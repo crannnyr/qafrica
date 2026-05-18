@@ -1,0 +1,303 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 6%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 6%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 6%;
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 30 100% 96%;
+    --secondary-foreground: 24 95% 40%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+    --accent: 24 95% 53%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 24 95% 53%;
+    --radius: 0.625rem;
+    
+    /* QAFRICA Custom Colors */
+    --qafrica-orange: 24 95% 53%;
+    --qafrica-orange-dark: 20 90% 48%;
+    --qafrica-orange-light: 30 100% 92%;
+    --qafrica-black: 0 0% 6%;
+    --qafrica-white: 0 0% 100%;
+    --qafrica-gray: 0 0% 45%;
+    --qafrica-success: 142 76% 36%;
+    --qafrica-warning: 38 92% 50%;
+    
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 26%;
+    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 30 100% 96%;
+    --sidebar-accent-foreground: 24 95% 40%;
+    --sidebar-border: 0 0% 91%;
+    --sidebar-ring: 24 95% 53%;
+  }
+
+  .dark {
+    --background: 0 0% 6%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 64%;
+    --accent: 24 95% 53%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 15%;
+    --input: 0 0% 15%;
+    --ring: 24 95% 53%;
+    
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 24 95% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer components {
+  /* QAFRICA Button Styles */
+  .btn-primary {
+    @apply bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-3 rounded-lg transition-all duration-200 shadow-lg shadow-orange-500/25;
+  }
+  
+  .btn-secondary {
+    @apply bg-orange-50 hover:bg-orange-100 text-orange-600 font-semibold px-6 py-3 rounded-lg transition-all duration-200;
+  }
+  
+  .btn-outline {
+    @apply border-2 border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white font-semibold px-6 py-3 rounded-lg transition-all duration-200;
+  }
+  
+  /* Card Styles */
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+  }
+  
+  /* Gradient Backgrounds */
+  .gradient-orange {
+    @apply bg-gradient-to-r from-orange-500 to-orange-600;
+  }
+  
+  .gradient-hero {
+    @apply bg-gradient-to-br from-orange-500 via-orange-500 to-orange-600;
+  }
+  
+  /* Text Gradients */
+  .text-gradient {
+    @apply bg-gradient-to-r from-orange-500 to-orange-600 bg-clip-text text-transparent;
+  }
+  
+  /* Glass Effect */
+  .glass {
+    @apply bg-white/80 backdrop-blur-lg border border-white/20;
+  }
+  
+  /* Section Padding */
+  .section-padding {
+    @apply px-4 sm:px-6 lg:px-8 xl:px-12 2xl:px-16;
+  }
+  
+  /* Container */
+  .container-custom {
+    @apply max-w-7xl mx-auto section-padding;
+  }
+  
+  /* Input Styles */
+  .input-custom {
+    @apply w-full px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-600
+           bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+           placeholder:text-gray-400 dark:placeholder:text-gray-500
+           focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20
+           transition-all duration-200 outline-none;
+  }
+  
+  /* Badge Styles */
+  .badge-orange {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800;
+  }
+  
+  .badge-success {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800;
+  }
+  
+  .badge-warning {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800;
+  }
+  
+  /* Status Indicators */
+  .status-dot {
+    @apply w-2 h-2 rounded-full;
+  }
+  
+  .status-active {
+    @apply bg-green-500;
+  }
+  
+  .status-pending {
+    @apply bg-yellow-500;
+  }
+  
+  .status-inactive {
+    @apply bg-gray-400;
+  }
+  
+  /* Animation Classes */
+  .fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+  
+  .slide-up {
+    animation: slideUp 0.5s ease-out;
+  }
+  
+  .pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@layer utilities {
+  /* Custom Scrollbar */
+  .scrollbar-custom::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-custom::-webkit-scrollbar-track {
+    @apply bg-gray-100 rounded-full;
+  }
+  
+  .scrollbar-custom::-webkit-scrollbar-thumb {
+    @apply bg-orange-300 rounded-full hover:bg-orange-400 transition-colors;
+  }
+  
+  /* Hide Scrollbar */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Loading Spinner */
+.spinner {
+  @apply inline-block w-6 h-6 border-2 border-current border-t-transparent rounded-full animate-spin;
+}
+
+/* Toast Notifications */
+.toast-success {
+  @apply bg-green-500 text-white;
+}
+
+.toast-error {
+  @apply bg-red-500 text-white;
+}
+
+.toast-warning {
+  @apply bg-yellow-500 text-white;
+}
+
+/* Dashboard Sidebar */
+.sidebar-item {
+  @apply flex items-center gap-3 px-4 py-3 text-gray-600 dark:text-gray-300
+         hover:text-orange-600 hover:bg-orange-50 dark:hover:bg-gray-700
+         rounded-lg transition-all duration-200;
+}
+
+.sidebar-item.active {
+  @apply text-orange-600 bg-orange-50 dark:bg-gray-700 font-medium;
+}
+
+/* Table Styles */
+.table-custom {
+  @apply w-full text-left border-collapse;
+}
+
+.table-custom th {
+  @apply px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider
+         bg-gray-50 dark:bg-gray-700 dark:text-gray-400;
+}
+
+.table-custom td {
+  @apply px-4 py-4 border-t border-gray-100 dark:border-gray-700 dark:text-gray-300;
+}
+
+.table-custom tr:hover {
+  @apply bg-gray-50 dark:bg-gray-700/50;
+}
+
+/* Price Display */
+.price-display {
+  @apply text-lg font-bold text-gray-900;
+}
+
+.price-original {
+  @apply text-sm text-gray-400 line-through;
+}
+
+.price-sale {
+  @apply text-lg font-bold text-orange-600;
+}
