@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingBag, ArrowRight, Check, Loader2, Star, Zap, Crown, CheckCircle, Infinity, SkipForward, MessageCircle } from 'lucide-react';
+import { ShoppingBag, ArrowRight, Check, Loader2, Star, Zap, Crown, CheckCircle, Infinity as InfinityIcon, SkipForward, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import CONFIG from '@/lib/config';
 import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
@@ -61,7 +61,7 @@ const monthlyPlans = [
     icon: Crown,
     description: 'For established brands',
     basePrice: CONFIG.PRICING?.UNLIMITED || 100000,
-    maxNiches: Infinity,
+    maxNiches: Number.POSITIVE_INFINITY,
     features: [
       'Unlimited Niches',
       'Unlimited Products',
@@ -122,10 +122,10 @@ const lifetimePlans = [
   {
     id: 'unlimited',
     name: 'Enterprise Lifetime',
-    icon: Infinity,
+    icon: InfinityIcon,
     description: 'Ultimate power for big brands',
     price: 10000000,
-    maxNiches: Infinity,
+    maxNiches: Number.POSITIVE_INFINITY,
     features: [
       'Unlimited Niches - Forever',
       'Unlimited Products',
@@ -172,7 +172,7 @@ export default function PricingPage() {
   };
 
   const canSelectPlan = (planMaxNiches: number) => {
-    if (planMaxNiches === Infinity || planMaxNiches === Number.POSITIVE_INFINITY) return true;
+    if (!isFinite(planMaxNiches)) return true;
     return selectedNiches.length <= planMaxNiches;
   };
 
@@ -363,7 +363,7 @@ export default function PricingPage() {
                   billingType === 'lifetime' ? 'bg-orange-500 text-white shadow-md' : 'text-gray-600 hover:text-gray-900'
                 }`}
               >
-                <Infinity className="w-4 h-4" />
+                <InfinityIcon className="w-4 h-4" />
                 Lifetime
               </button>
             </div>

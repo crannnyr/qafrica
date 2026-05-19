@@ -23,7 +23,6 @@ interface OrderItem {
   is_imported: boolean;
   dropship_price: number;
   original_owner_id: string | null;
-  // FIX: added original_store_id for original owner view detection
   original_store_id: string | null;
   product: {
     id: string;
@@ -37,6 +36,8 @@ interface OrderDetail {
   order_number: string;
   status: string;
   store_id: string;
+  // FIX: added dropshipper_store_id used for access control
+  dropshipper_store_id?: string | null;
   created_at: string;
   customer_name: string;
   customer_email: string;
@@ -59,7 +60,8 @@ interface OrderDetail {
   buyer_reported_issue: boolean;
   issue_description: string | null;
   issue_reported_at: string | null;
-  tracking_number: string | null;
+  // FIX: single declaration of tracking_number (was duplicated causing TS2300)
+  tracking_number?: string | null;
   order_items: OrderItem[];
   store: {
     name: string;
@@ -69,7 +71,6 @@ interface OrderDetail {
   shipbubble_tracking_url?: string | null;
   shipbubble_courier_name?: string | null;
   shipbubble_courier_phone?: string | null;
-  tracking_number?: string | null;
   shipbubble_status?: string | null;
   is_cod_order?: boolean | null;
 }
@@ -142,11 +143,8 @@ export default function OrderDetailPage() {
         return;
       }
   
-      // store owns order directly
       const isStoreOwner = data.store_id === currentStore.id;
-      
       const isDropshipper = data.dropshipper_store_id === currentStore.id;
-      
       const isOriginalSupplier = data.order_items?.some(
         (item: any) =>
           item.is_imported &&
@@ -162,7 +160,6 @@ export default function OrderDetailPage() {
           currentStore: currentStore.id,
           items: data.order_items
         });
-      
         toast.error('Order not found');
         navigate('/dashboard/orders');
         return;
@@ -183,7 +180,6 @@ export default function OrderDetailPage() {
     }
   };
 
-  // FIX: determine view mode based on whether this store owns the order or just supplies items
   const isDropshipperView =
     !!order && order.dropshipper_store_id === currentStore?.id;
   
@@ -197,12 +193,10 @@ export default function OrderDetailPage() {
         item.original_store_id === currentStore?.id
     );
 
-  // Items this store needs to fulfil (original owner view)
   const myDropshippedItems = (order?.order_items || []).filter(
     (item) => item.is_imported && item.original_store_id === currentStore?.id
   );
 
-  // FIX: dropshipper view — store owns the order but some items are sourced externally
   const hasDropshippedItems = (order?.order_items || []).some(
     (item) =>
       item.is_imported &&
@@ -214,7 +208,6 @@ export default function OrderDetailPage() {
     (order?.order_items?.length ?? 0) > 0 &&
     order?.order_items.every((item) => item.is_imported);
 
-  // FIX: earnings breakdown for dropshipper view
   const dropshipEarnings = (() => {
     if (!order) return { margin: 0, platformFee: 0, net: 0 };
     const margin = (order.order_items || []).reduce((sum, item) => {
@@ -227,7 +220,6 @@ export default function OrderDetailPage() {
     return { margin, platformFee, net: margin - platformFee };
   })();
 
-  // FIX: total amount the original owner earns for their items
   const originalOwnerTotal = myDropshippedItems.reduce(
     (sum, item) => sum + (item.dropship_price || 0) * item.quantity,
     0
@@ -246,7 +238,6 @@ export default function OrderDetailPage() {
 
     setIsUpdating(true);
     try {
-      // FIX: original owner uses their own status update path via orderService
       if (isOriginalOwnerView && currentStore?.id) {
         const updates: any = { status: newStatus };
         if (newStatus === 'shipped' && trackingNumber.trim()) {
@@ -346,13 +337,9 @@ export default function OrderDetailPage() {
   const StatusIcon = statusConfig.icon;
 
   // ── ORIGINAL OWNER VIEW ────────────────────────────────────────────────────
-  // FIX: render a separate simplified view for the store that originally owns
-  // the dropshipped products. They see only their items, their dropship earnings,
-  // and the "Fulfill" action — not the dropshipper's margin or full order total.
   if (isOriginalOwnerView) {
     return (
       <div className="space-y-6 max-w-4xl">
-        {/* Header */}
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/dashboard/orders')}
@@ -370,7 +357,6 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Info banner */}
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-start gap-3">
           <Package className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
           <div>
@@ -382,7 +368,6 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* FIX: Status + Fulfill actions for original owner */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6">
           <div className="flex items-center justify-between mb-4">
             <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${statusConfig.color}`}>
@@ -422,7 +407,6 @@ export default function OrderDetailPage() {
           )}
         </div>
 
-        {/* FIX: show ONLY this store's items, with dropship_price × qty */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6">
           <h2 className="font-semibold text-gray-900 dark:text-white mb-4">
             Your Items to Ship ({myDropshippedItems.length})
@@ -450,7 +434,6 @@ export default function OrderDetailPage() {
                     )}
                     <p className="text-sm text-gray-500 dark:text-gray-400">Qty: {item.quantity}</p>
                   </div>
-                  {/* FIX: show dropship_price × quantity, NOT selling price */}
                   <div className="text-right">
                     <p className="font-semibold text-gray-900 dark:text-white">
                       ₦{((item.dropship_price || 0) * item.quantity).toLocaleString()}
@@ -465,7 +448,6 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Customer / Ship-to info */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6">
           <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Ship To</h2>
           <div className="space-y-2 text-sm">
@@ -491,7 +473,6 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* FIX: Earnings summary — dropship price only, no margin details shown */}
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-6">
           <h2 className="font-semibold text-green-900 dark:text-green-300 mb-2">Your Earnings</h2>
           <div className="space-y-1 text-sm">
@@ -515,7 +496,6 @@ export default function OrderDetailPage() {
   // ── DROPSHIPPER / STORE OWNER VIEW ─────────────────────────────────────────
   return (
     <div className="space-y-6 max-w-4xl">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
@@ -541,7 +521,6 @@ export default function OrderDetailPage() {
         </Button>
       </div>
 
-      {/* Issue Reported Banner */}
       {order.buyer_reported_issue && !order.is_escrow_released && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -561,7 +540,6 @@ export default function OrderDetailPage() {
         </motion.div>
       )}
 
-      {/* Escrow Released */}
       {order.is_escrow_released && (
         <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl p-4 flex items-center gap-3">
           <ShieldCheck className="w-5 h-5 text-green-600 flex-shrink-0" />
@@ -579,7 +557,6 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* FIX: Dropshipped Notice — now shown for fully OR partially dropshipped orders */}
       {isFullyDropshipped && (
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 flex items-start gap-3">
           <Lock className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
@@ -593,7 +570,6 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Status + Actions */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
@@ -609,7 +585,6 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* FIX: Remove status update buttons entirely when fully dropshipped — supplier fulfils */}
         {!isFullyDropshipped && !order.is_escrow_released && nextStatus && (
           <div className="space-y-3">
             {(nextStatus === 'shipped' || showTrackingInput) && !order.tracking_number && (
@@ -652,7 +627,6 @@ export default function OrderDetailPage() {
           </div>
         )}
 
-        {/* FIX: show "Supplier Fulfils" badge when all items are dropshipped */}
         {isFullyDropshipped && (
           <div className="inline-flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
             <Lock className="w-4 h-4" />
@@ -661,7 +635,6 @@ export default function OrderDetailPage() {
         )}
       </div>
 
-      {/* Order Items — show all, mark dropshipped vs own */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6">
         <h2 className="font-semibold text-gray-900 dark:text-white mb-4">
           Items ({(order.order_items || []).length})
@@ -669,7 +642,6 @@ export default function OrderDetailPage() {
         <div className="space-y-4">
           {(order.order_items || []).map((item) => {
             const image = item.product?.images?.[0] ?? null;
-            // FIX: per-item ownership badges
             const isFulfilledBySupplier =
               item.is_imported &&
               item.original_owner_id &&
@@ -698,13 +670,11 @@ export default function OrderDetailPage() {
                   )}
                   <p className="text-sm text-gray-500 dark:text-gray-400">Qty: {item.quantity}</p>
                   <div className="flex gap-2 mt-1 flex-wrap">
-                    {/* FIX: "Fulfilled by Supplier" badge for externally dropshipped items */}
                     {isFulfilledBySupplier && (
                       <span className="text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 px-2 py-0.5 rounded-full">
                         Fulfilled by Supplier
                       </span>
                     )}
-                    {/* FIX: "Your Product" badge when this store is the original owner */}
                     {isOwnProductDropshipped && (
                       <span className="text-xs bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 px-2 py-0.5 rounded-full">
                         Your Product — You Fulfill
@@ -731,7 +701,6 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* FIX: Dropship Earnings card — shown when order has dropshipped items */}
       {hasDropshippedItems && (
         <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-6">
           <h2 className="font-semibold text-orange-900 dark:text-orange-300 mb-3">Your Dropship Earnings</h2>
@@ -755,7 +724,6 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {/* Customer Info */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6">
         <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Customer</h2>
         <div className="space-y-3 text-sm">
@@ -771,7 +739,6 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-      {/* Delivery Address */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6">
         <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Delivery Address</h2>
         <div className="flex items-start gap-3 text-gray-600 dark:text-gray-400">
@@ -788,76 +755,74 @@ export default function OrderDetailPage() {
         </div>
       </div>
 
-                {/* SHIP BUBBLE TRACKING SECTION */}
-  {order?.shipbubble_order_id && (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-5 space-y-4 mt-6"
-    >
-      <div className="flex items-center gap-3">
-        <div className="bg-blue-100 rounded-full p-2">
-          <Truck className="w-5 h-5 text-blue-600" />
-        </div>
-        <div className="flex-1">
-          <h3 className="font-semibold text-blue-900">Ship Bubble Shipment</h3>
-          <p className="text-xs text-blue-700">Real-time tracking via Ship Bubble</p>
-        </div>
-        <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-3 py-1 rounded-full capitalize">
-          {order.shipbubble_status || 'Processing'}
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="bg-white rounded-lg p-3 border border-blue-100">
-          <p className="text-xs text-gray-600 font-medium uppercase tracking-wide">Courier</p>
-          <p className="font-semibold text-gray-900 mt-1">{order.shipbubble_courier_name || 'TBD'}</p>
-          {order.shipbubble_courier_phone && (
-            <p className="text-xs text-gray-600 mt-1">📞 {order.shipbubble_courier_phone}</p>
-          )}
-        </div>
-
-        <div className="bg-white rounded-lg p-3 border border-blue-100">
-          <p className="text-xs text-gray-600 font-medium uppercase tracking-wide">Tracking Number</p>
-          <p className="font-mono font-semibold text-gray-900 mt-1">{order.tracking_number || order.shipbubble_order_id || 'N/A'}</p>
-        </div>
-
-        <div className="bg-white rounded-lg p-3 border border-blue-100">
-          <p className="text-xs text-gray-600 font-medium uppercase tracking-wide">Shipment ID</p>
-          <p className="font-mono text-xs text-gray-700 mt-1 break-all">{order.shipbubble_order_id}</p>
-        </div>
-
-        <div className="bg-white rounded-lg p-3 border border-blue-100">
-          <p className="text-xs text-gray-600 font-medium uppercase tracking-wide">Status</p>
-          <p className="font-semibold text-gray-900 mt-1 capitalize">{order.shipbubble_status || 'Pending'}</p>
-        </div>
-      </div>
-
-      {order.is_cod_order && (
-        <div className="bg-amber-100 border border-amber-300 rounded-lg p-3 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="text-sm font-semibold text-amber-900">Cash on Delivery</p>
-            <p className="text-xs text-amber-800">Customer will pay on delivery</p>
-          </div>
-        </div>
-      )}
-
-      {order.shipbubble_tracking_url && (
-        <a
-          href={order.shipbubble_tracking_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition"
+      {order?.shipbubble_order_id && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-200 rounded-xl p-5 space-y-4 mt-6"
         >
-          <ExternalLink className="w-4 h-4" />
-          View Full Tracking on Ship Bubble
-        </a>
-      )}
-    </motion.div>
-  )}
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-100 rounded-full p-2">
+              <Truck className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-blue-900">Ship Bubble Shipment</h3>
+              <p className="text-xs text-blue-700">Real-time tracking via Ship Bubble</p>
+            </div>
+            <span className="text-xs font-semibold bg-blue-100 text-blue-700 px-3 py-1 rounded-full capitalize">
+              {order.shipbubble_status || 'Processing'}
+            </span>
+          </div>
 
-      {/* Order Summary */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white rounded-lg p-3 border border-blue-100">
+              <p className="text-xs text-gray-600 font-medium uppercase tracking-wide">Courier</p>
+              <p className="font-semibold text-gray-900 mt-1">{order.shipbubble_courier_name || 'TBD'}</p>
+              {order.shipbubble_courier_phone && (
+                <p className="text-xs text-gray-600 mt-1">📞 {order.shipbubble_courier_phone}</p>
+              )}
+            </div>
+
+            <div className="bg-white rounded-lg p-3 border border-blue-100">
+              <p className="text-xs text-gray-600 font-medium uppercase tracking-wide">Tracking Number</p>
+              <p className="font-mono font-semibold text-gray-900 mt-1">{order.tracking_number || order.shipbubble_order_id || 'N/A'}</p>
+            </div>
+
+            <div className="bg-white rounded-lg p-3 border border-blue-100">
+              <p className="text-xs text-gray-600 font-medium uppercase tracking-wide">Shipment ID</p>
+              <p className="font-mono text-xs text-gray-700 mt-1 break-all">{order.shipbubble_order_id}</p>
+            </div>
+
+            <div className="bg-white rounded-lg p-3 border border-blue-100">
+              <p className="text-xs text-gray-600 font-medium uppercase tracking-wide">Status</p>
+              <p className="font-semibold text-gray-900 mt-1 capitalize">{order.shipbubble_status || 'Pending'}</p>
+            </div>
+          </div>
+
+          {order.is_cod_order && (
+            <div className="bg-amber-100 border border-amber-300 rounded-lg p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-900">Cash on Delivery</p>
+                <p className="text-xs text-amber-800">Customer will pay on delivery</p>
+              </div>
+            </div>
+          )}
+
+          {order.shipbubble_tracking_url && (
+            <a
+              href={order.shipbubble_tracking_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition"
+            >
+              <ExternalLink className="w-4 h-4" />
+              View Full Tracking on Ship Bubble
+            </a>
+          )}
+        </motion.div>
+      )}
+
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6">
         <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Payment</h2>
         <div className="space-y-2 text-sm">

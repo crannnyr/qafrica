@@ -40,10 +40,15 @@ export interface User {
   avatar_url?: string;
   // Aligned to actual DB values — 'user' no longer exists in profiles
   role: 'store_owner' | 'customer' | 'admin';
+  // FIX: added user_type used in SignupPage
+  user_type?: string;
   email_verified: boolean;
   created_at: string;
   updated_at: string;
   last_sign_in?: string;
+  // FIX: added onboarding fields used in PaymentCallbackPage & PricingPage
+  onboarding_step?: number;
+  onboarding_completed?: boolean;
 }
 
 export interface SavedCard {
@@ -102,17 +107,18 @@ export interface Store {
   created_at: string;
   updated_at: string;
   social_links: {
-  instagram?: string;
-  facebook?: string;
-  twitter?: string;
-  tiktok?: string;
-  whatsapp?: string;
-  youtube?: string;
-};
-group_chat_url?: string;
+    instagram?: string;
+    facebook?: string;
+    twitter?: string;
+    tiktok?: string;
+    whatsapp?: string;
+    youtube?: string;
+  };
+  group_chat_url?: string;
   analytics: StoreAnalytics;
+  // FIX: expanded delivery_mode to include 'shipbubble'
+  delivery_mode?: 'manual' | 'terminal' | 'shipbubble';
   // Terminal Africa fields
-  delivery_mode?: 'manual' | 'terminal';
   terminal_pickup_address?: TerminalPickupAddress | null;
   terminal_packaging_id?: string | null;
   packaging_length_cm?: number;
@@ -120,6 +126,10 @@ group_chat_url?: string;
   packaging_height_cm?: number;
   packaging_weight_kg?: number;
   delivery_window_days?: number;
+  // FIX: added Shipbubble-specific fields used in DeliveryZonesPage
+  shipbubble_pickup_address?: Record<string, string> | null;
+  shipbubble_sender_address_code?: number | null;
+  shipbubble_category_id?: number;
   // Payment fields
   payment_method?: 'paystack' | 'direct_transfer';
   direct_bank_name?: string;
@@ -322,7 +332,6 @@ export interface OrderItem {
   original_store_id?: string | null;
   dropship_price?: number;
   variant_options?: Record<string, string>;
-  // FIX: Added missing fields that exist in the DB but were absent from this type
   original_owner_id?: string | null;
   price_at_time?: number;
 }
@@ -333,6 +342,8 @@ export interface DeliveryAddress {
   state: string;
   country: string;
   postal_code?: string;
+  // FIX: added address field used in DropshipOrderDetailPage
+  address?: string;
 }
 
 // FIX: Added DropshipOrderView — used by original product owners to see orders
@@ -850,6 +861,9 @@ export interface CustomerAddress {
   id: string;
   customer_id: string;
   label?: string;
+  // FIX: added name and phone fields used throughout checkout
+  name?: string;
+  phone?: string;
   address_line1: string;
   address_line2?: string;
   city: string;
@@ -858,6 +872,9 @@ export interface CustomerAddress {
   postal_code?: string;
   is_default: boolean;
   created_at: string;
+  // FIX: added Shipbubble address validation fields
+  shipbubble_address_code?: number | null;
+  shipbubble_validated_at?: string | null;
 }
 
 // ============================================
