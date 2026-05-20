@@ -54,6 +54,7 @@ interface ShipbubbleCourier {
   cod_fee?: number;
   service_type: 'pickup' | 'dropoff';
   tracking: { bars: number; label: string };
+  request_token?: string;
 }
 
 interface ShipbubbleSelection {
@@ -516,7 +517,7 @@ export default function CheckoutPage() {
       );
   
       setShipbubbleSelection({
-        request_token: cheapest.request_token,
+        request_token: cheapest.request_token ?? '',
         receiver_address_code: receiverAddressCode,
         courier_id: cheapest.courier_id,
         service_code: cheapest.service_code,
@@ -841,7 +842,7 @@ export default function CheckoutPage() {
                     'bg-gray-200 dark:bg-gray-700 text-gray-500'
                   }`}>
                     {(
-                      (step === 'auth'     && ['shipping','payment','confirm'].includes(currentStep)) ||
+                     (step === 'shipping' && ['payment','confirm'].includes(currentStep)) ||
                       (step === 'shipping' && ['payment','confirm'].includes(currentStep)) ||
                       (step === 'payment'  && currentStep === 'confirm')
                     ) ? <Check className="w-4 h-4" /> : step === 'shipping' ? 1 : 2}

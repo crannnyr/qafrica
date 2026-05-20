@@ -60,18 +60,18 @@ export default function ModalNotificationDisplay() {
     if (!notification || !user?.id || isDismissing) return;
     setIsDismissing(true);
 
-    // Record dismissal so it never shows again for this user
-    await supabase.from('modal_notification_dismissals').insert({
-      notification_id: notification.id,
-      user_id: user.id,
-    }).then(() => {
-      setNotification(null);
-      setIsDismissing(false);
-    }).catch(() => {
+    try {
+      // Record dismissal so it never shows again for this user
+      await supabase.from('modal_notification_dismissals').insert({
+        notification_id: notification.id,
+        user_id: user.id,
+      });
+    } catch {
       // Even if DB write fails, close the modal for this session
+    } finally {
       setNotification(null);
       setIsDismissing(false);
-    });
+    }
   };
 
   return (

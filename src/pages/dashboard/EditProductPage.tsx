@@ -565,7 +565,7 @@ export default function EditProductPage() {
         name:               formData.name,
         description:        formData.description,
         category:           formData.category,
-        subcategory:        formData.subcategory || null,
+        subcategory:        formData.subcategory || undefined,
         niche:              formData.niche,
         cost_price:         parseFloat(formData.cost_price) || 0,
         selling_price:      parseFloat(formData.selling_price),
@@ -579,7 +579,7 @@ export default function EditProductPage() {
         has_variants:       formData.has_variants,
         variants:           formData.has_variants ? variants : [],
         // Keep legacy weight in sync with weight_kg for backward compat
-        weight:             weightKgParsed,
+        weight:             weightKgParsed ?? undefined,
         // New Terminal Africa fields
         weight_kg:          weightKgParsed,
         hs_code:            formData.hs_code.trim() || null,
@@ -590,9 +590,9 @@ export default function EditProductPage() {
               width:  parseFloat(formData.dimensions.width)  || 0,
               height: parseFloat(formData.dimensions.height) || 0,
             }
-          : null,
+          : undefined,
         is_active:          formData.is_active,
-      });
+        });
 
       if (error) throw error;
       toast.success('Product updated successfully!');

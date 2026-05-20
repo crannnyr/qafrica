@@ -75,7 +75,7 @@ const monthlyPlans = [
     cta: 'Contact Sales',
     popular: false,
   },
-];
+] as const;
 
 // Lifetime plans (One-time payment)
 const lifetimePlans = [
@@ -141,7 +141,7 @@ const lifetimePlans = [
     popular: false,
     badge: 'Ultimate',
   },
-];
+] as const;
 
 export default function PricingPage() {
   const navigate = useNavigate();
@@ -181,11 +181,9 @@ export default function PricingPage() {
     try {
       await loadPaystackScript();
       const isLifetime = billingType === 'lifetime';
-      const selectedPlanData = isLifetime
-        ? lifetimePlans.find(p => p.id === selectedPlan)
-        : monthlyPlans.find(p => p.id === selectedPlan);
+      const lifetimePlanData = lifetimePlans.find(p => p.id === selectedPlan);
       const amount = isLifetime
-        ? selectedPlanData?.price || 0
+        ? lifetimePlanData?.price || 0
         : calculatePrice(selectedPlan, selectedDuration);
       const reference = generateReference(isLifetime ? 'LIFE' : 'SUB');
       const email = sessionStorage.getItem('signup_email') || 'user@example.com';
@@ -291,9 +289,12 @@ export default function PricingPage() {
     ? calculatePrice(selectedPlan, selectedDuration)
     : lifetimePlans.find(p => p.id === selectedPlan)?.price || 0;
 
-  const selectedPlanData = billingType === 'monthly'
-    ? monthlyPlans.find((p) => p.id === selectedPlan)
-    : lifetimePlans.find((p) => p.id === selectedPlan);
+  // Keep monthly and lifetime plan data separate to avoid union type ambiguity
+  const selectedMonthlyPlanData = monthlyPlans.find((p) => p.id === selectedPlan);
+  const selectedLifetimePlanData = lifetimePlans.find((p) => p.id === selectedPlan);
+  const selectedPlanName = billingType === 'monthly'
+    ? selectedMonthlyPlanData?.name
+    : selectedLifetimePlanData?.name;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 py-8 px-4">
@@ -613,7 +614,7 @@ export default function PricingPage() {
               <div>
                 <p className="text-gray-500 mb-1">Your Selection</p>
                 <p className="text-lg font-semibold text-gray-900">
-                  {selectedPlanData?.name}
+                  {selectedPlanName}
                   {billingType === 'monthly' && ` • ${durations.find(d => d.value === selectedDuration)?.label}`}
                 </p>
                 <p className="text-sm text-gray-500">

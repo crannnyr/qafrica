@@ -343,6 +343,7 @@ export interface DeveloperOrder {
   order_number: string;
   status: DeveloperOrderStatus;
   payment_status: 'pending' | 'paid' | 'failed' | 'refunded';
+  payment_method?: string;
   subtotal: number;
   delivery_fee: number;
   platform_fee: number;

@@ -511,7 +511,7 @@ const EMPTY_FORM = {
 export default function AddProductPage() {
   const navigate   = useNavigate();
   const { user }   = useAuthStore();
-  const { currentStore, subscription } = useStoreStore();
+  const { currentStore } = useStoreStore();
 
   const [step, setStep]         = useState(1);
   const [isLoading, setIsLoading] = useState(false);
@@ -662,7 +662,7 @@ export default function AddProductPage() {
         name:                formData.name.trim(),
         description:         formData.description,
         category:            formData.category,
-        subcategory:         formData.subcategory || null,
+        subcategory:         formData.subcategory || undefined,
         niche:               formData.niche,
         cost_price:          parseFloat(formData.cost_price) || 0,
         selling_price:       parseFloat(formData.selling_price),
@@ -672,8 +672,8 @@ export default function AddProductPage() {
         stock_quantity:      totalStock,
         low_stock_threshold: parseInt(formData.low_stock_threshold) || 10,
         is_out_of_stock:     totalStock === 0,
-        sku:                 formData.sku.trim() || null,
-        barcode:             formData.barcode.trim() || null,
+        sku:                 formData.sku.trim() || undefined,
+        barcode:             formData.barcode.trim() || undefined,
         images,
         is_importable:       formData.allowOtherSellers,
         has_variants:        formData.has_variants,
@@ -683,17 +683,17 @@ export default function AddProductPage() {
         weight_kg:           weightKg,
         hs_code:             formData.hs_code.trim() || null,
         product_type:        formData.product_type,
-        weight:              weightKg,
+        weight:              weightKg ?? undefined,
         dimensions:
-          formData.dimensions.length || formData.dimensions.width || formData.dimensions.height
-            ? {
-                length: parseFloat(formData.dimensions.length) || 0,
-                width:  parseFloat(formData.dimensions.width)  || 0,
-                height: parseFloat(formData.dimensions.height) || 0,
-              }
-            : null,
-        seo_title:       formData.seo_title.trim() || null,
-        seo_description: formData.seo_description.trim() || null,
+  formData.dimensions.length || formData.dimensions.width || formData.dimensions.height
+    ? {
+        length: parseFloat(formData.dimensions.length) || 0,
+        width:  parseFloat(formData.dimensions.width)  || 0,
+        height: parseFloat(formData.dimensions.height) || 0,
+      }
+    : undefined,
+    seo_title:       formData.seo_title.trim() || undefined,
+    seo_description: formData.seo_description.trim() || undefined,
         is_active:       formData.is_active,
         views:           0,
         sales_count:     0,
@@ -769,7 +769,7 @@ export default function AddProductPage() {
           <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-blue-900">
-              Plan: {subscription?.tier?.replace('_', ' ') || 'Loading...'}
+            Plan: {currentStore?.niches?.length ? 'Active' : 'Loading...'}
             </p>
             <p className="text-sm text-blue-700 mt-0.5">
               Niches available: {allowedNiches.map(n => CONFIG.NICHES.find((cn: any) => cn.id === n)?.name || n).join(', ')}

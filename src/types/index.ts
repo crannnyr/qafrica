@@ -39,7 +39,7 @@ export interface User {
   phone: string;
   avatar_url?: string;
   // Aligned to actual DB values — 'user' no longer exists in profiles
-  role: 'store_owner' | 'customer' | 'admin';
+  role: 'store_owner' | 'customer' | 'admin' | 'staff';
   // FIX: added user_type used in SignupPage
   user_type?: string;
   email_verified: boolean;
@@ -65,9 +65,9 @@ export interface SavedCard {
   updated_at: string;
 }
 
-// Extends User — maps to the profiles table (store owners only)
+// Extends User — maps to the profiles table (store owners and staff)
 export interface StoreOwner extends User {
-  role: 'store_owner' | 'admin';
+  role: 'store_owner' | 'admin' | 'staff';
   store_id?: string;
   subscription_tier: 'free' | 'one_niche' | 'three_niches' | 'unlimited' | null;
   subscription_expires_at?: string;

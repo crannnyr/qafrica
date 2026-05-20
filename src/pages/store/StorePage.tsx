@@ -110,7 +110,7 @@ export default function StorePage() {
         has_variants: item.has_variants,
         variants: item.variants,
         stock_quantity: item.stock_quantity,
-      })) as Product[];
+      })) as unknown as Product[];
 
       const ownProducts = (productsData as Product[]).filter(p => p.is_active);
       const allProducts = [...ownProducts, ...mappedImports];
@@ -141,7 +141,7 @@ export default function StorePage() {
 
   const handleAddToCart = (product: Product) => {
     if (!store) return;
-    if (product.has_variants && product.variants?.length > 0) {
+    if (product.has_variants && (product.variants?.length ?? 0) > 0) {
       setSelectedProduct(product);
       setSelectedVariants({});
       setQuantity(1);
@@ -601,9 +601,9 @@ export default function StorePage() {
                 </div>
 
                 {/* Variant options */}
-                {selectedProduct.variants?.length > 0 && (
+                {(selectedProduct.variants?.length ?? 0) > 0 && (
                   <div className="space-y-4 mb-6">
-                    {Object.keys(selectedProduct.variants[0].options).map(variantName => (
+                    {Object.keys(selectedProduct.variants![0].options).map(variantName => (
                       <div key={variantName}>
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{variantName}</p>
                         <div className="flex flex-wrap gap-2">

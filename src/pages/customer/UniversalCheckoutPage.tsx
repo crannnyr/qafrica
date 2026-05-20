@@ -327,7 +327,7 @@ export default function UniversalCheckoutPage() {
     setIsSendingMessage(true);
     try {
       const { error } = await messageService.sendMessage({
-        shipbubble_store_id: storeId,
+        store_id: storeId,
         customer_id: customer.id,
         customer_name: customer.full_name,
         customer_email: customer.email,
@@ -718,7 +718,7 @@ export default function UniversalCheckoutPage() {
       console.log(`[${store.storeName}] Available Couriers:`, couriers);
    
       // Pre-select cheapest courier
-      const cheapest = couriers.reduce((a, b) =>
+      const cheapest = couriers.reduce((a: any, b: any) =>
         a.rate_card_amount < b.rate_card_amount ? a : b
       );
    

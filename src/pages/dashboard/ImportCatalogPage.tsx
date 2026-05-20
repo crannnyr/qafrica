@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Search, Plus, Store, Filter, X, Check, AlertCircle, DollarSign, Loader2, MessageCircle, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useStoreStore, useImportStore } from '@/stores';
+import { useStoreStore, useImportStore, useAuthStore } from '@/stores';
 import { toast } from 'sonner';
 import { importCatalogService } from '@/services/supabase';
-
+import type { StoreOwner } from '@/types';
 type FilterType = 'all' | 'my_niches' | 'other';
 
 export default function ImportCatalogPage() {
-  const { currentStore, subscription } = useStoreStore();
+  const { currentStore } = useStoreStore();
+  const { user } = useAuthStore();
   const { imports, fetchStoreImports, importProduct, updateImport, deleteImport } = useImportStore();
   const [activeTab, setActiveTab] = useState<'browse' | 'imported'>('browse');
   const [searchQuery, setSearchQuery] = useState('');
@@ -26,8 +27,7 @@ export default function ImportCatalogPage() {
   const [isDeletingImport, setIsDeletingImport] = useState<string | null>(null);
 
   const storeNiches = currentStore?.niches || [];
-  const isUnlimited = subscription?.tier === 'unlimited';
-
+  const isUnlimited = (user as any)?.subscription_tier === 'unlimited';
   useEffect(() => {
     if (currentStore?.id) {
       fetchStoreImports(currentStore.id);
@@ -179,15 +179,17 @@ export default function ImportCatalogPage() {
 
   return (
     <div className="space-y-6 relative">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+     {/* Header */}
+     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Import Catalog</h1>
           <p className="text-gray-500 mt-1">Browse and import products from other sellers</p>
         </div>
-        {subscription && (
+        {user && (
           <div className="text-sm text-gray-600 bg-gray-100 px-4 py-2 rounded-lg">
-            Plan: <span className="font-medium text-orange-600 capitalize">{subscription.tier?.replace('_', ' ')}</span>
+            Plan: <span className="font-medium text-orange-600 capitalize">
+              {((user as StoreOwner)?.subscription_tier || 'free').replace('_', ' ')}
+            </span>
             {!isUnlimited && (
               <span className="ml-2 text-gray-500">
                 (Showing {filterType === 'my_niches' ? 'your niches' : 'other niches'})
@@ -196,7 +198,6 @@ export default function ImportCatalogPage() {
           </div>
         )}
       </div>
-
       {/* Tabs */}
       <div className="flex gap-4 border-b">
         <button

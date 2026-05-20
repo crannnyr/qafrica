@@ -153,32 +153,7 @@ export default function DeliveryZonesPage() {
     setIsSavingWindow(false);
   };
 
-  /** Validate address against Shipbubble and cache the address_code */
-  // In the address validation section:
-  const handleValidatePickupAddress = async () => {
-    setIsValidatingAddress(true);
-    try {
-      const result = await shipbubbleService.validateAddress(
-        pickupAddress,
-        accessToken
-      );
-      
-      if (result.success) {
-        setAddressValidated(true);
-        // Save the address_code to store
-        await updateStore(currentStore.id, {
-          shipbubble_pickup_address: pickupAddress,
-          shipbubble_sender_address_code: result.address_code,
-        });
-        toast.success('Pickup address validated and saved');
-      } else {
-        toast.error(result.error);
-      }
-    } finally {
-      setIsValidatingAddress(false);
-    }
-  };
-
+ 
   const handleValidateAddress = async () => {
     if (!currentStore?.id) return;
   
@@ -288,7 +263,7 @@ export default function DeliveryZonesPage() {
       ? pickupAddress.phone!
       : '+234' + pickupAddress.phone!.replace(/^0/, '');
     setIsSavingAddress(true);
-    const result = await updateStore(currentStore.id, {
+    const result = await updateStore(currentStore!.id, {
       shipbubble_pickup_address: {
         ...pickupAddress,
         phone,

@@ -306,7 +306,7 @@ function FlyingLogo({ startRect, sellRect, anyRect, onComplete, onSellHit, onAny
 // ─── NudgeWord ─────────────────────────────────────────────────────────────────
 
 function NudgeWord({ children, nudge, className, innerRef }: {
-  children: React.ReactNode; nudge: boolean; className?: string; innerRef?: React.RefObject<HTMLSpanElement>;
+  children: React.ReactNode; nudge: boolean; className?: string; innerRef?: React.RefObject<HTMLSpanElement | null>;
 }) {
   return (
     <motion.span
@@ -319,7 +319,7 @@ function NudgeWord({ children, nudge, className, innerRef }: {
           </motion.span>
   );
 }
-function FlipText({ first, second, className }: { first: string; second: string; className?: string }) {
+function FlipText({ first, second, third, className }: { first: string; second: string; third?: string; className?: string }) {
   const [flipped, setFlipped] = useState(false);
 
   useEffect(() => {

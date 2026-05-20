@@ -271,9 +271,9 @@ export default function StoreTemplatesPage() {
             </div>
             <div className="space-y-1">
               <p className="text-lg font-semibold">
-                Niches: {currentStore?.niches?.length > 0 
-                  ? currentStore.niches.map(n => NICHE_CATEGORIES[n]?.name || n).join(', ')
-                  : 'None selected'}
+              Niches: {(currentStore?.niches?.length ?? 0) > 0 
+  ? currentStore!.niches!.map(n => NICHE_CATEGORIES[n]?.name || n).join(', ')
+  : 'None selected'}
               </p>
               <p className="text-orange-100 text-sm">
                 Active Theme: <span className="font-medium text-white">{currentTheme?.name || 'Default'}</span>

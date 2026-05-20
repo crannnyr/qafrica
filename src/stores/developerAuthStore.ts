@@ -92,15 +92,15 @@ export const useDeveloperAuthStore = create<DeveloperAuthState>()(
             return { success: false, error: message };
           }
 
-          if (dev.is_blocked) {
+          if ((dev as any).is_blocked) {
             await developerSupabase.auth.signOut();
-            const message = dev.block_reason ?? 'Your account has been suspended. Contact support@qafrica.store.';
+            const message = (dev as any).block_reason ?? 'Your account has been suspended. Contact support@qafrica.store.';
             set({ isLoading: false, error: message });
             return { success: false, error: message };
           }
-
+          
           set({
-            developer:       dev as Developer,
+            developer:       dev as unknown as Developer,
             isAuthenticated: true,
             isLoading:       false,
             error:           null,
@@ -168,7 +168,7 @@ export const useDeveloperAuthStore = create<DeveloperAuthState>()(
           }
 
           set({
-            developer:       dev as Developer,
+            developer:       dev as unknown as Developer,
             isAuthenticated: true,
             isLoading:       false,
             error:           null,

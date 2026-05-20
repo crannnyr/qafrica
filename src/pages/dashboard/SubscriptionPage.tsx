@@ -85,7 +85,7 @@ function formatDate(dateString: string) {
 
 export default function SubscriptionPage() {
   const { user } = useAuthStore();
-  const { balance: walletBalance } = useWalletStore();
+  const { availableBalance: walletBalance } = useWalletStore();
   
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
   const [savedCards, setSavedCards] = useState<SavedCard[]>([]);

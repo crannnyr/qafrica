@@ -372,7 +372,7 @@ export default function CustomerOrderDetailPage() {
 
             {order.shipbubble_tracking_url && (
               <button
-                onClick={() => window.open(order.shipbubble_tracking_url, '_blank')}
+                onClick={() => window.open(order.shipbubble_tracking_url ?? undefined, '_blank')}
                 className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition"
               >
                 <ExternalLink className="w-4 h-4" />

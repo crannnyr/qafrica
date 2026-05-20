@@ -192,18 +192,18 @@ export default function DeveloperSignupPage() {
     setIsLoading(true);
     try {
       const payload: DeveloperSignupFormData = {
-        account_type:  accountType,
-        full_name:     form.full_name.trim(),
-        email:         form.email.trim().toLowerCase(),
-        password:      form.password,
-        phone:         form.phone.trim() || undefined,
-        platform_name: form.platform_name.trim(),
-        platform_url:  form.platform_url.trim(),
-        platform_type: form.platform_type || undefined,
-        company_name:  accountType === 'company' ? form.company_name.trim() : undefined,
-        rc_number:     form.rc_number.trim() || undefined,
+        account_type:     accountType,
+        full_name:        form.full_name.trim(),
+        email:            form.email.trim().toLowerCase(),
+        password:         form.password,
+        confirm_password: form.confirm,
+        phone:            form.phone.trim() || undefined,
+        platform_name:    form.platform_name.trim(),
+        platform_url:     form.platform_url.trim(),
+        platform_type:    form.platform_type || undefined,
+        company_name:     accountType === 'company' ? form.company_name.trim() : undefined,
+        rc_number:        form.rc_number.trim() || undefined,
       };
-
       // 1. Create the account
       await developerAuthService.signup(payload);
 
