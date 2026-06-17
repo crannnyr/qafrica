@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, ArrowRight, Check, Loader as Loader2, Palette, Type, Store } from 'lucide-react';
+import {
+  ShoppingBag, ArrowRight, Check,
+  Loader2, Palette, Type, Store,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores';
 import { storeService, supabase } from '@/services/supabase';
@@ -9,14 +12,24 @@ import { OnboardingProgress } from './NicheSelectionPage';
 import { toast } from 'sonner';
 import { sendStoreCreatedEmail } from '@/services/email';
 
-const themes = [
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const RESERVED_SLUGS = new Set([
+  'admin','finance','api','store','shop','dashboard','login','signup',
+  'register','auth','payment','checkout','wallet','support','help',
+  'billing','account','settings','staff','developer','dev','test',
+  'demo','null','undefined','qafrica','system','internal','legal',
+  'terms','privacy','about',
+]);
+
+const THEMES = [
   { id: 'modern',  name: 'Modern',  description: 'Clean and minimalist', color: '#F97316' },
   { id: 'classic', name: 'Classic', description: 'Elegant and timeless', color: '#1F2937' },
   { id: 'vibrant', name: 'Vibrant', description: 'Bold and colorful',    color: '#8B5CF6' },
   { id: 'natural', name: 'Natural', description: 'Organic and earthy',   color: '#10B981' },
 ];
 
-const colorPresets = [
+const COLOR_PRESETS = [
   { primary: '#F97316', secondary: '#FED7AA', name: 'Orange' },
   { primary: '#3B82F6', secondary: '#BFDBFE', name: 'Blue'   },
   { primary: '#8B5CF6', secondary: '#DDD6FE', name: 'Purple' },
@@ -25,135 +38,197 @@ const colorPresets = [
   { primary: '#1F2937', secondary: '#E5E7EB', name: 'Dark'   },
 ];
 
-const steps = [
+const SUB_STEPS = [
   { number: 1, title: 'Basic Info', icon: Store   },
   { number: 2, title: 'Theme',      icon: Palette },
   { number: 3, title: 'Branding',   icon: Type    },
 ];
 
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function OnboardingStoreSetup() {
-  const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const [step, setStep] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
+  const navigate  = useNavigate();
+  const { user }  = useAuthStore();
+
+  const [subStep, setSubStep]       = useState(1);
+  const [isLoading, setIsLoading]   = useState(true);
+  const [isSaving, setIsSaving]     = useState(false);
+  const [selectedNiches, setSelectedNiches] = useState<string[]>([]);
+
   const [formData, setFormData] = useState({
-    name: sessionStorage.getItem('signup_full_name')
-      ? `${sessionStorage.getItem('signup_full_name')}'s Store`
-      : '',
-    slug: '',
-    description: '',
-    theme: 'modern',
-    primary_color: '#F97316',
+    name:            '',
+    slug:            '',
+    description:     '',
+    theme:           'modern',
+    primary_color:   '#F97316',
     secondary_color: '#FED7AA',
   });
 
-  const handleSlugChange = (value: string) => {
-    const slug = value.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
-    setFormData({ ...formData, slug });
-  };
+  // ── On mount: resume from Supabase ────────────────────────────────────────
+  useEffect(() => {
+    const resume = async () => {
+      if (!user) { navigate('/login'); return; }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('onboarding_data, full_name')
+        .eq('id', user.id)
+        .single();
+
+      if (error || !data) {
+        toast.error('Could not load your progress. Please try again.');
+        navigate('/select-niche');
+        return;
+      }
+
+      const saved = data.onboarding_data ?? {};
+
+      // If no niche selected yet, send back
+      if (!saved.selected_niches?.length) {
+        navigate('/select-niche');
+        return;
+      }
+
+      setSelectedNiches(saved.selected_niches);
+
+      // If store already created in a previous visit, skip straight to plan
+      if (saved.store_id) {
+        navigate('/onboarding/choice');
+        return;
+      }
+
+      // Pre-fill store name from profile full_name
+      const defaultName = data.full_name ? `${data.full_name}'s Store` : '';
+      const defaultSlug = defaultName
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-');
+
+      setFormData((prev) => ({ ...prev, name: defaultName, slug: defaultSlug }));
+      setIsLoading(false);
+    };
+
+    resume();
+  }, [user, navigate]);
+
+  // ── Slug helpers ──────────────────────────────────────────────────────────
+  const toSlug = (value: string) =>
+    value.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
 
   const handleNameChange = (value: string) => {
-    // Auto-generate slug from name if slug is empty or was auto-generated
-    const slug = value.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-');
-    setFormData({ ...formData, name: value, slug });
+    setFormData((prev) => ({ ...prev, name: value, slug: toSlug(value) }));
   };
 
+  const handleSlugChange = (value: string) => {
+    setFormData((prev) => ({ ...prev, slug: toSlug(value) }));
+  };
+
+  // ── Step 1 validation ─────────────────────────────────────────────────────
   const handleNext = () => {
-    if (step === 1) {
-      if (!formData.name.trim()) {
-        toast.error('Please enter a store name');
-        return;
-      }
-      if (!formData.slug.trim()) {
-        toast.error('Please enter a store URL');
-        return;
-      }
-      const RESERVED_WORDS = [
-        'admin', 'finance', 'api', 'store', 'shop', 'dashboard', 'login',
-        'signup', 'register', 'auth', 'payment', 'checkout', 'wallet',
-        'support', 'help', 'billing', 'account', 'settings', 'staff',
-        'developer', 'dev', 'test', 'demo', 'null', 'undefined', 'qafrica',
-        'system', 'internal', 'legal', 'terms', 'privacy', 'about',
-      ];
-      const slugLower = formData.slug.toLowerCase();
-      if (RESERVED_WORDS.includes(slugLower)) {
-        toast.error('That store name is reserved. Please choose a different one.');
+    if (subStep === 1) {
+      if (!formData.name.trim()) { toast.error('Please enter a store name.'); return; }
+      if (!formData.slug.trim()) { toast.error('Please enter a store URL.');  return; }
+      if (RESERVED_SLUGS.has(formData.slug.toLowerCase())) {
+        toast.error('That store URL is reserved. Please choose a different one.');
         return;
       }
     }
-    setStep(step + 1);
+    setSubStep((s) => s + 1);
   };
 
+  // ── Final submit: create store → save store_id → navigate ─────────────────
   const handleSubmit = async () => {
-    if (!user) {
-      toast.error('Session expired. Please sign in again.');
-      navigate('/login');
-      return;
-    }
+    if (!user) { toast.error('Session expired. Please sign in again.'); navigate('/login'); return; }
 
-    const selectedNiches = JSON.parse(sessionStorage.getItem('selected_niches') || '[]');
-    if (selectedNiches.length === 0) {
-      toast.error('No niche selected. Please go back.');
-      navigate('/select-niche');
-      return;
-    }
-
-    setIsLoading(true);
-
+    setIsSaving(true);
     try {
-      // Verify active session before hitting RLS-protected table
+      // Refresh session defensively
       let { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         const { data: refreshed } = await supabase.auth.refreshSession();
         session = refreshed.session;
       }
       if (!session) {
-        toast.error('Your session expired. Please sign in again.');
+        toast.error('Session expired. Please sign in again.');
         navigate('/login');
-        setIsLoading(false);
         return;
       }
 
+      // Create the store
       const { data: store, error } = await storeService.createStore({
-        owner_id: user.id,
-        name: formData.name,
-        slug: formData.slug,
-        description: formData.description,
-        theme: formData.theme,
-        primary_color: formData.primary_color,
+        owner_id:        user.id,
+        name:            formData.name,
+        slug:            formData.slug,
+        description:     formData.description,
+        theme:           formData.theme,
+        primary_color:   formData.primary_color,
         secondary_color: formData.secondary_color,
-        niches: selectedNiches,
-        is_active: false, // activated after plan selection
+        niches:          selectedNiches,
+        is_active:       false, // activated after plan selection
       });
 
       if (error) {
-        if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+        const isDuplicate = error.message?.includes('duplicate') || error.message?.includes('unique');
+        if (isDuplicate) {
           toast.error('That store URL is already taken. Please choose a different one.');
-          setStep(1);
+          setSubStep(1);
         } else {
           toast.error(error.message || 'Failed to create store. Please try again.');
         }
-        setIsLoading(false);
         return;
       }
 
-      if (store) {
-        sessionStorage.setItem('onboarding_store_id', store.id);
-        toast.success('Store created! Now choose your plan.');
-        sendStoreCreatedEmail(user.email, user.full_name || 'there', store.name, store.slug);
-        navigate('/onboarding/choice');
-      }
-    } catch (err) {
-      console.error('Store creation error:', err);
-      toast.error('Something went wrong. Please try again.');
-    }
+      if (!store) throw new Error('No store returned');
 
-    setIsLoading(false);
+      // Save store_id to onboarding_data so user can resume here
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          onboarding_step: 3,
+          onboarding_data: {
+            step: 3,
+            selected_niches: selectedNiches,
+            store_id: store.id,
+          },
+        })
+        .eq('id', user.id);
+
+      if (profileError) throw profileError;
+
+      // Fire-and-forget welcome email
+      sendStoreCreatedEmail(
+        user.email,
+        user.full_name || 'there',
+        store.name,
+        store.slug,
+      );
+
+      toast.success('Store created! Now choose your plan.');
+      navigate('/onboarding/choice');
+    } catch (err: any) {
+      console.error('Store creation error:', err);
+      toast.error(err?.message || 'Something went wrong. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
+  // ── Loading state ─────────────────────────────────────────────────────────
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-500">Loading your progress…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 py-8 px-4">
-      <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 rounded-full blur-3xl" />
       </div>
@@ -169,25 +244,30 @@ export default function OnboardingStoreSetup() {
           </div>
         </div>
 
-        {/* Outer onboarding progress (Account → Niche → Store → Plan) */}
         <OnboardingProgress step={3} />
 
-        {/* Inner store setup sub-steps */}
+        {/* Inner sub-step indicator */}
         <div className="flex items-center justify-center gap-4 mb-8">
-          {steps.map((s, index) => (
+          {SUB_STEPS.map((s, index) => (
             <div key={s.number} className="flex items-center">
-              <div className={`flex items-center gap-2 ${step >= s.number ? 'text-orange-600' : 'text-gray-400'}`}>
+              <div className={`flex items-center gap-2 ${
+                subStep >= s.number ? 'text-orange-600' : 'text-gray-400'
+              }`}>
                 <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                  step > s.number  ? 'bg-green-500 text-white' :
-                  step === s.number ? 'bg-orange-500 text-white' :
-                                      'bg-gray-200 text-gray-400'
+                  subStep > s.number   ? 'bg-green-500 text-white'  :
+                  subStep === s.number ? 'bg-orange-500 text-white' :
+                                         'bg-gray-200 text-gray-400'
                 }`}>
-                  {step > s.number ? <Check className="w-4 h-4" /> : <s.icon className="w-4 h-4" />}
+                  {subStep > s.number
+                    ? <Check className="w-4 h-4" />
+                    : <s.icon className="w-4 h-4" />}
                 </div>
                 <span className="hidden sm:block text-sm font-medium">{s.title}</span>
               </div>
-              {index < steps.length - 1 && (
-                <div className={`w-8 sm:w-12 h-0.5 mx-3 ${step > s.number ? 'bg-orange-500' : 'bg-gray-200'}`} />
+              {index < SUB_STEPS.length - 1 && (
+                <div className={`w-8 sm:w-12 h-0.5 mx-3 ${
+                  subStep > s.number ? 'bg-orange-500' : 'bg-gray-200'
+                }`} />
               )}
             </div>
           ))}
@@ -196,19 +276,19 @@ export default function OnboardingStoreSetup() {
         {/* Card */}
         <AnimatePresence mode="wait">
           <motion.div
-            key={step}
+            key={subStep}
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.25 }}
+            transition={{ duration: 0.22 }}
             className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8"
           >
-            {/* Step 1 — Basic Info */}
-            {step === 1 && (
+            {/* ── Sub-step 1: Basic Info ── */}
+            {subStep === 1 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 mb-1">Name Your Store</h2>
-                  <p className="text-gray-500">You can always change this later from settings</p>
+                  <p className="text-gray-500">You can always change this later from settings.</p>
                 </div>
 
                 <div>
@@ -237,33 +317,35 @@ export default function OnboardingStoreSetup() {
                       autoComplete="off"
                     />
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">Only lowercase letters, numbers, and hyphens</p>
+                  <p className="text-xs text-gray-400 mt-1">Lowercase letters, numbers, and hyphens only.</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Store Description</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Store Description <span className="text-gray-400 font-normal">(optional)</span>
+                  </label>
                   <textarea
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 min-h-[100px] resize-none"
-                    placeholder="Tell customers what your store is about..."
+                    placeholder="Tell customers what your store is about…"
                   />
                 </div>
               </div>
             )}
 
-            {/* Step 2 — Theme */}
-            {step === 2 && (
+            {/* ── Sub-step 2: Theme ── */}
+            {subStep === 2 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 mb-1">Choose a Theme</h2>
-                  <p className="text-gray-500">Pick the style that fits your brand</p>
+                  <p className="text-gray-500">Pick the style that fits your brand.</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  {themes.map((theme) => (
+                  {THEMES.map((theme) => (
                     <button
                       key={theme.id}
-                      onClick={() => setFormData({ ...formData, theme: theme.id })}
+                      onClick={() => setFormData((prev) => ({ ...prev, theme: theme.id }))}
                       className={`p-4 rounded-xl border-2 transition-all text-left ${
                         formData.theme === theme.id
                           ? 'border-orange-500 bg-orange-50 shadow-md'
@@ -284,23 +366,23 @@ export default function OnboardingStoreSetup() {
               </div>
             )}
 
-            {/* Step 3 — Branding */}
-            {step === 3 && (
+            {/* ── Sub-step 3: Branding ── */}
+            {subStep === 3 && (
               <div className="space-y-6">
                 <div className="text-center mb-6">
                   <h2 className="text-2xl font-bold text-gray-900 mb-1">Choose Your Brand Colors</h2>
-                  <p className="text-gray-500">Make your store uniquely yours</p>
+                  <p className="text-gray-500">Make your store uniquely yours.</p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-3">
-                  {colorPresets.map((preset) => (
+                  {COLOR_PRESETS.map((preset) => (
                     <button
                       key={preset.name}
-                      onClick={() => setFormData({
-                        ...formData,
-                        primary_color: preset.primary,
+                      onClick={() => setFormData((prev) => ({
+                        ...prev,
+                        primary_color:   preset.primary,
                         secondary_color: preset.secondary,
-                      })}
+                      }))}
                       className={`p-4 rounded-xl border-2 transition-all ${
                         formData.primary_color === preset.primary
                           ? 'border-orange-500 bg-orange-50 shadow-md'
@@ -316,7 +398,7 @@ export default function OnboardingStoreSetup() {
                   ))}
                 </div>
 
-                {/* Live Preview */}
+                {/* Live preview */}
                 <div className="bg-gray-50 rounded-xl p-5">
                   <p className="text-sm font-medium text-gray-600 mb-3">Live Preview</p>
                   <div className="rounded-xl p-5 text-white" style={{ backgroundColor: formData.primary_color }}>
@@ -336,37 +418,34 @@ export default function OnboardingStoreSetup() {
             {/* Navigation */}
             <div className="flex items-center justify-between mt-8 pt-6 border-t border-gray-100">
               <button
-                onClick={() => step === 1 ? navigate('/select-niche') : setStep(step - 1)}
+                onClick={() => subStep === 1 ? navigate('/select-niche') : setSubStep((s) => s - 1)}
                 className="text-gray-500 hover:text-gray-700 font-medium"
-                disabled={isLoading}
+                disabled={isSaving}
               >
                 ← Back
               </button>
 
-              {step < 3 ? (
+              {subStep < 3 ? (
                 <Button
                   onClick={handleNext}
                   className="bg-orange-500 hover:bg-orange-600 text-white px-8 h-11"
                 >
-                  Continue
-                  <ArrowRight className="w-4 h-4 ml-2" />
+                  Continue <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               ) : (
                 <Button
                   onClick={handleSubmit}
+                  disabled={isSaving}
                   className="bg-orange-500 hover:bg-orange-600 text-white px-8 h-11"
-                  disabled={isLoading}
                 >
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating Store...
-                    </>
+                  {isSaving ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Creating Store…
+                    </span>
                   ) : (
-                    <>
-                      Create Store
-                      <ArrowRight className="w-4 h-4 ml-2" />
-                    </>
+                    <span className="flex items-center gap-2">
+                      Create Store <ArrowRight className="w-4 h-4" />
+                    </span>
                   )}
                 </Button>
               )}
