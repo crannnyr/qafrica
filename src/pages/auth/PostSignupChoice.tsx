@@ -1,144 +1,155 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ShoppingBag, Sparkles, CreditCard, Loader2, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import {
+  ShoppingBag, Sparkles, CreditCard,
+  Loader2, CheckCircle, Clock, AlertCircle,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { subscriptionService, storeService, supabase } from '@/services/supabase';
+import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/stores';
 import { OnboardingProgress } from './NicheSelectionPage';
 import { toast } from 'sonner';
 
-function clearOnboardingStorage() {
-  sessionStorage.removeItem('onboarding_store_id');
-  sessionStorage.removeItem('selected_niches');
-  sessionStorage.removeItem('signup_email');
-  sessionStorage.removeItem('signup_full_name');
-  sessionStorage.removeItem('signup_phone');
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface OnboardingData {
+  step:            number;
+  selected_niches: string[];
+  store_id:        string;
 }
 
-export default function PostSignupChoice() {
-  const navigate = useNavigate();
-  const { user, updateOnboardingStep } = useAuthStore();
-  const [isLoading, setIsLoading] = useState(false);
-  const [storeId, setStoreId] = useState<string | null>(null);
-  const [hasUsedFreePlan, setHasUsedFreePlan] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
+// ── Page ──────────────────────────────────────────────────────────────────────
 
+export default function PostSignupChoice() {
+  const navigate     = useNavigate();
+  const { user, fetchProfile } = useAuthStore();
+
+  const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
+  const [hasUsedFreePlan, setHasUsedFreePlan] = useState(false);
+  const [isChecking, setIsChecking]           = useState(true);
+  const [isActivating, setIsActivating]       = useState(false);
+
+  // ── On mount: load onboarding state from Supabase ─────────────────────────
   useEffect(() => {
-    const storedStoreId = sessionStorage.getItem('onboarding_store_id');
-    if (!storedStoreId || !user) {
-      navigate('/signup');
-      return;
-    }
-    setStoreId(storedStoreId);
-    
-    // Check if user has already used free plan
-    checkFreePlanUsage();
+    const load = async () => {
+      if (!user) { navigate('/login'); return; }
+
+      try {
+        // Load profile onboarding_data + check free plan usage in parallel
+        const [profileRes, subRes] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('onboarding_data')
+            .eq('id', user.id)
+            .single(),
+          supabase
+            .from('subscriptions')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('tier', 'free')
+            .maybeSingle(),
+        ]);
+
+        const saved = profileRes.data?.onboarding_data as OnboardingData | null;
+
+        // Guard: must have completed previous steps
+        if (!saved?.store_id || !saved?.selected_niches?.length) {
+          toast.error('Please complete the previous steps first.');
+          navigate(saved?.selected_niches?.length ? '/onboarding/store-setup' : '/select-niche');
+          return;
+        }
+
+        setOnboardingData(saved);
+        setHasUsedFreePlan(!!subRes.data);
+      } catch (err) {
+        console.error('Failed to load onboarding state:', err);
+        toast.error('Could not load your progress. Please try again.');
+        navigate('/select-niche');
+      } finally {
+        setIsChecking(false);
+      }
+    };
+
+    load();
   }, [user, navigate]);
 
-  const checkFreePlanUsage = async () => {
-    if (!user) return;
-    
-    try {
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('tier', 'free')
-        .maybeSingle();
-      
-      if (data) {
-        setHasUsedFreePlan(true);
-      }
-    } catch (err) {
-      console.error('Error checking free plan usage:', err);
-    } finally {
-      setIsChecking(false);
-    }
-  };
-
+  // ── Activate free trial ────────────────────────────────────────────────────
   const handleStartTrial = async () => {
-    if (!user || !storeId) return;
-    
+    if (!user || !onboardingData) return;
+
     if (hasUsedFreePlan) {
-      toast.error('You have already used the free plan. Please choose a paid plan.');
+      toast.error('Free plan already used. Please choose a paid plan.');
       return;
     }
 
-    setIsLoading(true);
+    setIsActivating(true);
     try {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 4); // 4 days free trial
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error('Session expired. Please sign in again.');
+        navigate('/login');
+        return;
+      }
 
-      const { error } = await subscriptionService.createSubscription({
-        user_id: user.id,
-        store_id: storeId,
-        tier: 'free',
-        is_trial: true,
-        // FIXED: Removed is_free_plan: true - column doesn't exist in database schema
-        starts_at: new Date().toISOString(),
-        expires_at: expiresAt.toISOString(),
-        is_active: true,
-        duration_months: 0,
-        amount_paid: 0,
-        niches: JSON.parse(sessionStorage.getItem('selected_niches') || '[]'),
-        auto_renew: false,
-        payment_reference: 'FREE_TRIAL',
+      // Call the existing complete-onboarding edge function
+      const res = await supabase.functions.invoke('complete-onboarding', {
+        body: {
+          store_id:        onboardingData.store_id,
+          selected_niches: onboardingData.selected_niches,
+          plan:            'free',
+        },
       });
 
-      if (error) {
-        console.error('Subscription creation error:', error);
-        throw error;
-      }
+      if (res.error) throw res.error;
 
-      // Activate the store
-      const { error: storeError } = await storeService.updateStore(storeId, { is_active: true });
-      
-      if (storeError) {
-        console.error('Store activation error:', storeError);
-        throw storeError;
-      }
-      
-      // Update onboarding step to 4 (plan selected) and mark as complete
-      const { error: onboardingError } = await updateOnboardingStep(4, true);
-      
-      if (onboardingError) {
-        console.error('Onboarding update error:', onboardingError);
-        throw onboardingError;
-      }
+      // Mark onboarding complete on profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          onboarding_step:      4,
+          onboarding_completed: true,
+          onboarding_data:      {
+            ...onboardingData,
+            step: 4,
+            completed: true,
+          },
+        })
+        .eq('id', user.id);
+
+      if (profileError) throw profileError;
+
+      // Refresh auth store so ProtectedRoute sees onboarding_completed = true
+      await fetchProfile();
 
       toast.success('Free plan activated! You have 4 days to explore.');
-      clearOnboardingStorage();
-      
-      // Small delay to ensure state updates propagate
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 500);
-      
+      navigate('/dashboard');
     } catch (err: any) {
       console.error('Trial activation error:', err);
       toast.error(err?.message || 'Failed to activate free plan. Please try again.');
     } finally {
-      setIsLoading(false);
+      setIsActivating(false);
     }
   };
 
-  const handlePayNow = () => {
-    navigate('/pricing');
-  };
+  const handlePayNow = () => navigate('/pricing');
 
+  // ── Loading ────────────────────────────────────────────────────────────────
   if (isChecking) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+          <p className="text-sm text-gray-500">Loading your options…</p>
+        </div>
       </div>
     );
   }
 
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 py-8 px-4">
-      {/* Background */}
-      <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 rounded-full blur-3xl" />
       </div>
@@ -159,17 +170,17 @@ export default function PostSignupChoice() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.4 }}
         >
           <div className="text-center mb-10">
             <h1 className="text-3xl font-bold text-gray-900 mb-3">Choose Your Path</h1>
             <p className="text-gray-600 text-lg">
-              Start selling immediately with your free plan or subscribe now
+              Start selling immediately with your free plan or subscribe now.
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Free Plan */}
+            {/* ── Free Plan card ── */}
             <motion.div
               whileHover={{ scale: hasUsedFreePlan ? 1 : 1.02 }}
               className={`bg-white rounded-2xl shadow-xl border-2 p-8 relative overflow-hidden ${
@@ -189,51 +200,54 @@ export default function PostSignupChoice() {
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Start Free Plan</h2>
               <div className="text-3xl font-bold text-orange-600 mb-4">₦0</div>
               <p className="text-gray-600 mb-6">
-                Get full access to start selling with 1 niche for 4 days. No credit card required.
+                Full access to start selling with 1 niche for 4 days. No credit card required.
               </p>
 
               <ul className="space-y-3 mb-8">
                 {[
-                  { icon: CheckCircle, color: 'text-green-500', text: '1 Niche selection' },
-                  { icon: CheckCircle, color: 'text-green-500', text: 'Unlimited products' },
-                  { icon: CheckCircle, color: 'text-green-500', text: 'All features included' },
-                  { icon: Clock,       color: 'text-orange-500', text: '4 days duration'   },
+                  { icon: CheckCircle, color: 'text-green-500', text: '1 Niche selection'     },
+                  { icon: CheckCircle, color: 'text-green-500', text: 'Unlimited products'     },
+                  { icon: CheckCircle, color: 'text-green-500', text: 'All features included'  },
+                  { icon: Clock,       color: 'text-orange-500', text: '4-day trial duration'  },
                 ].map(({ icon: Icon, color, text }) => (
                   <li key={text} className="flex items-center gap-2 text-sm text-gray-700">
-                    <Icon className={`w-5 h-5 ${color}`} />
-                    <span>{text}</span>
+                    <Icon className={`w-5 h-5 ${color} flex-shrink-0`} />
+                    {text}
                   </li>
                 ))}
               </ul>
 
-            {hasUsedFreePlan ? (
-  <div className="space-y-3">
-    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
-      <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-      <p className="text-sm text-amber-700">Free plan already used on this account</p>
-    </div>
-    <Button
-      onClick={() => {
-        clearOnboardingStorage();
-        navigate('/dashboard');
-      }}
-      className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-lg font-semibold"
-    >
-      Continue with Free Plan →
-    </Button>
-  </div>
-) : (
+              {hasUsedFreePlan ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                    <p className="text-sm text-amber-700">Free plan already used on this account.</p>
+                  </div>
+                  <Button
+                    onClick={handlePayNow}
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-lg font-semibold"
+                  >
+                    View Paid Plans →
+                  </Button>
+                </div>
+              ) : (
                 <Button
                   onClick={handleStartTrial}
-                  disabled={isLoading}
+                  disabled={isActivating}
                   className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-lg"
                 >
-                  {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Start Free Plan'}
+                  {isActivating ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin" /> Activating…
+                    </span>
+                  ) : (
+                    'Start Free Plan'
+                  )}
                 </Button>
               )}
             </motion.div>
 
-            {/* Pay Now */}
+            {/* ── Subscribe card ── */}
             <motion.div
               whileHover={{ scale: 1.02 }}
               className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8"
@@ -256,8 +270,8 @@ export default function PostSignupChoice() {
                   'No expiration',
                 ].map((text) => (
                   <li key={text} className="flex items-center gap-2 text-sm text-gray-700">
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                    <span>{text}</span>
+                    <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                    {text}
                   </li>
                 ))}
               </ul>
@@ -273,8 +287,8 @@ export default function PostSignupChoice() {
           </div>
 
           <p className="text-center mt-8 text-sm text-gray-500">
-            {hasUsedFreePlan 
-              ? 'Free plan can only be used once per account.'
+            {hasUsedFreePlan
+              ? 'The free plan can only be used once per account.'
               : 'You can upgrade anytime during or after your free plan.'}
           </p>
         </motion.div>
