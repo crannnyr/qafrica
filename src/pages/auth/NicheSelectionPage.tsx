@@ -21,8 +21,9 @@ interface Niche {
 }
 
 export default function NicheSelectionPage() {
-  const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const navigate  = useNavigate();
+  const { user }  = useAuthStore();
+  const userId    = user?.id; // ← stable primitive, not the full object
 
   const [niches, setNiches]                 = useState<Niche[]>([]);
   const [selectedNiches, setSelectedNiches] = useState<string[]>([]);
@@ -30,35 +31,43 @@ export default function NicheSelectionPage() {
   const [isSaving, setIsSaving]             = useState(false);
 
   useEffect(() => {
+    if (!userId) return;
+    let cancelled = false; // ← prevents state update if component unmounts mid-fetch
+
     const init = async () => {
-      await Promise.all([fetchNiches(), resumeProgress()]);
+      // Both calls in parallel — single round trip
+      const [nichesRes, profileRes] = await Promise.all([
+        supabase
+          .from('niches')
+          .select('id, name, icon, description')
+          .eq('is_active', true)
+          .order('sort_order'),
+        supabase
+          .from('profiles')
+          .select('onboarding_data')
+          .eq('id', userId)
+          .single(),
+      ]);
+
+      if (cancelled) return;
+
+      if (nichesRes.error) {
+        toast.error('Failed to load niches. Please refresh.');
+      } else {
+        setNiches(nichesRes.data ?? []);
+      }
+
+      const saved = profileRes.data?.onboarding_data;
+      if (saved?.selected_niches?.length) {
+        setSelectedNiches(saved.selected_niches);
+      }
+
       setIsLoading(false);
     };
+
     init();
-  }, [user]);
-
-  const fetchNiches = async () => {
-    const { data, error } = await supabase
-      .from('niches')
-      .select('id, name, icon, description')
-      .eq('is_active', true)
-      .order('sort_order');
-
-    if (error) { toast.error('Failed to load niches. Please refresh.'); return; }
-    setNiches(data ?? []);
-  };
-
-  const resumeProgress = async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('profiles')
-      .select('onboarding_data')
-      .eq('id', user.id)
-      .single();
-
-    const saved = data?.onboarding_data;
-    if (saved?.selected_niches?.length) setSelectedNiches(saved.selected_niches);
-  };
+    return () => { cancelled = true; };
+  }, [userId]); // ← string primitive, never causes spurious re-fires
 
   const toggleNiche = (nicheId: string) => {
     setSelectedNiches((prev) => {
@@ -76,7 +85,7 @@ export default function NicheSelectionPage() {
 
   const handleContinue = async () => {
     if (selectedNiches.length === 0) { toast.error('Please select a niche to continue.'); return; }
-    if (!user) { toast.error('Session expired. Please sign in again.'); navigate('/login'); return; }
+    if (!userId) { toast.error('Session expired. Please sign in again.'); navigate('/login'); return; }
 
     setIsSaving(true);
     try {
@@ -86,7 +95,7 @@ export default function NicheSelectionPage() {
           onboarding_step: 2,
           onboarding_data: { step: 2, selected_niches: selectedNiches },
         })
-        .eq('id', user.id);
+        .eq('id', userId);
 
       if (error) throw error;
       navigate('/onboarding/store-setup');
@@ -110,7 +119,6 @@ export default function NicheSelectionPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 py-8 px-4">
-      {/* Ambient blobs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 rounded-full blur-3xl" />
@@ -135,7 +143,6 @@ export default function NicheSelectionPage() {
           transition={{ duration: 0.4 }}
           className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8"
         >
-          {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-3">Select Your Niche</h1>
             <p className="text-gray-600 max-w-2xl mx-auto">
@@ -144,7 +151,6 @@ export default function NicheSelectionPage() {
             </p>
           </div>
 
-          {/* Counter */}
           <div className="flex items-center justify-center gap-2 mb-8">
             <span className="text-sm text-gray-500">Selected:</span>
             <span className={`text-sm font-medium ${
