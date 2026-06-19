@@ -25,7 +25,7 @@ import DashboardLayout from '@/pages/dashboard/DashboardLayout';
 import DashboardHome from '@/pages/dashboard/DashboardHome';
 import StoreSetup from '@/pages/dashboard/StoreSetup';
 import ProductsPage from '@/pages/dashboard/ProductsPage';
-import AddProductPage from '@/pages/dashboard/AddProductPage';
+import AddProductPage from '@/pages/dashboard/AddProduct';
 import EditProductPage from '@/pages/dashboard/EditProductPage';
 import ImportCatalogPage from '@/pages/dashboard/ImportCatalogPage';
 import OrdersPage from '@/pages/dashboard/OrdersPage';
