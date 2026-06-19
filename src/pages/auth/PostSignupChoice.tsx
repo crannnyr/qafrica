@@ -22,38 +22,41 @@ interface OnboardingData {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PostSignupChoice() {
-  const navigate     = useNavigate();
-  const { user, fetchProfile } = useAuthStore();
+  const navigate                       = useNavigate();
+  // Pull both user and the store setter so we can update auth state directly
+  const { user, updateOnboardingStep } = useAuthStore();
+  const userId                         = user?.id;
 
-  const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
+  const [onboardingData, setOnboardingData]   = useState<OnboardingData | null>(null);
   const [hasUsedFreePlan, setHasUsedFreePlan] = useState(false);
   const [isChecking, setIsChecking]           = useState(true);
   const [isActivating, setIsActivating]       = useState(false);
 
-  // ── On mount: load onboarding state from Supabase ─────────────────────────
+  // ── Load state — stable dep ────────────────────────────────────────────────
   useEffect(() => {
-    const load = async () => {
-      if (!user) { navigate('/login'); return; }
+    if (!userId) { navigate('/login'); return; }
+    let cancelled = false;
 
+    const load = async () => {
       try {
-        // Load profile onboarding_data + check free plan usage in parallel
         const [profileRes, subRes] = await Promise.all([
           supabase
             .from('profiles')
             .select('onboarding_data')
-            .eq('id', user.id)
+            .eq('id', userId)
             .single(),
           supabase
             .from('subscriptions')
             .select('id')
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .eq('tier', 'free')
             .maybeSingle(),
         ]);
 
+        if (cancelled) return;
+
         const saved = profileRes.data?.onboarding_data as OnboardingData | null;
 
-        // Guard: must have completed previous steps
         if (!saved?.store_id || !saved?.selected_niches?.length) {
           toast.error('Please complete the previous steps first.');
           navigate(saved?.selected_niches?.length ? '/onboarding/store-setup' : '/select-niche');
@@ -67,17 +70,17 @@ export default function PostSignupChoice() {
         toast.error('Could not load your progress. Please try again.');
         navigate('/select-niche');
       } finally {
-        setIsChecking(false);
+        if (!cancelled) setIsChecking(false);
       }
     };
 
     load();
-  }, [user, navigate]);
+    return () => { cancelled = true; };
+  }, [userId, navigate]); // ← primitive, not full user object
 
   // ── Activate free trial ────────────────────────────────────────────────────
   const handleStartTrial = async () => {
     if (!user || !onboardingData) return;
-
     if (hasUsedFreePlan) {
       toast.error('Free plan already used. Please choose a paid plan.');
       return;
@@ -92,7 +95,7 @@ export default function PostSignupChoice() {
         return;
       }
 
-      // Call the existing complete-onboarding edge function
+      // Call complete-onboarding edge function
       const res = await supabase.functions.invoke('complete-onboarding', {
         body: {
           store_id:        onboardingData.store_id,
@@ -103,33 +106,39 @@ export default function PostSignupChoice() {
 
       if (res.error) throw res.error;
 
-      // Mark onboarding complete on profile
-      const { error: profileError } = await supabase
+      // ── FIX: use updateOnboardingStep from authStore so isAuthenticated
+      //    is set to true in the store — this stops ProtectedRoute from
+      //    redirecting back to /select-niche ──────────────────────────────
+      const { error: stepError } = await updateOnboardingStep(4, true);
+      if (stepError) throw new Error(stepError);
+
+      // Also persist the completed state to onboarding_data
+      await supabase
         .from('profiles')
         .update({
-          onboarding_step:      4,
-          onboarding_completed: true,
-          onboarding_data:      {
-            ...onboardingData,
-            step: 4,
-            completed: true,
-          },
+          onboarding_data: { ...onboardingData, step: 4, completed: true },
         })
         .eq('id', user.id);
 
-      if (profileError) throw profileError;
-
-      // Refresh auth store so ProtectedRoute sees onboarding_completed = true
-      await fetchProfile();
-
       toast.success('Free plan activated! You have 4 days to explore.');
-      navigate('/dashboard');
+
+      // Small delay so Zustand state propagates before route check
+      setTimeout(() => navigate('/dashboard'), 300);
     } catch (err: any) {
       console.error('Trial activation error:', err);
       toast.error(err?.message || 'Failed to activate free plan. Please try again.');
     } finally {
       setIsActivating(false);
     }
+  };
+
+  // ── If free plan already used: let them continue with existing store ───────
+  const handleContinueExisting = () => {
+    // They already have a store + subscription from a prior session
+    // Just mark onboarding complete in the store and go to dashboard
+    updateOnboardingStep(4, true).then(() => {
+      navigate('/dashboard');
+    });
   };
 
   const handlePayNow = () => navigate('/pricing');
@@ -146,7 +155,6 @@ export default function PostSignupChoice() {
     );
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 py-8 px-4">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -182,9 +190,9 @@ export default function PostSignupChoice() {
           <div className="grid md:grid-cols-2 gap-6">
             {/* ── Free Plan card ── */}
             <motion.div
-              whileHover={{ scale: hasUsedFreePlan ? 1 : 1.02 }}
+              whileHover={{ scale: 1.02 }}
               className={`bg-white rounded-2xl shadow-xl border-2 p-8 relative overflow-hidden ${
-                hasUsedFreePlan ? 'border-gray-200 opacity-75' : 'border-orange-100'
+                hasUsedFreePlan ? 'border-gray-200' : 'border-orange-100'
               }`}
             >
               {!hasUsedFreePlan && (
@@ -205,9 +213,9 @@ export default function PostSignupChoice() {
 
               <ul className="space-y-3 mb-8">
                 {[
-                  { icon: CheckCircle, color: 'text-green-500', text: '1 Niche selection'     },
-                  { icon: CheckCircle, color: 'text-green-500', text: 'Unlimited products'     },
-                  { icon: CheckCircle, color: 'text-green-500', text: 'All features included'  },
+                  { icon: CheckCircle, color: 'text-green-500',  text: '1 Niche selection'    },
+                  { icon: CheckCircle, color: 'text-green-500',  text: 'Unlimited products'    },
+                  { icon: CheckCircle, color: 'text-green-500',  text: 'All features included' },
                   { icon: Clock,       color: 'text-orange-500', text: '4-day trial duration'  },
                 ].map(({ icon: Icon, color, text }) => (
                   <li key={text} className="flex items-center gap-2 text-sm text-gray-700">
@@ -218,16 +226,17 @@ export default function PostSignupChoice() {
               </ul>
 
               {hasUsedFreePlan ? (
+                // ── FIX: restored "Continue to Dashboard" button ──────────
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
                     <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
                     <p className="text-sm text-amber-700">Free plan already used on this account.</p>
                   </div>
                   <Button
-                    onClick={handlePayNow}
+                    onClick={handleContinueExisting}
                     className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-lg font-semibold"
                   >
-                    View Paid Plans →
+                    Continue to Dashboard →
                   </Button>
                 </div>
               ) : (
