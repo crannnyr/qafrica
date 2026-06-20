@@ -143,10 +143,12 @@ const DROPSHIP_PRODUCTS: DropshipProduct[] = [
 ];
 
 /* ─── ANIMATION HELPERS ─── */
+const EASE_OUT_EXPO = [0.22, 1, 0.36, 1] as [number, number, number, number];
+
 const fadeUp = (delay = 0) => ({
   initial: { opacity: 0, y: 16 },
   animate: { opacity: 1, y: 0 },
-  transition: { delay, duration: 0.6, ease: [0.22, 1, 0.36, 1] as number[] },
+  transition: { delay, duration: 0.6, ease: EASE_OUT_EXPO },
 });
 
 const springTransition = (delay = 0, stiffness = 220, damping = 18) => ({
@@ -267,7 +269,7 @@ function FlyingItem({ item }: { item: CartItem }) {
       style={{ left: store.x, top: store.y, transform: 'translate(-50%, -50%)' }}
       initial={{ opacity: 0, scale: 0, x: 0, y: 0 }}
       animate={{ opacity: [0, 1, 1, 0], scale: [0, 1.1, 1, 0.3], x: [0, targetX], y: [0, targetY] }}
-      transition={{ duration: 1.6, delay: item.delay, ease: [0.4, 0, 0.2, 1] }}
+      transition={{ duration: 1.6, delay: item.delay, ease: EASE_CART_ITEM }}
     >
       <div className="flex flex-col items-center gap-0.5">
         <div className="text-2xl drop-shadow-lg">{item.emoji}</div>
@@ -334,7 +336,7 @@ function PhaseIntro() {
         className="text-center mt-6"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.55, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ delay: 0.55, duration: 0.7, ease: EASE_OUT_EXPO }}
       >
         <h1 className="text-white font-black text-4xl sm:text-5xl leading-tight tracking-tight mb-2">
           QAfrica
@@ -424,7 +426,10 @@ const FINGER_KEYFRAMES = {
   opacity: [0, 1, 1, 1, 0],
   y:       [0, 0, -6, 0, 0],
 };
-const SWEEP_TRANSITION = { duration: 6.5, ease: [0.3, 0, 0.4, 1] as number[], times: [0, 0.08, 0.4, 0.85, 1] };
+const EASE_IN_OUT_CUBIC = [0.3, 0, 0.4, 1] as [number, number, number, number];
+const EASE_CART_ITEM   = [0.4, 0, 0.2, 1] as [number, number, number, number];
+
+const SWEEP_TRANSITION = { duration: 6.5, ease: EASE_IN_OUT_CUBIC, times: [0, 0.08, 0.4, 0.85, 1] };
 
 function PhaseWorld() {
   return (
@@ -489,7 +494,7 @@ function PhaseWorld() {
               className="text-sm"
               initial={{ opacity: 0, y: -8, scale: 0 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ delay: item.delay + 1.0, ...springTransition(0, 300) }}
+              transition={springTransition(item.delay + 1.0, 300)}
             >
               {item.emoji}
             </motion.span>
