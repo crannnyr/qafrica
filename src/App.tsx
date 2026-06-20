@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { Toaster } from '@/components/ui/sonner';
@@ -16,6 +18,7 @@ import PostSignupChoice from '@/pages/auth/PostSignupChoice';
 import PricingPage from '@/pages/auth/PricingPage';
 import PaymentCallbackPage from '@/pages/auth/PaymentCallbackPage';
 import AcceptStaffInvitePage from '@/pages/auth/AcceptStaffInvitePage';
+
 // Legal Pages
 import PrivacyPolicyPage from '@/pages/legal/PrivacyPolicyPage';
 import TermsOfServicePage from '@/pages/legal/TermsOfServicePage';
@@ -25,14 +28,13 @@ import DashboardLayout from '@/pages/dashboard/DashboardLayout';
 import DashboardHome from '@/pages/dashboard/DashboardHome';
 import StoreSetup from '@/pages/dashboard/StoreSetup';
 import ProductsPage from '@/pages/dashboard/ProductsPage';
-import AddProductPage from '@/pages/dashboard/AddProduct';
-import EditProductPage from '@/pages/dashboard/EditProduct';
+import AddProductPage from '@/pages/dashboard/AddProductPage';
+import EditProductPage from '@/pages/dashboard/EditProductPage';
 import ImportCatalogPage from '@/pages/dashboard/ImportCatalogPage';
 import OrdersPage from '@/pages/dashboard/OrdersPage';
 import ManualSalesPage from '@/pages/dashboard/ManualSalesPage';
 import OrderManagementPage from '@/pages/dashboard/OrderManagementPage';
 import OrderDetailPage from '@/pages/dashboard/OrderDetailPage';
-// FIX: import the two new dropship pages created for original product owners
 import DropshipOrdersPage from '@/pages/dashboard/DropshipOrdersPage';
 import DropshipOrderDetailPage from '@/pages/dashboard/DropshipOrderDetailPage';
 import WalletPage from '@/pages/dashboard/WalletPage';
@@ -49,6 +51,11 @@ import CouponsPage from '@/pages/dashboard/CouponsPage';
 import StoreTemplatesPage from '@/pages/dashboard/StoreTemplatesPage';
 import NicheCustomizationPage from '@/pages/dashboard/NicheCustomizationPage';
 
+// Marketplace Placeholder Pages
+import JumiaPage from '@/pages/dashboard/JumiaPage';
+import KongaPage from '@/pages/dashboard/KongaPage';
+import JijiPage from '@/pages/dashboard/JijiPage';
+
 // Store Pages
 import StorePage from '@/pages/store/StorePage';
 import ProductDetailPage from '@/pages/store/ProductDetailPage';
@@ -59,7 +66,7 @@ import StoreNotFoundPage from '@/pages/store/StoreNotFoundPage';
 // Customer Pages
 import CustomerLoginPage from '@/pages/customer/CustomerLoginPage';
 import CustomerSignupPage from '@/pages/customer/CustomerSignupPage';
-import CustomerDashboard from '@/pages/customer/CustomerDashboard/index';
+import CustomerDashboard from '@/pages/customer/CustomerDashboard';
 import CustomerOrderDetailPage from '@/pages/customer/CustomerOrderDetailPage';
 import StoreDiscoveryPage from '@/pages/customer/StoreDiscoveryPage';
 import UniversalCartPage from '@/pages/customer/UniversalCartPage';
@@ -108,9 +115,8 @@ import CustomDomainRouter from '@/components/CustomDomainRouter';
 
 // ── Route helpers ─────────────────────────────────────────────────────────────
 
-const isInOnboardingFlow = (user: any) => {
-  return sessionStorage.getItem('signup_email') !== null && !user?.onboarding_completed;
-};
+const isInOnboardingFlow = (user: any) =>
+  sessionStorage.getItem('signup_email') !== null && !user?.onboarding_completed;
 
 const ProtectedRoute = ({
   children,
@@ -125,30 +131,19 @@ const ProtectedRoute = ({
 
   if (isOnboardingRoute) {
     const inOnboarding = isInOnboardingFlow(user);
-    if (!isAuthenticated && !inOnboarding) {
-      return <Navigate to="/login" replace />;
-    }
+    if (!isAuthenticated && !inOnboarding) return <Navigate to="/login" replace />;
     return <>{children}</>;
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
 
-  if (requireAdmin && user?.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />;
-  }
+  if (requireAdmin && user?.role !== 'admin') return <Navigate to="/dashboard" replace />;
 
-  // Staff members skip onboarding entirely
-  if (user?.role === 'staff') {
-    return <>{children}</>;
-  }
+  if (user?.role === 'staff') return <>{children}</>;
 
   const hasCompletedOnboarding = user?.onboarding_completed === true;
 
-  if (!hasCompletedOnboarding) {
-    return <Navigate to="/select-niche" replace />;
-  }
+  if (!hasCompletedOnboarding) return <Navigate to="/select-niche" replace />;
 
   if (hasCompletedOnboarding && sessionStorage.getItem('signup_email')) {
     sessionStorage.removeItem('signup_email');
@@ -163,22 +158,10 @@ const ProtectedRoute = ({
 const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, user } = useAuthStore();
 
-  if (isInOnboardingFlow(user)) {
-    return <Navigate to="/select-niche" replace />;
-  }
-
-  if (!isAuthenticated) {
-    return <>{children}</>;
-  }
-
-  if (user?.onboarding_completed !== true) {
-    return <Navigate to="/select-niche" replace />;
-  }
-
-  if (user?.role === 'admin') {
-    return <Navigate to="/admin" replace />;
-  }
-
+  if (isInOnboardingFlow(user)) return <Navigate to="/select-niche" replace />;
+  if (!isAuthenticated) return <>{children}</>;
+  if (user?.onboarding_completed !== true) return <Navigate to="/select-niche" replace />;
+  if (user?.role === 'admin') return <Navigate to="/admin" replace />;
   return <Navigate to="/dashboard" replace />;
 };
 
@@ -191,11 +174,7 @@ function App() {
     const saved = localStorage.getItem('theme');
     const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const shouldBeDark = saved === 'dark' || (!saved && systemDark);
-    if (shouldBeDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', shouldBeDark);
   }, []);
 
   useEffect(() => {
@@ -216,16 +195,16 @@ function App() {
         <Routes>
           {/* Public Routes */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-          <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
+          <Route path="/login"           element={<PublicRoute><LoginPage /></PublicRoute>} />
+          <Route path="/signup"          element={<PublicRoute><SignupPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/reset-password"  element={<ResetPasswordPage />} />
 
-          {/* Legal Pages — always public, never redirect */}
-          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+          {/* Legal */}
+          <Route path="/privacy-policy"   element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
 
-          {/* Onboarding Routes */}
+          {/* Onboarding */}
           <Route path="/select-niche" element={
             <ProtectedRoute isOnboardingRoute={true}><NicheSelectionPage /></ProtectedRoute>
           } />
@@ -235,105 +214,109 @@ function App() {
           <Route path="/onboarding/choice" element={
             <ProtectedRoute isOnboardingRoute={true}><PostSignupChoice /></ProtectedRoute>
           } />
-          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/pricing"          element={<PricingPage />} />
           <Route path="/payment/callback" element={<PaymentCallbackPage />} />
 
           {/* Customer Routes */}
-          <Route path="/customer/login" element={<CustomerLoginPage />} />
-          <Route path="/customer/signup" element={<CustomerSignupPage />} />
-          <Route path="/customer/dashboard" element={<CustomerDashboard />} />
+          <Route path="/customer/login"           element={<CustomerLoginPage />} />
+          <Route path="/customer/signup"          element={<CustomerSignupPage />} />
+          <Route path="/customer/dashboard"       element={<CustomerDashboard />} />
           <Route path="/customer/orders/:orderId" element={<CustomerOrderDetailPage />} />
-          <Route path="/stores" element={<StoreDiscoveryPage />} />
-          <Route path="/cart" element={<UniversalCartPage />} />
-          <Route path="/checkout" element={<UniversalCheckoutPage />} />
+          <Route path="/stores"                   element={<StoreDiscoveryPage />} />
+          <Route path="/cart"                     element={<UniversalCartPage />} />
+          <Route path="/checkout"                 element={<UniversalCheckoutPage />} />
 
-          {/* Staff invite acceptance — always public */}
+          {/* Staff invite */}
           <Route path="/accept-staff-invite" element={<AcceptStaffInvitePage />} />
 
           {/* Dashboard Routes */}
           <Route path="/dashboard" element={
             <ProtectedRoute><DashboardLayout /></ProtectedRoute>
           }>
-            <Route index element={<DashboardHome />} />
-            <Route path="store-setup" element={<StoreSetup />} />
-            <Route path="products" element={<ProductsPage />} />
-            <Route path="products/add" element={<StaffGuard><AddProductPage /></StaffGuard>} />
-            <Route path="products/edit/:productId" element={<StaffGuard><EditProductPage /></StaffGuard>} />
-            <Route path="products/bulk-import" element={<StaffGuard><BulkImportPage /></StaffGuard>} />
-            <Route path="import-catalog" element={<StaffGuard><ImportCatalogPage /></StaffGuard>} />
-            <Route path="orders" element={<OrdersPage />} />
-            <Route path="orders/:orderId" element={<OrderDetailPage />} />
-            <Route path="order-management" element={<OrderManagementPage />} />
-            {/* FIX: routes for original product owners to view and fulfill dropship orders */}
-            <Route path="dropship-orders" element={<DropshipOrdersPage />} />
-            <Route path="dropship-orders/:orderId" element={<DropshipOrderDetailPage />} />
-            <Route path="reviews" element={<ReviewsPage />} />
-            <Route path="coupons" element={<StaffGuard><CouponsPage /></StaffGuard>} />
-            <Route path="wallet" element={<StaffGuard><WalletPage /></StaffGuard>} />
-            <Route path="delivery-zones" element={<StaffGuard><DeliveryZonesPage /></StaffGuard>} />
-            <Route path="domain" element={<StaffGuard><DomainPage /></StaffGuard>} />
-            <Route path="analytics" element={<StaffGuard><AnalyticsPage /></StaffGuard>} />
-            <Route path="tax-expenses" element={<StaffGuard><TaxExpensesPage /></StaffGuard>} />
-            <Route path="settings" element={<StaffGuard><StoreSettingsPage /></StaffGuard>} />
-            <Route path="templates" element={<StaffGuard><StoreTemplatesPage /></StaffGuard>} />
-            <Route path="subscription" element={<StaffGuard><SubscriptionPage /></StaffGuard>} />
-            <Route path="niches" element={<StaffGuard><NicheCustomizationPage /></StaffGuard>} />
-            <Route path="how-to-use" element={<HowToUsePage />} />
-            <Route  path="/dashboard/manual-sales" element={<ManualSalesPage />} />
+            <Route index                    element={<DashboardHome />} />
+            <Route path="store-setup"       element={<StoreSetup />} />
+            <Route path="products"          element={<ProductsPage />} />
+            <Route path="products/add"      element={<StaffGuard><AddProductPage /></StaffGuard>} />
+            <Route path="products/edit/:productId"   element={<StaffGuard><EditProductPage /></StaffGuard>} />
+            <Route path="products/bulk-import"       element={<StaffGuard><BulkImportPage /></StaffGuard>} />
+            <Route path="import-catalog"             element={<StaffGuard><ImportCatalogPage /></StaffGuard>} />
+            <Route path="orders"                     element={<OrdersPage />} />
+            <Route path="orders/:orderId"            element={<OrderDetailPage />} />
+            <Route path="order-management"           element={<OrderManagementPage />} />
+            <Route path="dropship-orders"            element={<DropshipOrdersPage />} />
+            <Route path="dropship-orders/:orderId"   element={<DropshipOrderDetailPage />} />
+            <Route path="reviews"                    element={<ReviewsPage />} />
+            <Route path="coupons"                    element={<StaffGuard><CouponsPage /></StaffGuard>} />
+            <Route path="wallet"                     element={<StaffGuard><WalletPage /></StaffGuard>} />
+            <Route path="delivery-zones"             element={<StaffGuard><DeliveryZonesPage /></StaffGuard>} />
+            <Route path="domain"                     element={<StaffGuard><DomainPage /></StaffGuard>} />
+            <Route path="analytics"                  element={<StaffGuard><AnalyticsPage /></StaffGuard>} />
+            <Route path="tax-expenses"               element={<StaffGuard><TaxExpensesPage /></StaffGuard>} />
+            <Route path="settings"                   element={<StaffGuard><StoreSettingsPage /></StaffGuard>} />
+            <Route path="templates"                  element={<StaffGuard><StoreTemplatesPage /></StaffGuard>} />
+            <Route path="subscription"               element={<StaffGuard><SubscriptionPage /></StaffGuard>} />
+            <Route path="niches"                     element={<StaffGuard><NicheCustomizationPage /></StaffGuard>} />
+            <Route path="how-to-use"                 element={<HowToUsePage />} />
+            <Route path="manual-sales"               element={<ManualSalesPage />} />
+
+            {/* Marketplace Routes */}
+            <Route path="jumia" element={<JumiaPage />} />
+            <Route path="konga" element={<KongaPage />} />
+            <Route path="jiji"  element={<JijiPage />} />
           </Route>
 
           {/* Admin Routes */}
           <Route path="/admin" element={
             <ProtectedRoute requireAdmin={true}><AdminLayout /></ProtectedRoute>
           }>
-            <Route index element={<AdminDashboard />} />
-            <Route path="users" element={<AdminUsers />} />
-            <Route path="stores" element={<AdminStores />} />
-            <Route path="products" element={<AdminProducts />} />
-            <Route path="orders" element={<AdminOrders />} />
-            <Route path="withdrawals" element={<AdminWithdrawals />} />
-            <Route path="subscriptions" element={<AdminSubscriptions />} />
-            <Route path="domain-requests" element={<AdminDomainRequests />} />
-            <Route path="notifications" element={<AdminNotifications />} />
-            <Route path="legal" element={<AdminLegal />} />
+            <Route index                   element={<AdminDashboard />} />
+            <Route path="users"            element={<AdminUsers />} />
+            <Route path="stores"           element={<AdminStores />} />
+            <Route path="products"         element={<AdminProducts />} />
+            <Route path="orders"           element={<AdminOrders />} />
+            <Route path="withdrawals"      element={<AdminWithdrawals />} />
+            <Route path="subscriptions"    element={<AdminSubscriptions />} />
+            <Route path="domain-requests"  element={<AdminDomainRequests />} />
+            <Route path="notifications"    element={<AdminNotifications />} />
+            <Route path="legal"            element={<AdminLegal />} />
           </Route>
 
-          {/* Developer Portal Routes */}
+          {/* Developer Portal */}
           <Route path="/developer" element={<Navigate to="/developer/login" replace />} />
-          <Route path="/developer/signup" element={<DeveloperSignupPage />} />
-          <Route path="/developer/login" element={<DeveloperLoginPage />} />
-          <Route path="/developer/verify-email" element={<DeveloperVerifyEmailPage />} />
-          <Route path="/developer/forgot-password" element={<DeveloperForgotPasswordPage />} />
-          <Route path="/developer/reset-password" element={<DeveloperResetPasswordPage />} />
-          <Route path="/developer/onboarding" element={<DeveloperOnboardingPage />} />
+          <Route path="/developer/signup"                       element={<DeveloperSignupPage />} />
+          <Route path="/developer/login"                        element={<DeveloperLoginPage />} />
+          <Route path="/developer/verify-email"                 element={<DeveloperVerifyEmailPage />} />
+          <Route path="/developer/forgot-password"              element={<DeveloperForgotPasswordPage />} />
+          <Route path="/developer/reset-password"               element={<DeveloperResetPasswordPage />} />
+          <Route path="/developer/onboarding"                   element={<DeveloperOnboardingPage />} />
           <Route path="/developer/onboarding/paystack-callback" element={<PaystackConnectCallbackPage />} />
 
           <Route path="/developer/dashboard" element={<DeveloperLayout />}>
-            <Route index element={<DeveloperDashboardHome />} />
-            <Route path="api-keys" element={<DeveloperApiKeysPage />} />
-            <Route path="catalog" element={<DeveloperCatalogPage />} />
-            <Route path="imports" element={<DeveloperImportsPage />} />
-            <Route path="products" element={<DeveloperProductsPage />} />
-            <Route path="orders" element={<DeveloperOrdersPage />} />
+            <Route index                element={<DeveloperDashboardHome />} />
+            <Route path="api-keys"      element={<DeveloperApiKeysPage />} />
+            <Route path="catalog"       element={<DeveloperCatalogPage />} />
+            <Route path="imports"       element={<DeveloperImportsPage />} />
+            <Route path="products"      element={<DeveloperProductsPage />} />
+            <Route path="orders"        element={<DeveloperOrdersPage />} />
             <Route path="orders/:orderId" element={<DeveloperOrderDetailPage />} />
-            <Route path="webhooks" element={<DeveloperWebhooksPage />} />
-            <Route path="wallet" element={<DeveloperWalletPage />} />
-            <Route path="subscription" element={<DeveloperSubscriptionPage />} />
-            <Route path="settings" element={<DeveloperSettingsPage />} />
-            <Route path="docs" element={<DeveloperDocsPage />} />
+            <Route path="webhooks"      element={<DeveloperWebhooksPage />} />
+            <Route path="wallet"        element={<DeveloperWalletPage />} />
+            <Route path="subscription"  element={<DeveloperSubscriptionPage />} />
+            <Route path="settings"      element={<DeveloperSettingsPage />} />
+            <Route path="docs"          element={<DeveloperDocsPage />} />
           </Route>
 
           {/* Store Status Pages */}
-          <Route path="/store-closed" element={<StoreClosedPage />} />
+          <Route path="/store-closed"    element={<StoreClosedPage />} />
           <Route path="/store-not-found" element={<StoreNotFoundPage />} />
-          <Route path="/store-inactive" element={<StoreClosedPage />} />
+          <Route path="/store-inactive"  element={<StoreClosedPage />} />
 
-          {/* Store Routes — /:slug must be LAST so it only catches unmatched paths */}
-          <Route path="/:slug" element={<StorePage />} />
-          <Route path="/:slug/product/:productId" element={<ProductDetailPage />} />
-          <Route path="/:slug/checkout" element={<CheckoutPage />} />
+          {/* Store Routes — must be LAST */}
+          <Route path="/:slug"                        element={<StorePage />} />
+          <Route path="/:slug/product/:productId"     element={<ProductDetailPage />} />
+          <Route path="/:slug/checkout"               element={<CheckoutPage />} />
 
-          {/* Catch all → store not found (not redirect to home) */}
+          {/* Catch all */}
           <Route path="*" element={<StoreNotFoundPage />} />
         </Routes>
       </CustomDomainRouter>
