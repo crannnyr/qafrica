@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores';
+import { supabase } from '@/services/supabase';
 import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
 
 import PricingHeader from './Pricing/PricingHeader';
@@ -17,33 +18,71 @@ import PricingSummary from './Pricing/PricingSummary';
 import { monthlyPlans, lifetimePlans } from './Pricing/constants';
 
 export default function PricingPage() {
-  const navigate = useNavigate();
-  const { fetchProfile } = useAuthStore();
+  const navigate         = useNavigate();
+  const { user, updateOnboardingStep } = useAuthStore();
+  const userId           = user?.id;
 
-  const [selectedPlan, setSelectedPlan]       = useState<string>('three_niches');
+  const [selectedPlan, setSelectedPlan]         = useState<string>('three_niches');
   const [selectedDuration, setSelectedDuration] = useState<number>(1);
-  const [isLoading, setIsLoading]             = useState(false);
-  const [isSkipLoading, setIsSkipLoading]     = useState(false);
-  const [selectedNiches, setSelectedNiches]   = useState<string[]>([]);
-  const [billingType, setBillingType]         = useState<'monthly' | 'lifetime'>('monthly');
+  const [isLoading, setIsLoading]               = useState(false);
+  const [isSkipLoading, setIsSkipLoading]       = useState(false);
+  const [selectedNiches, setSelectedNiches]     = useState<string[]>([]);
+  const [storeId, setStoreId]                   = useState<string | null>(null);
+  const [userEmail, setUserEmail]               = useState<string>('');
+  const [billingType, setBillingType]           = useState<'monthly' | 'lifetime'>('monthly');
 
+  // ── Load onboarding_data from Supabase — no sessionStorage ───────────────
   useEffect(() => {
-    const niches = sessionStorage.getItem('selected_niches');
-    if (niches) {
-      setSelectedNiches(JSON.parse(niches));
-    } else {
-      toast.error('Please select a niche first');
-      navigate('/select-niche');
-    }
-  }, [navigate]);
+    if (!userId) return;
+    let cancelled = false;
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('onboarding_data, email')
+        .eq('id', userId)
+        .single();
+
+      if (cancelled) return;
+
+      if (error || !data) {
+        toast.error('Could not load your session. Please try again.');
+        navigate('/select-niche');
+        return;
+      }
+
+      const saved = data.onboarding_data ?? {};
+
+      if (!saved.selected_niches?.length) {
+        toast.error('Please select a niche first.');
+        navigate('/select-niche');
+        return;
+      }
+
+      if (!saved.store_id) {
+        toast.error('Please complete store setup first.');
+        navigate('/onboarding/store-setup');
+        return;
+      }
+
+      setSelectedNiches(saved.selected_niches);
+      setStoreId(saved.store_id);
+      setUserEmail(data.email ?? user?.email ?? '');
+    };
+
+    load();
+    return () => { cancelled = true; };
+  }, [userId, navigate, user?.email]);
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
   const calculatePrice = (planId: string, duration: number) => {
     const plan = monthlyPlans.find((p) => p.id === planId);
     if (!plan) return 0;
     const multiplier = [
-      { value: 1, multiplier: 1 }, { value: 3, multiplier: 2.7 },
-      { value: 6, multiplier: 5 }, { value: 12, multiplier: 9 },
+      { value: 1,  multiplier: 1   },
+      { value: 3,  multiplier: 2.7 },
+      { value: 6,  multiplier: 5   },
+      { value: 12, multiplier: 9   },
     ].find((d) => d.value === duration)?.multiplier || 1;
     return Math.round(plan.basePrice * multiplier);
   };
@@ -53,19 +92,26 @@ export default function PricingPage() {
     return selectedNiches.length <= maxNiches;
   };
 
-  // ── Subscribe ──────────────────────────────────────────────────────────────
+  // ── Subscribe (paid) ──────────────────────────────────────────────────────
   const handleSubscribe = async () => {
+    if (!storeId || !selectedNiches.length) {
+      toast.error('Missing store or niche data. Please go back and try again.');
+      return;
+    }
+
     setIsLoading(true);
     try {
       await loadPaystackScript();
+
       const isLifetime       = billingType === 'lifetime';
       const lifetimePlanData = lifetimePlans.find((p) => p.id === selectedPlan);
       const amount           = isLifetime
         ? lifetimePlanData?.price || 0
         : calculatePrice(selectedPlan, selectedDuration);
       const reference = generateReference(isLifetime ? 'LIFE' : 'SUB');
-      const email     = sessionStorage.getItem('signup_email') || 'user@example.com';
 
+      // Store payment metadata in sessionStorage only for the callback
+      // (short-lived: just for the redirect back from Paystack)
       sessionStorage.setItem('subscription_plan',     selectedPlan);
       sessionStorage.setItem('subscription_duration', isLifetime ? 'lifetime' : selectedDuration.toString());
       sessionStorage.setItem('subscription_amount',   amount.toString());
@@ -73,13 +119,14 @@ export default function PricingPage() {
       sessionStorage.setItem('is_lifetime',           isLifetime ? 'true' : 'false');
 
       initializePayment({
-        email,
+        email:  userEmail,
         amount: toKobo(amount),
         reference,
         metadata: {
           plan:        selectedPlan,
           duration:    isLifetime ? 'lifetime' : selectedDuration,
           niches:      selectedNiches,
+          store_id:    storeId,
           is_lifetime: isLifetime,
         },
         onSuccess: (response) => {
@@ -97,63 +144,37 @@ export default function PricingPage() {
     }
   };
 
-  // ── Free plan ──────────────────────────────────────────────────────────────
+  // ── Free plan: call complete-onboarding edge function ─────────────────────
   const handleContinueWithFree = async () => {
+    if (!storeId || !selectedNiches.length) {
+      toast.error('Missing store or niche data. Please go back and try again.');
+      return;
+    }
+
     setIsSkipLoading(true);
     try {
-      const storeId = sessionStorage.getItem('onboarding_store_id');
-      const { supabase } = await import('@/services/supabase');
-      const { data: { user } } = await supabase.auth.getUser();
+      const res = await supabase.functions.invoke('complete-onboarding', {
+        body: {
+          store_id:        storeId,
+          selected_niches: selectedNiches,
+          plan:            'free',
+        },
+      });
 
-      if (!user) { toast.error('Please log in first'); navigate('/login'); return; }
+      if (res.error) throw res.error;
 
-      const { error: subError } = await supabase
-        .from('subscriptions')
-        .insert({
-          user_id:           user.id,
-          store_id:          storeId || undefined,
-          tier:              'free',
-          niches:            selectedNiches,
-          duration_months:   0,
-          amount_paid:       0,
-          payment_reference: 'FREE_PLAN_DIRECT',
-          starts_at:         new Date().toISOString(),
-          expires_at:        new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(),
-          is_active:         true,
-          is_trial:          true,
-        });
-
-      if (subError) {
-        toast.error('Failed to activate free plan');
-        setIsSkipLoading(false);
-        return;
-      }
-
-      await supabase
-        .from('profiles')
-        .update({
-          onboarding_step:      4,
-          onboarding_completed: true,
-          updated_at:           new Date().toISOString(),
-        })
-        .eq('id', user.id);
-
-      await fetchProfile();
-
-      ['selected_niches','subscription_plan','subscription_duration',
-       'subscription_amount','payment_reference','onboarding_store_id',
-       'signup_email','signup_full_name','signup_phone',
-      ].forEach((key) => sessionStorage.removeItem(key));
+      // Update Zustand store so ProtectedRoute sees isAuthenticated: true
+      await updateOnboardingStep(4, true);
 
       toast.success('Free plan activated! Welcome to QAFRICA.');
       navigate('/dashboard', { replace: true });
-    } catch (error: any) {
-      toast.error('Failed to activate free plan. Please try again.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to activate free plan. Please try again.');
       setIsSkipLoading(false);
     }
   };
 
-  // ── Derived ────────────────────────────────────────────────────────────────
+  // ── Derived ───────────────────────────────────────────────────────────────
   const currentPrice = billingType === 'monthly'
     ? calculatePrice(selectedPlan, selectedDuration)
     : lifetimePlans.find((p) => p.id === selectedPlan)?.price || 0;
@@ -162,7 +183,6 @@ export default function PricingPage() {
     ? monthlyPlans.find((p) => p.id === selectedPlan)?.name
     : lifetimePlans.find((p) => p.id === selectedPlan)?.name;
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 py-8 px-4">
       <div className="fixed top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
@@ -178,22 +198,13 @@ export default function PricingPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
         >
-          <BillingToggle
-            billingType={billingType}
-            onToggle={setBillingType}
-          />
+          <BillingToggle billingType={billingType} onToggle={setBillingType} />
 
-          <FreePlanBanner
-            isLoading={isSkipLoading}
-            onContinue={handleContinueWithFree}
-          />
+          <FreePlanBanner isLoading={isSkipLoading} onContinue={handleContinueWithFree} />
 
           {billingType === 'monthly' && (
             <>
-              <DurationPicker
-                selectedDuration={selectedDuration}
-                onSelect={setSelectedDuration}
-              />
+              <DurationPicker selectedDuration={selectedDuration} onSelect={setSelectedDuration} />
               <MonthlyPlanGrid
                 selectedPlan={selectedPlan}
                 selectedDuration={selectedDuration}
@@ -222,7 +233,7 @@ export default function PricingPage() {
             isSkipLoading={isSkipLoading}
             onSubscribe={handleSubscribe}
             onContinueWithFree={handleContinueWithFree}
-            onBack={() => navigate('/select-niche')}
+            onBack={() => navigate('/onboarding/choice')}
           />
         </motion.div>
       </div>
