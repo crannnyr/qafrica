@@ -1,11 +1,11 @@
 // src/pages/auth/OnboardingStoreSetup.tsx
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag } from 'lucide-react';
 import { useAuthStore } from '@/stores';
-import { storeService, supabase } from '@/services';
+import { storeService, supabase } from '@/services/supabase';
 import { toast } from 'sonner';
 import { sendStoreCreatedEmail } from '@/services/email';
 
@@ -18,25 +18,30 @@ import StoreNavFooter from './StoreSetup/StoreNavFooter';
 import { RESERVED_SLUGS, INITIAL_FORM_DATA } from './StoreSetup/constants';
 
 export default function OnboardingStoreSetup() {
-  const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const navigate      = useNavigate();
+  const { user }      = useAuthStore();
+  const userId        = user?.id; // ← stable primitive
 
   const [subStep, setSubStep]               = useState(1);
   const [isLoading, setIsLoading]           = useState(true);
   const [isSaving, setIsSaving]             = useState(false);
   const [selectedNiches, setSelectedNiches] = useState<string[]>([]);
   const [formData, setFormData]             = useState(INITIAL_FORM_DATA);
+  const submitLock                          = useRef(false); // blocks double-tap
 
-  // ── Resume progress ────────────────────────────────────────────────────────
+  // ── Resume progress — stable dep ──────────────────────────────────────────
   useEffect(() => {
-    const resume = async () => {
-      if (!user) { navigate('/login'); return; }
+    if (!userId) { navigate('/login'); return; }
+    let cancelled = false;
 
+    const resume = async () => {
       const { data, error } = await supabase
         .from('profiles')
         .select('onboarding_data, full_name')
-        .eq('id', user.id)
+        .eq('id', userId)
         .single();
+
+      if (cancelled) return;
 
       if (error || !data) {
         toast.error('Could not load your progress. Please try again.');
@@ -62,7 +67,8 @@ export default function OnboardingStoreSetup() {
     };
 
     resume();
-  }, [user, navigate]);
+    return () => { cancelled = true; };
+  }, [userId, navigate]); // ← primitive string, not full user object
 
   // ── Slug helpers ───────────────────────────────────────────────────────────
   const toSlug = (value: string) =>
@@ -87,11 +93,14 @@ export default function OnboardingStoreSetup() {
     setSubStep((s) => s + 1);
   };
 
-  // ── Submit ─────────────────────────────────────────────────────────────────
+  // ── Submit — double-tap protected ─────────────────────────────────────────
   const handleSubmit = async () => {
+    if (submitLock.current || isSaving) return;
     if (!user) { toast.error('Session expired. Please sign in again.'); navigate('/login'); return; }
 
+    submitLock.current = true;
     setIsSaving(true);
+
     try {
       let { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -117,10 +126,14 @@ export default function OnboardingStoreSetup() {
       });
 
       if (error) {
-        const isDuplicate = error.message?.includes('duplicate') || error.message?.includes('unique');
+        const isDuplicate   = error.message?.includes('duplicate') || error.message?.includes('unique');
+        const isSingleStore = error.message?.includes('one store per account');
         if (isDuplicate) {
           toast.error('That store URL is already taken. Please choose a different one.');
           setSubStep(1);
+        } else if (isSingleStore) {
+          toast.error('You already have a store. Redirecting to your dashboard.');
+          navigate('/dashboard');
         } else {
           toast.error(error.message || 'Failed to create store. Please try again.');
         }
@@ -157,6 +170,7 @@ export default function OnboardingStoreSetup() {
       toast.error(err?.message || 'Something went wrong. Please try again.');
     } finally {
       setIsSaving(false);
+      submitLock.current = false;
     }
   };
 
