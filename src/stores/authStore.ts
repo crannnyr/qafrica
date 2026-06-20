@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { authService, userService } from '@/services';
+import { authService, userService } from '@/services/supabase';
 import { sendWelcomeEmail } from '@/services/email';
 import type { User, StoreOwner } from '@/types';
 import { useStoreStore } from './storeStore';
@@ -14,7 +14,6 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
 
-  // Actions
   setUser: (user: StoreOwner | null) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; onboardingIncomplete?: boolean; currentStep?: number }>;
   signup: (email: string, password: string, userData: Partial<User>) => Promise<{ success: boolean; error?: string }>;
@@ -49,7 +48,6 @@ export const useAuthStore = create<AuthState>()(
             const { data: profile, error: profileError } = await userService.getProfile(data.user.id);
 
             if (profileError || !profile) {
-              // No profile row = this is a customer account, not a store owner
               await authService.signOut();
               set({ isLoading: false });
               return {
@@ -58,7 +56,6 @@ export const useAuthStore = create<AuthState>()(
               };
             }
 
-            // ROLE GUARD: reject non-store-owner accounts
             if (profile.role !== 'store_owner' && profile.role !== 'admin') {
               await authService.signOut();
               set({ isLoading: false });
@@ -69,7 +66,10 @@ export const useAuthStore = create<AuthState>()(
             }
 
             const isOnboardingComplete = profile.onboarding_completed === true;
-            const currentStep = profile.onboarding_step || 0;
+
+            // ── FIX 6: read resume step from onboarding_data not sessionStorage ──
+            const onboardingData = profile.onboarding_data ?? {};
+            const currentStep    = onboardingData.step ?? profile.onboarding_step ?? 0;
 
             set({
               user: profile as StoreOwner,
@@ -78,8 +78,6 @@ export const useAuthStore = create<AuthState>()(
             });
 
             if (!isOnboardingComplete) {
-              sessionStorage.setItem('signup_email', email);
-              sessionStorage.setItem('onboarding_step', currentStep.toString());
               return { success: true, onboardingIncomplete: true, currentStep };
             }
 
@@ -106,13 +104,11 @@ export const useAuthStore = create<AuthState>()(
           }
 
           if (data?.user) {
-            // Small delay to allow DB trigger to complete
             await new Promise(resolve => setTimeout(resolve, 500));
 
             const { data: profile, error: profileError } = await userService.getProfile(data.user.id);
 
             if (profile && !profileError) {
-              // Verify the profile was created as a store owner
               if (profile.role !== 'store_owner') {
                 await authService.signOut();
                 set({ isLoading: false });
@@ -127,16 +123,10 @@ export const useAuthStore = create<AuthState>()(
                 isLoading: false,
               });
 
-              if (!isOnboardingComplete) {
-                sessionStorage.setItem('signup_email', email);
-                sessionStorage.setItem('onboarding_step', (profile.onboarding_step || 0).toString());
-              }
-
               sendWelcomeEmail(email, userData.full_name || 'there');
             } else {
-              // Profile not ready yet — don't authenticate
+              // Profile not ready yet
               set({ isAuthenticated: false, isLoading: false });
-              sessionStorage.setItem('signup_email', email);
               sendWelcomeEmail(email, userData.full_name || 'there');
             }
           } else {
@@ -167,8 +157,13 @@ export const useAuthStore = create<AuthState>()(
           set({ user: null, isAuthenticated: false, error: null });
           localStorage.removeItem('qafrica-store');
           localStorage.removeItem('qafrica-auth');
+          // Clean up any legacy sessionStorage keys
           sessionStorage.removeItem('signup_email');
           sessionStorage.removeItem('onboarding_step');
+          sessionStorage.removeItem('onboarding_store_id');
+          sessionStorage.removeItem('selected_niches');
+          sessionStorage.removeItem('signup_full_name');
+          sessionStorage.removeItem('signup_phone');
         }
       },
 
@@ -184,9 +179,6 @@ export const useAuthStore = create<AuthState>()(
           const { data, error } = await userService.getProfile(authUser.id);
 
           if (data && !error) {
-            // ROLE GUARD: if a customer session reaches here, clear authStore
-            // state only — do NOT call signOut, as that would destroy the
-            // customer's active Supabase session (both stores share one client)
             if (data.role !== 'store_owner' && data.role !== 'admin') {
               set({ user: null, isAuthenticated: false });
               return;
@@ -198,14 +190,7 @@ export const useAuthStore = create<AuthState>()(
               user: data as StoreOwner,
               isAuthenticated: isOnboardingComplete,
             });
-
-            if (!isOnboardingComplete && data.email) {
-              sessionStorage.setItem('signup_email', data.email);
-              sessionStorage.setItem('onboarding_step', (data.onboarding_step || 0).toString());
-            }
           } else {
-            // No profiles row — this is a customer session. Clear authStore
-            // state only, do NOT sign out.
             set({ user: null, isAuthenticated: false });
           }
         } catch (err) {
@@ -220,9 +205,7 @@ export const useAuthStore = create<AuthState>()(
 
         try {
           const { data, error } = await userService.updateProfile(user.id, updates);
-
           if (error) return { success: false, error: error.message };
-
           set({ user: data as StoreOwner });
           return { success: true };
         } catch (err) {
@@ -231,6 +214,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      // ── FIX 5: removed all sessionStorage reads/writes ────────────────────
       updateOnboardingStep: async (step: number, completed: boolean = false) => {
         const { user } = get();
         if (!user) return { success: false, error: 'Not authenticated' };
@@ -240,16 +224,12 @@ export const useAuthStore = create<AuthState>()(
           if (completed) updates.onboarding_completed = true;
 
           const { data, error } = await userService.updateProfile(user.id, updates);
-
           if (error) return { success: false, error: error.message };
 
           set({
             user: { ...user, ...updates } as StoreOwner,
-            isAuthenticated: completed,
+            isAuthenticated: completed ? true : get().isAuthenticated,
           });
-
-          sessionStorage.setItem('onboarding_step', step.toString());
-          if (completed) sessionStorage.removeItem('signup_email');
 
           return { success: true };
         } catch (err) {
