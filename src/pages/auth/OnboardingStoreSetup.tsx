@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag } from 'lucide-react';
 import { useAuthStore } from '@/stores';
-import { storeService, supabase } from '@/services/supabase';
+import { storeService } from '@/services/store.service';
+import { supabase } from '@/services/supabase';
 import { toast } from 'sonner';
 import { sendStoreCreatedEmail } from '@/services/email';
 
@@ -20,16 +21,16 @@ import { RESERVED_SLUGS, INITIAL_FORM_DATA } from './StoreSetup/constants';
 export default function OnboardingStoreSetup() {
   const navigate      = useNavigate();
   const { user }      = useAuthStore();
-  const userId        = user?.id; // ← stable primitive
+  const userId        = user?.id;
 
   const [subStep, setSubStep]               = useState(1);
   const [isLoading, setIsLoading]           = useState(true);
   const [isSaving, setIsSaving]             = useState(false);
   const [selectedNiches, setSelectedNiches] = useState<string[]>([]);
   const [formData, setFormData]             = useState(INITIAL_FORM_DATA);
-  const submitLock                          = useRef(false); // blocks double-tap
+  const submitLock                          = useRef(false);
 
-  // ── Resume progress — stable dep ──────────────────────────────────────────
+  // ── Resume progress ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!userId) { navigate('/login'); return; }
     let cancelled = false;
@@ -68,7 +69,7 @@ export default function OnboardingStoreSetup() {
 
     resume();
     return () => { cancelled = true; };
-  }, [userId, navigate]); // ← primitive string, not full user object
+  }, [userId, navigate]);
 
   // ── Slug helpers ───────────────────────────────────────────────────────────
   const toSlug = (value: string) =>
@@ -93,7 +94,7 @@ export default function OnboardingStoreSetup() {
     setSubStep((s) => s + 1);
   };
 
-  // ── Submit — double-tap protected ─────────────────────────────────────────
+  // ── Submit ─────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
     if (submitLock.current || isSaving) return;
     if (!user) { toast.error('Session expired. Please sign in again.'); navigate('/login'); return; }
