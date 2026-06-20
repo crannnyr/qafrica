@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore, useStoreStore } from '@/stores';
 import { toast } from 'sonner';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import {
   NICHE_CATEGORIES,
   getNicheDisplayList,

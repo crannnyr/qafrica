@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, ThumbsUp, ThumbsDown, MessageCircle, Check, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase, reviewService } from '@/services/supabase';
+import { supabase, reviewService } from '@/services';
 import { useCustomerAuthStore } from '@/stores'; // NEW: Import auth store
 import { toast } from 'sonner';
 import type { Review, ReviewSummary } from '@/types';

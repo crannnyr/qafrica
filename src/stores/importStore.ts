@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { importCatalogService, supabase } from '@/services/supabase';
+import { importCatalogService, supabase } from '@/services';
 import type { ImportCatalogItem, Product } from '@/types';
 
 interface ImportState {

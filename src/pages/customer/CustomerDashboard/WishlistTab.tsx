@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Heart, Store } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { useCartStore } from '@/stores';
 
 export default function WishlistTab() {

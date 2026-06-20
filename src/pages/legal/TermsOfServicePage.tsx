@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { ShoppingBag, ArrowLeft, Loader2 } from 'lucide-react';
 import SEO from '@/components/SEO';
 import CONFIG from '@/lib/config';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 
 export default function TermsOfServicePage() {
   const [content, setContent] = useState('');

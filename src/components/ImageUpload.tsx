@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
-import { storageService } from '@/services/supabase';
+import { storageService } from '@/services';
 import { toast } from 'sonner';
 
 interface ImageUploadProps {

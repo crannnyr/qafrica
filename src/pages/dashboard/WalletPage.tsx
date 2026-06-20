@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuthStore, useWalletStore } from '@/stores';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { sendEmail } from '@/services/email';
 import { toast } from 'sonner';
 

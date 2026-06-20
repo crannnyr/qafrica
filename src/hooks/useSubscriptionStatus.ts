@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuthStore } from '@/stores';
-import { subscriptionService } from '@/services/supabase';
+import { subscriptionService } from '@/services';
 import type { Subscription } from '@/types';
 
 interface SubscriptionStatus {

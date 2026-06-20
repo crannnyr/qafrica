@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Crown, Users, CheckCircle, XCircle, Calendar } from 'lucide-react';
-import { subscriptionService } from '@/services/supabase';
+import { subscriptionService } from '@/services';
 
 export default function AdminSubscriptions() {
   const [subscriptions, setSubscriptions] = useState<any[]>([]);

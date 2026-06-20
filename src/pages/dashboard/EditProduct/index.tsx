@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Trash2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStoreStore, useAuthStore } from '@/stores';
 import { toast } from 'sonner';
-import { productService } from '@/services/supabase';
+import { productService } from '@/services';
 import { EMPTY_FORM } from '../AddProduct/constants';
 import { Step1Basics } from '../AddProduct/components/steps/Step1Basics';
 import { Step2Images } from '../AddProduct/components/steps/Step2Images';

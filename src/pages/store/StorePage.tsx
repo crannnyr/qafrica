@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StoreSEO } from '@/components/SEO';
-import { storeService, productService, supabase } from '@/services/supabase';
+import { storeService, productService, supabase } from '@/services';
 import { toast } from 'sonner';
 import { getThemeById } from '@/lib/themes';
 import { useCustomerAuthStore, useCartStore } from '@/stores';

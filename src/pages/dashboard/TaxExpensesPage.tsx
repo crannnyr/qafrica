@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStoreStore, useAuthStore } from '@/stores';
-import { taxService, expenseService, taxReportService } from '@/services/supabase';
+import { taxService, expenseService, taxReportService } from '@/services';
 import { toast } from 'sonner';
 import { EXPENSE_CATEGORIES } from '@/types';
 import type { TaxSettings, BusinessExpense, TaxReport, TaxCalculation, ExpenseCategorySummary } from '@/types';

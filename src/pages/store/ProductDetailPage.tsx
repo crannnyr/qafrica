@@ -6,7 +6,7 @@ import {
   Minus, Plus, Check, AlertCircle, Clock,
   ChevronDown, ChevronUp, Truck, Shield, Package,
 } from 'lucide-react';
-import { storeService, productService, supabase } from '@/services/supabase';
+import { storeService, productService, supabase } from '@/services';
 import Reviews from '@/components/Reviews';
 import ImageCarousel from '@/components/ImageCarousel';
 import { toast } from 'sonner';

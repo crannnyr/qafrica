@@ -8,7 +8,7 @@ import {
   Package, RefreshCw, Clock
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { storeService, deliveryZoneService, authService, supabase, messageService } from '@/services/supabase';
+import { storeService, deliveryZoneService, authService, supabase, messageService } from '@/services';
 import { loadPaystackScript, initializePayment, generateReference } from '@/services/paystack';
 import { toast } from 'sonner';
 import { getThemeById } from '@/lib/themes';

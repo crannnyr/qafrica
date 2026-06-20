@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { CheckCircle, Loader2, ShoppingBag, Sparkles, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { verifyTransaction } from '@/services/paystack';
-import { subscriptionService, authService, userService } from '@/services/supabase';
+import { subscriptionService, authService, userService } from '@/services';
 import { useAuthStore } from '@/stores'; // NEW: Import auth store
 import { toast } from 'sonner';
 

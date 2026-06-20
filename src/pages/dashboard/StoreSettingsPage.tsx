@@ -12,7 +12,7 @@ import DarkModeToggle from '@/components/DarkModeToggle';
 import { SingleImageUpload } from '@/components/ImageUpload';
 import { useStoreStore, useAuthStore } from '@/stores';
 import { toast } from 'sonner';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import type { StoreStaff } from '@/types';
 
 type Tab = 'general' | 'images' | 'branding' | 'payments' | 'social' | 'password' | 'staff';

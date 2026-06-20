@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStoreStore } from '@/stores';
-import { productService } from '@/services/supabase';
+import { productService } from '@/services';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 

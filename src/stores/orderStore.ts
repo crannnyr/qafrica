@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { orderService } from '@/services/supabase';
+import { orderService } from '@/services';
 import type { Order, DropshipOrderView } from '@/types';
 
 interface OrderState {

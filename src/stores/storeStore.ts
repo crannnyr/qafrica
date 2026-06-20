@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { storeService, productService, deliveryZoneService } from '@/services/supabase';
+import { storeService, productService, deliveryZoneService } from '@/services';
 import type { Store, Product, DeliveryZone } from '@/types';
 
 interface StoreState {

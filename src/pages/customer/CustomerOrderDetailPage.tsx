@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCustomerAuthStore } from '@/stores';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { toast } from 'sonner';
 
 // ── Types ─────────────────────────────────────────────────────────────────────

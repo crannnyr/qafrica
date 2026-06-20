@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
-import { deliveryZoneService, messageService, supabase } from '@/services/supabase';
+import { deliveryZoneService, messageService, supabase } from '@/services';
 import { toast } from 'sonner';
 import type { DeliveryZone } from '@/types';
 

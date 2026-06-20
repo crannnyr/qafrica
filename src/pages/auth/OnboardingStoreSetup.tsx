@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag } from 'lucide-react';
 import { useAuthStore } from '@/stores';
-import { storeService, supabase } from '@/services/supabase';
+import { storeService, supabase } from '@/services';
 import { toast } from 'sonner';
 import { sendStoreCreatedEmail } from '@/services/email';
 

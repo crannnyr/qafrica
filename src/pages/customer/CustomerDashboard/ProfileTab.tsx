@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { useCustomerAuthStore } from '@/stores';
 import { toast } from 'sonner';
 

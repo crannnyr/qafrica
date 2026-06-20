@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ShoppingCart, Search } from 'lucide-react';
-import { orderService } from '@/services/supabase';
+import { orderService } from '@/services';
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);

@@ -5,7 +5,7 @@ import {
   Users, Store, X, Check, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { toast } from 'sonner';
 
 interface ModalNotification {

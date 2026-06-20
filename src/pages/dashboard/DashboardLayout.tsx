@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutDashboard, Package, ShoppingCart, Wallet, MapPin, ChartBar as BarChart3, Settings, Store, LogOut, Menu, X, Import, Bell, User, Crown, Globe, ChevronLeft, TriangleAlert as AlertTriangle, Calculator, BookOpen, MessageSquare, Tag, Upload, Palette, Layers, Clock, CircleCheck as CheckCircle2, ChevronDown, ChevronRight, Shield, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore, useStoreStore } from '@/stores';
-import { stockAlertService, supabase } from '@/services/supabase';
+import { stockAlertService, supabase } from '@/services';
 import { subscribeToOrders, subscribeToStockAlerts, subscribeToWalletUpdates } from '@/services/realtime';
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import ModalNotificationDisplay from '@/components/ModalNotificationDisplay';

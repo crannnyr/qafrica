@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Mail, ArrowLeft, Loader2, CheckCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { authService } from '@/services/supabase';
+import { authService } from '@/services';
 import { toast } from 'sonner';
 
 export default function VerifyEmailPage() {

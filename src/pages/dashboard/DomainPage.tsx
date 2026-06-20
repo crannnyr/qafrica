@@ -7,7 +7,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useStoreStore, useAuthStore } from '@/stores';
 import { toast } from 'sonner';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
 
 // Change 1: Updated pricing with per-extension breakdown

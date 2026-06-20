@@ -8,7 +8,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import StorePage from '@/pages/store/StorePage';
 import ProductDetailPage from '@/pages/store/ProductDetailPage';
 import CheckoutPage from '@/pages/store/CheckoutPage';

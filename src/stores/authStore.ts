@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { authService, userService } from '@/services/supabase';
+import { authService, userService } from '@/services';
 import { sendWelcomeEmail } from '@/services/email';
 import type { User, StoreOwner } from '@/types';
 import { useStoreStore } from './storeStore';

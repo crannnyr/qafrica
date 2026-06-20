@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStoreStore } from '@/stores';
-import { supabase } from '@/services/supabase'; // Updated to use direct supabase queries
+import { supabase } from '@/services'; // Updated to use direct supabase queries
 import { toast } from 'sonner';
 
 const timeRanges = [

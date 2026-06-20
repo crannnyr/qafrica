@@ -6,7 +6,7 @@ import {
   ShoppingBag, Filter, ChevronRight, Sparkles, ImageIcon
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import type { Store } from '@/types';
 
 // Featured categories

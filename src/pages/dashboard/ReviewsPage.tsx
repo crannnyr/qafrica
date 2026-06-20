@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStoreStore } from '@/stores';
-import { reviewService } from '@/services/supabase';
+import { reviewService } from '@/services';
 import { toast } from 'sonner';
 import type { Review } from '@/types';
 

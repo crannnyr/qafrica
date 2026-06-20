@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Package, Search, Store, Eye, Trash2 } from 'lucide-react';
-import { productService } from '@/services/supabase';
+import { productService } from '@/services';
 import { toast } from 'sonner';
 
 export default function AdminProducts() {

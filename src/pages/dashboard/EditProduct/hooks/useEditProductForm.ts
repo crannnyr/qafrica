@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { productService } from '@/services/supabase';
+import { productService } from '@/services';
 import type { VariantCombination } from '../../AddProduct/types';
 
 interface UseEditProductFormProps {

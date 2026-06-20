@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ShoppingBag, Lock } from 'lucide-react';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { useAuthStore } from '@/stores';
 import { toast } from 'sonner';
 

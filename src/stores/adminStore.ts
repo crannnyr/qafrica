@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { adminService, storeService, userService } from '@/services/supabase';
+import { adminService, storeService, userService } from '@/services';
 import type { AdminDashboardStats, User, Store } from '@/types';
 
 interface AdminState {

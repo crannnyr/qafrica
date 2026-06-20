@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { productService } from '@/services/supabase';
+import { productService } from '@/services';
 import { processEmailQueue } from '@/services/email';
 import { STEPS } from '../constants';
 import type { VariantCombination } from '../types';

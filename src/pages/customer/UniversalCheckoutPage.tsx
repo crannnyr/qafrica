@@ -7,7 +7,7 @@ import {
   ChevronRight, Loader2, MessageCircle, X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { deliveryZoneService, authService, supabase, messageService } from '@/services/supabase';
+import { deliveryZoneService, authService, supabase, messageService } from '@/services';
 import { loadPaystackScript, initializePayment, generateReference } from '@/services/paystack';
 import { toast } from 'sonner';
 import { useCartStore } from '@/stores/cartStore';

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { MapPin, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { useCustomerAuthStore } from '@/stores';
 import AddAddressForm from './AddAddressForm';
 import type { CustomerAddress } from '@/types';

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useWalletStore } from '@/stores';
 import { useAuthStore } from '@/stores';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { toast } from 'sonner';
 
 interface FailureLog {

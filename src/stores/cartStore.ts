@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import type { Product, Store } from '@/types';
 
 // CartItem that matches CheckoutPage expectations (camelCase)

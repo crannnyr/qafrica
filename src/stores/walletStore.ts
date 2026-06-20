@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { walletService, withdrawalService } from '@/services/supabase';
-import { supabase } from '@/services/supabase';
+import { walletService, withdrawalService } from '@/services';
+import { supabase } from '@/services';
 import type { Wallet, WalletTransaction, WithdrawalRequest } from '@/types';
 
 interface WalletState {

@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useAuthStore, useWalletStore } from '@/stores';
 import { toast } from 'sonner';
 import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import type { Subscription, SavedCard } from '@/types';
 
 // Pricing configuration

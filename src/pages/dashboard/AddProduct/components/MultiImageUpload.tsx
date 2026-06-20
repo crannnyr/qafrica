@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Plus, X, Check, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { compressImage } from '@/lib/imageCompression';
 import { useAuthStore } from '@/stores';
 

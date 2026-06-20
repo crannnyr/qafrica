@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStoreStore } from '@/stores';
-import { supabase } from '@/services/supabase';
+import { supabase } from '@/services';
 import { toast } from 'sonner';
 import type { Coupon } from '@/types';
 

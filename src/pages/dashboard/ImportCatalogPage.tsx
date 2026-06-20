@@ -4,7 +4,7 @@ import { Package, Search, Plus, Store, Filter, X, Check, AlertCircle, DollarSign
 import { Button } from '@/components/ui/button';
 import { useStoreStore, useImportStore, useAuthStore } from '@/stores';
 import { toast } from 'sonner';
-import { importCatalogService } from '@/services/supabase';
+import { importCatalogService } from '@/services';
 import type { StoreOwner } from '@/types';
 type FilterType = 'all' | 'my_niches' | 'other';
 

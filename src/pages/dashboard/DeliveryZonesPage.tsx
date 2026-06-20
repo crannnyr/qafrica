@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStoreStore } from '@/stores';
-import { deliveryZoneService, supabase } from '@/services/supabase';
+import { deliveryZoneService, supabase } from '@/services';
 import { shipbubbleService } from '@/services/shipbubble';
 import CONFIG from '@/lib/config';
 import { toast } from 'sonner';
