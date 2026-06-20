@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { authService, userService } from '@/services/supabase';
+import { authService } from '@/services/auth.service';
+import { userService } from '@/services/user.service';
 import { sendWelcomeEmail } from '@/services/email';
 import type { User, StoreOwner } from '@/types';
 import { useStoreStore } from './storeStore';
@@ -67,7 +68,6 @@ export const useAuthStore = create<AuthState>()(
 
             const isOnboardingComplete = profile.onboarding_completed === true;
 
-            // ── FIX 6: read resume step from onboarding_data not sessionStorage ──
             const onboardingData = profile.onboarding_data ?? {};
             const currentStep    = onboardingData.step ?? profile.onboarding_step ?? 0;
 
@@ -125,7 +125,6 @@ export const useAuthStore = create<AuthState>()(
 
               sendWelcomeEmail(email, userData.full_name || 'there');
             } else {
-              // Profile not ready yet
               set({ isAuthenticated: false, isLoading: false });
               sendWelcomeEmail(email, userData.full_name || 'there');
             }
@@ -157,7 +156,6 @@ export const useAuthStore = create<AuthState>()(
           set({ user: null, isAuthenticated: false, error: null });
           localStorage.removeItem('qafrica-store');
           localStorage.removeItem('qafrica-auth');
-          // Clean up any legacy sessionStorage keys
           sessionStorage.removeItem('signup_email');
           sessionStorage.removeItem('onboarding_step');
           sessionStorage.removeItem('onboarding_store_id');
@@ -214,7 +212,6 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      // ── FIX 5: removed all sessionStorage reads/writes ────────────────────
       updateOnboardingStep: async (step: number, completed: boolean = false) => {
         const { user } = get();
         if (!user) return { success: false, error: 'Not authenticated' };
