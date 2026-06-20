@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
-  ShoppingCart, Search, Package, CheckCircle, Truck, Clock, Eye, Lock 
+  ShoppingCart, Search, Package, CheckCircle, Truck, Clock, Eye 
 } from 'lucide-react';
 import { useStoreStore, useOrderStore } from '@/stores';
 import type { Order } from '@/types';
@@ -46,9 +46,6 @@ export default function OrdersPage() {
     return matchesSearch && matchesStatus;
   });
 
-  // FIX: Detect dropshipped orders using item.original_owner_id directly from
-  // order_items DB columns — the old code relied on item.product?.original_owner_id
-  // which is a nested join that isn't always loaded and caused silent false negatives.
   const getIsDropshipped = (order: Order) =>
     order.items?.some(
       (item: any) =>
@@ -57,9 +54,6 @@ export default function OrdersPage() {
         item.original_owner_id !== currentStore?.owner_id
     ) ?? false;
 
-  // FIX: For dropshipped orders, calculate the dropshipper's net earnings
-  // (their markup over the dropship_price, minus the 8% platform fee) so we
-  // show a meaningful number in the Total column instead of the full order total.
   const getDropshipperEarnings = (order: Order): number | null => {
     if (!getIsDropshipped(order)) return null;
     const margin =
@@ -166,9 +160,6 @@ export default function OrdersPage() {
               <tbody className="divide-y divide-gray-100">
                 {filteredOrders.map((order) => {
                   const StatusIcon = statusIcons[order.status as keyof typeof statusIcons] || Package;
-
-                  // FIX: Use item.original_owner_id directly (DB column) instead of
-                  // item.product?.original_owner_id (nested join not always present)
                   const isDropshipped = getIsDropshipped(order);
                   const dropshipperEarnings = getDropshipperEarnings(order);
 
@@ -176,8 +167,10 @@ export default function OrdersPage() {
                     <tr key={order.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <p className="font-medium text-gray-900">{order.order_number}</p>
-                        <p className="text-sm text-gray-500">{order.items?.length || 0} items</p>
-                        {/* Badge so it's clear at a glance this order has dropshipped items */}
+                        {/* BUG FIX: use order_items if items alias not present */}
+                        <p className="text-sm text-gray-500">
+                          {(order.order_items ?? order.items)?.length || 0} items
+                        </p>
                         {isDropshipped && (
                           <span className="inline-block mt-1 text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
                             Dropshipped
@@ -199,10 +192,6 @@ export default function OrdersPage() {
                           {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                         </span>
                       </td>
-
-                      {/* FIX: For dropshipped orders show the dropshipper's net earnings
-                          (margin minus 8% platform fee) with a "Your Earnings" label
-                          instead of the full customer-facing order total. */}
                       <td className="px-6 py-4 text-right">
                         {isDropshipped && dropshipperEarnings !== null ? (
                           <div>
@@ -217,10 +206,6 @@ export default function OrdersPage() {
                           </p>
                         )}
                       </td>
-
-                      {/* FIX: Dropshipped orders now show a navigable "View Earnings" button
-                          instead of the disabled "Supplier Fulfills" badge — dropshippers
-                          can still view the order detail and see their earnings breakdown. */}
                       <td className="px-6 py-4 text-right">
                         {isDropshipped ? (
                           <button
