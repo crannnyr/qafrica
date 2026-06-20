@@ -82,4 +82,39 @@ export default function MonthlyPlanGrid({
                 </div>
                 {selectedDuration > 1 && (
                   <p className="text-sm text-green-600 mt-1">
-                    You save ₦{((plan.basePrice * selectedDuratio
+                    You save ₦{((plan.basePrice * selectedDuration) - price).toLocaleString()}
+                  </p>
+                )}
+              </div>
+
+              {/* Features */}
+              <ul className="space-y-3 mb-8">
+                {plan.features.map((feature, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <CheckCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                      isSelected ? 'text-orange-500' : 'text-gray-400'
+                    }`} />
+                    <span className="text-sm text-gray-600">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Select button */}
+              <button
+                onClick={() => canSelect && onSelectPlan(plan.id)}
+                disabled={!canSelect}
+                className={`w-full py-3 rounded-lg font-medium transition-all ${
+                  isSelected
+                    ? 'bg-orange-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {isSelected ? 'Selected' : 'Select Plan'}
+              </button>
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
