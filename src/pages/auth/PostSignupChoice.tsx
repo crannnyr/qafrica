@@ -6,12 +6,9 @@ import {
   Loader2, CheckCircle, Clock, AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/services';
+import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/stores';
-import OnboardingProgress from './NicheSelectionPage'
 import { toast } from 'sonner';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface OnboardingData {
   step:            number;
@@ -19,11 +16,8 @@ interface OnboardingData {
   store_id:        string;
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
-
 export default function PostSignupChoice() {
   const navigate                       = useNavigate();
-  // Pull both user and the store setter so we can update auth state directly
   const { user, updateOnboardingStep } = useAuthStore();
   const userId                         = user?.id;
 
@@ -32,7 +26,6 @@ export default function PostSignupChoice() {
   const [isChecking, setIsChecking]           = useState(true);
   const [isActivating, setIsActivating]       = useState(false);
 
-  // ── Load state — stable dep ────────────────────────────────────────────────
   useEffect(() => {
     if (!userId) { navigate('/login'); return; }
     let cancelled = false;
@@ -76,9 +69,8 @@ export default function PostSignupChoice() {
 
     load();
     return () => { cancelled = true; };
-  }, [userId, navigate]); // ← primitive, not full user object
+  }, [userId, navigate]);
 
-  // ── Activate free trial ────────────────────────────────────────────────────
   const handleStartTrial = async () => {
     if (!user || !onboardingData) return;
     if (hasUsedFreePlan) {
@@ -95,7 +87,6 @@ export default function PostSignupChoice() {
         return;
       }
 
-      // Call complete-onboarding edge function
       const res = await supabase.functions.invoke('complete-onboarding', {
         body: {
           store_id:        onboardingData.store_id,
@@ -106,13 +97,9 @@ export default function PostSignupChoice() {
 
       if (res.error) throw res.error;
 
-      // ── FIX: use updateOnboardingStep from authStore so isAuthenticated
-      //    is set to true in the store — this stops ProtectedRoute from
-      //    redirecting back to /select-niche ──────────────────────────────
       const { error: stepError } = await updateOnboardingStep(4, true);
       if (stepError) throw new Error(stepError);
 
-      // Also persist the completed state to onboarding_data
       await supabase
         .from('profiles')
         .update({
@@ -121,8 +108,6 @@ export default function PostSignupChoice() {
         .eq('id', user.id);
 
       toast.success('Free plan activated! You have 4 days to explore.');
-
-      // Small delay so Zustand state propagates before route check
       setTimeout(() => navigate('/dashboard'), 300);
     } catch (err: any) {
       console.error('Trial activation error:', err);
@@ -132,18 +117,12 @@ export default function PostSignupChoice() {
     }
   };
 
-  // ── If free plan already used: let them continue with existing store ───────
   const handleContinueExisting = () => {
-    // They already have a store + subscription from a prior session
-    // Just mark onboarding complete in the store and go to dashboard
-    updateOnboardingStep(4, true).then(() => {
-      navigate('/dashboard');
-    });
+    updateOnboardingStep(4, true).then(() => navigate('/dashboard'));
   };
 
   const handlePayNow = () => navigate('/pricing');
 
-  // ── Loading ────────────────────────────────────────────────────────────────
   if (isChecking) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center">
@@ -173,8 +152,6 @@ export default function PostSignupChoice() {
           </div>
         </div>
 
-        <OnboardingProgress step={4} />
-
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -188,7 +165,7 @@ export default function PostSignupChoice() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
-            {/* ── Free Plan card ── */}
+            {/* Free Plan card */}
             <motion.div
               whileHover={{ scale: 1.02 }}
               className={`bg-white rounded-2xl shadow-xl border-2 p-8 relative overflow-hidden ${
@@ -226,7 +203,6 @@ export default function PostSignupChoice() {
               </ul>
 
               {hasUsedFreePlan ? (
-                // ── FIX: restored "Continue to Dashboard" button ──────────
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
                     <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
@@ -256,7 +232,7 @@ export default function PostSignupChoice() {
               )}
             </motion.div>
 
-            {/* ── Subscribe card ── */}
+            {/* Subscribe card */}
             <motion.div
               whileHover={{ scale: 1.02 }}
               className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8"
