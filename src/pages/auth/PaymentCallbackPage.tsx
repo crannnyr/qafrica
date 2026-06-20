@@ -4,199 +4,166 @@ import { motion } from 'framer-motion';
 import { CheckCircle, Loader2, ShoppingBag, Sparkles, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { verifyTransaction } from '@/services/paystack';
-import { subscriptionService, authService, userService } from '@/services';
-import { useAuthStore } from '@/stores'; // NEW: Import auth store
+import { authService } from '@/services';
+import { useAuthStore } from '@/stores';
+import { supabase } from '@/services/supabase';
 import { toast } from 'sonner';
 
 export default function PaymentCallbackPage() {
-  const navigate = useNavigate();
+  const navigate       = useNavigate();
   const [searchParams] = useSearchParams();
-  const [status, setStatus] = useState<'verifying' | 'success' | 'failed'>('verifying');
-  const [message, setMessage] = useState('Processing your request...');
+  const { user, updateOnboardingStep } = useAuthStore();
+
+  const [status, setStatus]           = useState<'verifying' | 'success' | 'failed'>('verifying');
+  const [message, setMessage]         = useState('Processing your request...');
   const [errorDetails, setErrorDetails] = useState('');
-  const { fetchProfile } = useAuthStore(); // NEW: Get auth store function
 
   useEffect(() => {
     const processPayment = async () => {
       const reference = searchParams.get('reference');
-      const isTrial = searchParams.get('trial') === 'true';
-      
-      // Get current user session
+
+      // Verify session
       const { session, error: sessionError } = await authService.getSession();
-      
       if (sessionError || !session?.user) {
         setStatus('failed');
         setMessage('Session expired. Please log in again.');
-        setErrorDetails('Your session has expired. Please sign up or log in again to continue.');
+        setErrorDetails('Your session has expired. Please sign in again to continue.');
         return;
       }
 
       const userId = session.user.id;
-      
-      // Handle Free Trial
-      if (isTrial) {
-        setMessage('Activating your free trial...');
-        
-        try {
-          const niches = JSON.parse(sessionStorage.getItem('selected_niches') || '[]');
-          const storeId = sessionStorage.getItem('onboarding_store_id');
-          
-          // Create free trial subscription (4 days)
-          const trialSubscription = {
-            user_id: userId,
-            store_id: storeId || undefined,
-            tier: 'free' as const,
-            niches,
-            duration_months: 0,
-            amount_paid: 0,
-            payment_reference: 'FREE_TRIAL',
-            starts_at: new Date().toISOString(),
-            expires_at: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString(), // 4 days
-            is_active: true,
-            is_trial: true,
-          };
 
-          const { error: subError } = await subscriptionService.createSubscription(trialSubscription);
-          
-          if (subError) {
-            console.error('Trial subscription error:', subError);
-            setStatus('failed');
-            setMessage('Failed to activate trial');
-            setErrorDetails(subError.message);
-            return;
-          }
+      // ── Load onboarding_data from Supabase — single source of truth ──────
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('onboarding_data, email')
+        .eq('id', userId)
+        .single();
 
-          // Mark onboarding as completed in database
-          await userService.updateProfile(userId, {
-            onboarding_step: 4,
-            onboarding_completed: true
-          });
+      const onboardingData = profileData?.onboarding_data ?? {};
+      const storeId        = onboardingData.store_id ?? null;
+      const selectedNiches = onboardingData.selected_niches ?? [];
 
-          // NEW: Refresh auth store to update user state before navigation
-          await fetchProfile();
-
-          // Clear session storage only after successful DB updates
-          clearSessionData();
-
-          setStatus('success');
-          setMessage('Your 4-day free trial is active! Welcome to QAFRICA.');
-          toast.success('Free trial activated! Enjoy exploring QAFRICA.');
-        } catch (error) {
-          console.error('Trial activation error:', error);
-          setStatus('failed');
-          setMessage('An error occurred while activating your trial');
-          setErrorDetails('Please contact support if this issue persists.');
-        }
+      if (!storeId || !selectedNiches.length) {
+        setStatus('failed');
+        setMessage('Missing onboarding data.');
+        setErrorDetails('Could not find your store or niche selection. Please contact support.');
         return;
       }
-      
-      // Handle Regular Payment
+
+      // ── Handle paid payment ───────────────────────────────────────────────
       if (!reference) {
         setStatus('failed');
-        setMessage('Invalid payment reference');
-        setErrorDetails('No payment reference was found. Please try again.');
+        setMessage('Invalid payment reference.');
+        setErrorDetails('No payment reference found. Please try again.');
         return;
       }
 
       try {
         setMessage('Verifying your payment...');
-        
-        // Verify the transaction with Paystack
         const result = await verifyTransaction(reference);
-        
-        if (result.success) {
-          const plan = sessionStorage.getItem('subscription_plan');
-          const duration = parseInt(sessionStorage.getItem('subscription_duration') || '1');
-          const amount = parseInt(sessionStorage.getItem('subscription_amount') || '0');
-          const niches = JSON.parse(sessionStorage.getItem('selected_niches') || '[]');
-          const storeId = sessionStorage.getItem('onboarding_store_id');
-          
-          // Map plan IDs to correct DB tier values
-          let dbTier: 'one_niche' | 'three_niches' | 'unlimited';
-          if (plan === 'single' || plan === 'one_niche') {
-            dbTier = 'one_niche';
-          } else if (plan === 'three' || plan === 'three_niches') {
-            dbTier = 'three_niches';
-          } else if (plan === 'unlimited') {
-            dbTier = 'unlimited';
-          } else {
-            dbTier = 'one_niche'; // fallback
-          }
-          
-          // Create subscription record
-          const subscriptionData = {
-            user_id: userId,
-            store_id: storeId || undefined,
-            tier: dbTier,
-            niches,
-            duration_months: duration,
-            amount_paid: amount,
+
+        if (!result.success) {
+          setStatus('failed');
+          setMessage(result.error || 'Payment verification failed.');
+          setErrorDetails('The payment could not be verified. Please contact support if you were charged.');
+          toast.error('Payment verification failed.');
+          return;
+        }
+
+        // Read payment metadata from sessionStorage
+        // (written by PricingPage just before Paystack redirect — short-lived use)
+        const plan     = sessionStorage.getItem('subscription_plan') ?? 'one_niche';
+        const duration = parseInt(sessionStorage.getItem('subscription_duration') || '1');
+        const amount   = parseInt(sessionStorage.getItem('subscription_amount') || '0');
+        const isLifetime = sessionStorage.getItem('is_lifetime') === 'true';
+
+        // Normalize tier
+        const tierMap: Record<string, 'one_niche' | 'three_niches' | 'unlimited'> = {
+          single:       'one_niche',
+          one_niche:    'one_niche',
+          three:        'three_niches',
+          three_niches: 'three_niches',
+          unlimited:    'unlimited',
+        };
+        const dbTier = tierMap[plan] ?? 'one_niche';
+
+        setMessage('Activating your subscription...');
+
+        // Create subscription directly (paid plan — not via complete-onboarding
+        // which is free-plan only)
+        const expiresAt = isLifetime
+          ? new Date('2099-12-31').toISOString()
+          : new Date(Date.now() + duration * 30 * 24 * 60 * 60 * 1000).toISOString();
+
+        const { error: subError } = await supabase
+          .from('subscriptions')
+          .insert({
+            user_id:           userId,
+            store_id:          storeId,
+            tier:              dbTier,
+            niches:            selectedNiches,
+            duration_months:   isLifetime ? 0 : duration,
+            amount_paid:       amount,
             payment_reference: reference,
-            starts_at: new Date().toISOString(),
-            expires_at: new Date(Date.now() + duration * 30 * 24 * 60 * 60 * 1000).toISOString(),
-            is_active: true,
-            is_trial: false,
-          };
-
-          const { error: subError } = await subscriptionService.createSubscription(subscriptionData);
-          
-          if (subError) {
-            console.error('Subscription creation error:', subError);
-            setStatus('failed');
-            setMessage('Failed to activate subscription');
-            setErrorDetails(subError.message);
-            return;
-          }
-
-          // Mark onboarding as completed in database
-          await userService.updateProfile(userId, {
-            onboarding_step: 4,
-            onboarding_completed: true
+            starts_at:         new Date().toISOString(),
+            expires_at:        expiresAt,
+            is_active:         true,
+            is_trial:          false,
           });
 
-          // NEW: Refresh auth store to update user state before navigation
-          // This ensures the dashboard recognizes the user as authenticated
-          await fetchProfile();
-
-          // Clear session storage only after successful DB updates
-          clearSessionData();
-
-          setStatus('success');
-          setMessage('Your payment was successful! Welcome to QAFRICA.');
-          toast.success('Payment successful! Your subscription is now active.');
-        } else {
+        if (subError) {
           setStatus('failed');
-          setMessage(result.error || 'Payment verification failed');
-          setErrorDetails('The payment could not be verified. Please contact support if you were charged.');
-          toast.error('Payment verification failed');
+          setMessage('Failed to activate subscription.');
+          setErrorDetails(subError.message);
+          return;
         }
-      } catch (error) {
-        console.error('Payment verification error:', error);
+
+        // Activate the store
+        await supabase
+          .from('stores')
+          .update({ niches: selectedNiches, is_active: true })
+          .eq('id', storeId);
+
+        // Mark onboarding complete via authStore
+        // so isAuthenticated becomes true and ProtectedRoute stops redirecting
+        await updateOnboardingStep(4, true);
+
+        // Also persist completed state to onboarding_data
+        await supabase
+          .from('profiles')
+          .update({
+            onboarding_data: {
+              ...onboardingData,
+              step: 4,
+              completed: true,
+              plan: dbTier,
+            },
+          })
+          .eq('id', userId);
+
+        // Clean up short-lived payment sessionStorage keys
+        ['subscription_plan','subscription_duration','subscription_amount',
+         'payment_reference','is_lifetime',
+        ].forEach((key) => sessionStorage.removeItem(key));
+
+        setStatus('success');
+        setMessage('Your payment was successful! Welcome to QAFRICA.');
+        toast.success('Payment successful! Your subscription is now active.');
+      } catch (err: any) {
+        console.error('Payment verification error:', err);
         setStatus('failed');
-        setMessage('An error occurred while verifying your payment');
+        setMessage('An error occurred while verifying your payment.');
         setErrorDetails('Please try again or contact support for assistance.');
-        toast.error('Payment verification error');
+        toast.error('Payment verification error.');
       }
     };
 
     processPayment();
-  }, [searchParams, navigate, fetchProfile]); // Added fetchProfile to dependencies
-
-  const clearSessionData = () => {
-    sessionStorage.removeItem('selected_niches');
-    sessionStorage.removeItem('subscription_plan');
-    sessionStorage.removeItem('subscription_duration');
-    sessionStorage.removeItem('subscription_amount');
-    sessionStorage.removeItem('payment_reference');
-    sessionStorage.removeItem('onboarding_store_id');
-    sessionStorage.removeItem('signup_email');
-    sessionStorage.removeItem('signup_full_name');
-    sessionStorage.removeItem('signup_phone');
-  };
+  }, [searchParams, updateOnboardingStep]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center p-4">
-      {/* Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 rounded-full blur-3xl" />
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 rounded-full blur-3xl" />
@@ -218,7 +185,6 @@ export default function PaymentCallbackPage() {
           </div>
         </div>
 
-        {/* Status Card */}
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 text-center">
           {status === 'verifying' && (
             <>
@@ -237,7 +203,6 @@ export default function PaymentCallbackPage() {
               </div>
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Success!</h2>
               <p className="text-gray-500 mb-8">{message}</p>
-              
               <div className="space-y-3">
                 <Button
                   onClick={() => navigate('/dashboard', { replace: true })}
@@ -246,7 +211,7 @@ export default function PaymentCallbackPage() {
                   <Sparkles className="w-5 h-5 mr-2" />
                   Go to Dashboard
                 </Button>
-                <p className="text-sm text-gray-500 text-center pt-2">
+                <p className="text-sm text-gray-500 pt-2">
                   Your store is ready! Start adding products from your dashboard.
                 </p>
               </div>
