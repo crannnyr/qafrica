@@ -8,7 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services';
 import { useAuthStore } from '@/stores';
-import { OnboardingProgress } from './NicheSelectionPage';
+import OnboardingProgress from './NicheSelectionPage'
 import { toast } from 'sonner';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
