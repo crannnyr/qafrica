@@ -328,7 +328,7 @@ export default function ProductDetailPage() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="rounded-2xl overflow-hidden bg-gray-50"
+            className="relative rounded-2xl overflow-hidden bg-gray-50"
           >
             <ImageCarousel
               images={product.images || []}
@@ -337,6 +337,12 @@ export default function ProductDetailPage() {
               enableZoom
               className="w-full"
             />
+            {/* ── Store name watermark on main product image ── */}
+            <div className="absolute bottom-3 right-3 pointer-events-none z-10">
+              <span className="text-white/70 text-[10px] font-semibold tracking-widest uppercase drop-shadow-sm">
+                {store.name}
+              </span>
+            </div>
           </motion.div>
 
           {/* ── Info ── */}
@@ -504,7 +510,8 @@ export default function ProductDetailPage() {
                   to={`/${slug}/product/${related.id}`}
                   className="group"
                 >
-                  <div className="aspect-square bg-gray-50 rounded-xl overflow-hidden mb-3">
+                  {/* ── Related product image with watermark ── */}
+                  <div className="relative aspect-square bg-gray-50 rounded-xl overflow-hidden mb-3">
                     {related.images?.[0] ? (
                       <img
                         src={related.images[0]}
@@ -516,6 +523,12 @@ export default function ProductDetailPage() {
                         {related.name.charAt(0)}
                       </div>
                     )}
+                    {/* Store name watermark */}
+                    <div className="absolute bottom-2 right-2 pointer-events-none">
+                      <span className="text-white/70 text-[9px] font-semibold tracking-widest uppercase drop-shadow-sm">
+                        {store.name}
+                      </span>
+                    </div>
                   </div>
                   <p className="text-sm font-medium text-gray-800 line-clamp-1 mb-0.5">{related.name}</p>
                   <p className="text-sm font-bold" style={{ color: primary }}>
