@@ -7,7 +7,7 @@ interface WithdrawalRequest {
   amount: number;
   bank_name: string;
   account_number: string;
-  status: 'pending' | 'paid' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'paid'
   created_at: string;
 }
 
