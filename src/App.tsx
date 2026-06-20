@@ -36,7 +36,7 @@ import OrderDetailPage from '@/pages/dashboard/OrderDetailPage';
 import DropshipOrdersPage from '@/pages/dashboard/DropshipOrdersPage';
 import DropshipOrderDetailPage from '@/pages/dashboard/DropshipOrderDetailPage';
 import WalletPage from '@/pages/dashboard/WalletPage';
-import DeliveryZonesPage from '@/pages/dashboard/DeliveryZonesPage';
+import DeliveryZonesPage from '@/pages/dashboard/DeliveryZones';
 import DomainPage from '@/pages/dashboard/DomainPage';
 import AnalyticsPage from '@/pages/dashboard/AnalyticsPage';
 import TaxExpensesPage from '@/pages/dashboard/TaxExpensesPage';
@@ -82,6 +82,7 @@ import AdminSubscriptions from '@/pages/admin/AdminSubscriptions';
 import AdminDomainRequests from '@/pages/admin/AdminDomainRequests';
 import AdminNotifications from '@/pages/admin/AdminNotifications';
 import AdminLegal from '@/pages/admin/AdminLegal';
+import AdminShipbubblePage from '@/pages/admin/AdminShipbubble';
 
 // Developer Pages
 import DeveloperLayout from '@/pages/developer/dashboard/DeveloperLayout';
@@ -144,7 +145,6 @@ const ProtectedRoute = ({
     return <Navigate to="/dashboard" replace />;
   }
 
-  // Staff members skip onboarding entirely
   if (user?.role === 'staff') {
     return <>{children}</>;
   }
@@ -226,7 +226,7 @@ function App() {
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          {/* Legal Pages — always public, never redirect */}
+          {/* Legal Pages */}
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
 
@@ -252,7 +252,7 @@ function App() {
           <Route path="/cart" element={<UniversalCartPage />} />
           <Route path="/checkout" element={<UniversalCheckoutPage />} />
 
-          {/* Staff invite acceptance — always public */}
+          {/* Staff invite */}
           <Route path="/accept-staff-invite" element={<AcceptStaffInvitePage />} />
 
           {/* Dashboard Routes */}
@@ -284,8 +284,6 @@ function App() {
             <Route path="niches" element={<StaffGuard><NicheCustomizationPage /></StaffGuard>} />
             <Route path="how-to-use" element={<HowToUsePage />} />
             <Route path="manual-sales" element={<ManualSalesPage />} />
-
-            {/* Marketplace Routes */}
             <Route path="jumia" element={<JumiaPage />} />
             <Route path="konga" element={<KongaPage />} />
             <Route path="jiji" element={<JijiPage />} />
@@ -305,6 +303,7 @@ function App() {
             <Route path="domain-requests" element={<AdminDomainRequests />} />
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="legal" element={<AdminLegal />} />
+            <Route path="shipbubble" element={<AdminShipbubblePage />} />
           </Route>
 
           {/* Developer Portal Routes */}
@@ -337,12 +336,12 @@ function App() {
           <Route path="/store-not-found" element={<StoreNotFoundPage />} />
           <Route path="/store-inactive" element={<StoreClosedPage />} />
 
-          {/* Store Routes — /:slug must be LAST so it only catches unmatched paths */}
+          {/* Store Routes — must be LAST */}
           <Route path="/:slug" element={<StorePage />} />
           <Route path="/:slug/product/:productId" element={<ProductDetailPage />} />
           <Route path="/:slug/checkout" element={<CheckoutPage />} />
 
-          {/* Catch all → store not found */}
+          {/* Catch all */}
           <Route path="*" element={<StoreNotFoundPage />} />
         </Routes>
       </CustomDomainRouter>
