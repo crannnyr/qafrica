@@ -174,6 +174,7 @@ export interface Product {
   stock_quantity: number;
   low_stock_threshold: number;
   sku?: string;
+  compare_at_price?: number;
   barcode?: string;
   is_out_of_stock: boolean;
   has_variants: boolean;
