@@ -59,7 +59,7 @@ import StoreNotFoundPage from '@/pages/store/StoreNotFoundPage';
 // Customer Pages
 import CustomerLoginPage from '@/pages/customer/CustomerLoginPage';
 import CustomerSignupPage from '@/pages/customer/CustomerSignupPage';
-import CustomerDashboard from '@/pages/customer/CustomerDashboard';
+import CustomerDashboard from '@/pages/customer/CustomerDashboard/index';
 import CustomerOrderDetailPage from '@/pages/customer/CustomerOrderDetailPage';
 import StoreDiscoveryPage from '@/pages/customer/StoreDiscoveryPage';
 import UniversalCartPage from '@/pages/customer/UniversalCartPage';
