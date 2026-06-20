@@ -1,6 +1,7 @@
 // src/pages/customer/StoreDiscoveryPage.tsx
 
 import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { supabase } from '@/services';
 
 import DiscoveryHero from './StoreDiscovery/DiscoveryHero';
@@ -10,13 +11,19 @@ import StoreGrid from './StoreDiscovery/StoreGrid';
 import SellerCallToAction from './StoreDiscovery/SellerCallToAction';
 import type { StoreDisplay, SortBy } from './StoreDiscovery/constants';
 
+// Must match the hero's cinematic area height
+const HERO_HEIGHT = 440;
+// Approx height of the collapsed sticky search bar
+const SEARCH_BAR_H = 72;
+
 export default function StoreDiscoveryPage() {
-  const [stores, setStores]                   = useState<any[]>([]);
-  const [filteredStores, setFilteredStores]   = useState<StoreDisplay[]>([]);
-  const [isLoading, setIsLoading]             = useState(true);
-  const [searchQuery, setSearchQuery]         = useState('');
+  const [stores, setStores]                     = useState<any[]>([]);
+  const [filteredStores, setFilteredStores]     = useState<StoreDisplay[]>([]);
+  const [isLoading, setIsLoading]               = useState(true);
+  const [searchQuery, setSearchQuery]           = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [sortBy, setSortBy]                   = useState<SortBy>('popular');
+  const [sortBy, setSortBy]                     = useState<SortBy>('popular');
+  const [heroCollapsed, setHeroCollapsed]       = useState(false);
 
   useEffect(() => { fetchStores(); }, []);
 
@@ -104,9 +111,26 @@ export default function StoreDiscoveryPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
+      {/*
+        The hero is sticky and animates its own height from (440 + search bar)
+        down to just the search bar. We render a spacer beneath it that mirrors
+        that shrink so the content below never jumps.
+      */}
       <DiscoveryHero
         searchQuery={searchQuery}
         onSearch={setSearchQuery}
+        collapsed={heroCollapsed}
+        onCollapse={() => setHeroCollapsed(true)}
+      />
+
+      {/*
+        Spacer: starts at the full hero height, shrinks to the sticky bar height
+        as the hero collapses. This keeps the page content from jumping up.
+      */}
+      <motion.div
+        aria-hidden
+        animate={{ height: heroCollapsed ? 0 : HERO_HEIGHT }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       />
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
