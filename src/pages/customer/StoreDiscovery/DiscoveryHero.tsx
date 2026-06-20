@@ -11,6 +11,8 @@ import {
 interface Props {
   searchQuery: string;
   onSearch: (value: string) => void;
+  collapsed: boolean;
+  onCollapse: () => void;
 }
 
 type Phase = 'intro' | 'normal' | 'world' | 'listing' | 'escrow' | 'dropshiphero' | 'dropship';
@@ -1079,11 +1081,10 @@ function PhaseDropship() {
 }
 
 /* ─── MAIN COMPONENT ─── */
-export default function DiscoveryHero({ searchQuery, onSearch }: Props) {
-  const [phase, setPhase]       = useState<Phase>('intro');
-  const [collapsed, setCollapsed] = useState(false);
-  const timerRef                = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const phaseRef                = useRef<Phase>('intro');
+export default function DiscoveryHero({ searchQuery, onSearch, collapsed, onCollapse }: Props) {
+  const [phase, setPhase] = useState<Phase>('intro');
+  const timerRef          = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const phaseRef          = useRef<Phase>('intro');
 
   const scheduleNext = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -1106,11 +1107,11 @@ export default function DiscoveryHero({ searchQuery, onSearch }: Props) {
   // Collapse to search-only header on first scroll
   useEffect(() => {
     const onScroll = () => {
-      if (window.scrollY > 10) setCollapsed(true);
+      if (window.scrollY > 10) onCollapse();
     };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [onCollapse]);
 
   return (
     <div
