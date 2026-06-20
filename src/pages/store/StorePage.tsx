@@ -16,6 +16,17 @@ import { useCustomerAuthStore, useCartStore } from '@/stores';
 import { useCustomDomainSlug } from '@/components/CustomDomainRouter';
 import type { Store, Product } from '@/types';
 
+// ── Helper: pick black or white text based on background color ────────────────
+function getContrastColor(hex: string): string {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  // Perceived luminance
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.55 ? '#000000' : '#ffffff';
+}
+
 export default function StorePage() {
   const { slug: paramSlug } = useParams<{ slug: string }>();
   const domainSlug = useCustomDomainSlug();
@@ -53,6 +64,7 @@ export default function StorePage() {
   const theme = store?.theme ? getThemeById(store.theme) : getThemeById('modern');
   const cartCount = getTotalItems();
   const primary = store?.primary_color || theme?.colors.primary || '#f97316';
+  const contrastText = getContrastColor(primary);
   const returnUrl = encodeURIComponent(`/${slug}`);
 
   // Close profile dropdown on outside click
@@ -195,7 +207,7 @@ export default function StorePage() {
     return Array.from(options);
   };
 
-  // ─── Loading ─────────────────────────────────────────────────────────────────
+  // ─── Loading ──────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -223,7 +235,7 @@ export default function StorePage() {
     );
   }
 
-  // ─── Page ─────────────────────────────────────────────────────────────────────
+  // ─── Page ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-white" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <StoreSEO
@@ -391,9 +403,16 @@ export default function StorePage() {
               )}
             </div>
           </div>
-          {/* ── Store name watermark on banner ── */}
-          <div className="absolute bottom-3 right-4 pointer-events-none">
-            <span className="text-white/70 text-[10px] font-semibold tracking-widest uppercase">
+
+          {/* ── Banner watermark badge ── */}
+          <div
+            className="absolute bottom-0 right-0 px-3 py-1.5 pointer-events-none"
+            style={{ backgroundColor: primary }}
+          >
+            <span
+              className="text-[10px] font-bold tracking-widest uppercase"
+              style={{ color: contrastText }}
+            >
               {store.name}
             </span>
           </div>
@@ -467,9 +486,15 @@ export default function StorePage() {
                     </div>
                   )}
 
-                  {/* ── Store name watermark ── */}
-                  <div className="absolute bottom-2 right-2 pointer-events-none">
-                    <span className="text-white/70 text-[9px] font-semibold tracking-widest uppercase drop-shadow-sm">
+                  {/* ── Product watermark badge ── */}
+                  <div
+                    className="absolute bottom-0 right-0 px-2 py-1 pointer-events-none"
+                    style={{ backgroundColor: primary }}
+                  >
+                    <span
+                      className="text-[8px] font-bold tracking-widest uppercase"
+                      style={{ color: contrastText }}
+                    >
                       {store.name}
                     </span>
                   </div>
