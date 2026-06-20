@@ -391,6 +391,12 @@ export default function StorePage() {
               )}
             </div>
           </div>
+          {/* ── Store name watermark on banner ── */}
+          <div className="absolute bottom-3 right-4 pointer-events-none">
+            <span className="text-white/70 text-[10px] font-semibold tracking-widest uppercase">
+              {store.name}
+            </span>
+          </div>
         </div>
       )}
 
@@ -460,6 +466,13 @@ export default function StorePage() {
                       {product.name.charAt(0)}
                     </div>
                   )}
+
+                  {/* ── Store name watermark ── */}
+                  <div className="absolute bottom-2 right-2 pointer-events-none">
+                    <span className="text-white/70 text-[9px] font-semibold tracking-widest uppercase drop-shadow-sm">
+                      {store.name}
+                    </span>
+                  </div>
 
                   {/* Wishlist */}
                   <button
