@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useStoreStore } from '@/stores';
-import { orderService, supabase } from "@/services/supabase";
+import { orderService } from '@/services';
+import { supabase } from '@/services/supabase';
 import { toast } from 'sonner';
 import type { Order } from '@/types';
 
