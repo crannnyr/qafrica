@@ -252,6 +252,7 @@ export interface Order {
   customer_email: string;
   customer_phone: string;
   items: OrderItem[];
+  order_items?: OrderItem[];
   subtotal: number;
   delivery_fee: number;
   platform_fee: number;
