@@ -1,165 +1,122 @@
-import { useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  Users, Store, Package, ShoppingCart, CreditCard, 
-  TrendingUp, TrendingDown, DollarSign, Activity
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  Users, Store, Package, ShoppingCart,
+  DollarSign, CreditCard, AlertTriangle, CheckCircle,
 } from 'lucide-react';
-import { useAdminStore, useWalletStore } from '@/stores';
+import { supabase } from '@/services/supabase';
+import { useWalletStore } from '@/stores';
 
-const stats = [
-  { label: 'Total Users', value: '1,234', change: '+12%', icon: Users, color: 'bg-blue-500' },
-  { label: 'Active Stores', value: '856', change: '+8%', icon: Store, color: 'bg-green-500' },
-  { label: 'Total Products', value: '12,456', change: '+15%', icon: Package, color: 'bg-purple-500' },
-  { label: 'Total Orders', value: '3,789', change: '+22%', icon: ShoppingCart, color: 'bg-orange-500' },
-  { label: 'Revenue', value: '₦45.2M', change: '+18%', icon: DollarSign, color: 'bg-pink-500' },
-  { label: 'Pending Withdrawals', value: '23', change: '-5%', icon: CreditCard, color: 'bg-red-500' },
-];
-
-const recentActivity = [
-  { action: 'New store created', detail: 'Fashion Hub Nigeria', time: '2 mins ago' },
-  { action: 'Order completed', detail: 'Order #12345 - ₦45,000', time: '5 mins ago' },
-  { action: 'Withdrawal request', detail: '₦50,000 - Chioma Adeyemi', time: '15 mins ago' },
-  { action: 'New user registered', detail: 'emmanuel@email.com', time: '1 hour ago' },
-  { action: 'Store verified', detail: 'Electronics World', time: '2 hours ago' },
-];
+interface DashboardStats {
+  total_users: number;
+  total_stores: number;
+  total_products: number;
+  total_orders: number;
+  total_revenue: number;
+  pending_withdrawals: number;
+  pending_verifications: number;
+  blocked_stores: number;
+}
 
 export default function AdminDashboard() {
-  const { fetchDashboardStats } = useAdminStore();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const { pendingWithdrawals, fetchPendingWithdrawals } = useWalletStore();
 
   useEffect(() => {
-    fetchDashboardStats();
+    const fetchStats = async () => {
+      try {
+        const { data, error } = await supabase.rpc('get_admin_dashboard_stats');
+        if (error) throw error;
+        // RPC returns JSON directly
+        setStats(typeof data === 'string' ? JSON.parse(data) : data);
+      } catch (err) {
+        console.error('[AdminDashboard] Stats error:', err);
+      }
+      setIsLoading(false);
+    };
+    fetchStats();
     fetchPendingWithdrawals();
-  }, [fetchDashboardStats, fetchPendingWithdrawals]);
+  }, [fetchPendingWithdrawals]);
+
+  const cards = stats ? [
+    { label: 'Total Users',          value: stats.total_users,                                          icon: Users,         color: 'text-blue-600',   bg: 'bg-blue-50',   link: '/admin/users'      },
+    { label: 'Total Stores',         value: stats.total_stores,                                         icon: Store,         color: 'text-green-600',  bg: 'bg-green-50',  link: '/admin/stores'     },
+    { label: 'Total Products',       value: stats.total_products,                                       icon: Package,       color: 'text-purple-600', bg: 'bg-purple-50', link: '/admin/products'   },
+    { label: 'Total Orders',         value: stats.total_orders,                                         icon: ShoppingCart,  color: 'text-orange-600', bg: 'bg-orange-50', link: '/admin/orders'     },
+    { label: 'Total Revenue',        value: `₦${(stats.total_revenue / 1_000_000).toFixed(1)}M`,       icon: DollarSign,    color: 'text-pink-600',   bg: 'bg-pink-50',   link: '/admin/orders'     },
+    { label: 'Pending Withdrawals',  value: stats.pending_withdrawals,                                  icon: CreditCard,    color: 'text-red-600',    bg: 'bg-red-50',    link: '/admin/withdrawals'},
+    { label: 'Unverified Stores',    value: stats.pending_verifications,                                icon: AlertTriangle, color: 'text-amber-600',  bg: 'bg-amber-50',  link: '/admin/stores'     },
+    { label: 'Blocked Stores',       value: stats.blocked_stores,                                       icon: CheckCircle,   color: 'text-gray-600',   bg: 'bg-gray-100',  link: '/admin/stores'     },
+  ] : [];
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
+    <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Admin Dashboard</h1>
-        <p className="text-gray-500 mt-1">Overview of platform performance</p>
+        <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
+        <p className="text-xs text-gray-400 mt-0.5">Live platform overview</p>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        {stats.map((stat, index) => (
-          <motion.div
-            key={stat.label}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.05 }}
-            className="bg-white rounded-xl p-6 border border-gray-100"
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-gray-500 mb-1">{stat.label}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                <div className={`flex items-center gap-1 mt-2 ${
-                  stat.change.startsWith('+') ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {stat.change.startsWith('+') ? (
-                    <TrendingUp className="w-4 h-4" />
-                  ) : (
-                    <TrendingDown className="w-4 h-4" />
-                  )}
-                  <span className="text-sm font-medium">{stat.change}</span>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {isLoading
+          ? Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-xl border border-gray-100 p-4 animate-pulse">
+                <div className="w-8 h-8 bg-gray-100 rounded-lg mb-3" />
+                <div className="h-6 w-16 bg-gray-100 rounded mb-1" />
+                <div className="h-3 w-20 bg-gray-100 rounded" />
+              </div>
+            ))
+          : cards.map(({ label, value, icon: Icon, color, bg, link }) => (
+              <Link key={label} to={link}
+                className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm hover:shadow-md transition-shadow">
+                <div className={`w-8 h-8 ${bg} rounded-lg flex items-center justify-center mb-3`}>
+                  <Icon className={`w-4 h-4 ${color}`} />
                 </div>
-              </div>
-              <div className={`w-12 h-12 ${stat.color} rounded-xl flex items-center justify-center`}>
-                <stat.icon className="w-6 h-6 text-white" />
-              </div>
-            </div>
-          </motion.div>
-        ))}
+                <p className={`text-xl font-bold ${color}`}>{value}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{label}</p>
+              </Link>
+            ))
+        }
       </div>
 
-      {/* Charts Row */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-xl border border-gray-100 p-6"
-        >
-          <h2 className="text-lg font-semibold text-gray-900 mb-6">Revenue Trend</h2>
-          <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-            <p className="text-gray-400">Revenue chart will appear here</p>
+      {/* Pending Withdrawals */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-semibold text-gray-900">Pending Withdrawals</h2>
+          <div className="flex items-center gap-2">
+            {pendingWithdrawals.length > 0 && (
+              <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-medium">
+                {pendingWithdrawals.length}
+              </span>
+            )}
+            <Link to="/admin/withdrawals" className="text-xs text-orange-500 hover:underline">
+              View all
+            </Link>
           </div>
-        </motion.div>
+        </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white rounded-xl border border-gray-100 p-6"
-        >
-          <h2 className="text-lg font-semibold text-gray-900 mb-6">User Growth</h2>
-          <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-            <p className="text-gray-400">User growth chart will appear here</p>
+        {pendingWithdrawals.length === 0 ? (
+          <div className="py-10 text-center">
+            <CreditCard className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+            <p className="text-sm text-gray-400">No pending withdrawals</p>
           </div>
-        </motion.div>
-      </div>
-
-      {/* Recent Activity & Pending Withdrawals */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        {/* Recent Activity */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-white rounded-xl border border-gray-100 p-6"
-        >
-          <h2 className="text-lg font-semibold text-gray-900 mb-6">Recent Activity</h2>
-          <div className="space-y-4">
-            {recentActivity.map((activity, index) => (
-              <div key={index} className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Activity className="w-5 h-5 text-orange-500" />
+        ) : (
+          <div className="divide-y divide-gray-50">
+            {pendingWithdrawals.slice(0, 5).map(w => (
+              <div key={w.id} className="flex items-center justify-between px-5 py-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">₦{w.amount.toLocaleString()}</p>
+                  <p className="text-xs text-gray-400">{w.bank_name} · {w.account_number}</p>
                 </div>
-                <div className="flex-1">
-                  <p className="font-medium text-gray-900">{activity.action}</p>
-                  <p className="text-sm text-gray-500">{activity.detail}</p>
-                </div>
-                <p className="text-sm text-gray-400">{activity.time}</p>
+                <Link to="/admin/withdrawals"
+                  className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium transition-colors">
+                  Review
+                </Link>
               </div>
             ))}
           </div>
-        </motion.div>
-
-        {/* Pending Withdrawals */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.6 }}
-          className="bg-white rounded-xl border border-gray-100 p-6"
-        >
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-900">Pending Withdrawals</h2>
-            <span className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
-              {pendingWithdrawals.length} pending
-            </span>
-          </div>
-          {pendingWithdrawals.length === 0 ? (
-            <div className="text-center py-8">
-              <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500">No pending withdrawals</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {pendingWithdrawals.slice(0, 5).map((withdrawal) => (
-                <div key={withdrawal.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="font-medium text-gray-900">₦{withdrawal.amount.toLocaleString()}</p>
-                    <p className="text-sm text-gray-500">{withdrawal.bank_name} - {withdrawal.account_number}</p>
-                  </div>
-                  <button className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors">
-                    Approve
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </motion.div>
+        )}
       </div>
     </div>
   );
