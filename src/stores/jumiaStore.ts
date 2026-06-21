@@ -98,6 +98,7 @@ interface JumiaStore {
 
   fetchSubmissions: (userId: string) => Promise<void>;
   fetchAllSubmissions: () => Promise<void>;
+  fetchSubmissionById: (id: string) => Promise<JumiaSubmission | null>;
   fetchDropOffLocations: () => Promise<void>;
   fetchWallet: (userId: string) => Promise<void>;
   fetchTransactions: (userId: string) => Promise<void>;
@@ -152,6 +153,17 @@ export const useJumiaStore = create<JumiaStore>((set, get) => ({
       .order('created_at', { ascending: false });
     if (!error) set({ allSubmissions: (data as JumiaSubmission[]) || [] });
     set({ isLoading: false });
+  },
+
+  // Single submission with owner joined, used by the admin detail page (route gives only an id).
+  fetchSubmissionById: async (id) => {
+    const { data, error } = await supabase
+      .from('jumia_submissions')
+      .select('*, owner:profiles!jumia_submissions_owner_id_fkey(full_name, email, phone)')
+      .eq('id', id)
+      .maybeSingle();
+    if (error || !data) return null;
+    return data as JumiaSubmission;
   },
 
   // Admin-scope: all withdrawal requests across all users, with requester profile joined.
