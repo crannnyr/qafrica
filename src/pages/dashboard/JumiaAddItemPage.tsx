@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useAuthStore, useStoreStore } from '@/stores';
@@ -12,6 +12,8 @@ import { loadPaystackScript, initializePayment, generateReference, toKobo } from
 import JumiaVariantInputs from './Jumia/JumiaVariantInputs';
 import JumiaFulfillmentChoice from './Jumia/JumiaFulfillmentChoice';
 import JumiaPlanGate from './Jumia/JumiaPlanGate';
+import JumiaImageUpload from './Jumia/JumiaImageUpload';
+import JumiaFeeCalculator from './Jumia/JumiaFeeCalculator';
 
 const SUBMISSION_FEE = 1500;
 const AGENT_FEE = 7500;
@@ -20,13 +22,15 @@ function JumiaAddItemForm() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { currentStore, products, fetchUserStore } = useStoreStore();
-  const { dropOffLocations, fetchDropOffLocations, createSubmission } = useJumiaStore();
+  const { dropOffLocations, fetchDropOffLocations, createSubmission, uploadSubmissionImages } = useJumiaStore();
 
   const [isLoadingStore, setIsLoadingStore] = useState(!currentStore);
   const [sourceProductId, setSourceProductId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [price, setPrice] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
+  const [images, setImages] = useState<string[]>([]);
   const [hasVariants, setHasVariants] = useState(false);
   const [variants, setVariants] = useState<JumiaVariant[]>([]);
   const [singleQuantity, setSingleQuantity] = useState(10);
@@ -55,6 +59,8 @@ function JumiaAddItemForm() {
     if (!name.trim()) return 'Item name is required';
     if (!category.trim()) return 'Category is required';
     if (!price || Number(price) <= 0) return 'Enter a valid price';
+    if (!contactPhone.trim()) return 'A phone number is required so we can reach you about drop-off';
+    if (images.length < 3) return 'Upload at least 3 photos of the item';
     if (hasVariants) {
       if (variants.length === 0) return 'Add at least one variant';
       if (variants.some((v) => !v.label.trim())) return 'Every variant needs a label';
@@ -86,13 +92,14 @@ function JumiaAddItemForm() {
       source_product_id: sourceProductId,
       name, category,
       selling_price: Number(price),
+      contact_phone: contactPhone.trim(),
       has_variants: hasVariants,
       variants: hasVariants ? variants : [],
       quantity_sent: hasVariants ? 0 : singleQuantity,
       quantity_remaining: hasVariants ? 0 : singleQuantity,
       fulfillment_method: method!,
       drop_off_location_id: method === 'self_dropoff' ? locationId : null,
-      images: [],
+      images,
       status: 'pending_payment',
       payment_reference: reference,
       payment_status: 'unpaid',
@@ -142,8 +149,17 @@ function JumiaAddItemForm() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Send an Item to Jumia</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
-          You need at least 10 units ready. Submission costs ₦{SUBMISSION_FEE.toLocaleString()} —
-          this keeps out invalid submissions and is non-refundable.
+          Submission costs ₦{SUBMISSION_FEE.toLocaleString()} — this keeps out invalid
+          submissions and is non-refundable.
+        </p>
+      </div>
+
+      <div className="flex items-start gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4">
+        <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+        <p className="text-sm text-red-700 dark:text-red-400 font-medium">
+          You must have at least 10 units of this exact item ready before submitting.
+          If it has variants (like colors or sizes), you need at least 10 of EACH variant
+          — not 10 total. Submissions without enough stock will be rejected.
         </p>
       </div>
 
@@ -178,8 +194,22 @@ function JumiaAddItemForm() {
           <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category (e.g. Phone Accessories)"
             className="px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm" />
         </div>
-        <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Selling price (₦)"
-          className="w-full px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm" />
+
+        <input
+          type="tel"
+          value={contactPhone}
+          onChange={(e) => setContactPhone(e.target.value)}
+          placeholder="Phone number (so we can reach you about drop-off)"
+          className="w-full px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm"
+        />
+
+        <JumiaImageUpload images={images} onImagesChange={setImages} uploadImages={(files) => uploadSubmissionImages(user!.id, files)} />
+
+        <div>
+          <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Selling price (₦)"
+            className="w-full px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm mb-3" />
+          <JumiaFeeCalculator sellingPrice={price} onSellingPriceChange={setPrice} />
+        </div>
 
         <JumiaVariantInputs
           hasVariants={hasVariants} onToggleVariants={setHasVariants}
