@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Users, Store, Package, ShoppingCart, 
   CreditCard, Crown, LogOut, Menu, X, Shield, Globe,
-  ChevronLeft, User, Bell, FileText, Truck
+  ChevronLeft, User, Bell, FileText, Truck, ShoppingBag
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores';
@@ -16,7 +16,9 @@ const sidebarItems = [
   { icon: Store,           label: 'Stores',          path: '/admin/stores' },
   { icon: Package,         label: 'Products',        path: '/admin/products' },
   { icon: ShoppingCart,    label: 'Orders',          path: '/admin/orders' },
+  { icon: ShoppingBag,     label: 'Jumia',           path: '/admin/jumia' },
   { icon: CreditCard,      label: 'Withdrawals',     path: '/admin/withdrawals' },
+  { icon: CreditCard,      label: 'Jumia Withdrawals', path: '/admin/jumia-withdrawals' },
   { icon: Crown,           label: 'Subscriptions',   path: '/admin/subscriptions' },
   { icon: Globe,           label: 'Domain Requests', path: '/admin/domain-requests' },
   { icon: Bell,            label: 'Notifications',   path: '/admin/notifications' },
@@ -43,7 +45,7 @@ export default function AdminLayout() {
 
   const isActive = (path: string) => {
     if (path === '/admin') return location.pathname === '/admin';
-    return location.pathname.startsWith(path);
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   return (
