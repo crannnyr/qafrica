@@ -130,6 +130,7 @@ export interface Store {
   shipbubble_pickup_address?: Record<string, string> | null;
   shipbubble_sender_address_code?: number | null;
   shipbubble_category_id?: number;
+shipbubble_enabled?: boolean;
   // Payment fields
   payment_method?: 'paystack' | 'direct_transfer';
   direct_bank_name?: string;
