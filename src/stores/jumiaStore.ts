@@ -20,6 +20,7 @@ export interface JumiaSubmission {
   images: string[];
   category: string;
   selling_price: number;
+  contact_phone: string;
   has_variants: boolean;
   variants: JumiaVariant[];
   quantity_sent: number;
@@ -108,6 +109,7 @@ interface JumiaStore {
   fetchWithdrawalRequests: (userId: string) => Promise<void>;
   fetchAllWithdrawalRequests: () => Promise<void>;
   createSubmission: (payload: Partial<JumiaSubmission>) => Promise<{ success: boolean; id?: string; error?: string }>;
+  uploadSubmissionImages: (userId: string, files: File[]) => Promise<{ success: boolean; urls?: string[]; error?: string }>;
   updateSubmissionStatus: (id: string, updates: Partial<JumiaSubmission>) => Promise<{ success: boolean; error?: string }>;
   recordSale: (params: {
     submission_id: string; variant_label: string | null; units_sold: number; unit_price: number; admin_id: string;
@@ -214,6 +216,28 @@ export const useJumiaStore = create<JumiaStore>((set, get) => ({
       .single();
     if (error) return { success: false, error: error.message };
     return { success: true, id: data.id };
+  },
+
+  // Compresses each file to ~30KB via the shared compressImage utility, then uploads
+  // to the jumia-submissions bucket under {userId}/ — matching the storage RLS policy
+  // which only allows writes inside the caller's own user-id folder.
+  uploadSubmissionImages: async (userId, files) => {
+    try {
+      const { compressImages } = await import('@/lib/imageCompression');
+      const compressed = await compressImages(files, { targetSizeKb: 30 });
+
+      const urls: string[] = [];
+      for (const file of compressed) {
+        const path = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${file.name.split('.').pop()}`;
+        const { error } = await supabase.storage.from('jumia-submissions').upload(path, file);
+        if (error) return { success: false, error: error.message };
+        const { data } = supabase.storage.from('jumia-submissions').getPublicUrl(path);
+        urls.push(data.publicUrl);
+      }
+      return { success: true, urls };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Image upload failed' };
+    }
   },
 
   // Generic admin status/field update — used for schedule notes, status transitions, rejection reasons.
