@@ -9,8 +9,9 @@ import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores';
 import { useJumiaStore } from '@/stores/jumiaStore';
 import JumiaSubmissionStatusBadge from './Jumia/JumiaSubmissionStatusBadge';
+import JumiaPlanGate from './Jumia/JumiaPlanGate';
 
-export default function JumiaPage() {
+function JumiaOverview() {
   const { user } = useAuthStore();
   const { submissions, wallet, fetchSubmissions, fetchWallet, isLoading } = useJumiaStore();
 
@@ -125,5 +126,13 @@ export default function JumiaPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function JumiaPage() {
+  return (
+    <JumiaPlanGate>
+      <JumiaOverview />
+    </JumiaPlanGate>
   );
 }
