@@ -30,6 +30,9 @@ export interface JumiaSubmission {
   submission_fee_amount: number;
   agent_fee_paid: boolean;
   agent_fee_amount: number;
+  payment_reference: string | null;
+  payment_status: 'unpaid' | 'paid';
+  paid_at: string | null;
   status: 'pending_payment' | 'awaiting_schedule' | 'awaiting_dropoff' | 'dropped_off'
         | 'received_by_jumia' | 'live' | 'out_of_stock' | 'paused' | 'rejected';
   status_note: string | null;
