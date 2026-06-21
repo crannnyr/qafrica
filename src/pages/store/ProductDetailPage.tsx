@@ -14,6 +14,16 @@ import { getThemeById } from '@/lib/themes';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
 import type { Store as StoreType, Product, ProductVariant } from '@/types';
 
+// ── Helper: pick black or white text based on background color ────────────────
+function getContrastColor(hex: string): string {
+  const clean = hex.replace('#', '');
+  const r = parseInt(clean.substring(0, 2), 16);
+  const g = parseInt(clean.substring(2, 4), 16);
+  const b = parseInt(clean.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.55 ? '#000000' : '#ffffff';
+}
+
 // ── Collapsible description ───────────────────────────────────────────────────
 function CollapsibleDescription({
   text,
@@ -128,6 +138,7 @@ export default function ProductDetailPage() {
 
   const theme = store?.theme ? getThemeById(store.theme) : getThemeById('modern');
   const primary = store?.primary_color || theme?.colors.primary || '#f97316';
+  const contrastText = store ? getContrastColor(primary) : '#ffffff';
 
   useEffect(() => {
     if (slug && productId) loadData();
@@ -337,9 +348,9 @@ export default function ProductDetailPage() {
               enableZoom
               className="w-full"
             />
-            {/* ── Store name watermark on main product image ── */}
-            <div className="absolute bottom-3 right-3 pointer-events-none z-10">
-              <span className="text-white/70 text-[10px] font-semibold tracking-widest uppercase drop-shadow-sm">
+            {/* ── Main image watermark badge ── */}
+            <div className="absolute bottom-0 right-0 px-2.5 py-1 pointer-events-none z-10 bg-white">
+              <span className="text-[9px] font-bold tracking-widest uppercase text-black">
                 {store.name}
               </span>
             </div>
@@ -510,7 +521,6 @@ export default function ProductDetailPage() {
                   to={`/${slug}/product/${related.id}`}
                   className="group"
                 >
-                  {/* ── Related product image with watermark ── */}
                   <div className="relative aspect-square bg-gray-50 rounded-xl overflow-hidden mb-3">
                     {related.images?.[0] ? (
                       <img
@@ -523,9 +533,9 @@ export default function ProductDetailPage() {
                         {related.name.charAt(0)}
                       </div>
                     )}
-                    {/* Store name watermark */}
-                    <div className="absolute bottom-2 right-2 pointer-events-none">
-                      <span className="text-white/70 text-[9px] font-semibold tracking-widest uppercase drop-shadow-sm">
+                    {/* ── Related product watermark badge ── */}
+                    <div className="absolute bottom-0 right-0 px-2 py-0.5 pointer-events-none bg-white">
+                      <span className="text-[7px] font-bold tracking-widest uppercase text-black">
                         {store.name}
                       </span>
                     </div>
