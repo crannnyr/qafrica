@@ -39,6 +39,8 @@ export interface JumiaSubmission {
   scheduled_for: string | null;
   created_at: string;
   live_at: string | null;
+  // Present only when fetched via fetchAllSubmissions (admin join)
+  owner?: { full_name: string; email: string; phone: string | null };
 }
 
 export interface JumiaDropOffLocation {
@@ -86,18 +88,26 @@ export interface JumiaWithdrawalRequest {
 
 interface JumiaStore {
   submissions: JumiaSubmission[];
+  allSubmissions: JumiaSubmission[];
   dropOffLocations: JumiaDropOffLocation[];
   wallet: JumiaWallet | null;
   transactions: JumiaWalletTransaction[];
   withdrawalRequests: JumiaWithdrawalRequest[];
+  allWithdrawalRequests: (JumiaWithdrawalRequest & { user?: { full_name: string; email: string } })[];
   isLoading: boolean;
 
   fetchSubmissions: (userId: string) => Promise<void>;
+  fetchAllSubmissions: () => Promise<void>;
   fetchDropOffLocations: () => Promise<void>;
   fetchWallet: (userId: string) => Promise<void>;
   fetchTransactions: (userId: string) => Promise<void>;
   fetchWithdrawalRequests: (userId: string) => Promise<void>;
+  fetchAllWithdrawalRequests: () => Promise<void>;
   createSubmission: (payload: Partial<JumiaSubmission>) => Promise<{ success: boolean; id?: string; error?: string }>;
+  updateSubmissionStatus: (id: string, updates: Partial<JumiaSubmission>) => Promise<{ success: boolean; error?: string }>;
+  recordSale: (params: {
+    submission_id: string; variant_label: string | null; units_sold: number; unit_price: number; admin_id: string;
+  }) => Promise<{ success: boolean; saleId?: string; error?: string }>;
   submitWithdrawal: (payload: {
     user_id: string; amount: number; bank_name: string; account_number: string; account_name: string;
   }) => Promise<{ success: boolean; error?: string }>;
@@ -105,10 +115,12 @@ interface JumiaStore {
 
 export const useJumiaStore = create<JumiaStore>((set, get) => ({
   submissions: [],
+  allSubmissions: [],
   dropOffLocations: [],
   wallet: null,
   transactions: [],
   withdrawalRequests: [],
+  allWithdrawalRequests: [],
   isLoading: false,
 
   fetchSubmissions: async (userId) => {
@@ -129,6 +141,26 @@ export const useJumiaStore = create<JumiaStore>((set, get) => ({
       .eq('is_active', true)
       .order('name');
     if (!error) set({ dropOffLocations: (data as JumiaDropOffLocation[]) || [] });
+  },
+
+  // Admin-scope: all submissions across all users, with owner profile joined for the admin list view.
+  fetchAllSubmissions: async () => {
+    set({ isLoading: true });
+    const { data, error } = await supabase
+      .from('jumia_submissions')
+      .select('*, owner:profiles!jumia_submissions_owner_id_fkey(full_name, email, phone)')
+      .order('created_at', { ascending: false });
+    if (!error) set({ allSubmissions: (data as JumiaSubmission[]) || [] });
+    set({ isLoading: false });
+  },
+
+  // Admin-scope: all withdrawal requests across all users, with requester profile joined.
+  fetchAllWithdrawalRequests: async () => {
+    const { data, error } = await supabase
+      .from('jumia_withdrawal_requests')
+      .select('*, user:profiles!jumia_withdrawal_requests_user_id_fkey(full_name, email)')
+      .order('created_at', { ascending: false });
+    if (!error) set({ allWithdrawalRequests: (data as any) || [] });
   },
 
   fetchWallet: async (userId) => {
@@ -167,6 +199,30 @@ export const useJumiaStore = create<JumiaStore>((set, get) => ({
       .single();
     if (error) return { success: false, error: error.message };
     return { success: true, id: data.id };
+  },
+
+  // Generic admin status/field update — used for schedule notes, status transitions, rejection reasons.
+  updateSubmissionStatus: async (id, updates) => {
+    const { error } = await supabase
+      .from('jumia_submissions')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  // Calls the record_jumia_sale RPC, which atomically inserts the sale, credits the
+  // wallet (80%/20% split server-side via platform_settings), and decrements stock.
+  recordSale: async ({ submission_id, variant_label, units_sold, unit_price, admin_id }) => {
+    const { data, error } = await supabase.rpc('record_jumia_sale', {
+      p_submission_id: submission_id,
+      p_variant_label: variant_label,
+      p_units_sold: units_sold,
+      p_unit_price: unit_price,
+      p_admin_id: admin_id,
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true, saleId: data as string };
   },
 
   submitWithdrawal: async ({ user_id, amount, bank_name, account_number, account_name }) => {
