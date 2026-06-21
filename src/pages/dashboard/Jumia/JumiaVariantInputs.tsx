@@ -51,6 +51,14 @@ export default function JumiaVariantInputs({
         You need at least {MIN_UNITS_PER_VARIANT} units {hasVariants ? 'of each variant' : 'of this item'} ready before submitting.
       </p>
 
+      {hasVariants && (
+        <p className="text-xs text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-lg px-3 py-2">
+          Example: if you sell polo shirts in Black and White, "Black — 10" means you have
+          10 actual black polo shirts ready, and "White — 10" means 10 actual white polo
+          shirts — each variant needs its own 10, not 10 shared between them.
+        </p>
+      )}
+
       {!hasVariants ? (
         <input
           type="number"
