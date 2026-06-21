@@ -37,23 +37,6 @@ interface ConfettiPiece {
   rotate: number;
 }
 
-interface StoreSource {
-  name: string;
-  emoji: string;
-  color: string;
-  x: string;
-  y: string;
-  delay: number;
-}
-
-interface CartItem {
-  emoji: string;
-  color: string;
-  price: string;
-  fromStore: number;
-  delay: number;
-}
-
 interface Platform {
   name: string;
   tagline: string;
@@ -106,24 +89,6 @@ const CONFETTI_PIECES: ConfettiPiece[] = Array.from({ length: 40 }, (_, i) => ({
   rotate: (i * 37) % 360,
 }));
 
-const STORE_SOURCES: StoreSource[] = [
-  { name: 'Mens World',  emoji: '👔', color: '#60a5fa', x: '8%',  y: '18%', delay: 0.4 },
-  { name: 'Her Store',   emoji: '👗', color: '#ec4899', x: '78%', y: '12%', delay: 0.9 },
-  { name: 'Tech & More', emoji: '📱', color: '#06b6d4', x: '6%',  y: '60%', delay: 1.4 },
-  { name: 'Glow Store',  emoji: '💄', color: '#a78bfa', x: '80%', y: '58%', delay: 1.9 },
-  { name: 'Drip',        emoji: '👟', color: '#34d399', x: '50%', y: '8%',  delay: 2.4 },
-  { name: 'Food Hub',    emoji: '🍱', color: '#fbbf24', x: '82%', y: '34%', delay: 2.9 },
-];
-
-const CART_ITEMS: CartItem[] = [
-  { emoji: '👔', color: '#60a5fa', price: '₦12,300', fromStore: 0, delay: 1.2 },
-  { emoji: '👗', color: '#ec4899', price: '₦8,500',  fromStore: 1, delay: 1.8 },
-  { emoji: '📱', color: '#06b6d4', price: '₦45,000', fromStore: 2, delay: 2.4 },
-  { emoji: '💄', color: '#a78bfa', price: '₦3,200',  fromStore: 3, delay: 3.0 },
-  { emoji: '👟', color: '#34d399', price: '₦18,000', fromStore: 4, delay: 3.6 },
-  { emoji: '🍱', color: '#fbbf24', price: '₦2,800',  fromStore: 5, delay: 4.2 },
-];
-
 const PLATFORMS: Platform[] = [
   { name: 'JUMIA', tagline: "Nigeria's #1 marketplace", color: '#fff7ed', glow: 'rgba(255,237,213,0.6)', bg: 'rgba(249,115,22,0.25)', border: 'rgba(255,200,150,0.7)', delay: 0.3, products: ['Shoes', 'Phones', 'Fashion'], count: 298 },
   { name: 'KONGA', tagline: 'Shop smarter, pay better',  color: '#22c55e', glow: 'rgba(34,197,94,0.7)',   bg: 'rgba(34,197,94,0.15)',  border: 'rgba(34,197,94,0.6)',  delay: 0.7, products: ['Electronics', 'Home', 'Beauty'], count: 356 },
@@ -131,10 +96,10 @@ const PLATFORMS: Platform[] = [
 ];
 
 const DROPSHIP_NODES: DropshipNode[] = [
-  { label: 'Supplier',    Icon: Store,      color: '#f97316' },
-  { label: 'QAfrica',     Icon: Zap,        color: '#fbbf24' },
-  { label: 'Your Store',  Icon: TrendingUp, color: '#34d399' },
-  { label: 'Customer',    Icon: Users,      color: '#60a5fa' },
+  { label: 'Supplier',   Icon: Store,      color: '#f97316' },
+  { label: 'QAfrica',    Icon: Zap,        color: '#fbbf24' },
+  { label: 'Your Store', Icon: TrendingUp, color: '#34d399' },
+  { label: 'Customer',   Icon: Users,      color: '#60a5fa' },
 ];
 
 const DROPSHIP_PRODUCTS: DropshipProduct[] = [
@@ -228,58 +193,6 @@ function Typewriter({ text, delay = 0, className = '' }: { text: string; delay?:
         />
       )}
     </span>
-  );
-}
-
-/* ─── SVGs ─── */
-function CartSVG() {
-  return (
-    <svg viewBox="0 0 120 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-      <path d="M10 18 L18 18 L28 62 L96 62 L108 28 L24 28" stroke="white" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <line x1="28" y1="62" x2="96" y2="62" stroke="white" strokeWidth="5.5" strokeLinecap="round"/>
-      <circle cx="42" cy="74" r="7" fill="white" />
-      <circle cx="82" cy="74" r="7" fill="white" />
-      <circle cx="42" cy="74" r="3.5" fill="rgba(249,115,22,0.8)" />
-      <circle cx="82" cy="74" r="3.5" fill="rgba(249,115,22,0.8)" />
-      <line x1="10" y1="18" x2="2" y2="18" stroke="white" strokeWidth="5.5" strokeLinecap="round"/>
-    </svg>
-  );
-}
-
-function FingerSVG() {
-  return (
-    <svg viewBox="0 0 60 90" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-      <rect x="14" y="42" width="34" height="36" rx="10" fill="#FDDCB5" stroke="#e8b88a" strokeWidth="1.5"/>
-      <rect x="22" y="10" width="14" height="36" rx="7"   fill="#FDDCB5" stroke="#e8b88a" strokeWidth="1.5"/>
-      <rect x="37" y="22" width="11" height="26" rx="5.5" fill="#FDDCB5" stroke="#e8b88a" strokeWidth="1.5"/>
-      <rect x="10" y="26" width="11" height="22" rx="5.5" fill="#FDDCB5" stroke="#e8b88a" strokeWidth="1.5"/>
-      <rect x="2"  y="42" width="12" height="18" rx="6"   fill="#FDDCB5" stroke="#e8b88a" strokeWidth="1.5"/>
-      <rect x="25" y="13" width="8"  height="9"  rx="4"   fill="#f9a8d4" opacity="0.6"/>
-    </svg>
-  );
-}
-
-/* ─── FLYING ITEM ─── */
-function FlyingItem({ item }: { item: CartItem }) {
-  const store = STORE_SOURCES[item.fromStore];
-  const targetX = `calc(28vw - ${store.x})`;
-  const targetY = `calc(45% - ${store.y})`;
-
-  return (
-    <motion.div
-      className="absolute pointer-events-none z-20"
-      style={{ left: store.x, top: store.y, transform: 'translate(-50%, -50%)' }}
-      initial={{ opacity: 0, scale: 0, x: 0, y: 0 }}
-      animate={{ opacity: [0, 1, 1, 0], scale: [0, 1.1, 1, 0.3], x: [0, targetX], y: [0, targetY] }}
-      transition={{ duration: 1.6, delay: item.delay, ease: EASE_CART_ITEM }}
-    >
-      <div className="flex flex-col items-center gap-0.5">
-        <div className="text-2xl drop-shadow-lg">{item.emoji}</div>
-        <div className="bg-white rounded-lg px-1.5 py-0.5 shadow-lg">
-          <div className="font-black text-[8px]" style={{ color: item.color }}>{item.price}</div>
-        </div>
-      </div>
-    </motion.div>
   );
 }
 
@@ -419,123 +332,116 @@ function PhaseNormal() {
 }
 
 /* ─── PHASE: WORLD ─── */
-const CART_KEYFRAMES = {
-  x:       [-160, '10vw', '28vw', '55vw', '110vw'],
-  opacity: [0, 1, 1, 1, 0],
-};
-const FINGER_KEYFRAMES = {
-  x:       [-80, '8vw', '26vw', '52vw', '108vw'],
-  opacity: [0, 1, 1, 1, 0],
-  y:       [0, 0, -6, 0, 0],
-};
-const EASE_IN_OUT_CUBIC = [0.3, 0, 0.4, 1] as [number, number, number, number];
-const EASE_CART_ITEM   = [0.4, 0, 0.2, 1] as [number, number, number, number];
-
-const SWEEP_TRANSITION = { duration: 6.5, ease: EASE_IN_OUT_CUBIC, times: [0, 0.08, 0.4, 0.85, 1] };
-
 function PhaseWorld() {
   return (
     <motion.div
       key="world"
-      className="absolute inset-0 overflow-hidden"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-      exit={{ opacity: 0, filter: 'blur(6px)' }}
+      className="absolute inset-0 flex flex-col items-center justify-center px-6 pb-16 overflow-hidden"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, filter: 'blur(4px)' }}
       transition={{ duration: 0.6 }}
     >
-      <div className="absolute inset-0 bg-black/10" />
-      <motion.div className="absolute top-6 left-0 right-0 text-center z-40 px-4" {...fadeUp(0.2)}>
-        <h2
-          className="text-white font-black text-2xl sm:text-3xl leading-tight"
-          style={{ textShadow: '0 2px 24px rgba(0,0,0,0.55), 0 1px 4px rgba(0,0,0,0.4)' }}
-        >
-          Shop from <span className="text-orange-200">every store</span><br />in one place
-        </h2>
-      </motion.div>
+      {/* Subtle glow */}
+      <motion.div
+        className="absolute rounded-full blur-3xl pointer-events-none"
+        style={{ width: 300, height: 200, background: 'rgba(255,255,255,0.12)' }}
+        animate={{ scale: [0.9, 1.1, 0.9], opacity: [0.4, 0.7, 0.4] }}
+        transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+      />
 
-      {STORE_SOURCES.map(s => (
+      {/* Cart + text sliding in from left */}
+      <motion.div
+        className="relative flex flex-col items-center"
+        initial={{ x: -300, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 1.0, ease: [0.22, 1, 0.36, 1], delay: 0.2 }}
+      >
+        {/* Cart SVG with gentle bounce */}
         <motion.div
-          key={s.name}
-          className="absolute flex flex-col items-center gap-0.5 z-10"
-          style={{ left: s.x, top: s.y, transform: 'translate(-50%, -50%)' }}
-          initial={{ opacity: 0, scale: 0 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={springTransition(s.delay - 0.2, 220, 18)}
+          animate={{ x: [0, 18, 0] }}
+          transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut', delay: 1.4 }}
+          style={{ position: 'relative', width: 176, height: 144 }}
         >
+          {/* Speed lines — flash on each rightward bounce */}
           <motion.div
-            className="w-11 h-11 bg-white rounded-2xl shadow-xl flex items-center justify-center text-xl"
-            animate={{ boxShadow: [`0 0 0 0 ${s.color}00`, `0 0 0 8px ${s.color}40`, `0 0 0 0 ${s.color}00`] }}
-            transition={{ repeat: Infinity, duration: 2.4, delay: s.delay }}
+            style={{ position: 'absolute', left: -28, top: 28 }}
+            animate={{ opacity: [0, 0.6, 0] }}
+            transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut', delay: 1.4 }}
           >
-            {s.emoji}
+            <svg width="28" height="36" viewBox="0 0 28 36" fill="none">
+              <line x1="0" y1="6"  x2="22" y2="6"  stroke="white" strokeWidth="2"   strokeLinecap="round" opacity="0.5"/>
+              <line x1="0" y1="16" x2="18" y2="16" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.3"/>
+              <line x1="0" y1="26" x2="20" y2="26" stroke="white" strokeWidth="1.5" strokeLinecap="round" opacity="0.3"/>
+            </svg>
           </motion.div>
-          <span className="text-white/70 text-[7px] font-bold whitespace-nowrap bg-black/20 rounded px-1">{s.name}</span>
-        </motion.div>
-      ))}
 
-      {CART_ITEMS.map((item, i) => (
-        <FlyingItem key={i} item={item} />
-      ))}
-
-      <motion.div
-        className="absolute z-10"
-        style={{ top: '38%', width: 130, height: 108 }}
-        animate={CART_KEYFRAMES}
-        transition={{ ...SWEEP_TRANSITION, delay: 0.5 }}
-      >
-        <motion.div
-          className="absolute -inset-4 rounded-full blur-2xl"
-          animate={{ opacity: [0.3, 0.6, 0.3] }}
-          transition={{ repeat: Infinity, duration: 1.6 }}
-          style={{ background: 'rgba(255,255,255,0.25)' }}
-        />
-        <CartSVG />
-        <div className="absolute top-5 left-8 flex flex-wrap gap-0.5 w-16 overflow-hidden">
-          {CART_ITEMS.map((item, i) => (
-            <motion.span
-              key={i}
-              className="text-sm"
-              initial={{ opacity: 0, y: -8, scale: 0 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={springTransition(item.delay + 1.0, 300)}
-            >
-              {item.emoji}
-            </motion.span>
-          ))}
-        </div>
-        <motion.div
-          className="absolute -top-2 -right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-lg"
-          initial={{ scale: 0 }} animate={{ scale: 1 }}
-          transition={springTransition(1.8)}
-        >
-          <motion.span
-            className="text-orange-500 font-black text-sm"
-            animate={{ scale: [1, 1.3, 1] }}
-            transition={{ repeat: Infinity, duration: 1.2, delay: 2 }}
+          <svg
+            viewBox="0 0 120 100"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            width={176}
+            height={144}
+            style={{ filter: 'drop-shadow(0 8px 32px rgba(0,0,0,0.25))' }}
           >
-            6
-          </motion.span>
+            {/* Cart body */}
+            <path
+              d="M10 18 L18 18 L28 62 L96 62 L108 28 L24 28"
+              stroke="white" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round"
+            />
+            <line x1="28" y1="62" x2="96" y2="62" stroke="white" strokeWidth="5.5" strokeLinecap="round"/>
+            {/* Handle */}
+            <line x1="10" y1="18" x2="2" y2="18" stroke="white" strokeWidth="5.5" strokeLinecap="round"/>
+            {/* Wheels */}
+            <circle cx="42" cy="74" r="7" fill="white"/>
+            <circle cx="82" cy="74" r="7" fill="white"/>
+            <circle cx="42" cy="74" r="3.5" fill="rgba(234,101,16,0.75)"/>
+            <circle cx="82" cy="74" r="3.5" fill="rgba(234,101,16,0.75)"/>
+            {/* Wheel spokes */}
+            <line x1="42" y1="67" x2="42" y2="81" stroke="rgba(234,101,16,0.5)" strokeWidth="1.5"/>
+            <line x1="35" y1="74" x2="49" y2="74" stroke="rgba(234,101,16,0.5)" strokeWidth="1.5"/>
+            <line x1="82" y1="67" x2="82" y2="81" stroke="rgba(234,101,16,0.5)" strokeWidth="1.5"/>
+            <line x1="75" y1="74" x2="89" y2="74" stroke="rgba(234,101,16,0.5)" strokeWidth="1.5"/>
+          </svg>
         </motion.div>
-      </motion.div>
 
-      <motion.div
-        className="absolute z-30"
-        style={{ top: '64%', width: 44, height: 66 }}
-        animate={FINGER_KEYFRAMES}
-        transition={{ ...SWEEP_TRANSITION, delay: 0.7 }}
-      >
-        <FingerSVG />
+        {/* Text below cart */}
         <motion.div
-          className="absolute -inset-2 rounded-full border-2 border-white/50"
-          initial={{ scale: 0.5, opacity: 0.8 }}
-          animate={{ scale: 2.5, opacity: 0 }}
-          transition={{ repeat: Infinity, duration: 1.4, delay: 1.2 }}
-        />
-      </motion.div>
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.9, duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+          className="text-center mt-2"
+        >
+          <h2 className="text-white font-black text-3xl sm:text-4xl leading-tight tracking-tight">
+            QAfrica
+          </h2>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1.3, duration: 0.6 }}
+            className="text-orange-100/85 text-base sm:text-lg font-medium mt-1"
+          >
+            Your Business Buddy
+          </motion.p>
+        </motion.div>
 
-      <motion.div className="absolute bottom-16 left-0 right-0 text-center px-4 z-30" {...fadeUp(2.5)}>
-        <div className="inline-block bg-black/25 backdrop-blur rounded-2xl px-5 py-2.5">
-          <p className="text-white font-black text-base sm:text-lg">One cart · Every store · All Nigeria</p>
-        </div>
+        {/* Animated underline */}
+        <motion.div
+          initial={{ scaleX: 0, opacity: 0 }}
+          animate={{ scaleX: 1, opacity: 1 }}
+          transition={{ delay: 1.6, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          className="mt-3 h-0.5 w-40 bg-white/30 rounded-full origin-left"
+        />
+
+        {/* Sub tagline */}
+        <motion.p
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.9, duration: 0.6 }}
+          className="text-white/55 text-sm mt-3 text-center"
+        >
+          One cart · Every store · All Nigeria
+        </motion.p>
       </motion.div>
     </motion.div>
   );
@@ -902,8 +808,8 @@ function PhaseDropshipHero() {
         <motion.div className="flex gap-3 justify-center mt-6" {...fadeUp(1.3)}>
           {[
             { icon: <DollarSign className="w-3.5 h-3.5" />, label: 'Zero upfront cost' },
-            { icon: <BarChart3  className="w-3.5 h-3.5" />, label: 'Set your markup' },
-            { icon: <Package   className="w-3.5 h-3.5" />, label: 'We fulfil orders' },
+            { icon: <BarChart3  className="w-3.5 h-3.5" />, label: 'Set your markup'  },
+            { icon: <Package   className="w-3.5 h-3.5" />, label: 'We fulfil orders'  },
           ].map((item, i) => (
             <motion.div
               key={item.label}
@@ -1104,11 +1010,8 @@ export default function DiscoveryHero({ searchQuery, onSearch, collapsed, onColl
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [scheduleNext]);
 
-  // Collapse to search-only header on first scroll
   useEffect(() => {
-    const onScroll = () => {
-      if (window.scrollY > 10) onCollapse();
-    };
+    const onScroll = () => { if (window.scrollY > 10) onCollapse(); };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, [onCollapse]);
@@ -1118,14 +1021,12 @@ export default function DiscoveryHero({ searchQuery, onSearch, collapsed, onColl
       className="sticky top-0 z-50 select-none overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #f97316 0%, #ea6510 50%, #dc5a0a 100%)' }}
     >
-      {/* Background layers */}
       <Particles />
       <div
         className="absolute inset-0 pointer-events-none"
         style={{ background: 'radial-gradient(ellipse 80% 80% at 50% 50%, transparent 40%, rgba(0,0,0,0.15) 100%)' }}
       />
 
-      {/* Cinematic phases — animates to height 0 on collapse */}
       <motion.div
         className="relative z-10 overflow-hidden"
         animate={{ height: collapsed ? 0 : 440, opacity: collapsed ? 0 : 1 }}
@@ -1133,17 +1034,16 @@ export default function DiscoveryHero({ searchQuery, onSearch, collapsed, onColl
         style={{ pointerEvents: collapsed ? 'none' : 'auto' }}
       >
         <AnimatePresence mode="wait">
-          {phase === 'intro'        && <PhaseIntro        key="intro" />}
-          {phase === 'normal'       && <PhaseNormal       key="normal" />}
-          {phase === 'world'        && <PhaseWorld        key="world" />}
-          {phase === 'listing'      && <PhaseListing      key="listing" />}
-          {phase === 'escrow'       && <PhaseEscrow       key="escrow" />}
+          {phase === 'intro'        && <PhaseIntro        key="intro"        />}
+          {phase === 'normal'       && <PhaseNormal       key="normal"       />}
+          {phase === 'world'        && <PhaseWorld        key="world"        />}
+          {phase === 'listing'      && <PhaseListing      key="listing"      />}
+          {phase === 'escrow'       && <PhaseEscrow       key="escrow"       />}
           {phase === 'dropshiphero' && <PhaseDropshipHero key="dropshiphero" />}
-          {phase === 'dropship'     && <PhaseDropship     key="dropship" />}
+          {phase === 'dropship'     && <PhaseDropship     key="dropship"     />}
         </AnimatePresence>
       </motion.div>
 
-      {/* Search bar — always visible, padding tightens when collapsed */}
       <motion.div
         className="relative z-10 max-w-2xl mx-auto px-4"
         animate={{
