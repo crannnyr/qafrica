@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { deliveryZoneService, supabase } from '@/services/supabase';
+import { deliveryZoneService, supabase } from '@/services';
 import { useStoreStore } from '@/stores';
 import type { ShipbubblePickupAddress, PackagingDimensions } from '../types';
 
