@@ -11,16 +11,18 @@ import { useJumiaStore, type JumiaVariant } from '@/stores/jumiaStore';
 import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
 import JumiaVariantInputs from './Jumia/JumiaVariantInputs';
 import JumiaFulfillmentChoice from './Jumia/JumiaFulfillmentChoice';
+import JumiaPlanGate from './Jumia/JumiaPlanGate';
 
 const SUBMISSION_FEE = 1500;
 const AGENT_FEE = 7500;
 
-export default function JumiaAddItemPage() {
+function JumiaAddItemForm() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const { currentStore, products, fetchUserStore } = useStoreStore();
   const { dropOffLocations, fetchDropOffLocations, createSubmission } = useJumiaStore();
 
+  const [isLoadingStore, setIsLoadingStore] = useState(!currentStore);
   const [sourceProductId, setSourceProductId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -33,8 +35,11 @@ export default function JumiaAddItemPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user?.id && !currentStore) fetchUserStore(user.id);
     fetchDropOffLocations();
+    if (!user?.id) return;
+    if (currentStore) { setIsLoadingStore(false); return; }
+    setIsLoadingStore(true);
+    fetchUserStore(user.id).finally(() => setIsLoadingStore(false));
   }, [user?.id, currentStore, fetchUserStore, fetchDropOffLocations]);
 
   const selectExistingProduct = (id: string) => {
@@ -142,6 +147,16 @@ export default function JumiaAddItemPage() {
         </p>
       </div>
 
+      {isLoadingStore ? (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-12 text-center text-gray-400 text-sm">
+          Loading your store…
+        </div>
+      ) : !currentStore ? (
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-12 text-center">
+          <p className="text-gray-500 dark:text-gray-400 font-medium mb-1">We couldn't find your store</p>
+          <p className="text-gray-400 text-sm mb-4">Every account gets a store on signup — try refreshing, or contact support if this keeps happening.</p>
+        </div>
+      ) : (
       <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm p-6 space-y-6">
         {products && products.length > 0 && (
           <div>
@@ -186,6 +201,15 @@ export default function JumiaAddItemPage() {
           {isSubmitting ? 'Processing…' : `Pay ₦${(SUBMISSION_FEE + (method === 'agent_pickup' ? AGENT_FEE : 0)).toLocaleString()} & Submit`}
         </Button>
       </div>
+      )}
     </div>
+  );
+}
+
+export default function JumiaAddItemPage() {
+  return (
+    <JumiaPlanGate>
+      <JumiaAddItemForm />
+    </JumiaPlanGate>
   );
 }
