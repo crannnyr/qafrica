@@ -37,8 +37,11 @@ export interface JumiaSubmission {
         | 'received_by_jumia' | 'live' | 'out_of_stock' | 'paused' | 'rejected';
   status_note: string | null;
   scheduled_for: string | null;
+  admin_notes: string | null;
   created_at: string;
+  updated_at: string;
   live_at: string | null;
+  received_by_jumia_at: string | null;
   // Present only when fetched via fetchAllSubmissions (admin join)
   owner?: { full_name: string; email: string; phone: string | null };
 }
