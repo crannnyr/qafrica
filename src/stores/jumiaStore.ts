@@ -1,0 +1,181 @@
+// src/stores/jumiaStore.ts
+// Mirrors the structure of useWalletStore / useStoreStore.
+// Fully isolated from the main wallet — separate balance, separate transactions.
+
+import { create } from 'zustand';
+import { supabase } from '@/services';
+
+export interface JumiaVariant {
+  label: string;
+  quantity_sent: number;
+  quantity_remaining: number;
+}
+
+export interface JumiaSubmission {
+  id: string;
+  owner_id: string;
+  source_product_id: string | null;
+  name: string;
+  description: string | null;
+  images: string[];
+  category: string;
+  selling_price: number;
+  has_variants: boolean;
+  variants: JumiaVariant[];
+  quantity_sent: number;
+  quantity_remaining: number;
+  fulfillment_method: 'self_dropoff' | 'agent_pickup';
+  drop_off_location_id: string | null;
+  submission_fee_paid: boolean;
+  submission_fee_amount: number;
+  agent_fee_paid: boolean;
+  agent_fee_amount: number;
+  status: 'pending_payment' | 'awaiting_schedule' | 'awaiting_dropoff' | 'dropped_off'
+        | 'received_by_jumia' | 'live' | 'out_of_stock' | 'paused' | 'rejected';
+  status_note: string | null;
+  scheduled_for: string | null;
+  created_at: string;
+  live_at: string | null;
+}
+
+export interface JumiaDropOffLocation {
+  id: string;
+  name: string;
+  address: string;
+  phone: string | null;
+  latitude: number;
+  longitude: number;
+  is_active: boolean;
+}
+
+export interface JumiaWallet {
+  id: string;
+  user_id: string;
+  balance: number;
+  total_earned: number;
+  total_withdrawn: number;
+  withdrawal_bank_name: string | null;
+  withdrawal_account_number: string | null;
+  withdrawal_account_name: string | null;
+}
+
+export interface JumiaWalletTransaction {
+  id: string;
+  type: 'credit' | 'debit';
+  amount: number;
+  balance_after: number;
+  description: string;
+  status: string;
+  created_at: string;
+}
+
+export interface JumiaWithdrawalRequest {
+  id: string;
+  amount: number;
+  status: 'pending' | 'approved' | 'rejected' | 'paid';
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  admin_note: string | null;
+  created_at: string;
+  paid_at: string | null;
+}
+
+interface JumiaStore {
+  submissions: JumiaSubmission[];
+  dropOffLocations: JumiaDropOffLocation[];
+  wallet: JumiaWallet | null;
+  transactions: JumiaWalletTransaction[];
+  withdrawalRequests: JumiaWithdrawalRequest[];
+  isLoading: boolean;
+
+  fetchSubmissions: (userId: string) => Promise<void>;
+  fetchDropOffLocations: () => Promise<void>;
+  fetchWallet: (userId: string) => Promise<void>;
+  fetchTransactions: (userId: string) => Promise<void>;
+  fetchWithdrawalRequests: (userId: string) => Promise<void>;
+  createSubmission: (payload: Partial<JumiaSubmission>) => Promise<{ success: boolean; id?: string; error?: string }>;
+  submitWithdrawal: (payload: {
+    user_id: string; amount: number; bank_name: string; account_number: string; account_name: string;
+  }) => Promise<{ success: boolean; error?: string }>;
+}
+
+export const useJumiaStore = create<JumiaStore>((set, get) => ({
+  submissions: [],
+  dropOffLocations: [],
+  wallet: null,
+  transactions: [],
+  withdrawalRequests: [],
+  isLoading: false,
+
+  fetchSubmissions: async (userId) => {
+    set({ isLoading: true });
+    const { data, error } = await supabase
+      .from('jumia_submissions')
+      .select('*')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: false });
+    if (!error) set({ submissions: (data as JumiaSubmission[]) || [] });
+    set({ isLoading: false });
+  },
+
+  fetchDropOffLocations: async () => {
+    const { data, error } = await supabase
+      .from('jumia_drop_off_locations')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+    if (!error) set({ dropOffLocations: (data as JumiaDropOffLocation[]) || [] });
+  },
+
+  fetchWallet: async (userId) => {
+    const { data, error } = await supabase
+      .from('jumia_wallets')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (!error) set({ wallet: data as JumiaWallet | null });
+  },
+
+  fetchTransactions: async (userId) => {
+    const { data, error } = await supabase
+      .from('jumia_wallet_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (!error) set({ transactions: (data as JumiaWalletTransaction[]) || [] });
+  },
+
+  fetchWithdrawalRequests: async (userId) => {
+    const { data, error } = await supabase
+      .from('jumia_withdrawal_requests')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (!error) set({ withdrawalRequests: (data as JumiaWithdrawalRequest[]) || [] });
+  },
+
+  createSubmission: async (payload) => {
+    const { data, error } = await supabase
+      .from('jumia_submissions')
+      .insert(payload)
+      .select('id')
+      .single();
+    if (error) return { success: false, error: error.message };
+    return { success: true, id: data.id };
+  },
+
+  submitWithdrawal: async ({ user_id, amount, bank_name, account_number, account_name }) => {
+    const wallet = get().wallet;
+    if (!wallet) return { success: false, error: 'Jumia wallet not found' };
+    if (amount < 10000) return { success: false, error: 'Minimum withdrawal is ₦10,000' };
+    if (amount > wallet.balance) return { success: false, error: 'Insufficient Jumia wallet balance' };
+
+    const { error } = await supabase.from('jumia_withdrawal_requests').insert({
+      user_id, jumia_wallet_id: wallet.id, amount, bank_name, account_number, account_name,
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+}));
