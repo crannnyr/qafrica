@@ -405,14 +405,8 @@ export default function StorePage() {
           </div>
 
           {/* ── Banner watermark badge ── */}
-          <div
-            className="absolute bottom-0 right-0 px-3 py-1.5 pointer-events-none"
-            style={{ backgroundColor: primary }}
-          >
-            <span
-              className="text-[10px] font-bold tracking-widest uppercase"
-              style={{ color: contrastText }}
-            >
+          <div className="absolute bottom-0 right-0 px-2.5 py-1 pointer-events-none bg-white">
+            <span className="text-[9px] font-bold tracking-widest uppercase text-black">
               {store.name}
             </span>
           </div>
@@ -487,14 +481,8 @@ export default function StorePage() {
                   )}
 
                   {/* ── Product watermark badge ── */}
-                  <div
-                    className="absolute bottom-0 right-0 px-2 py-1 pointer-events-none"
-                    style={{ backgroundColor: primary }}
-                  >
-                    <span
-                      className="text-[8px] font-bold tracking-widest uppercase"
-                      style={{ color: contrastText }}
-                    >
+                  <div className="absolute bottom-0 right-0 px-2 py-0.5 pointer-events-none bg-white">
+                    <span className="text-[7px] font-bold tracking-widest uppercase text-black">
                       {store.name}
                     </span>
                   </div>
