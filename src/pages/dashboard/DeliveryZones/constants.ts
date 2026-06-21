@@ -10,10 +10,10 @@ export const SHIPBUBBLE_CATEGORIES = [
 ];
 
 export const PICKUP_ADDRESS_FIELDS = [
-  { key: 'first_name', label: 'First Name', placeholder: 'John' },
-  { key: 'last_name',  label: 'Last Name',  placeholder: 'Doe' },
+  { key: 'first_name', label: 'First Name', placeholder: 'John',          type: 'text'  },
+  { key: 'last_name',  label: 'Last Name',  placeholder: 'Doe',           type: 'text'  },
   { key: 'email',      label: 'Email',      placeholder: 'john@store.com', type: 'email' },
-  { key: 'phone',      label: 'Phone',      placeholder: '08012345678' },
+  { key: 'phone',      label: 'Phone',      placeholder: '08012345678',   type: 'tel'   },
 ] as const;
 
 export const PACKAGING_FIELDS = [
