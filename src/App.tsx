@@ -51,6 +51,10 @@ import NicheCustomizationPage from '@/pages/dashboard/NicheCustomizationPage';
 
 // Marketplace Placeholder Pages
 import JumiaPage from '@/pages/dashboard/JumiaPage';
+import JumiaAddItemPage from '@/pages/dashboard/JumiaAddItemPage';
+import JumiaDropOffLocationsPage from '@/pages/dashboard/JumiaDropOffLocationsPage';
+import JumiaWalletPage from '@/pages/dashboard/JumiaWalletPage';
+import JumiaHowToScalePage from '@/pages/dashboard/JumiaHowToScalePage';
 import KongaPage from '@/pages/dashboard/KongaPage';
 import JijiPage from '@/pages/dashboard/JijiPage';
 
@@ -83,6 +87,9 @@ import AdminDomainRequests from '@/pages/admin/AdminDomainRequests';
 import AdminNotifications from '@/pages/admin/AdminNotifications';
 import AdminLegal from '@/pages/admin/AdminLegal';
 import AdminShipbubblePage from '@/pages/admin/AdminShipbubble';
+import AdminJumia from '@/pages/admin/AdminJumia';
+import AdminJumiaSubmissionDetail from '@/pages/admin/AdminJumiaSubmissionDetail';
+import AdminJumiaWithdrawals from '@/pages/admin/AdminJumiaWithdrawals';
 
 // Developer Pages
 import DeveloperLayout from '@/pages/developer/dashboard/DeveloperLayout';
@@ -285,6 +292,10 @@ function App() {
             <Route path="how-to-use" element={<HowToUsePage />} />
             <Route path="manual-sales" element={<ManualSalesPage />} />
             <Route path="jumia" element={<JumiaPage />} />
+            <Route path="jumia/add" element={<JumiaAddItemPage />} />
+            <Route path="jumia/locations" element={<JumiaDropOffLocationsPage />} />
+            <Route path="jumia/wallet" element={<JumiaWalletPage />} />
+            <Route path="jumia/how-to-scale" element={<JumiaHowToScalePage />} />
             <Route path="konga" element={<KongaPage />} />
             <Route path="jiji" element={<JijiPage />} />
           </Route>
@@ -304,6 +315,9 @@ function App() {
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="legal" element={<AdminLegal />} />
             <Route path="shipbubble" element={<AdminShipbubblePage />} />
+            <Route path="jumia" element={<AdminJumia />} />
+            <Route path="jumia/:id" element={<AdminJumiaSubmissionDetail />} />
+            <Route path="jumia-withdrawals" element={<AdminJumiaWithdrawals />} />
           </Route>
 
           {/* Developer Portal Routes */}
