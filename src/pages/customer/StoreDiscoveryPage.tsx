@@ -1,7 +1,6 @@
 // src/pages/customer/StoreDiscoveryPage.tsx
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
 import { supabase } from '@/services';
 
 import DiscoveryHero from './StoreDiscovery/DiscoveryHero';
@@ -10,11 +9,6 @@ import StoreGridControls from './StoreDiscovery/StoreGridControls';
 import StoreGrid from './StoreDiscovery/StoreGrid';
 import SellerCallToAction from './StoreDiscovery/SellerCallToAction';
 import type { StoreDisplay, SortBy } from './StoreDiscovery/constants';
-
-// Must match the hero's cinematic area height
-const HERO_HEIGHT = 440;
-// Approx height of the collapsed sticky search bar
-const SEARCH_BAR_H = 72;
 
 export default function StoreDiscoveryPage() {
   const [stores, setStores]                     = useState<any[]>([]);
@@ -26,12 +20,8 @@ export default function StoreDiscoveryPage() {
   const [heroCollapsed, setHeroCollapsed]       = useState(false);
 
   useEffect(() => { fetchStores(); }, []);
+  useEffect(() => { filterStores(); }, [stores, searchQuery, selectedCategory, sortBy]);
 
-  useEffect(() => {
-    filterStores();
-  }, [stores, searchQuery, selectedCategory, sortBy]);
-
-  // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchStores = async () => {
     try {
       const { data, error } = await supabase
@@ -40,7 +30,6 @@ export default function StoreDiscoveryPage() {
         .eq('is_active', true)
         .or('is_blocked.eq.false,is_blocked.is.null')
         .order('created_at', { ascending: false });
-
       setStores(!error && data ? data : []);
     } catch (err) {
       console.error('Failed to fetch stores:', err);
@@ -50,28 +39,24 @@ export default function StoreDiscoveryPage() {
     }
   };
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
   const getProductCount = (productsObj: any) => {
     if (!productsObj) return 0;
-    if (Array.isArray(productsObj) && productsObj.length > 0)
-      return productsObj[0].count || 0;
+    if (Array.isArray(productsObj) && productsObj.length > 0) return productsObj[0].count || 0;
     if (typeof productsObj.count === 'number') return productsObj.count;
     return 0;
   };
 
-  // ── Filter + sort ──────────────────────────────────────────────────────────
   const filterStores = () => {
     if (stores.length === 0 && isLoading) return;
-
     let filtered: StoreDisplay[] = stores.map((s) => ({
       id:            s.id,
       name:          s.name,
       slug:          s.slug,
       description:   s.description,
-      logo_url:      s.logo_url    || null,
-      banner_url:    s.banner_url  || null,
+      logo_url:      s.logo_url   || null,
+      banner_url:    s.banner_url || null,
       primary_color: s.primary_color,
-      niches:        s.niches      || [],
+      niches:        s.niches     || [],
       product_count: getProductCount(s.products),
       rating:        4.5,
       review_count:  100,
@@ -80,42 +65,25 @@ export default function StoreDiscoveryPage() {
     }));
 
     if (searchQuery) {
-      filtered = filtered.filter((store) =>
-        store.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        store.description?.toLowerCase().includes(searchQuery.toLowerCase()),
+      filtered = filtered.filter((s) =>
+        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.description?.toLowerCase().includes(searchQuery.toLowerCase()),
       );
     }
-
     if (selectedCategory !== 'all') {
-      filtered = filtered.filter((store) =>
-        store.niches?.includes(selectedCategory),
-      );
+      filtered = filtered.filter((s) => s.niches?.includes(selectedCategory));
     }
-
     switch (sortBy) {
-      case 'rating':
-        filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-        break;
-      case 'newest':
-        filtered.sort((a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-        );
-        break;
-      default:
-        filtered.sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
+      case 'rating':  filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0)); break;
+      case 'newest':  filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
+      default:        filtered.sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
     }
-
     setFilteredStores(filtered);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
+    // ── No spacer div — hero is sticky, content flows naturally beneath ──
     <div className="min-h-screen bg-gray-50">
-      {/*
-        The hero is sticky and animates its own height from (440 + search bar)
-        down to just the search bar. We render a spacer beneath it that mirrors
-        that shrink so the content below never jumps.
-      */}
       <DiscoveryHero
         searchQuery={searchQuery}
         onSearch={setSearchQuery}
@@ -123,33 +91,17 @@ export default function StoreDiscoveryPage() {
         onCollapse={() => setHeroCollapsed(true)}
       />
 
-      {/*
-        Spacer: starts at the full hero height, shrinks to the sticky bar height
-        as the hero collapses. This keeps the page content from jumping up.
-      */}
-      <motion.div
-        aria-hidden
-        animate={{ height: heroCollapsed ? 0 : HERO_HEIGHT }}
-        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-      />
-
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <CategoryFilter
           selectedCategory={selectedCategory}
           onSelect={setSelectedCategory}
         />
-
         <StoreGridControls
           totalCount={filteredStores.length}
           sortBy={sortBy}
           onSortChange={setSortBy}
         />
-
-        <StoreGrid
-          stores={filteredStores}
-          isLoading={isLoading}
-        />
-
+        <StoreGrid stores={filteredStores} isLoading={isLoading} />
         <SellerCallToAction />
       </div>
     </div>
