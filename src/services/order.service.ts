@@ -33,15 +33,18 @@ export const orderService = {
   },
 
   async getOrder(orderId: string) {
+    // FIX: changed 'items:order_items(*)' to 'order_items(*)' to avoid conflict
+    // with the orders.items JSONB column which silently overrides the join alias
     const { data, error } = await supabase
       .from('orders')
-      .select('*, items:order_items(*)')
+      .select('*, order_items(*)')
       .eq('id', orderId)
       .single();
     return { data, error };
   },
 
   async getStoreOrders(storeId: string) {
+    // FIX: changed 'items:order_items(*)' to 'order_items(*)'
     const { data: directOrders, error: directError } = await supabase
       .from('orders')
       .select('*, order_items(*)')
@@ -50,7 +53,6 @@ export const orderService = {
 
     if (directError) return { data: null, error: directError };
 
-    // BUG FIX: removed broken nested alias 'items:order_items' — use order_items directly
     const { data: dropshipRows } = await supabase
       .from('order_items')
       .select('order:orders(*, order_items(*))')
@@ -94,24 +96,24 @@ export const orderService = {
     if (error) return { data: null, error };
 
     const transformed: DropshipOrderView[] = (data || []).map((item: any) => ({
-      order_id:              item.order.id,
-      order_number:          item.order.order_number,
-      dropshipper_store_id:  item.order.store_id,
+      order_id:               item.order.id,
+      order_number:           item.order.order_number,
+      dropshipper_store_id:   item.order.store_id,
       dropshipper_store_name: '',
-      customer_name:         item.order.customer_name,
-      customer_email:        item.order.customer_email,
-      customer_phone:        item.order.customer_phone,
-      delivery_address:      item.order.delivery_address,
-      delivery_state:        item.order.delivery_state,
-      status:                item.order.status,
-      payment_status:        item.order.payment_status,
-      created_at:            item.order.created_at,
-      items:                 item.order.order_items,
-      total_dropship_price:  (item.dropship_price ?? 0) * item.quantity,
-      total_quantity:        item.quantity,
-      tracking_number:       item.order.tracking_number,
-      is_escrow_released:    item.order.is_escrow_released,
-      delivered_at:          item.order.delivered_at,
+      customer_name:          item.order.customer_name,
+      customer_email:         item.order.customer_email,
+      customer_phone:         item.order.customer_phone,
+      delivery_address:       item.order.delivery_address,
+      delivery_state:         item.order.delivery_state,
+      status:                 item.order.status,
+      payment_status:         item.order.payment_status,
+      created_at:             item.order.created_at,
+      items:                  item.order.order_items,
+      total_dropship_price:   (item.dropship_price ?? 0) * item.quantity,
+      total_quantity:         item.quantity,
+      tracking_number:        item.order.tracking_number,
+      is_escrow_released:     item.order.is_escrow_released,
+      delivered_at:           item.order.delivered_at,
     }));
 
     return { data: transformed, error: null };
@@ -144,9 +146,10 @@ export const orderService = {
   },
 
   async getUserOrders(userId: string) {
+    // FIX: changed 'items:order_items(*)' to 'order_items(*)'
     const { data, error } = await supabase
       .from('orders')
-      .select('*, items:order_items(*)')
+      .select('*, order_items(*)')
       .eq('customer_id', userId)
       .order('created_at', { ascending: false });
     return { data, error };
@@ -204,9 +207,10 @@ export const orderService = {
   },
 
   async getAllOrders() {
+    // FIX: changed 'items:order_items(*)' to 'order_items(*)'
     const { data, error } = await supabase
       .from('orders')
-      .select('*, items:order_items(*)')
+      .select('*, order_items(*)')
       .order('created_at', { ascending: false });
     return { data, error };
   },
