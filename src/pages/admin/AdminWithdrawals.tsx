@@ -1,59 +1,56 @@
 import { useEffect, useState } from 'react';
-import {
-  CreditCard, CheckCircle, XCircle, Building2, User,
-  AlertTriangle, RefreshCw, Clock, X
-} from 'lucide-react';
-import { useWalletStore } from '@/stores';
+import { CheckCircle, XCircle, Building2, User, Clock, X, RefreshCw, Copy } from 'lucide-react';
+import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/stores';
-import { supabase } from '@/services';
 import { toast } from 'sonner';
 
-interface FailureLog {
+interface Withdrawal {
   id: string;
-  failure_type: string;
-  entity_type: string;
-  entity_id: string;
-  error_message: string;
-  metadata: Record<string, any>;
-  is_resolved: boolean;
+  amount: number;
+  status: string;
+  bank_name: string;
+  account_number: string;
+  account_name: string;
+  admin_note: string | null;
   created_at: string;
-  affected_user_name: string | null;
-  affected_user_email: string | null;
-  affected_user_phone: string | null;
+  paid_at: string | null;
+  full_name: string;
+  email: string;
+  phone: string | null;
 }
 
 export default function AdminWithdrawals() {
   const { user } = useAuthStore();
-  const { pendingWithdrawals, fetchPendingWithdrawals } = useWalletStore();
-  const [processing, setProcessing] = useState<string | null>(null);
-
-  // Reject modal
-  const [rejectTarget, setRejectTarget] = useState<{ id: string; amount: number } | null>(null);
+  const [withdrawals, setWithdrawals]   = useState<Withdrawal[]>([]);
+  const [isLoading, setIsLoading]       = useState(true);
+  const [processing, setProcessing]     = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState('pending');
+  const [rejectModal, setRejectModal]   = useState<Withdrawal | null>(null);
   const [rejectReason, setRejectReason] = useState('');
-
-  // Failure logs
-  const [failureLogs, setFailureLogs] = useState<FailureLog[]>([]);
-  const [logsLoading, setLogsLoading] = useState(true);
-
-  // Processed today count
   const [processedToday, setProcessedToday] = useState(0);
 
-  useEffect(() => {
-    fetchPendingWithdrawals();
-    fetchFailureLogs();
-    fetchProcessedToday();
-  }, [fetchPendingWithdrawals]);
-
-  const fetchFailureLogs = async () => {
-    setLogsLoading(true);
+  const fetchWithdrawals = async () => {
+    setIsLoading(true);
     const { data, error } = await supabase
-      .from('admin_failure_dashboard')
-      .select('*')
-      .eq('is_resolved', false)
-      .order('created_at', { ascending: false })
-      .limit(50);
-    if (!error && data) setFailureLogs(data as FailureLog[]);
-    setLogsLoading(false);
+      .from('withdrawal_requests')
+      .select(`
+        id, amount, status, bank_name, account_number,
+        account_name, admin_note, created_at, paid_at,
+        profiles!withdrawal_requests_user_id_fkey (full_name, email, phone)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setWithdrawals(data.map((w: any) => ({
+        ...w,
+        full_name: w.profiles?.full_name || '—',
+        email:     w.profiles?.email     || '—',
+        phone:     w.profiles?.phone     || null,
+      })));
+    } else {
+      toast.error('Failed to load withdrawals');
+    }
+    setIsLoading(false);
   };
 
   const fetchProcessedToday = async () => {
@@ -67,265 +64,244 @@ export default function AdminWithdrawals() {
     setProcessedToday(count ?? 0);
   };
 
-  const resolveFailureLog = async (logId: string) => {
-    await supabase
-      .from('system_failure_logs')
-      .update({ is_resolved: true, resolved_at: new Date().toISOString(), resolved_by: user?.id })
-      .eq('id', logId);
-    setFailureLogs(prev => prev.filter(l => l.id !== logId));
-    toast.success('Marked as resolved');
+  useEffect(() => {
+    fetchWithdrawals();
+    fetchProcessedToday();
+  }, []);
+
+  const filtered = withdrawals.filter(w => w.status === statusFilter);
+  const pending  = withdrawals.filter(w => w.status === 'pending');
+  const totalPending = pending.reduce((s, w) => s + Number(w.amount), 0);
+
+  const copy = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied`);
   };
 
-  const handleApprovePaid = async (withdrawal: { id: string }) => {
+  const handleApprovePaid = async (w: Withdrawal) => {
     if (!user?.id) return;
-    setProcessing(withdrawal.id);
-
+    setProcessing(w.id);
     const { error } = await supabase.functions.invoke('admin-withdrawal-action', {
-      body: { action: 'paid', request_id: withdrawal.id, admin_id: user.id },
+      body: { action: 'paid', request_id: w.id, admin_id: user.id },
     });
-
-    if (!error) {
-      toast.success('Marked as paid — user notified by email');
-      fetchPendingWithdrawals();
-      fetchProcessedToday();
-    } else {
-      toast.error(error.message || 'Failed to mark as paid');
+    if (error) toast.error(error.message || 'Failed to mark as paid');
+    else {
+      toast.success('Marked as paid — user notified');
+      await fetchWithdrawals();
+      await fetchProcessedToday();
     }
     setProcessing(null);
   };
 
-  const handleRejectConfirm = async () => {
-    if (!rejectTarget || !user?.id || !rejectReason.trim()) {
-      toast.error('Please enter a reason for rejection'); return;
-    }
-    setProcessing(rejectTarget.id);
-
+  const handleReject = async () => {
+    if (!rejectModal || !user?.id) return;
+    if (!rejectReason.trim()) { toast.error('Enter a rejection reason'); return; }
+    setProcessing(rejectModal.id);
     const { error } = await supabase.functions.invoke('admin-withdrawal-action', {
-      body: { action: 'rejected', request_id: rejectTarget.id, admin_id: user.id, reason: rejectReason.trim() },
+      body: { action: 'rejected', request_id: rejectModal.id, admin_id: user.id, reason: rejectReason.trim() },
     });
-
-    if (!error) {
-      toast.success('Rejected — funds returned to user wallet, user notified');
-      fetchPendingWithdrawals();
-      setRejectTarget(null);
+    if (error) toast.error(error.message || 'Failed to reject');
+    else {
+      toast.success('Rejected — funds returned to wallet');
+      setRejectModal(null);
       setRejectReason('');
-    } else {
-      toast.error(error.message || 'Failed to reject withdrawal');
+      await fetchWithdrawals();
     }
     setProcessing(null);
   };
-
-  const totalPending = pendingWithdrawals.reduce((s, w) => s + w.amount, 0);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Withdrawals</h1>
-        <p className="text-gray-500 dark:text-gray-400 mt-1">Manage withdrawal requests — process within 34 hours</p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Withdrawals</h1>
+          <p className="text-xs text-gray-400 mt-0.5">Process within 34 hours of submission</p>
+        </div>
+        <button onClick={() => { fetchWithdrawals(); fetchProcessedToday(); }}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <RefreshCw className="w-4 h-4 text-gray-400" />
+        </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700">
-          <p className="text-sm text-gray-500 mb-1">Pending</p>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">{pendingWithdrawals.length}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700">
-          <p className="text-sm text-gray-500 mb-1">Total Pending Amount</p>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">₦{totalPending.toLocaleString()}</p>
-        </div>
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border border-gray-100 dark:border-gray-700">
-          <p className="text-sm text-gray-500 mb-1">Processed Today</p>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">{processedToday}</p>
-        </div>
-      </div>
-
-      {/* Failure Logs */}
-      {(logsLoading || failureLogs.length > 0) && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-red-200 dark:border-red-800 overflow-hidden">
-          <div className="p-4 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-              <h2 className="font-semibold text-red-800 dark:text-red-300">System Failures Requiring Attention</h2>
-              {failureLogs.length > 0 && (
-                <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{failureLogs.length}</span>
-              )}
-            </div>
-            <button onClick={fetchFailureLogs} className="text-red-600 hover:text-red-800 p-1 rounded">
-              <RefreshCw className="w-4 h-4" />
-            </button>
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: 'Pending',          value: pending.length,                         color: 'text-amber-600', bg: 'bg-amber-50'  },
+          { label: 'Total Pending ₦',  value: `₦${totalPending.toLocaleString()}`,    color: 'text-red-600',   bg: 'bg-red-50'    },
+          { label: 'Processed Today',  value: processedToday,                         color: 'text-green-600', bg: 'bg-green-50'  },
+        ].map(({ label, value, color, bg }) => (
+          <div key={label} className={`${bg} rounded-xl p-4 border border-gray-100`}>
+            <p className="text-xs text-gray-500 mb-1">{label}</p>
+            <p className={`text-xl font-bold ${color}`}>{value}</p>
           </div>
-          {logsLoading ? (
-            <div className="p-6 text-center text-gray-400 text-sm">Loading failure logs…</div>
-          ) : (
-            <div className="divide-y divide-red-100 dark:divide-red-900/30">
-              {failureLogs.map((log) => (
-                <div key={log.id} className="p-4 flex items-start justify-between gap-4">
+        ))}
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-2">
+        {['pending', 'paid', 'rejected'].map(s => (
+          <button key={s} onClick={() => setStatusFilter(s)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors capitalize ${
+              statusFilter === s
+                ? 'bg-orange-500 text-white'
+                : 'bg-white border border-gray-200 text-gray-600 hover:border-orange-300'
+            }`}>
+            {s} ({withdrawals.filter(w => w.status === s).length})
+          </button>
+        ))}
+      </div>
+
+      {/* Withdrawals List */}
+      <div className="space-y-3">
+        {isLoading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-100 p-4 animate-pulse">
+              <div className="h-4 bg-gray-100 rounded w-1/3 mb-2" />
+              <div className="h-3 bg-gray-100 rounded w-1/2" />
+            </div>
+          ))
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-100 py-12 text-center">
+            <p className="text-sm text-gray-400">No {statusFilter} withdrawals</p>
+          </div>
+        ) : filtered.map(w => {
+          const hoursOld = Math.floor((Date.now() - new Date(w.created_at).getTime()) / 3600000);
+          const isUrgent = w.status === 'pending' && hoursOld >= 24;
+
+          return (
+            <div key={w.id} className={`bg-white rounded-xl border shadow-sm p-4 ${
+              isUrgent ? 'border-red-200 bg-red-50/30' : 'border-gray-100'
+            }`}>
+              <div className="flex items-start justify-between gap-4">
+                {/* Left: user + bank info */}
+                <div className="flex items-start gap-3 flex-1 min-w-0">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    isUrgent ? 'bg-red-100' : 'bg-orange-100'
+                  }`}>
+                    <User className={`w-4 h-4 ${isUrgent ? 'text-red-500' : 'text-orange-500'}`} />
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-2 py-0.5 rounded uppercase tracking-wider">
-                        {log.failure_type.replace(/_/g, ' ')}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {new Date(log.created_at).toLocaleString('en-NG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                      </span>
+                    {/* User details with copy */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-semibold text-gray-900">{w.full_name}</p>
+                      {isUrgent && (
+                        <span className="px-1.5 py-0.5 bg-red-100 text-red-600 text-[10px] font-bold rounded-full">
+                          OVERDUE {hoursOld}h
+                        </span>
+                      )}
                     </div>
-                    <p className="text-sm text-gray-900 dark:text-white font-medium truncate">{log.error_message}</p>
-                    {log.affected_user_name && (
-                      <div className="mt-1 flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-                        <span className="flex items-center gap-1"><User className="w-3 h-3" />{log.affected_user_name}</span>
-                        {log.affected_user_email && <span>{log.affected_user_email}</span>}
-                        {log.affected_user_phone && <span>{log.affected_user_phone}</span>}
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <p className="text-[10px] text-gray-400">{w.email}</p>
+                      <button onClick={() => copy(w.email, 'Email')} className="p-0.5 hover:bg-gray-100 rounded">
+                        <Copy className="w-2.5 h-2.5 text-gray-300 hover:text-gray-500" />
+                      </button>
+                    </div>
+                    {w.phone && (
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <p className="text-[10px] text-gray-400">{w.phone}</p>
+                        <button onClick={() => copy(w.phone!, 'Phone')} className="p-0.5 hover:bg-gray-100 rounded">
+                          <Copy className="w-2.5 h-2.5 text-gray-300 hover:text-gray-500" />
+                        </button>
                       </div>
                     )}
-                    {log.entity_id && (
-                      <p className="text-xs text-gray-400 mt-1 font-mono">
-                        {log.entity_type}: {log.entity_id.slice(0, 8)}…
-                        {log.metadata?.order_number && ` (${log.metadata.order_number})`}
-                      </p>
+
+                    {/* Bank details */}
+                    <div className="mt-2 p-2.5 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Building2 className="w-3 h-3 text-gray-400" />
+                        <p className="text-xs font-medium text-gray-700">{w.bank_name}</p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <p className="text-xs text-gray-600 font-mono">{w.account_number}</p>
+                        <button onClick={() => copy(w.account_number, 'Account number')} className="p-0.5 hover:bg-gray-200 rounded">
+                          <Copy className="w-2.5 h-2.5 text-gray-400" />
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-gray-500 mt-0.5">{w.account_name}</p>
+                    </div>
+
+                    {/* Amount + time */}
+                    <div className="flex items-center gap-3 mt-2">
+                      <p className="text-sm font-bold text-gray-900">₦{Number(w.amount).toLocaleString()}</p>
+                      <div className="flex items-center gap-1 text-[10px] text-gray-400">
+                        <Clock className="w-3 h-3" />
+                        {w.status === 'paid' && w.paid_at
+                          ? `Paid ${new Date(w.paid_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })}`
+                          : `${hoursOld}h ago`
+                        }
+                      </div>
+                    </div>
+
+                    {w.admin_note && (
+                      <p className="text-[10px] text-gray-400 mt-1 italic">Note: {w.admin_note}</p>
                     )}
                   </div>
-                  <button
-                    onClick={() => resolveFailureLog(log.id)}
-                    className="flex-shrink-0 text-xs text-green-600 hover:text-green-800 font-semibold border border-green-300 px-3 py-1.5 rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
-                  >
-                    Resolve
-                  </button>
                 </div>
-              ))}
+
+                {/* Right: actions */}
+                {w.status === 'pending' && (
+                  <div className="flex flex-col gap-2 flex-shrink-0">
+                    <button onClick={() => handleApprovePaid(w)} disabled={processing === w.id}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium disabled:opacity-50 transition-colors">
+                      {processing === w.id
+                        ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        : <CheckCircle className="w-3.5 h-3.5" />
+                      }
+                      Mark Paid
+                    </button>
+                    <button onClick={() => setRejectModal(w)} disabled={processing === w.id}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-xs font-medium disabled:opacity-50 transition-colors">
+                      <XCircle className="w-3.5 h-3.5" />
+                      Reject
+                    </button>
+                  </div>
+                )}
+
+                {w.status === 'paid' && (
+                  <span className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-lg text-[10px] font-medium flex-shrink-0">
+                    <CheckCircle className="w-3 h-3" /> Paid
+                  </span>
+                )}
+
+                {w.status === 'rejected' && (
+                  <span className="flex items-center gap-1 px-2 py-1 bg-red-100 text-red-600 rounded-lg text-[10px] font-medium flex-shrink-0">
+                    <XCircle className="w-3 h-3" /> Rejected
+                  </span>
+                )}
+              </div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Pending Withdrawals */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Pending Requests</h2>
-          <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-300 px-3 py-1.5 rounded-full border border-amber-200 dark:border-amber-800">
-            <Clock className="w-3 h-3" />
-            Process within 34 hours of submission
-          </div>
-        </div>
-
-        {pendingWithdrawals.length === 0 ? (
-          <div className="p-12 text-center">
-            <CreditCard className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">No pending withdrawals</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-100 dark:divide-gray-700">
-            {pendingWithdrawals.map((withdrawal) => {
-              const w = withdrawal as any;
-              const hoursOld = Math.floor((Date.now() - new Date(withdrawal.created_at).getTime()) / 3600000);
-              const isUrgent = hoursOld >= 24;
-
-              return (
-                <div key={withdrawal.id} className={`p-6 ${isUrgent ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4 flex-1 min-w-0">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        isUrgent ? 'bg-red-100 dark:bg-red-900/30' : 'bg-orange-100 dark:bg-orange-900/30'
-                      }`}>
-                        <User className={`w-6 h-6 ${isUrgent ? 'text-red-500' : 'text-orange-500'}`} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        {w.user?.full_name && (
-                          <p className="font-semibold text-gray-900 dark:text-white text-sm">{w.user.full_name}</p>
-                        )}
-                        {w.user?.email && (
-                          <p className="text-xs text-gray-500 dark:text-gray-400">{w.user.email}</p>
-                        )}
-                        <p className="font-bold text-gray-900 dark:text-white mt-1">₦{withdrawal.amount.toLocaleString()}</p>
-                        <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 dark:text-gray-400 flex-wrap">
-                          <span className="flex items-center gap-1">
-                            <Building2 className="w-4 h-4" />
-                            {withdrawal.bank_name}
-                          </span>
-                          <span>{withdrawal.account_number}</span>
-                          <span className="font-medium text-gray-700 dark:text-gray-300">{withdrawal.account_name}</span>
-                        </div>
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className={`text-xs font-medium ${isUrgent ? 'text-red-600 dark:text-red-400' : 'text-gray-400'}`}>
-                            {hoursOld}h ago
-                          </span>
-                          {isUrgent && (
-                            <span className="text-xs font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded-full">
-                              Overdue
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => handleApprovePaid({ id: withdrawal.id })}
-                        disabled={processing === withdrawal.id}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm font-medium disabled:opacity-60"
-                      >
-                        {processing === withdrawal.id ? (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <CheckCircle className="w-4 h-4" />
-                        )}
-                        Mark Paid
-                      </button>
-                      <button
-                        onClick={() => setRejectTarget({ id: withdrawal.id, amount: withdrawal.amount })}
-                        disabled={processing === withdrawal.id}
-                        className="flex items-center gap-2 px-4 py-2 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-sm font-medium border border-red-200 dark:border-red-800"
-                      >
-                        <XCircle className="w-4 h-4" />
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+          );
+        })}
       </div>
 
-      {/* Reject Reason Modal */}
-      {rejectTarget && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Reject Withdrawal</h3>
-              <button onClick={() => { setRejectTarget(null); setRejectReason(''); }}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                <X className="w-5 h-5 text-gray-400" />
+      {/* Reject Modal */}
+      {rejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-gray-900">Reject Withdrawal</h3>
+              <button onClick={() => { setRejectModal(null); setRejectReason(''); }}
+                className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              Rejecting ₦{rejectTarget.amount.toLocaleString()} — funds will be returned to the user's wallet and they will be notified by email.
+            <p className="text-xs text-gray-500 mb-1">
+              Rejecting <strong>₦{Number(rejectModal.amount).toLocaleString()}</strong> for <strong>{rejectModal.full_name}</strong>.
             </p>
-            <div className="mb-5">
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Reason for rejection</label>
-              <textarea
-                value={rejectReason}
-                onChange={e => setRejectReason(e.target.value)}
-                rows={3}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 focus:ring-2 focus:ring-red-500 outline-none text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white resize-none"
-                placeholder="e.g. Invalid account details, please update your bank account and resubmit."
-              />
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setRejectTarget(null); setRejectReason(''); }}
-                className="flex-1 px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl font-bold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
+            <p className="text-xs text-gray-400 mb-3">
+              Funds will be returned to their wallet and they'll be notified by email.
+            </p>
+            <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+              placeholder="e.g. Invalid account details, please update and resubmit..."
+              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-400 min-h-[80px] resize-none mb-3" />
+            <div className="flex gap-2">
+              <button onClick={() => { setRejectModal(null); setRejectReason(''); }}
+                className="flex-1 px-3 py-2 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">
                 Cancel
               </button>
-              <button
-                onClick={handleRejectConfirm}
-                disabled={!rejectReason.trim() || !!processing}
-                className="flex-1 px-4 py-3 bg-red-500 text-white rounded-xl font-bold hover:bg-red-600 disabled:opacity-50 transition-colors"
-              >
-                {processing ? (
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto" />
-                ) : 'Confirm Reject'}
+              <button onClick={handleReject} disabled={!!processing || !rejectReason.trim()}
+                className="flex-1 px-3 py-2 text-xs text-white bg-red-500 hover:bg-red-600 rounded-lg disabled:opacity-50 transition-colors">
+                {processing ? 'Rejecting...' : 'Confirm Reject'}
               </button>
             </div>
           </div>
