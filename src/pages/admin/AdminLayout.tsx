@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  LayoutDashboard, Users, Store, Package, ShoppingCart, 
+  LayoutDashboard, Users, AlertTriangle, Store, Package, ShoppingCart, 
   CreditCard, Crown, LogOut, Menu, X, Shield, Globe,
   ChevronLeft, User, Bell, FileText, Truck, ShoppingBag
 } from 'lucide-react';
@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 
 const sidebarItems = [
   { icon: LayoutDashboard, label: 'Dashboard',       path: '/admin' },
+{ icon: AlertTriangle, label: 'Failures', path: '/admin/failures' },
   { icon: Users,           label: 'Users',           path: '/admin/users' },
   { icon: Store,           label: 'Stores',          path: '/admin/stores' },
   { icon: Package,         label: 'Products',        path: '/admin/products' },
