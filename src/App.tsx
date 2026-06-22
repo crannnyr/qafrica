@@ -82,6 +82,7 @@ import AdminStores from '@/pages/admin/AdminStores';
 import AdminProducts from '@/pages/admin/AdminProducts';
 import AdminOrders from '@/pages/admin/AdminOrders';
 import AdminWithdrawals from '@/pages/admin/AdminWithdrawals';
+import AdminFailures from '@/pages/admin/AdminFailures';
 import AdminSubscriptions from '@/pages/admin/AdminSubscriptions';
 import AdminDomainRequests from '@/pages/admin/AdminDomainRequests';
 import AdminNotifications from '@/pages/admin/AdminNotifications';
@@ -310,6 +311,7 @@ function App() {
             <Route path="products" element={<AdminProducts />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="withdrawals" element={<AdminWithdrawals />} />
+<Route path="failures" element={<AdminFailures />} />
             <Route path="subscriptions" element={<AdminSubscriptions />} />
             <Route path="domain-requests" element={<AdminDomainRequests />} />
             <Route path="notifications" element={<AdminNotifications />} />
