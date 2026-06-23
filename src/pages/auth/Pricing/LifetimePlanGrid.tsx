@@ -1,13 +1,59 @@
 // src/pages/auth/Pricing/LifetimePlanGrid.tsx
 
 import { motion } from 'framer-motion';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Users } from 'lucide-react';
 import { lifetimePlans } from './constants';
 
 interface Props {
   selectedPlan: string;
   onSelectPlan: (planId: string) => void;
   canSelectPlan: (maxNiches: number) => boolean;
+}
+
+function MarketplaceBadges() {
+  return (
+    <span className="inline-flex items-center gap-1.5 flex-wrap">
+      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#FF6600', color: 'white' }}>Jumia</span>
+      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#C8202F', color: 'white' }}>Konga</span>
+      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: '#4CAF50', color: 'white' }}>Jiji</span>
+    </span>
+  );
+}
+
+function NichePill({ count }: { count: number }) {
+  if (!isFinite(count)) return (
+    <span className="inline-block px-3 py-1 rounded-full text-sm font-bold bg-green-50 text-green-700 border-2 border-green-200">
+      Unlimited Niches
+    </span>
+  );
+  if (count === 3) return (
+    <span className="inline-block px-3 py-1 rounded-full text-sm font-bold bg-amber-50 text-amber-700 border-2 border-amber-200">
+      3 Niches
+    </span>
+  );
+  return (
+    <span className="inline-block px-3 py-1 rounded-full text-sm font-bold bg-orange-50 text-orange-600 border-2 border-orange-200">
+      1 Niche
+    </span>
+  );
+}
+
+function StaffPill({ limit }: { limit: number }) {
+  if (limit === 0) return (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-600 border border-red-200">
+      <Users className="w-3 h-3" /> No Staff Management
+    </span>
+  );
+  if (limit === 3) return (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+      <Users className="w-3 h-3" /> Up to 3 Staff
+    </span>
+  );
+  return (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+      <Users className="w-3 h-3" /> Up to 10 Staff
+    </span>
+  );
 }
 
 export default function LifetimePlanGrid({
@@ -43,13 +89,6 @@ export default function LifetimePlanGrid({
               </div>
             )}
 
-            {/* Popular ribbon */}
-            {plan.popular && (
-              <div className="absolute top-8 -right-12 bg-orange-500 text-white text-xs font-bold px-12 py-1 rotate-45 shadow-lg">
-                POPULAR
-              </div>
-            )}
-
             {/* Niche limit overlay */}
             {!canSelect && (
               <div className="absolute inset-0 bg-white/80 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10">
@@ -61,38 +100,62 @@ export default function LifetimePlanGrid({
             )}
 
             <div className="p-8">
-              {/* Plan header */}
-              <div className="text-center mb-6">
+              {/* Icon + name */}
+              <div className="text-center mb-4">
                 <div className={`w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4 ${
                   isSelected ? 'bg-purple-500' : 'bg-purple-100'
                 }`}>
                   <Icon className={`w-7 h-7 ${isSelected ? 'text-white' : 'text-purple-500'}`} />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-1">{plan.name}</h3>
-                <p className="text-sm text-gray-500">{plan.description}</p>
+                <p className="text-sm text-gray-500 mb-3">{plan.description}</p>
+
+                {/* Niche pill */}
+                <div className="mb-2">
+                  <NichePill count={plan.maxNiches} />
+                </div>
+
+                {/* Staff pill */}
+                <StaffPill limit={plan.staffLimit} />
               </div>
 
               {/* Price */}
-              <div className="text-center mb-6">
+              <div className="text-center mb-6 py-3 px-4 bg-gray-50 rounded-xl">
                 <div className="flex items-baseline justify-center gap-1">
                   <span className="text-3xl font-bold text-gray-900">
                     ₦{plan.price.toLocaleString()}
                   </span>
                 </div>
                 <p className="text-sm text-green-600 mt-1 font-medium">One-time payment</p>
-                <p className="text-xs text-gray-500 mt-1">Never pay again</p>
+                <p className="text-xs text-gray-500">Never pay again</p>
               </div>
 
               {/* Features */}
-              <ul className="space-y-3 mb-8">
-                {plan.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-3">
-                    <CheckCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
-                      isSelected ? 'text-purple-500' : 'text-gray-400'
-                    }`} />
-                    <span className="text-sm text-gray-600">{feature}</span>
+              <ul className="space-y-2.5 mb-8">
+                {plan.features.map((feature, i) => {
+                  const isMarketplace = feature.includes('Jumia');
+                  return (
+                    <li key={i} className="flex items-start gap-2.5">
+                      <CheckCircle className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+                        isSelected ? 'text-purple-500' : 'text-gray-400'
+                      }`} />
+                      {isMarketplace ? (
+                        <span className="text-sm text-gray-600 flex items-center gap-1.5 flex-wrap">
+                          Push to <MarketplaceBadges />
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-600">{feature}</span>
+                      )}
+                    </li>
+                  );
+                })}
+                {/* Staff row — crossed out for Starter */}
+                {plan.staffLimit === 0 && (
+                  <li className="flex items-start gap-2.5">
+                    <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-400" />
+                    <span className="text-sm text-gray-400">Staff management (Growth+)</span>
                   </li>
-                ))}
+                )}
               </ul>
 
               {/* Select button */}
