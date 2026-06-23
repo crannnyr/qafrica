@@ -21,7 +21,6 @@ export default function BillingToggle({ billingType, onToggle }: Props) {
         >
           Monthly / Yearly
         </button>
-
         <button
           onClick={() => onToggle('lifetime')}
           className={`px-6 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${
@@ -32,6 +31,13 @@ export default function BillingToggle({ billingType, onToggle }: Props) {
         >
           <InfinityIcon className="w-4 h-4" />
           Lifetime
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+            billingType === 'lifetime'
+              ? 'bg-white/25 text-white'
+              : 'bg-green-100 text-green-700'
+          }`}>
+            SAVE 90%+
+          </span>
         </button>
       </div>
     </div>
