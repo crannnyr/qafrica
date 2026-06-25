@@ -1,21 +1,20 @@
 // src/pages/landing/LandingPage.tsx
 
 import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
 import SEO, { OrganizationSchema } from '@/components/SEO';
 
-import { FlyingLogo }          from './Landing/animations';
-import LandingNav              from './Landing/LandingNav';
-import HeroSection             from './Landing/HeroSection';
-import StatsSection            from './Landing/StatsSection';
-import FeaturesSection         from './Landing/FeaturesSection';
-import NichesSection           from './Landing/NichesSection';
-import HowItWorksSection       from './Landing/HowItWorksSection';
-import PricingSection          from './Landing/PricingSection';
-import TestimonialsSection     from './Landing/TestimonialsSection';
-import FaqSection              from './Landing/FaqSection';
-import CtaSection              from './Landing/CtaSection';
-import FooterSection           from './Landing/FooterSection';
+import { FlyingLogo }          from './animations';
+import LandingNav              from './LandingNav';
+import HeroSection             from './HeroSection';
+import StatsSection            from './StatsSection';
+import FeaturesSection         from './FeaturesSection';
+import NichesSection           from './NichesSection';
+import HowItWorksSection       from './HowItWorksSection';
+import PricingSection          from './PricingSection';
+import TestimonialsSection     from './TestimonialsSection';
+import FaqSection              from './FaqSection';
+import CtaSection              from './CtaSection';
+import FooterSection           from './FooterSection';
 
 export default function LandingPage() {
   // ── Nav state ──────────────────────────────────────────────────────────────
@@ -42,7 +41,7 @@ export default function LandingPage() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // ── Capture rects for animation ───────────────────────────────────────────
+  // ── Capture rects for animation ────────────────────────────────────────────
   useEffect(() => {
     const id = setTimeout(() => {
       if (
