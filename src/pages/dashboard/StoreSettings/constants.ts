@@ -1,4 +1,4 @@
-export type Tab = 'general' | 'images' | 'branding' | 'payments' | 'social' | 'password' | 'staff';
+export type Tab = 'general' | 'images' | 'branding' | 'payments' | 'social' | 'location' | 'password' | 'staff';
 
 export const TABS: { id: Tab; label: string }[] = [
   { id: 'general',  label: 'General'  },
@@ -6,6 +6,7 @@ export const TABS: { id: Tab; label: string }[] = [
   { id: 'branding', label: 'Branding' },
   { id: 'payments', label: 'Payments' },
   { id: 'social',   label: 'Social'   },
+  { id: 'location', label: 'Location' },
   { id: 'password', label: 'Password' },
   { id: 'staff',    label: 'Staff'    },
 ];
