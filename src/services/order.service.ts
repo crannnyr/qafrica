@@ -2,6 +2,29 @@ import { supabase } from './supabase';
 import { productService } from './product.service';
 import type { Order, DropshipOrderView } from '@/types';
 
+// FIX: orders table has a legacy 'items' JSONB column that conflicts with the
+// order_items relation alias and causes a 500. We explicitly list every column
+// except 'items' so PostgREST never tries to return both.
+const ORDER_SELECT = `
+  id, order_number, store_id, customer_id,
+  customer_name, customer_email, customer_phone,
+  subtotal, delivery_fee, platform_fee, total,
+  delivery_address, delivery_state,
+  payment_status, payment_method, payment_reference, paid_at,
+  status, escrow_release_at, is_escrow_released,
+  tracking_number, created_at, updated_at,
+  delivered_at, delivery_confirmed_at, escrow_auto_release_at,
+  buyer_reported_issue, issue_reported_at, issue_description,
+  dispute_status, dispute_resolved_at, dispute_resolved_by,
+  refund_amount, refund_processed_at, shipped_at,
+  shipbubble_order_id, shipbubble_tracking_url,
+  shipbubble_courier_name, shipbubble_courier_phone, shipbubble_status,
+  shipbubble_receiver_address_code,
+  is_cod_order, dropshipper_store_id, dropshipper_profit,
+  is_manual_sale, has_reviewed,
+  order_items(*)
+`;
+
 export const orderService = {
   async createOrder(orderData: Partial<Order>) {
     if (!orderData.items) {
@@ -33,21 +56,18 @@ export const orderService = {
   },
 
   async getOrder(orderId: string) {
-    // FIX: changed 'items:order_items(*)' to 'order_items(*)' to avoid conflict
-    // with the orders.items JSONB column which silently overrides the join alias
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select(ORDER_SELECT)
       .eq('id', orderId)
       .single();
     return { data, error };
   },
 
   async getStoreOrders(storeId: string) {
-    // FIX: changed 'items:order_items(*)' to 'order_items(*)'
     const { data: directOrders, error: directError } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select(ORDER_SELECT)
       .eq('store_id', storeId)
       .order('created_at', { ascending: false });
 
@@ -55,7 +75,7 @@ export const orderService = {
 
     const { data: dropshipRows } = await supabase
       .from('order_items')
-      .select('order:orders(*, order_items(*))')
+      .select(`order:orders(${ORDER_SELECT})`)
       .eq('original_store_id', storeId)
       .eq('is_imported', true);
 
@@ -146,10 +166,9 @@ export const orderService = {
   },
 
   async getUserOrders(userId: string) {
-    // FIX: changed 'items:order_items(*)' to 'order_items(*)'
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select(ORDER_SELECT)
       .eq('customer_id', userId)
       .order('created_at', { ascending: false });
     return { data, error };
@@ -207,10 +226,9 @@ export const orderService = {
   },
 
   async getAllOrders() {
-    // FIX: changed 'items:order_items(*)' to 'order_items(*)'
     const { data, error } = await supabase
       .from('orders')
-      .select('*, order_items(*)')
+      .select(ORDER_SELECT)
       .order('created_at', { ascending: false });
     return { data, error };
   },
