@@ -24,7 +24,7 @@ interface TodayStats {
   stores_created_today: number;
   orders_today: number;
   revenue_today: number;
-  paid_immediately: number;      // users who paid within 30 min of signup
+  paid_immediately: number;
   subscriptions_today: number;
   withdrawals_today: number;
 }
@@ -82,7 +82,7 @@ function KpiCard({ label, value, icon: Icon, color, bg, sub, link }: {
 }) {
   const inner = (
     <div className={`${bg} rounded-xl p-4 border border-white hover:shadow-sm transition-shadow`}>
-      <div className={`w-8 h-8 bg-white/70 rounded-lg flex items-center justify-center mb-2`}>
+      <div className="w-8 h-8 bg-white/70 rounded-lg flex items-center justify-center mb-2">
         <Icon className={`w-4 h-4 ${color}`} />
       </div>
       <p className={`text-2xl font-black ${color} leading-none`}>{value}</p>
@@ -156,8 +156,15 @@ export default function AdminDashboard() {
       .gte('created_at', todayISO);
 
     // ── Users who paid within 30 mins of signing up ─────────────────────────
-    const { data: quickPayers } = await supabase.rpc('get_quick_payers_today').catch(() => ({ data: null }));
-    // Fallback if RPC doesn't exist yet
+    // FIX: Supabase RPC calls return a PostgrestFilterBuilder which does not
+    // have a .catch() method. Use try/catch instead.
+    let quickPayers: any[] | null = null;
+    try {
+      const { data } = await supabase.rpc('get_quick_payers_today');
+      quickPayers = data;
+    } catch {
+      quickPayers = null;
+    }
     const paidImmediately = quickPayers?.length ?? 0;
 
     // ── Today's withdrawals requested ───────────────────────────────────────
@@ -167,13 +174,13 @@ export default function AdminDashboard() {
       .gte('created_at', todayISO);
 
     setToday({
-      signups_today: signupsToday ?? 0,
-      stores_created_today: storesToday ?? 0,
-      orders_today: ordersToday?.length ?? 0,
-      revenue_today: revenueToday,
-      paid_immediately: paidImmediately,
-      subscriptions_today: subsToday ?? 0,
-      withdrawals_today: wdToday ?? 0,
+      signups_today:        signupsToday ?? 0,
+      stores_created_today: storesToday  ?? 0,
+      orders_today:         ordersToday?.length ?? 0,
+      revenue_today:        revenueToday,
+      paid_immediately:     paidImmediately,
+      subscriptions_today:  subsToday ?? 0,
+      withdrawals_today:    wdToday   ?? 0,
     });
 
     // ── Recent users with store + subscription info ─────────────────────────
@@ -199,7 +206,7 @@ export default function AdminDashboard() {
         .order('created_at', { ascending: true });
 
       const storeMap = Object.fromEntries((stores || []).map(s => [s.owner_id, s]));
-      const subMap   = Object.fromEntries((subs || []).map(s => [s.user_id, s]));
+      const subMap   = Object.fromEntries((subs   || []).map(s => [s.user_id,  s]));
 
       setRecentUsers(users.map(u => {
         const store = storeMap[u.id];
@@ -209,7 +216,7 @@ export default function AdminDashboard() {
           : null;
         return {
           ...u,
-          store_name:        store?.name ?? null,
+          store_name:        store?.name       ?? null,
           store_created_at:  store?.created_at ?? null,
           has_paid:          !!sub,
           mins_to_subscribe: minsToSub,
@@ -275,7 +282,9 @@ export default function AdminDashboard() {
             <Zap className="w-3 h-3 text-white" />
           </div>
           <h2 className="text-sm font-bold text-gray-900">Today</h2>
-          <span className="text-xs text-gray-400">{new Date().toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+          <span className="text-xs text-gray-400">
+            {new Date().toLocaleDateString('en-NG', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {isLoading
@@ -283,13 +292,13 @@ export default function AdminDashboard() {
                 <div key={i} className="bg-gray-100 rounded-xl h-24 animate-pulse" />
               ))
             : today && [
-                { label: 'New Signups',       value: today.signups_today,       icon: UserPlus,    color: 'text-blue-600',   bg: 'bg-blue-50',   link: '/admin/users' },
-                { label: 'Stores Created',    value: today.stores_created_today, icon: Store,      color: 'text-green-600',  bg: 'bg-green-50',  link: '/admin/stores' },
-                { label: 'Orders',            value: today.orders_today,         icon: ShoppingCart,color: 'text-orange-600', bg: 'bg-orange-50', link: '/admin/orders' },
-                { label: 'Revenue (fees)',    value: `₦${today.revenue_today.toLocaleString()}`, icon: DollarSign, color: 'text-pink-600', bg: 'bg-pink-50' },
-                { label: 'New Paid Subs',     value: today.subscriptions_today,  icon: Crown,      color: 'text-purple-600', bg: 'bg-purple-50', link: '/admin/subscriptions' },
-                { label: 'Paid in <30 mins',  value: today.paid_immediately,     icon: Zap,        color: 'text-emerald-600',bg: 'bg-emerald-50',sub: 'Signed up → paid fast' },
-                { label: 'Withdrawals Req.', value: today.withdrawals_today,    icon: CreditCard, color: 'text-red-600',    bg: 'bg-red-50',    link: '/admin/withdrawals' },
+                { label: 'New Signups',      value: today.signups_today,        icon: UserPlus,    color: 'text-blue-600',    bg: 'bg-blue-50',    link: '/admin/users' },
+                { label: 'Stores Created',   value: today.stores_created_today, icon: Store,       color: 'text-green-600',   bg: 'bg-green-50',   link: '/admin/stores' },
+                { label: 'Orders',           value: today.orders_today,         icon: ShoppingCart,color: 'text-orange-600',  bg: 'bg-orange-50',  link: '/admin/orders' },
+                { label: 'Revenue (fees)',   value: `₦${today.revenue_today.toLocaleString()}`, icon: DollarSign, color: 'text-pink-600', bg: 'bg-pink-50' },
+                { label: 'New Paid Subs',    value: today.subscriptions_today,  icon: Crown,       color: 'text-purple-600',  bg: 'bg-purple-50',  link: '/admin/subscriptions' },
+                { label: 'Paid in <30 mins', value: today.paid_immediately,     icon: Zap,         color: 'text-emerald-600', bg: 'bg-emerald-50', sub: 'Signed up → paid fast' },
+                { label: 'Withdrawals Req.', value: today.withdrawals_today,    icon: CreditCard,  color: 'text-red-600',     bg: 'bg-red-50',     link: '/admin/withdrawals' },
               ].map(k => <KpiCard key={k.label} {...k} />)
           }
         </div>
@@ -309,14 +318,14 @@ export default function AdminDashboard() {
                 <div key={i} className="bg-gray-100 rounded-xl h-20 animate-pulse" />
               ))
             : allTime && [
-                { label: 'Total Users',         value: allTime.total_users,       icon: Users,         color: 'text-blue-600',   bg: 'bg-blue-50',   link: '/admin/users' },
-                { label: 'Total Stores',        value: allTime.total_stores,      icon: Store,         color: 'text-green-600',  bg: 'bg-green-50',  link: '/admin/stores' },
-                { label: 'Total Products',      value: allTime.total_products,    icon: Package,       color: 'text-purple-600', bg: 'bg-purple-50', link: '/admin/products' },
-                { label: 'Total Orders',        value: allTime.total_orders,      icon: ShoppingCart,  color: 'text-orange-600', bg: 'bg-orange-50', link: '/admin/orders' },
+                { label: 'Total Users',         value: allTime.total_users,           icon: Users,         color: 'text-blue-600',   bg: 'bg-blue-50',   link: '/admin/users' },
+                { label: 'Total Stores',        value: allTime.total_stores,          icon: Store,         color: 'text-green-600',  bg: 'bg-green-50',  link: '/admin/stores' },
+                { label: 'Total Products',      value: allTime.total_products,        icon: Package,       color: 'text-purple-600', bg: 'bg-purple-50', link: '/admin/products' },
+                { label: 'Total Orders',        value: allTime.total_orders,          icon: ShoppingCart,  color: 'text-orange-600', bg: 'bg-orange-50', link: '/admin/orders' },
                 { label: 'Total Revenue',       value: `₦${(allTime.total_revenue / 1_000_000).toFixed(1)}M`, icon: DollarSign, color: 'text-pink-600', bg: 'bg-pink-50' },
-                { label: 'Pending Withdrawals', value: allTime.pending_withdrawals, icon: CreditCard,  color: 'text-red-600',    bg: 'bg-red-50',    link: '/admin/withdrawals' },
-                { label: 'Unverified Stores',   value: allTime.pending_verifications, icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50', link: '/admin/stores' },
-                { label: 'Blocked Stores',      value: allTime.blocked_stores,    icon: AlertTriangle, color: 'text-gray-600',   bg: 'bg-gray-100',  link: '/admin/stores' },
+                { label: 'Pending Withdrawals', value: allTime.pending_withdrawals,   icon: CreditCard,    color: 'text-red-600',    bg: 'bg-red-50',    link: '/admin/withdrawals' },
+                { label: 'Unverified Stores',   value: allTime.pending_verifications, icon: AlertTriangle, color: 'text-amber-600',  bg: 'bg-amber-50',  link: '/admin/stores' },
+                { label: 'Blocked Stores',      value: allTime.blocked_stores,        icon: AlertTriangle, color: 'text-gray-600',   bg: 'bg-gray-100',  link: '/admin/stores' },
               ].map(k => <KpiCard key={k.label} {...k} />)
           }
         </div>
