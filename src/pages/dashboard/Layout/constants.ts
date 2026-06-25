@@ -6,6 +6,7 @@ import {
   MessageSquare, Tag, Upload, Import, Palette, Layers,
   Globe, Calculator, Truck, ShoppingBag,
 } from 'lucide-react';
+import type { PermissionKey } from '@/lib/staffPermissions';
 
 export interface NavChild {
   icon: React.ElementType;
@@ -111,12 +112,79 @@ export const allNavItems = sidebarItems.flatMap((item) =>
   item.children ? [item, ...item.children] : [item],
 );
 
-export const staffAllowedPaths = [
-  '/dashboard',
-  '/dashboard/orders',
-  '/dashboard/products',
-  '/dashboard/dropship-orders',
-];
+// ── Staff permission gating ──────────────────────────────────────────────────
+// Maps each path to the permission required to see/access it.
+// `null` = always visible to staff (no gate needed — informational or universal).
+// Paths not listed here default to "restricted" (hidden from staff) for safety.
+export const PATH_PERMISSIONS: Record<string, PermissionKey | null> = {
+  '/dashboard': null,
+  '/dashboard/how-to-use': null,
+
+  '/dashboard/products':              'can_view_products',
+  '/dashboard/products/bulk-import':  'can_manage_products',
+  '/dashboard/import-catalog':        'can_manage_products',
+
+  '/dashboard/orders':           'can_view_orders',
+  '/dashboard/dropship-orders':  'can_view_orders',
+  '/dashboard/reviews':          'can_view_products',
+  '/dashboard/coupons':          'can_manage_products',
+
+  '/dashboard/wallet':         'can_manage_wallet',
+  '/dashboard/tax-expenses':   'can_manage_wallet',
+
+  '/dashboard/delivery-zones': 'can_manage_settings',
+  '/dashboard/domain':         'can_manage_settings',
+  '/dashboard/templates':      'can_manage_settings',
+  '/dashboard/niches':         'can_manage_settings',
+  '/dashboard/settings':       'can_manage_settings',
+
+  '/dashboard/jumia':  'can_manage_products',
+  '/dashboard/konga':  'can_manage_products',
+  '/dashboard/jiji':   'can_manage_products',
+
+  '/dashboard/analytics': 'can_view_analytics',
+};
+
+/** Looks up the permission required for a path, falling back to the longest matching prefix
+ * (handles sub-routes like /dashboard/orders/:id that aren't listed verbatim). */
+export function getRequiredPermission(pathname: string): PermissionKey | null | undefined {
+  if (pathname in PATH_PERMISSIONS) return PATH_PERMISSIONS[pathname];
+  const match = Object.keys(PATH_PERMISSIONS)
+    .filter((p) => p !== '/dashboard' && pathname.startsWith(p + '/'))
+    .sort((a, b) => b.length - a.length)[0];
+  return match ? PATH_PERMISSIONS[match] : undefined; // undefined = unknown path, default-restrict
+}
+
+/** True if a staff member with the given permissions can see/access this path. */
+export function staffCanAccess(
+  pathname: string,
+  permissions: Record<PermissionKey, boolean> | null,
+): boolean {
+  const required = getRequiredPermission(pathname);
+  if (required === null) return true;       // always-visible page
+  if (required === undefined) return false; // unknown path — default-restrict
+  return Boolean(permissions?.[required]);
+}
+
+/** Filters the full sidebar tree down to what a staff member with these permissions may see. */
+export function getVisibleSidebarItems(
+  items: NavItem[],
+  isStaff: boolean,
+  staffPermissions: Record<PermissionKey, boolean> | null,
+): NavItem[] {
+  if (!isStaff) return items;
+
+  return items
+    .map((item) => {
+      if (item.children) {
+        const visibleChildren = item.children.filter((c) => staffCanAccess(c.path, staffPermissions));
+        if (visibleChildren.length === 0) return null;
+        return { ...item, children: visibleChildren };
+      }
+      return staffCanAccess(item.path, staffPermissions) ? item : null;
+    })
+    .filter((item): item is NavItem => item !== null);
+}
 
 // ── Marketplace brand colors ───────────────────────────────────────────────────
 
