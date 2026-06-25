@@ -1,3 +1,4 @@
+// src/App.tsx
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { Toaster } from '@/components/ui/sonner';
@@ -20,6 +21,10 @@ import AcceptStaffInvitePage from '@/pages/auth/AcceptStaffInvitePage';
 // Legal Pages
 import PrivacyPolicyPage from '@/pages/legal/PrivacyPolicyPage';
 import TermsOfServicePage from '@/pages/legal/TermsOfServicePage';
+
+// Blog Pages
+import BlogIndexPage from '@/pages/blog/BlogIndexPage';
+import BlogPostPage from '@/pages/blog/BlogPostPage';
 
 // Dashboard Pages
 import DashboardLayout from '@/pages/dashboard/DashboardLayout';
@@ -49,7 +54,7 @@ import CouponsPage from '@/pages/dashboard/CouponsPage';
 import StoreTemplatesPage from '@/pages/dashboard/StoreTemplatesPage';
 import NicheCustomizationPage from '@/pages/dashboard/NicheCustomizationPage';
 
-// Marketplace Placeholder Pages
+// Marketplace Pages
 import JumiaPage from '@/pages/dashboard/JumiaPage';
 import JumiaAddItemPage from '@/pages/dashboard/JumiaAddItemPage';
 import JumiaDropOffLocationsPage from '@/pages/dashboard/JumiaDropOffLocationsPage';
@@ -85,6 +90,7 @@ import AdminWithdrawals from '@/pages/admin/AdminWithdrawals';
 import AdminFailures from '@/pages/admin/AdminFailures';
 import AdminSubscriptions from '@/pages/admin/AdminSubscriptions';
 import AdminDomainRequests from '@/pages/admin/AdminDomainRequests';
+import AdminEmailControls from '@/pages/admin/AdminEmailControls';
 import AdminNotifications from '@/pages/admin/AdminNotifications';
 import AdminLegal from '@/pages/admin/AdminLegal';
 import AdminShipbubblePage from '@/pages/admin/AdminShipbubble';
@@ -238,6 +244,10 @@ function App() {
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
 
+          {/* Blog Routes */}
+          <Route path="/blog" element={<BlogIndexPage />} />
+          <Route path="/blog/:slug" element={<BlogPostPage />} />
+
           {/* Onboarding Routes */}
           <Route path="/select-niche" element={
             <ProtectedRoute isOnboardingRoute={true}><NicheSelectionPage /></ProtectedRoute>
@@ -311,9 +321,10 @@ function App() {
             <Route path="products" element={<AdminProducts />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="withdrawals" element={<AdminWithdrawals />} />
-<Route path="failures" element={<AdminFailures />} />
+            <Route path="failures" element={<AdminFailures />} />
             <Route path="subscriptions" element={<AdminSubscriptions />} />
             <Route path="domain-requests" element={<AdminDomainRequests />} />
+            <Route path="email-controls" element={<AdminEmailControls />} />
             <Route path="notifications" element={<AdminNotifications />} />
             <Route path="legal" element={<AdminLegal />} />
             <Route path="shipbubble" element={<AdminShipbubblePage />} />
