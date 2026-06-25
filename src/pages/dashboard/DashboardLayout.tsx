@@ -10,11 +10,18 @@ import SubscriptionBanner from '@/components/SubscriptionBanner';
 import ModalNotificationDisplay from '@/components/ModalNotificationDisplay';
 import { toast } from 'sonner';
 import type { StockAlert } from '@/types';
+import type { PermissionKey } from '@/lib/staffPermissions';
 
 import Sidebar from './Layout/Sidebar';
 import DashboardHeader from './Layout/DashboardHeader';
 import ComingSoonModal from './Layout/ComingSoonModal';
-import { sidebarItems, allNavItems, staffAllowedPaths, type MarketplaceBrand } from './Layout/constants';
+import {
+  sidebarItems, allNavItems, getVisibleSidebarItems, staffCanAccess,
+  type MarketplaceBrand,
+} from './Layout/constants';
+
+const PERMISSION_COLUMNS =
+  'can_view_orders, can_update_orders, can_view_products, can_manage_products, can_manage_wallet, can_manage_settings, can_view_analytics';
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
@@ -37,6 +44,11 @@ export default function DashboardLayout() {
   } | null>(null);
   const [pendingDropshipCount, setPendingDropshipCount] = useState(0);
 
+  // Staff's actual granted permissions, fetched from their store_staff row.
+  // null while loading / not yet known — treated as "no access" by staffCanAccess until populated.
+  const [staffPermissions, setStaffPermissions] = useState<Record<PermissionKey, boolean> | null>(null);
+  const [staffPermissionsLoaded, setStaffPermissionsLoaded] = useState(false);
+
   const isStaff = user?.role === 'staff';
 
   // ── Init ───────────────────────────────────────────────────────────────────
@@ -55,19 +67,45 @@ export default function DashboardLayout() {
     }
   }, [currentStore?.id]);
 
+  // Resolve the staff member's store + their actual granted permissions in one query.
   useEffect(() => {
-    if (isStaff && user?.id) {
-      supabase
-        .from('store_staff')
-        .select('store_id')
-        .eq('staff_user_id', user.id)
-        .eq('status', 'active')
-        .single()
-        .then(({ data }) => {
-          if (data?.store_id) fetchUserStore(data.store_id);
-        });
+    if (!isStaff || !user?.id) {
+      setStaffPermissionsLoaded(true);
+      return;
     }
+    supabase
+      .from('store_staff')
+      .select(`store_id, status, ${PERMISSION_COLUMNS}`)
+      .eq('staff_user_id', user.id)
+      .eq('status', 'active')
+      .single()
+      .then(({ data }) => {
+        if (data?.store_id) fetchUserStore(data.store_id);
+        if (data) {
+          setStaffPermissions({
+            can_view_orders:     Boolean(data.can_view_orders),
+            can_update_orders:   Boolean(data.can_update_orders),
+            can_view_products:   Boolean(data.can_view_products),
+            can_manage_products: Boolean(data.can_manage_products),
+            can_manage_wallet:   Boolean(data.can_manage_wallet),
+            can_manage_settings: Boolean(data.can_manage_settings),
+            can_view_analytics:  Boolean(data.can_view_analytics),
+          });
+        }
+        setStaffPermissionsLoaded(true);
+      });
   }, [isStaff, user?.id, fetchUserStore]);
+
+  // Route guard: if a staff member manually navigates to a page they aren't permitted to see,
+  // bounce them back to the dashboard home. Waits for permissions to load first so we don't
+  // false-redirect on first paint. RLS is the real security boundary — this is just UX.
+  useEffect(() => {
+    if (!isStaff || !staffPermissionsLoaded) return;
+    if (!staffCanAccess(location.pathname, staffPermissions)) {
+      toast.error("You don't have access to that page");
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isStaff, staffPermissionsLoaded, staffPermissions, location.pathname, navigate]);
 
   // ── Realtime ───────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -198,7 +236,7 @@ export default function DashboardLayout() {
       currentStore?.domain_status === 'pending' &&
       (!domainRequest?.admin_approved || domainRequest?.status === 'pending'));
 
-  // ── Sidebar items with badges + staff filter ───────────────────────────────
+  // ── Sidebar items with badges + permission-based staff filter ─────────────
   const sidebarItemsWithBadges = sidebarItems.map((item) => {
     if (item.label === 'Sales' && item.children) {
       return {
@@ -213,11 +251,7 @@ export default function DashboardLayout() {
     return item;
   });
 
-  const visibleItems = isStaff
-    ? sidebarItemsWithBadges.filter((item) =>
-        staffAllowedPaths.some((p) => item.path === p),
-      )
-    : sidebarItemsWithBadges;
+  const visibleItems = getVisibleSidebarItems(sidebarItemsWithBadges, isStaff, staffPermissions);
 
   const currentLabel =
     allNavItems.find((item) => isActive(item.path))?.label || 'Dashboard';
