@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { getThemeById } from '@/lib/themes';
 import { useCustomerAuthStore, useCartStore } from '@/stores';
 import { useCustomDomainSlug } from '@/components/CustomDomainRouter';
+import StoreLocationBanner from './StoreLocationBanner';
 import type { Store, Product } from '@/types';
 
 // ── Helper: pick black or white text based on background color ────────────────
@@ -390,6 +391,9 @@ export default function StorePage() {
           )}
         </AnimatePresence>
       </header>
+
+      {/* ── Location banner — dismissible per-session, only shown if owner enabled it ── */}
+      <StoreLocationBanner store={store} primary={primary} />
 
       {/* ── Banner ── */}
       {store.banner_url && (
