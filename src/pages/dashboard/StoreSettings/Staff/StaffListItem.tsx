@@ -69,7 +69,7 @@ export default function StaffListItem({ staff, isMutating, onRemove, onResend, o
       {expanded && (
         <div className="border-t border-gray-100 p-4 bg-gray-50/60 space-y-3">
           {PERMISSIONS.map(perm => {
-            const checked = Boolean(staff[perm.key as keyof StoreStaff]);
+            const checked = staff[perm.key];
             return (
               <div key={perm.key} className="flex items-start justify-between gap-4">
                 <div>
