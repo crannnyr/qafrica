@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Users, Store, Package, ShoppingCart,
   CreditCard, Crown, LogOut, Menu, X, Shield, Globe,
-  ChevronLeft, User, Bell, FileText, Truck, ShoppingBag, Mail
+  ChevronLeft, User, Bell, FileText, Truck, ShoppingBag,
+  Mail, AlertTriangle, Wallet,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores';
 import { toast } from 'sonner';
@@ -17,6 +18,7 @@ const NAV = [
   { icon: Package,         label: 'Products',          path: '/admin/products' },
   { icon: ShoppingCart,    label: 'Orders',            path: '/admin/orders' },
   { icon: CreditCard,      label: 'Withdrawals',       path: '/admin/withdrawals' },
+  { icon: AlertTriangle,   label: 'Failures',          path: '/admin/failures' },
   { icon: Crown,           label: 'Subscriptions',     path: '/admin/subscriptions' },
   { icon: Globe,           label: 'Domain Requests',   path: '/admin/domain-requests', badge: true },
   { icon: Mail,            label: 'Email Controls',    path: '/admin/email-controls' },
@@ -24,6 +26,7 @@ const NAV = [
   { icon: FileText,        label: 'Legal Docs',        path: '/admin/legal' },
   { icon: Truck,           label: 'Shipbubble',        path: '/admin/shipbubble' },
   { icon: ShoppingBag,     label: 'Jumia',             path: '/admin/jumia' },
+  { icon: Wallet,          label: 'Jumia Payouts',     path: '/admin/jumia-withdrawals' },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -32,8 +35,8 @@ export default function AdminLayout() {
   const location  = useLocation();
   const { user, logout } = useAuthStore();
 
-  const [collapsed, setCollapsed]         = useState(false);
-  const [mobileOpen, setMobileOpen]       = useState(false);
+  const [collapsed, setCollapsed]   = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
 
@@ -168,12 +171,10 @@ export default function AdminLayout() {
         <header className="bg-white border-b border-gray-200 flex-shrink-0 z-30">
           <div className="flex items-center justify-between h-14 px-4 lg:px-6">
             <div className="flex items-center gap-3">
-              {/* Mobile menu open */}
               <button onClick={() => setMobileOpen(true)}
                 className="lg:hidden p-2 hover:bg-gray-100 rounded-lg">
                 <Menu className="w-5 h-5" />
               </button>
-              {/* Desktop collapse toggle */}
               <button onClick={() => setCollapsed(!collapsed)}
                 className="hidden lg:flex p-2 hover:bg-gray-100 rounded-lg transition-colors">
                 {collapsed ? <Menu className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
