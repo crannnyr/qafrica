@@ -137,6 +137,14 @@ shipbubble_enabled?: boolean;
   direct_account_number?: string;
   direct_account_name?: string;
   cod_enabled?: boolean;
+  // Location fields — "Visit our store" map feature
+  latitude?: number | null;
+  longitude?: number | null;
+  location_address?: string | null;
+  location_enabled?: boolean;
+  location_flagged?: boolean;
+  location_flagged_reason?: string | null;
+  location_set_at?: string | null;
 }
 
 export interface StoreAnalytics {
@@ -978,6 +986,14 @@ export interface StoreStaff {
   last_active_at: string | null;
   created_at: string;
   updated_at: string;
+  // Permission columns — control sidebar/route/RLS access, defaults set in migration
+  can_view_orders: boolean;
+  can_update_orders: boolean;
+  can_view_products: boolean;
+  can_manage_products: boolean;
+  can_manage_wallet: boolean;
+  can_manage_settings: boolean;
+  can_view_analytics: boolean;
 }
 
 export interface StaffInvitation {
