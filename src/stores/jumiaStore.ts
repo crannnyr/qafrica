@@ -108,6 +108,8 @@ export interface JumiaDropoffTask {
   admin_note: string | null;
   created_at: string;
 }
+
+export interface JumiaWithdrawalRequest {
   id: string;
   amount: number;
   status: 'pending' | 'approved' | 'rejected' | 'paid';
