@@ -1,5 +1,10 @@
 User-agent: *
 Allow: /
+Allow: /blog
+Allow: /marketplace
+Allow: /importations
+Allow: /stores
+Allow: /pricing
 
 # Block private routes
 Disallow: /dashboard
