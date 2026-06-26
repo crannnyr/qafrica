@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Block private routes
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /developer/dashboard
+Disallow: /payment
+Disallow: /customer/dashboard
+
+Sitemap: https://qafrica.store/sitemap.xml
