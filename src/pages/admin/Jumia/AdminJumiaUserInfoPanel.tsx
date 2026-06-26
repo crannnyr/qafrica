@@ -5,7 +5,9 @@ import { User, Mail, Phone, Tag, Package2 } from 'lucide-react';
 import type { JumiaSubmission } from '@/stores/jumiaStore';
 
 export default function AdminJumiaUserInfoPanel({ submission }: { submission: JumiaSubmission }) {
-  const totalRemaining = submission.has_variants
+  const hasVariants = submission.variant_type !== 'none';
+
+  const totalRemaining = hasVariants
     ? submission.variants.reduce((sum, v) => sum + v.quantity_remaining, 0)
     : submission.quantity_remaining;
 
@@ -45,7 +47,7 @@ export default function AdminJumiaUserInfoPanel({ submission }: { submission: Ju
 
       <div className="pt-4 border-t border-gray-100">
         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Stock</h2>
-        {submission.has_variants ? (
+        {hasVariants ? (
           <div className="space-y-1.5">
             {submission.variants.map((v) => (
               <div key={v.label} className="flex justify-between text-sm">
