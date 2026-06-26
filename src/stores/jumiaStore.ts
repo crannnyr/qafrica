@@ -5,10 +5,22 @@
 import { create } from 'zustand';
 import { supabase } from '@/services';
 
+export type VariantType = 'none' | 'colour' | 'size' | 'colour_size';
+
 export interface JumiaVariant {
-  label: string;
+  colour: string | null;
+  size: string | null;
   quantity_sent: number;
   quantity_remaining: number;
+}
+
+// Auto-generates the display label used for sale logging and stock matching.
+// Must match the server-side label generation in record_jumia_sale RPC.
+export function variantLabel(v: JumiaVariant): string {
+  if (v.colour && v.size) return `${v.colour} / ${v.size}`;
+  if (v.colour) return v.colour;
+  if (v.size) return v.size;
+  return '';
 }
 
 export interface JumiaSubmission {
@@ -21,10 +33,11 @@ export interface JumiaSubmission {
   category: string;
   selling_price: number;
   contact_phone: string;
-  has_variants: boolean;
+  variant_type: VariantType;
   variants: JumiaVariant[];
   quantity_sent: number;
   quantity_remaining: number;
+  strike_count: number;
   fulfillment_method: 'self_dropoff' | 'agent_pickup';
   drop_off_location_id: string | null;
   submission_fee_paid: boolean;
@@ -34,6 +47,7 @@ export interface JumiaSubmission {
   payment_reference: string | null;
   payment_status: 'unpaid' | 'paid';
   paid_at: string | null;
+  label_downloaded_at: string | null;
   status: 'pending_payment' | 'awaiting_schedule' | 'awaiting_dropoff' | 'dropped_off'
         | 'received_by_jumia' | 'live' | 'out_of_stock' | 'paused' | 'rejected';
   status_note: string | null;
@@ -78,7 +92,22 @@ export interface JumiaWalletTransaction {
   created_at: string;
 }
 
-export interface JumiaWithdrawalRequest {
+export interface JumiaDropoffTask {
+  id: string;
+  submission_id: string;
+  sale_id: string | null;
+  owner_id: string;
+  vdo_location_id: string | null;
+  status: 'pending_notification' | 'notified' | 'dropped_off' | 'missed';
+  notified_at: string | null;
+  deadline_at: string | null;
+  completed_at: string | null;
+  strike_number: number | null;
+  units: number;
+  variant_label: string | null;
+  admin_note: string | null;
+  created_at: string;
+}
   id: string;
   amount: number;
   status: 'pending' | 'approved' | 'rejected' | 'paid';
