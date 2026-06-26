@@ -26,6 +26,7 @@ const NAV = [
   { icon: FileText,        label: 'Legal Docs',        path: '/admin/legal' },
   { icon: Truck,           label: 'Shipbubble',        path: '/admin/shipbubble' },
   { icon: ShoppingBag,     label: 'Jumia',             path: '/admin/jumia' },
+{ icon: ShoppingBag, label: 'Jumia Settings', path: '/admin/jumia-settings' },
   { icon: Wallet,          label: 'Jumia Payouts',     path: '/admin/jumia-withdrawals' },
 ];
 
