@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Eye, EyeOff, Loader } from 'lucide-react';
 
-const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/china-import`;
-
+import CONFIG from '@/lib/config';
+const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 export default function ImportAdminLogin() {
   const navigate = useNavigate();
   const [email, setEmail]       = useState('');
