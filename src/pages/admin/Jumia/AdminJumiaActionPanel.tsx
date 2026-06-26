@@ -22,6 +22,8 @@ export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) 
   const { user: admin } = useAuthStore();
   const { updateSubmissionStatus, recordSale } = useJumiaStore();
 
+  const hasVariants = submission.variant_type !== 'none';
+
   const [isWorking, setIsWorking] = useState(false);
   const [scheduleNote, setScheduleNote] = useState('');
   const [rejectReason, setRejectReason] = useState('');
@@ -94,12 +96,12 @@ export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) 
     const price = Number(salePrice);
     if (!units || units <= 0) { toast.error('Enter a valid number of units sold'); return; }
     if (!price || price <= 0) { toast.error('Enter a valid sale price'); return; }
-    if (submission.has_variants && !variantLabel) { toast.error('Select a variant'); return; }
+    if (hasVariants && !variantLabel) { toast.error('Select a variant'); return; }
 
     setIsWorking(true);
     const result = await recordSale({
       submission_id: submission.id,
-      variant_label: submission.has_variants ? variantLabel : null,
+      variant_label: hasVariants ? variantLabel : null,
       units_sold: units,
       unit_price: price,
       admin_id: admin!.id,
@@ -113,12 +115,12 @@ export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) 
     setUnitsSold('');
 
     if (ownerEmail) {
-      const remaining = submission.has_variants
+      const remaining = hasVariants
         ? (submission.variants.find((v) => v.label === variantLabel)?.quantity_remaining ?? 0) - units
         : submission.quantity_remaining - units;
       const t = jumiaEmailTemplates.saleUpdate({
         name: ownerName, productName: submission.name,
-        variantLabel: submission.has_variants ? variantLabel : undefined,
+        variantLabel: hasVariants ? variantLabel : undefined,
         unitsSold: units, remaining: Math.max(0, remaining), appUrl: APP_URL,
       });
       await sendEmail({ to: ownerEmail, subject: t.subject, html: t.body }).catch(() => toast.error('Sale logged, but the email failed to send'));
@@ -174,7 +176,7 @@ export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) 
       {['live', 'out_of_stock'].includes(submission.status) && (
         <div className="space-y-3 pt-4 border-t border-gray-100">
           <h3 className="text-sm font-bold text-gray-700">Log a Sale</h3>
-          {submission.has_variants && (
+          {hasVariants && (
             <select value={variantLabel} onChange={(e) => setVariantLabel(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm">
               {submission.variants.map((v) => (
