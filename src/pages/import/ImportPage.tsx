@@ -8,7 +8,8 @@ import {
   BookOpen, Store, X, MessageCircle, Info
 } from 'lucide-react';
 import { compressImage } from '@/lib/imageCompression';
-const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/china-import`;
+import CONFIG from '@/lib/config';
+const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const WHATSAPP_NUMBER = '2348166888001';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
