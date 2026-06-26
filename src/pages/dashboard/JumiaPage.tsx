@@ -4,15 +4,17 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, MapPin, Wallet, BookOpen, Package, ArrowRight } from 'lucide-react';
+import { Plus, MapPin, Wallet, BookOpen, Package, ArrowRight, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAuthStore } from '@/stores';
+import { useAuthStore, useStoreStore } from '@/stores';
 import { useJumiaStore } from '@/stores/jumiaStore';
 import JumiaSubmissionStatusBadge from './Jumia/JumiaSubmissionStatusBadge';
 import JumiaPlanGate from './Jumia/JumiaPlanGate';
+import { generateJumiaLabel } from './Jumia/generateJumiaLabel';
 
 function JumiaOverview() {
   const { user } = useAuthStore();
+  const { currentStore } = useStoreStore();
   const { submissions, wallet, fetchSubmissions, fetchWallet, isLoading } = useJumiaStore();
 
   useEffect(() => {
@@ -119,7 +121,18 @@ function JumiaOverview() {
                   <p className="font-bold text-gray-900 dark:text-white truncate text-sm">{s.name}</p>
                   <p className="text-xs text-gray-500">₦{Number(s.selling_price).toLocaleString()}</p>
                 </div>
-                <JumiaSubmissionStatusBadge status={s.status} />
+                <div className="flex items-center gap-2">
+                  <JumiaSubmissionStatusBadge status={s.status} />
+                  {s.payment_status === 'paid' && (
+                    <button
+                      onClick={() => generateJumiaLabel(s, currentStore?.name ?? 'My Store', user?.full_name ?? user?.email ?? '')}
+                      title="Re-download shipping label"
+                      className="p-1.5 text-gray-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg transition-colors"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
               </motion.div>
             ))}
           </div>
