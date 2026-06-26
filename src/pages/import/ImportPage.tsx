@@ -7,8 +7,7 @@ import {
   ArrowRight, ExternalLink, Copy, Check, ChevronDown,
   BookOpen, Store, X, MessageCircle, Info
 } from 'lucide-react';
-import { compressImage } from '@/utils/imageCompression';
-
+import { compressImage } from '@/lib/imageCompression';
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/china-import`;
 const WHATSAPP_NUMBER = '2348166888001';
 
