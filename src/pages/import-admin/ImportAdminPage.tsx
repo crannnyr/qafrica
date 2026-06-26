@@ -11,7 +11,8 @@ import {
 import { compressImage } from '@/lib/imageCompression';
 import { supabase } from '@/services/supabase';
 
-const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/china-import`;
+import CONFIG from '@/lib/config';
+const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ImportOrder {
