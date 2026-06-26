@@ -1,3 +1,4 @@
+// src/App.tsx
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { Toaster } from '@/components/ui/sonner';
@@ -24,6 +25,11 @@ import TermsOfServicePage from '@/pages/legal/TermsOfServicePage';
 // Blog Pages
 import BlogIndexPage from '@/pages/blog/BlogIndexPage';
 import BlogPostPage from '@/pages/blog/BlogPostPage';
+
+// China Import Pages
+import ImportPage from '@/pages/import/ImportPage';
+import ImportAdminLogin from '@/pages/import-admin/ImportAdminLogin';
+import ImportAdminPage from '@/pages/import-admin/ImportAdminPage';
 
 // Dashboard Pages
 import DashboardLayout from '@/pages/dashboard/DashboardLayout';
@@ -206,7 +212,6 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 function App() {
   const { fetchProfile } = useAuthStore();
 
-  // FIX: only use dark mode if user explicitly chose it — ignore system preference
   useEffect(() => {
     const saved = localStorage.getItem('theme');
     if (saved === 'dark') {
@@ -246,6 +251,11 @@ function App() {
           {/* Blog Routes */}
           <Route path="/blog" element={<BlogIndexPage />} />
           <Route path="/blog/:slug" element={<BlogPostPage />} />
+
+          {/* China Import Routes — public, no auth needed */}
+          <Route path="/importations" element={<ImportPage />} />
+          <Route path="/importations/admin/login" element={<ImportAdminLogin />} />
+          <Route path="/importations/admin" element={<ImportAdminPage />} />
 
           {/* Onboarding Routes */}
           <Route path="/select-niche" element={
@@ -316,7 +326,6 @@ function App() {
           }>
             <Route index element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
-            <Route path="jumia-settings" element={<AdminJumiaSettings />} />
             <Route path="stores" element={<AdminStores />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="orders" element={<AdminOrders />} />
@@ -331,6 +340,7 @@ function App() {
             <Route path="jumia" element={<AdminJumia />} />
             <Route path="jumia/:id" element={<AdminJumiaSubmissionDetail />} />
             <Route path="jumia-withdrawals" element={<AdminJumiaWithdrawals />} />
+            <Route path="jumia-settings" element={<AdminJumiaSettings />} />
           </Route>
 
           {/* Developer Portal Routes */}
