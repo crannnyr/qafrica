@@ -8,7 +8,7 @@ import {
   Shield, Globe, CheckCircle,
 } from 'lucide-react';
 
-// ── Hero ──────────────────────────────────────────────────────────────────────
+// -- Hero ---------------------------------------------------------------------
 function Hero() {
   return (
     <section className="bg-white pt-8 pb-14 px-4 overflow-hidden">
@@ -17,7 +17,7 @@ function Hero() {
         {/* 2-col grid */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-center mb-10">
 
-          {/* Left — 60% */}
+          {/* Left -- 60% */}
           <div className="md:col-span-3">
             {/* Eyebrow */}
             <div className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 text-xs font-bold px-3 py-1.5 rounded-full mb-5">
@@ -33,7 +33,7 @@ function Hero() {
             <p className="text-gray-500 text-sm leading-relaxed mb-7 text-left max-w-sm">
               We can help you source from verified vendors on 1688. View our catalog
               for recommended products that sell best on Jumia. Or visit 1688.com and
-              send us screenshots — we'll handle the rest.
+              send us screenshots -- we'll handle the rest.
             </p>
 
             {/* CTAs */}
@@ -57,12 +57,12 @@ function Hero() {
             <p className="text-xs text-gray-400">
               Not sure what to import?{' '}
               <Link to="/blog" className="text-orange-500 font-semibold hover:underline">
-                Read our guide →
+                Read our guide &rarr;
               </Link>
             </p>
           </div>
 
-          {/* Right — 40% hero image */}
+          {/* Right -- 40% hero image */}
           <div className="md:col-span-2 flex items-center justify-center">
             <div className="relative w-full max-w-[260px] mx-auto">
               {/* Glow / shadow behind image */}
@@ -84,7 +84,7 @@ function Hero() {
   );
 }
 
-// ── How It Works ──────────────────────────────────────────────────────────────
+// -- How It Works -------------------------------------------------------------
 const STEPS = [
   {
     icon: Search,
@@ -137,7 +137,7 @@ function HowItWorks() {
             How It Works
           </p>
           <h2 className="text-xl font-black text-gray-900">
-            From browsing to payouts — 8 simple steps
+            From browsing to payouts -- 8 simple steps
           </h2>
         </div>
 
@@ -178,7 +178,7 @@ function HowItWorks() {
   );
 }
 
-// ── Why Trust Us ──────────────────────────────────────────────────────────────
+// -- Why Trust Us -------------------------------------------------------------
 const TRUST_POINTS = [
   {
     icon: Shield,
@@ -193,12 +193,12 @@ const TRUST_POINTS = [
   {
     icon: Globe,
     title: 'End-to-end logistics',
-    desc: 'Customs, compliance, packaging — all handled so you don't have to.',
+    desc: "Customs, compliance, packaging -- all handled so you don't have to.",
   },
   {
     icon: TrendingUp,
     title: 'Jumia-ready fulfillment',
-    desc: 'We list and fulfill on Jumia for you, no Lagos drop-off hub needed.',
+    desc: "We list and fulfill on Jumia for you, no Lagos drop-off hub needed.",
   },
 ];
 
@@ -217,12 +217,12 @@ function WhyTrustUs() {
             We are just starting out, and we built this platform because we noticed a
             massive gap that stops many aspiring business owners from selling on top
             marketplaces. Platforms like Jumia, Konga, and Jiji attract millions of
-            visitors every month — yet many entrepreneurs miss out because they don't
+            visitors every month -- yet many entrepreneurs miss out because they don't
             have access to vendor drop-off hubs in Lagos, or they're overwhelmed by
             packaging mandates and logistics.
           </p>
           <p className="text-gray-500 text-sm leading-relaxed max-w-lg mt-3">
-            We built QAFRICA to bridge that exact gap — handling the entire procurement
+            We built QAFRICA to bridge that exact gap -- handling the entire procurement
             process, cutting lengthy shipping timelines, tackling compliance, and bringing
             Lagos fulfilment infrastructure directly to your fingertips.
           </p>
@@ -264,7 +264,7 @@ function WhyTrustUs() {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────────────────────
+// -- Main Page ----------------------------------------------------------------
 export default function ImportPage() {
   return (
     <div className="min-h-screen bg-white">
