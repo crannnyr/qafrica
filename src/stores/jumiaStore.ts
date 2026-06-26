@@ -8,6 +8,7 @@ import { supabase } from '@/services';
 export type VariantType = 'none' | 'colour' | 'size' | 'colour_size';
 
 export interface JumiaVariant {
+  label: string;
   colour: string | null;
   size: string | null;
   quantity_sent: number;
@@ -17,6 +18,7 @@ export interface JumiaVariant {
 // Auto-generates the display label used for sale logging and stock matching.
 // Must match the server-side label generation in record_jumia_sale RPC.
 export function variantLabel(v: JumiaVariant): string {
+  if (v.label) return v.label;
   if (v.colour && v.size) return `${v.colour} / ${v.size}`;
   if (v.colour) return v.colour;
   if (v.size) return v.size;
