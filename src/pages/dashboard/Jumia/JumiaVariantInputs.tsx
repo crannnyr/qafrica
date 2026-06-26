@@ -19,7 +19,10 @@ interface Props {
 export default function JumiaVariantInputs({
   hasVariants, onToggleVariants, variants, onChange, singleQuantity, onSingleQuantityChange,
 }: Props) {
-  const addVariant = () => onChange([...variants, { label: '', quantity_sent: MIN_UNITS_PER_VARIANT, quantity_remaining: MIN_UNITS_PER_VARIANT }]);
+  const addVariant = () => onChange([
+    ...variants,
+    { label: '', colour: null, size: null, quantity_sent: MIN_UNITS_PER_VARIANT, quantity_remaining: MIN_UNITS_PER_VARIANT },
+  ]);
   const removeVariant = (i: number) => onChange(variants.filter((_, idx) => idx !== i));
   const updateVariant = (i: number, field: 'label' | 'quantity_sent', value: string | number) => {
     const next = [...variants];
