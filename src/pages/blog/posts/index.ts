@@ -62,9 +62,29 @@ export const posts: BlogPost[] = [
     keywords:    ['best niches nigeria','profitable products nigeria','what to sell online nigeria','niche selection nigeria'],
     featured:    false,
   },
+  {
+    slug:        'sell-on-jumia-konga-jiji-nigeria',
+    title:       'How to Sell on Jumia, Konga and Jiji at the Same Time (Without Extra Work)',
+    description: 'List once on QAFRICA and push your products to Jumia, Konga and Jiji automatically. No duplicate work, no separate accounts needed.',
+    category:    'Marketplace',
+    readTime:    '5 min read',
+    date:        'June 2026',
+    keywords:    ['sell on jumia konga jiji','list products multiple marketplaces nigeria','jumia konga jiji seller','marketplace nigeria 2026'],
+    featured:    false,
+  },
+  {
+    slug:        'import-products-from-china-nigeria',
+    title:       'How to Import Products from China to Nigeria Without a Freight Agent',
+    description: 'QAFRICA handles sourcing, quality control, warehousing and customs. You pick products from our catalog — we handle everything else.',
+    category:    'Importation',
+    readTime:    '6 min read',
+    date:        'June 2026',
+    keywords:    ['import from china nigeria','china to nigeria shipping','importation business nigeria','source products china nigeria 2026'],
+    featured:    false,
+  },
 ];
 
-export const getFeatured  = ()           => posts.filter(p => p.featured);
-export const getBySlug    = (slug: string) => posts.find(p => p.slug === slug);
+export const getFeatured  = ()              => posts.filter(p => p.featured);
+export const getBySlug    = (slug: string)  => posts.find(p => p.slug === slug);
 export const getRelated   = (slug: string, category: string) =>
   posts.filter(p => p.slug !== slug && p.category === category).slice(0, 2);
