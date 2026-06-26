@@ -100,7 +100,7 @@ function useImportAuth() {
   const logout = () => {
     sessionStorage.removeItem('import_manager_token');
     sessionStorage.removeItem('import_manager');
-    navigate('/import-admin/login');
+    navigate('/importations/admin/login');
   };
 
   useEffect(() => {
