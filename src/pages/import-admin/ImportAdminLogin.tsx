@@ -31,7 +31,7 @@ export default function ImportAdminLogin() {
       // Persist token and manager info
       sessionStorage.setItem('import_manager_token', data.token);
       sessionStorage.setItem('import_manager', JSON.stringify(data.manager));
-      navigate('/import-admin');
+      navigate('/importations/admin');
     } catch {
       setError('Connection error. Please try again.');
     } finally {
