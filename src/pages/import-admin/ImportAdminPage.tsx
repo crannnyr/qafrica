@@ -8,7 +8,7 @@ import {
   Upload, Loader, DollarSign, TrendingUp, Clock,
   AlertCircle, ExternalLink, Copy,
 } from 'lucide-react';
-import { compressImage } from '@/utils/imageCompression';
+import { compressImage } from '@/lib/imageCompression';
 import { supabase } from '@/services/supabase';
 
 const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/china-import`;
