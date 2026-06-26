@@ -7,7 +7,6 @@ import mdx from '@mdx-js/rollup'
 export default defineConfig({
   base: '/',
   plugins: [
-    // MDX must come before react()
     mdx({
       providerImportSource: '@mdx-js/react',
     }),
@@ -22,13 +21,16 @@ export default defineConfig({
         '/login',
         '/signup',
         '/pricing',
+        '/marketplace',
+        '/importations',
         '/blog',
         '/blog/what-sells-best-on-jumia-2026',
         '/blog/how-to-sell-on-jumia-without-getting-banned',
         '/blog/dropshipping-from-china-to-nigeria',
         '/blog/how-to-create-online-store-nigeria',
         '/blog/best-niches-nigeria-2026',
-        '/marketplace',
+        '/blog/sell-on-jumia-konga-jiji-nigeria',
+        '/blog/import-products-from-china-nigeria',
       ],
     }),
   ],
