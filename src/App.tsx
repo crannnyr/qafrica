@@ -1,4 +1,3 @@
-// src/App.tsx
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { Toaster } from '@/components/ui/sonner';
@@ -98,6 +97,7 @@ import AdminJumia from '@/pages/admin/AdminJumia';
 import AdminJumiaSubmissionDetail from '@/pages/admin/AdminJumiaSubmissionDetail';
 import AdminJumiaWithdrawals from '@/pages/admin/AdminJumiaWithdrawals';
 import AdminJumiaSettings from '@/pages/admin/AdminJumiaSettings';
+
 // Developer Pages
 import DeveloperLayout from '@/pages/developer/dashboard/DeveloperLayout';
 import DeveloperDashboardHome from '@/pages/developer/dashboard/DeveloperDashboardHome';
@@ -206,11 +206,10 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 function App() {
   const { fetchProfile } = useAuthStore();
 
+  // FIX: only use dark mode if user explicitly chose it — ignore system preference
   useEffect(() => {
     const saved = localStorage.getItem('theme');
-    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const shouldBeDark = saved === 'dark' || (!saved && systemDark);
-    if (shouldBeDark) {
+    if (saved === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
@@ -317,7 +316,7 @@ function App() {
           }>
             <Route index element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
-<Route path="jumia-settings" element={<AdminJumiaSettings />} />
+            <Route path="jumia-settings" element={<AdminJumiaSettings />} />
             <Route path="stores" element={<AdminStores />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="orders" element={<AdminOrders />} />
