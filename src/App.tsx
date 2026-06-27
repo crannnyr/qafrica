@@ -5,6 +5,9 @@ import { Toaster } from '@/components/ui/sonner';
 import { useAuthStore } from '@/stores';
 import { useDeveloperAuthStore } from '@/stores/developerAuthStore';
 
+// Scroll reset on every route change
+import ScrollToTop from '@/components/ScrollToTop';
+
 // Pages
 import LandingPage from '@/pages/landing/LandingPage';
 import LoginPage from '@/pages/auth/LoginPage';
@@ -26,12 +29,12 @@ import TermsOfServicePage from '@/pages/legal/TermsOfServicePage';
 import BlogIndexPage from '@/pages/blog/BlogIndexPage';
 import BlogPostPage from '@/pages/blog/BlogPostPage';
 
-// China Import Pages
+// China Import / Recommendations Pages
 import ImportPage from '@/pages/import/ImportPage';
 import ImportAdminLogin from '@/pages/import-admin/ImportAdminLogin';
 import ImportAdminPage from '@/pages/import-admin/ImportAdminPage';
 import RecommendationsPage from '@/pages/recommendations/RecommendationsPage';
-ProductDetailPage from '@/pages/recommendations/ProductDetailPage';
+import RecommendationsProductDetailPage from '@/pages/recommendations/ProductDetailPage';
 
 // Dashboard Pages
 import DashboardLayout from '@/pages/dashboard/DashboardLayout';
@@ -238,30 +241,42 @@ function App() {
         }}
       />
       <CustomDomainRouter>
+        {/* Resets scroll to top on every route change — must be inside the router */}
+        <ScrollToTop />
+
         <Routes>
-          {/* Public Routes */}
+          {/* ── Public Routes ── */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-          {/* Legal Pages */}
+          {/* ── Legal ── */}
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
 
-          {/* Blog Routes */}
+          {/* ── Blog ── */}
           <Route path="/blog" element={<BlogIndexPage />} />
           <Route path="/blog/:slug" element={<BlogPostPage />} />
 
-          {/* China Import Routes — public, no auth needed */}
+          {/* ── China Import & Recommendations — public, no auth needed ── */}
           <Route path="/importations" element={<ImportPage />} />
-<Route path="/recommendations" element={<RecommendationsPage />} />
           <Route path="/importations/admin/login" element={<ImportAdminLogin />} />
-<Route path="/recommendations/:id" element={<ProductDetailPage />} />
           <Route path="/importations/admin" element={<ImportAdminPage />} />
+          <Route path="/recommendations" element={<RecommendationsPage />} />
+          <Route path="/recommendations/:id" element={<RecommendationsProductDetailPage />} />
 
-          {/* Onboarding Routes */}
+          {/* ── Marketplace landing — public funnel from blog CTAs ── */}
+          {/*
+            /marketplaces is referenced by all Jumia / Konga / Jiji blog CTAs.
+            Point this route at whichever page you want as the marketplace
+            funnel entry point (e.g. a dedicated MarketplacesPage, or reuse
+            ImportPage temporarily). Swap the element below when ready.
+          */}
+          <Route path="/marketplaces" element={<ImportPage />} />
+
+          {/* ── Onboarding ── */}
           <Route path="/select-niche" element={
             <ProtectedRoute isOnboardingRoute={true}><NicheSelectionPage /></ProtectedRoute>
           } />
@@ -274,7 +289,7 @@ function App() {
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/payment/callback" element={<PaymentCallbackPage />} />
 
-          {/* Customer Routes */}
+          {/* ── Customer ── */}
           <Route path="/customer/login" element={<CustomerLoginPage />} />
           <Route path="/customer/signup" element={<CustomerSignupPage />} />
           <Route path="/customer/dashboard" element={<CustomerDashboard />} />
@@ -283,10 +298,10 @@ function App() {
           <Route path="/cart" element={<UniversalCartPage />} />
           <Route path="/checkout" element={<UniversalCheckoutPage />} />
 
-          {/* Staff invite */}
+          {/* ── Staff invite ── */}
           <Route path="/accept-staff-invite" element={<AcceptStaffInvitePage />} />
 
-          {/* Dashboard Routes */}
+          {/* ── Dashboard ── */}
           <Route path="/dashboard" element={
             <ProtectedRoute><DashboardLayout /></ProtectedRoute>
           }>
@@ -324,7 +339,7 @@ function App() {
             <Route path="jiji" element={<JijiPage />} />
           </Route>
 
-          {/* Admin Routes */}
+          {/* ── Admin ── */}
           <Route path="/admin" element={
             <ProtectedRoute requireAdmin={true}><AdminLayout /></ProtectedRoute>
           }>
@@ -347,7 +362,7 @@ function App() {
             <Route path="jumia-settings" element={<AdminJumiaSettings />} />
           </Route>
 
-          {/* Developer Portal Routes */}
+          {/* ── Developer Portal ── */}
           <Route path="/developer" element={<Navigate to="/developer/login" replace />} />
           <Route path="/developer/signup" element={<DeveloperSignupPage />} />
           <Route path="/developer/login" element={<DeveloperLoginPage />} />
@@ -356,7 +371,6 @@ function App() {
           <Route path="/developer/reset-password" element={<DeveloperResetPasswordPage />} />
           <Route path="/developer/onboarding" element={<DeveloperOnboardingPage />} />
           <Route path="/developer/onboarding/paystack-callback" element={<PaystackConnectCallbackPage />} />
-
           <Route path="/developer/dashboard" element={<DeveloperLayout />}>
             <Route index element={<DeveloperDashboardHome />} />
             <Route path="api-keys" element={<DeveloperApiKeysPage />} />
@@ -372,17 +386,17 @@ function App() {
             <Route path="docs" element={<DeveloperDocsPage />} />
           </Route>
 
-          {/* Store Status Pages */}
+          {/* ── Store Status Pages ── */}
           <Route path="/store-closed" element={<StoreClosedPage />} />
           <Route path="/store-not-found" element={<StoreNotFoundPage />} />
           <Route path="/store-inactive" element={<StoreClosedPage />} />
 
-          {/* Store Routes — must be LAST */}
+          {/* ── Store Routes — must stay LAST (wildcard slugs) ── */}
           <Route path="/:slug" element={<StorePage />} />
           <Route path="/:slug/product/:productId" element={<ProductDetailPage />} />
           <Route path="/:slug/checkout" element={<CheckoutPage />} />
 
-          {/* Catch all */}
+          {/* ── Catch-all ── */}
           <Route path="*" element={<StoreNotFoundPage />} />
         </Routes>
       </CustomDomainRouter>
