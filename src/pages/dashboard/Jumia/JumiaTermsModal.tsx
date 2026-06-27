@@ -29,11 +29,11 @@ const SECTIONS = [
   },
   {
     title: '4. Self Drop-Off Rules (if you chose to drop off yourself)',
-    content: `If you selected self drop-off: you keep your stock at home and do not send us anything upfront. Each time an item sells, we will notify you. You must drop that specific item at your chosen Jumia VDO location within 24 hours of being notified.\n\nMissing a drop-off counts as one strike. Three strikes and your listing is permanently removed from the platform with no refund of your submission fee. This option is only recommended for sellers based in Lagos with reliable transportation.`,
+    content: `If you selected self drop-off: you keep your stock at home and do not send us anything upfront. Each time an item sells, we will notify you. You must drop that specific item at your chosen Jumia VDO location within 24 hours of being notified.\n\nMissing a drop-off counts as one strike. Three strikes and your listing is permanently removed from the platform with no refund of your submission fee. Our team contacts you directly for packaging instructions after payment is confirmed.This option is only recommended for sellers based in Lagos with reliable transportation.`,
   },
   {
     title: '5. Agent Pickup (recommended)',
-    content: `If you selected agent pickup, we collect your stock and handle every drop-off on your behalf. You will never face a 24-hour deadline or risk strikes. Our team contacts you directly for packaging instructions after payment is confirmed. This is the smoother option for most sellers.`,
+    content: `If you selected agent pickup, we collect your stock and handle every drop-off on your behalf. You will never face a 24-hour deadline or risk strikes. This is the smoother option for most sellers.`,
   },
   {
     title: '6. Platform & Jumia Fees',
