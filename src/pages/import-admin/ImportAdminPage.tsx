@@ -4,12 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingBag, LogOut, Package, Search, RefreshCw,
-  Plus, Trash2, Edit2, Check, X, ChevronDown, ChevronUp,
-  Upload, Loader, DollarSign, TrendingUp, Clock,
-  AlertCircle, ExternalLink, Copy,
+  Plus, Trash2, Edit2, Check, ChevronDown, ChevronUp,
+  Upload, Loader, TrendingUp,
+  AlertCircle, ExternalLink,
 } from 'lucide-react';
 import { compressImage } from '@/lib/imageCompression';
-import { supabase } from '@/services/supabase';
 
 import CONFIG from '@/lib/config';
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
@@ -113,15 +112,15 @@ function useImportAuth() {
 
 // ── Load Code Panel ───────────────────────────────────────────────────────────
 function LoadCodePanel({ token }: { token: string }) {
-  const [code, setCode]         = useState('');
-  const [order, setOrder]       = useState<ImportOrder | null>(null);
+  const [code, setCode]           = useState('');
+  const [order, setOrder]         = useState<ImportOrder | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError]       = useState('');
-  const [shipping, setShipping] = useState('');
-  const [note, setNote]         = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [rates, setRates]       = useState<Rates | null>(null);
-  const [expanded, setExpanded] = useState(true);
+  const [error, setError]         = useState('');
+  const [shipping, setShipping]   = useState('');
+  const [note, setNote]           = useState('');
+  const [isSaving, setIsSaving]   = useState(false);
+  const [rates, setRates]         = useState<Rates | null>(null);
+  const [expanded, setExpanded]   = useState(true);
 
   useEffect(() => {
     fetch(`${EDGE_URL}?action=rates`)
@@ -540,20 +539,21 @@ function OrdersList({ token }: { token: string }) {
 
 // ── Product Management ────────────────────────────────────────────────────────
 function ProductsManager({ token }: { token: string }) {
-  const [products, setProducts]   = useState<ImportProduct[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showForm, setShowForm]   = useState(false);
+  const [products, setProducts]     = useState<ImportProduct[]>([]);
+  const [isLoading, setIsLoading]   = useState(true);
+  const [showForm, setShowForm]     = useState(false);
   const [editProduct, setEditProduct] = useState<ImportProduct | null>(null);
-  const [rates, setRates]         = useState<Rates | null>(null);
+  const [rates, setRates]           = useState<Rates | null>(null);
 
   // Form state
-  const [name, setName]           = useState('');
-  const [description, setDesc]    = useState('');
-  const [category, setCategory]   = useState('General');
-  const [priceCny, setPriceCny]   = useState('');
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [name, setName]             = useState('');
+  const [description, setDesc]      = useState('');
+  const [category, setCategory]     = useState('General');
+  const [priceCny, setPriceCny]     = useState('');
+  const [imageFile, setImageFile]   = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState('');
-  const [isSaving, setIsSaving]   = useState(false);
+  const [isSaving, setIsSaving]     = useState(false);
+  const [saveError, setSaveError]   = useState('');
 
   // Derived NGN from CNY
   const priceNgn = rates && priceCny ? parseFloat(priceCny) * rates.cnyToNgn : 0;
@@ -582,6 +582,7 @@ function ProductsManager({ token }: { token: string }) {
     setEditProduct(null);
     setName(''); setDesc(''); setCategory('General');
     setPriceCny(''); setImageFile(null); setImagePreview('');
+    setSaveError('');
     setShowForm(true);
   };
 
@@ -590,6 +591,7 @@ function ProductsManager({ token }: { token: string }) {
     setName(p.name); setDesc(p.description); setCategory(p.category);
     setPriceCny(p.price_cny.toString());
     setImagePreview(p.image_url); setImageFile(null);
+    setSaveError('');
     setShowForm(true);
   };
 
@@ -601,20 +603,43 @@ function ProductsManager({ token }: { token: string }) {
     setImagePreview(URL.createObjectURL(compressed));
   };
 
+  // Converts the (already-compressed) file to base64 and POSTs it to the
+  // edge function, which uploads to Supabase Storage using the service role
+  // key — avoiding the anon-key RLS block that was silently killing saves.
   const uploadImage = async (file: File): Promise<string> => {
-    const ext  = file.name.split('.').pop() ?? 'webp';
-    const path = `import-products/${Date.now()}.${ext}`;
-    const { error } = await supabase.storage
-      .from('product-images')
-      .upload(path, file, { upsert: true });
-    if (error) throw error;
-    const { data } = supabase.storage.from('product-images').getPublicUrl(path);
-    return data.publicUrl;
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const base64 = (reader.result as string).split(',')[1];
+          const ext    = file.name.split('.').pop() ?? 'webp';
+
+          const res = await fetch(`${EDGE_URL}?action=upload-image`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              image_base64:  base64,
+              extension:     ext,
+              manager_token: token,
+            }),
+          });
+
+          const data = await res.json();
+          if (!res.ok || !data.url) throw new Error(data.error ?? 'Upload failed');
+          resolve(data.url);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
   };
 
   const handleSave = async () => {
     if (!name || !priceCny || (!imagePreview && !imageFile)) return;
     setIsSaving(true);
+    setSaveError('');
     try {
       let imageUrl = editProduct?.image_url ?? '';
       if (imageFile) imageUrl = await uploadImage(imageFile);
@@ -623,9 +648,9 @@ function ProductsManager({ token }: { token: string }) {
         name,
         description,
         category,
-        price_cny: parseFloat(priceCny),
-        price_ngn: Math.round(priceNgn),
-        image_url: imageUrl,
+        price_cny:     parseFloat(priceCny),
+        price_ngn:     Math.round(priceNgn),
+        image_url:     imageUrl,
         manager_token: token,
       };
 
@@ -633,17 +658,19 @@ function ProductsManager({ token }: { token: string }) {
       const body   = editProduct ? { ...payload, id: editProduct.id } : payload;
 
       const res = await fetch(`${EDGE_URL}?action=${action}`, {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body:    JSON.stringify(body),
       });
       const data = await res.json();
       if (data.success) {
         setShowForm(false);
         loadProducts();
+      } else {
+        setSaveError(data.error ?? 'Save failed');
       }
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setSaveError(e?.message ?? 'Unexpected error');
     } finally {
       setIsSaving(false);
     }
@@ -749,6 +776,14 @@ function ProductsManager({ token }: { token: string }) {
                   </div>
                 )}
               </div>
+
+              {/* Error feedback */}
+              {saveError && (
+                <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {saveError}
+                </div>
+              )}
 
               <div className="flex gap-2 pt-1">
                 <button onClick={handleSave} disabled={isSaving || !name || !priceCny}
