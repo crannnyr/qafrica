@@ -6,7 +6,7 @@ import {
   ShieldCheck, Star, Clock, Truck, CheckCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/services';
+import { supabase, orderService } from '@/services';
 import { useCustomerAuthStore } from '@/stores';
 import { STATUS_STYLES, StatusIcon } from './helpers';
 import { toast } from 'sonner';
@@ -25,26 +25,16 @@ export default function OrdersTab() {
   const fetchOrders = async () => {
     if (!customer) return;
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`
-          id, order_number, status, payment_status, total, created_at,
-          delivery_address, delivery_state, delivered_at, tracking_number,
-          shipbubble_order_id, shipbubble_tracking_url, shipbubble_status,
-          shipbubble_courier_name, is_cod_order, is_escrow_released,
-          buyer_reported_issue, has_reviewed,
-          store:stores!orders_store_id_fkey(name, slug),
-          order_items(
-            id, quantity, unit_price, total_price,
-            product:products!order_items_product_id_fkey(id, name, images),
-            original_product:products!order_items_original_product_id_fkey(id, name, images)
-          )
-        `)
-        .eq('customer_id', customer.id)
-        .order('created_at', { ascending: false });
+      // Uses edge function — bypasses RLS + FK ambiguity
+      // Returns order_items with nested product & original_product
+      const { data, error } = await orderService.getUserOrders(customer.id);
 
-      if (error) { console.error('Fetch orders error:', error); setOrders([]); }
-      else setOrders(data || []);
+      if (error) {
+        console.error('Fetch orders error:', error);
+        setOrders([]);
+      } else {
+        setOrders(data || []);
+      }
     } catch (err) {
       console.error('Failed to fetch orders:', err);
       setOrders([]);
@@ -171,6 +161,7 @@ export default function OrdersTab() {
             {orderItems.length > 0 && (
               <div className="flex gap-2 mb-3">
                 {orderItems.slice(0, 4).map((item: any, idx: number) => {
+                  // Edge fn returns item.product with { id, name, images }
                   const image = item.product?.images?.[0] ?? null;
                   return (
                     <div key={idx} className="w-11 h-11 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-100">
