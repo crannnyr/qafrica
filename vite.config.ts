@@ -21,7 +21,7 @@ export default defineConfig({
         '/login',
         '/signup',
         '/pricing',
-        '/marketplace',
+        '/marketplaces',
         '/importations',
         '/blog',
         '/blog/what-sells-best-on-jumia-2026',
