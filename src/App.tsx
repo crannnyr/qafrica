@@ -31,6 +31,7 @@ import ImportPage from '@/pages/import/ImportPage';
 import ImportAdminLogin from '@/pages/import-admin/ImportAdminLogin';
 import ImportAdminPage from '@/pages/import-admin/ImportAdminPage';
 import RecommendationsPage from '@/pages/recommendations/RecommendationsPage';
+ProductDetailPage from '@/pages/recommendations/ProductDetailPage';
 
 // Dashboard Pages
 import DashboardLayout from '@/pages/dashboard/DashboardLayout';
@@ -257,6 +258,7 @@ function App() {
           <Route path="/importations" element={<ImportPage />} />
 <Route path="/recommendations" element={<RecommendationsPage />} />
           <Route path="/importations/admin/login" element={<ImportAdminLogin />} />
+<Route path="/recommendations/:id" element={<ProductDetailPage />} />
           <Route path="/importations/admin" element={<ImportAdminPage />} />
 
           {/* Onboarding Routes */}
