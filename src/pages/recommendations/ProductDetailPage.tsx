@@ -6,7 +6,8 @@ import {
   ArrowLeft, ShoppingBag, Plus, Minus,
   Package, ExternalLink, ChevronRight, Tag,
 } from 'lucide-react';
-import { CartItem, CodeModal, ImportProduct, fmt } from './RecommendationsPage';
+import { CodeModal, fmt } from './RecommendationsPage';
+import type { CartItem, ImportProduct } from './RecommendationsPage';
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
