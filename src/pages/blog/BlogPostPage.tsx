@@ -347,7 +347,7 @@ function PostContent({ slug }: { slug: string }) {
           'Under ₦15,000 — sits firmly inside the Nigerian impulse-buy threshold',
           'Solves a problem buyers already know they have',
           'Photographable — looks compelling on a product listing',
-          'Low return rate — Jumia rewards accounts that don't generate complaints',
+          "Low return rate — Jumia rewards accounts that don't generate complaints",
         ]}
       />
 
