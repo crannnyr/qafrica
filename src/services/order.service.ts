@@ -2,6 +2,26 @@ import { supabase } from './supabase';
 import { productService } from './product.service';
 import type { Order, DropshipOrderView } from '@/types';
 
+const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-orders`;
+
+async function callGetOrders(body: Record<string, unknown>) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token ?? '';
+
+  const res = await fetch(EDGE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+
+  const json = await res.json();
+  if (!res.ok) return { data: null, error: { message: json.error ?? 'Request failed' } };
+  return { data: json.data, error: null };
+}
+
 // FIX: orders table has a legacy 'items' JSONB column that conflicts with the
 // order_items relation alias and causes a 500. We explicitly list every column
 // except 'items' so PostgREST never tries to return both.
@@ -55,89 +75,30 @@ export const orderService = {
     return { data, error };
   },
 
+  // ── FETCH METHODS — all via edge function ──────────────────────────────────
+
   async getOrder(orderId: string) {
-    const { data, error } = await supabase
-      .from('orders')
-      .select(ORDER_SELECT)
-      .eq('id', orderId)
-      .single();
-    return { data, error };
+    return callGetOrders({ mode: 'detail', order_id: orderId });
   },
 
   async getStoreOrders(storeId: string) {
-    const { data: directOrders, error: directError } = await supabase
-      .from('orders')
-      .select(ORDER_SELECT)
-      .eq('store_id', storeId)
-      .order('created_at', { ascending: false });
-
-    if (directError) return { data: null, error: directError };
-
-    const { data: dropshipRows } = await supabase
-      .from('order_items')
-      .select(`order:orders(${ORDER_SELECT})`)
-      .eq('original_store_id', storeId)
-      .eq('is_imported', true);
-
-    const allOrders = [
-      ...(directOrders || []),
-      ...(dropshipRows?.map((row: any) => row.order).filter(Boolean) || []),
-    ];
-
-    const uniqueOrders = allOrders.filter(
-      (order, index, self) => index === self.findIndex((o) => o.id === order.id)
-    );
-
-    uniqueOrders.sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-
-    return { data: uniqueOrders, error: null };
+    return callGetOrders({ mode: 'store', store_id: storeId });
   },
 
   async getDropshipOrdersForStore(storeId: string) {
-    const { data, error } = await supabase
-      .from('order_items')
-      .select(`
-        order:orders(
-          id, order_number, store_id, customer_name, customer_email,
-          customer_phone, delivery_address, delivery_state, status,
-          payment_status, created_at, tracking_number, is_escrow_released,
-          delivered_at, order_items(*)
-        ),
-        product_name, quantity, dropship_price,
-        unit_price, total_price, is_imported,
-        original_owner_id, original_store_id
-      `)
-      .eq('original_store_id', storeId)
-      .eq('is_imported', true)
-      .order('created_at', { ascending: false });
-
-    if (error) return { data: null, error };
-
-    const transformed: DropshipOrderView[] = (data || []).map((item: any) => ({
-      order_id:               item.order.id,
-      order_number:           item.order.order_number,
-      dropshipper_store_id:   item.order.store_id,
-      dropshipper_store_name: '',
-      customer_name:          item.order.customer_name,
-      customer_email:         item.order.customer_email,
-      customer_phone:         item.order.customer_phone,
-      delivery_address:       item.order.delivery_address,
-      delivery_state:         item.order.delivery_state,
-      status:                 item.order.status,
-      payment_status:         item.order.payment_status,
-      created_at:             item.order.created_at,
-      items:                  item.order.order_items,
-      total_dropship_price:   (item.dropship_price ?? 0) * item.quantity,
-      total_quantity:         item.quantity,
-      tracking_number:        item.order.tracking_number,
-      is_escrow_released:     item.order.is_escrow_released,
-      delivered_at:           item.order.delivered_at,
-    }));
-
-    return { data: transformed, error: null };
+    return callGetOrders({ mode: 'dropship', store_id: storeId });
   },
+
+  async getUserOrders(_userId: string) {
+    // userId kept for API compatibility — identity resolved from JWT in edge fn
+    return callGetOrders({ mode: 'customer' });
+  },
+
+  async getAllOrders(page = 1, limit = 50) {
+    return callGetOrders({ mode: 'admin', page, limit });
+  },
+
+  // ── WRITE METHODS — direct Supabase (unchanged) ────────────────────────────
 
   async updateDropshipOrderStatus(
     orderId: string,
@@ -162,15 +123,6 @@ export const orderService = {
       .eq('id', orderId)
       .select()
       .single();
-    return { data, error };
-  },
-
-  async getUserOrders(userId: string) {
-    const { data, error } = await supabase
-      .from('orders')
-      .select(ORDER_SELECT)
-      .eq('customer_id', userId)
-      .order('created_at', { ascending: false });
     return { data, error };
   },
 
@@ -223,13 +175,5 @@ export const orderService = {
       .select()
       .single();
     return { data, error: updateError };
-  },
-
-  async getAllOrders() {
-    const { data, error } = await supabase
-      .from('orders')
-      .select(ORDER_SELECT)
-      .order('created_at', { ascending: false });
-    return { data, error };
   },
 };
