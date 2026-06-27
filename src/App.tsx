@@ -30,6 +30,7 @@ import BlogPostPage from '@/pages/blog/BlogPostPage';
 import ImportPage from '@/pages/import/ImportPage';
 import ImportAdminLogin from '@/pages/import-admin/ImportAdminLogin';
 import ImportAdminPage from '@/pages/import-admin/ImportAdminPage';
+import RecommendationsPage from '@/pages/recommendations/RecommendationsPage';
 
 // Dashboard Pages
 import DashboardLayout from '@/pages/dashboard/DashboardLayout';
@@ -254,6 +255,7 @@ function App() {
 
           {/* China Import Routes — public, no auth needed */}
           <Route path="/importations" element={<ImportPage />} />
+<Route path="/recommendations" element={<RecommendationsPage />} />
           <Route path="/importations/admin/login" element={<ImportAdminLogin />} />
           <Route path="/importations/admin" element={<ImportAdminPage />} />
 
