@@ -3,12 +3,14 @@
 // Enforces the 10-unit minimum per variant before the parent page allows submission.
 
 import { Plus, Trash2 } from 'lucide-react';
-import type { JumiaVariant } from '@/stores/jumiaStore';
+import type { JumiaVariant, VariantType } from '@/stores/jumiaStore';
+import { variantLabel } from '@/stores/jumiaStore';
 
 const MIN_UNITS_PER_VARIANT = 10;
 
 interface Props {
   hasVariants: boolean;
+  variantType?: VariantType;
   onToggleVariants: (value: boolean) => void;
   variants: JumiaVariant[];
   onChange: (variants: JumiaVariant[]) => void;
@@ -17,17 +19,25 @@ interface Props {
 }
 
 export default function JumiaVariantInputs({
-  hasVariants, onToggleVariants, variants, onChange, singleQuantity, onSingleQuantityChange,
+  hasVariants, variantType = 'colour', onToggleVariants, variants, onChange, singleQuantity, onSingleQuantityChange,
 }: Props) {
+  const showColour = variantType === 'colour' || variantType === 'colour_size';
+  const showSize   = variantType === 'size'   || variantType === 'colour_size';
+
   const addVariant = () => onChange([
     ...variants,
-    { label: '', colour: null, size: null, quantity_sent: MIN_UNITS_PER_VARIANT, quantity_remaining: MIN_UNITS_PER_VARIANT },
+    { colour: null, size: null, quantity_sent: MIN_UNITS_PER_VARIANT, quantity_remaining: MIN_UNITS_PER_VARIANT },
   ]);
+
   const removeVariant = (i: number) => onChange(variants.filter((_, idx) => idx !== i));
-  const updateVariant = (i: number, field: 'label' | 'quantity_sent', value: string | number) => {
+
+  const updateVariant = (i: number, field: 'colour' | 'size' | 'quantity_sent', value: string | number) => {
     const next = [...variants];
-    if (field === 'label') next[i] = { ...next[i], label: value as string };
-    else next[i] = { ...next[i], quantity_sent: value as number, quantity_remaining: value as number };
+    if (field === 'quantity_sent') {
+      next[i] = { ...next[i], quantity_sent: value as number, quantity_remaining: value as number };
+    } else {
+      next[i] = { ...next[i], [field]: (value as string) || null };
+    }
     onChange(next);
   };
 
@@ -75,13 +85,24 @@ export default function JumiaVariantInputs({
         <div className="space-y-2">
           {variants.map((v, i) => (
             <div key={i} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={v.label}
-                onChange={(e) => updateVariant(i, 'label', e.target.value)}
-                placeholder="e.g. Black"
-                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm"
-              />
+              {showColour && (
+                <input
+                  type="text"
+                  value={v.colour ?? ''}
+                  onChange={(e) => updateVariant(i, 'colour', e.target.value)}
+                  placeholder="Colour (e.g. Black)"
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm"
+                />
+              )}
+              {showSize && (
+                <input
+                  type="text"
+                  value={v.size ?? ''}
+                  onChange={(e) => updateVariant(i, 'size', e.target.value)}
+                  placeholder="Size (e.g. XL)"
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm"
+                />
+              )}
               <input
                 type="number"
                 min={MIN_UNITS_PER_VARIANT}
@@ -94,6 +115,11 @@ export default function JumiaVariantInputs({
               </button>
             </div>
           ))}
+          {variants.length > 0 && (
+            <p className="text-xs text-gray-400">
+              Preview: {variants.map(v => variantLabel(v) || '…').join(', ')}
+            </p>
+          )}
           <button
             type="button"
             onClick={addVariant}
