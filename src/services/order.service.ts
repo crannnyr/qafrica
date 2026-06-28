@@ -2,24 +2,15 @@ import { supabase } from './supabase';
 import { productService } from './product.service';
 import type { Order, DropshipOrderView } from '@/types';
 
-const EDGE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-orders`;
-
+// Unified helper — uses supabase.functions.invoke so auth token is
+// handled automatically and the URL is always correct.
 async function callGetOrders(body: Record<string, unknown>) {
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token ?? '';
-
-  const res = await fetch(EDGE_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(body),
+  const { data, error } = await supabase.functions.invoke('get-orders', {
+    body,
   });
-
-  const json = await res.json();
-  if (!res.ok) return { data: null, error: { message: json.error ?? 'Request failed' } };
-  return { data: json.data, error: null };
+  if (error) return { data: null, error: { message: error.message ?? 'Request failed' } };
+  if (data?.error) return { data: null, error: { message: data.error } };
+  return { data: data?.data ?? data, error: null };
 }
 
 // FIX: orders table has a legacy 'items' JSONB column that conflicts with the
