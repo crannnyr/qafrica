@@ -17,6 +17,7 @@ import JumiaImageUpload from './Jumia/JumiaImageUpload';
 import JumiaFeeCalculator from './Jumia/JumiaFeeCalculator';
 import JumiaFeeBreakdown from './Jumia/JumiaFeeBreakdown';
 import JumiaTermsModal from './Jumia/JumiaTermsModal';
+import JumiaCategorySelect from './Jumia/JumiaCategorySelect';
 import { useJumiaFees } from './Jumia/useJumiaFees';
 import { generateJumiaLabel } from './Jumia/generateJumiaLabel';
 
@@ -227,12 +228,10 @@ function JumiaAddItemForm() {
             </div>
           )}
 
-          <div className="grid sm:grid-cols-2 gap-3">
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item name"
-              className="px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm" />
-            <input value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category (e.g. Phone Accessories)"
-              className="px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm" />
-          </div>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Item name"
+            className="w-full px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white text-sm" />
+
+          <JumiaCategorySelect value={category} onChange={setCategory} />
 
           <input type="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)}
             placeholder="Phone number — for drop-off scheduling"
