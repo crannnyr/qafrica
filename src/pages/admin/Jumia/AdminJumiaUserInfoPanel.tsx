@@ -5,11 +5,6 @@ import { User, Mail, Phone, Tag, Package2 } from 'lucide-react';
 import type { JumiaSubmission } from '@/stores/jumiaStore';
 
 export default function AdminJumiaUserInfoPanel({ submission }: { submission: JumiaSubmission }) {
-  const hasVariants = submission.variant_type !== 'none';
-
-  const totalRemaining = hasVariants
-    ? submission.variants.reduce((sum, v) => sum + v.quantity_remaining, 0)
-    : submission.quantity_remaining;
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-5">
@@ -27,8 +22,18 @@ export default function AdminJumiaUserInfoPanel({ submission }: { submission: Ju
           {submission.owner?.email && (
             <p className="flex items-center gap-2"><Mail className="w-3.5 h-3.5 text-gray-400" /> {submission.owner.email}</p>
           )}
-          {submission.owner?.phone && (
-            <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" /> {submission.owner.phone}</p>
+          {submission.contact_phone && (
+            <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-orange-400" />
+              <a href={`tel:${submission.contact_phone}`} className="text-orange-600 font-medium hover:underline">
+                {submission.contact_phone}
+              </a>
+              <span className="text-xs text-gray-400">(submission contact)</span>
+            </p>
+          )}
+          {submission.owner?.phone && submission.owner.phone !== submission.contact_phone && (
+            <p className="flex items-center gap-2"><Phone className="w-3.5 h-3.5 text-gray-400" /> {submission.owner.phone}
+              <span className="text-xs text-gray-400">(profile)</span>
+            </p>
           )}
         </div>
       </div>
@@ -47,20 +52,23 @@ export default function AdminJumiaUserInfoPanel({ submission }: { submission: Ju
 
       <div className="pt-4 border-t border-gray-100">
         <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Stock</h2>
-        {hasVariants ? (
+        {submission.variant_type !== 'none' ? (
           <div className="space-y-1.5">
-            {submission.variants.map((v) => (
-              <div key={v.label} className="flex justify-between text-sm">
-                <span className="text-gray-600">{v.label}</span>
-                <span className={`font-semibold ${v.quantity_remaining === 0 ? 'text-red-500' : 'text-gray-900'}`}>
-                  {v.quantity_remaining} / {v.quantity_sent}
-                </span>
-              </div>
-            ))}
+            {submission.variants.map((v) => {
+              const label = v.colour && v.size ? `${v.colour} / ${v.size}` : v.colour ?? v.size ?? '';
+              return (
+                <div key={label} className="flex justify-between text-sm">
+                  <span className="text-gray-600">{label}</span>
+                  <span className={`font-semibold ${v.quantity_remaining === 0 ? 'text-red-500' : 'text-gray-900'}`}>
+                    {v.quantity_remaining} / {v.quantity_sent}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <p className="text-sm">
-            <span className={`font-semibold ${totalRemaining === 0 ? 'text-red-500' : 'text-gray-900'}`}>
+            <span className={`font-semibold ${submission.quantity_remaining === 0 ? 'text-red-500' : 'text-gray-900'}`}>
               {submission.quantity_remaining}
             </span>
             <span className="text-gray-500"> / {submission.quantity_sent} remaining</span>
