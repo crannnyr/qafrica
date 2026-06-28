@@ -10,7 +10,6 @@ import { useJumiaStore, type JumiaSubmission } from '@/stores/jumiaStore';
 import { useAuthStore } from '@/stores';
 import { sendEmail } from '@/services/email';
 import { jumiaEmailTemplates } from '@/services/jumiaEmailTemplates';
-
 const APP_URL = typeof window !== 'undefined' ? window.location.origin : '';
 
 interface Props {
@@ -20,16 +19,20 @@ interface Props {
 
 export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) {
   const { user: admin } = useAuthStore();
-  const { updateSubmissionStatus, recordSale } = useJumiaStore();
-
-  const hasVariants = submission.variant_type !== 'none';
+  const { updateSubmissionStatus, recordSale, createDropoffTask, markTaskDroppedOff, markTaskMissed } = useJumiaStore();
 
   const [isWorking, setIsWorking] = useState(false);
   const [scheduleNote, setScheduleNote] = useState('');
   const [rejectReason, setRejectReason] = useState('');
-  const [variantLabel, setVariantLabel] = useState(submission.variants?.[0]?.label ?? '');
+  const [variantLabel, setVariantLabel] = useState(() => {
+    const first = submission.variants?.[0];
+    if (!first) return '';
+    return first.colour && first.size ? `${first.colour} / ${first.size}` : first.colour ?? first.size ?? '';
+  });
   const [unitsSold, setUnitsSold] = useState('');
   const [salePrice, setSalePrice] = useState(String(submission.selling_price));
+  const [lastSaleId, setLastSaleId] = useState<string | null>(null);
+  const [isSendingDropoffNotif, setIsSendingDropoffNotif] = useState(false);
 
   const ownerName = submission.owner?.full_name || 'there';
   const ownerEmail = submission.owner?.email;
@@ -96,12 +99,12 @@ export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) 
     const price = Number(salePrice);
     if (!units || units <= 0) { toast.error('Enter a valid number of units sold'); return; }
     if (!price || price <= 0) { toast.error('Enter a valid sale price'); return; }
-    if (hasVariants && !variantLabel) { toast.error('Select a variant'); return; }
+    if (submission.variant_type !== 'none' && !variantLabel) { toast.error('Select a variant'); return; }
 
     setIsWorking(true);
     const result = await recordSale({
       submission_id: submission.id,
-      variant_label: hasVariants ? variantLabel : null,
+      variant_label: submission.variant_type !== 'none' ? variantLabel : null,
       units_sold: units,
       unit_price: price,
       admin_id: admin!.id,
@@ -113,14 +116,18 @@ export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) 
     }
     toast.success(`Logged ${units} unit(s) sold — wallet credited`);
     setUnitsSold('');
+    if (result.saleId) setLastSaleId(result.saleId);
 
     if (ownerEmail) {
-      const remaining = hasVariants
-        ? (submission.variants.find((v) => v.label === variantLabel)?.quantity_remaining ?? 0) - units
+      const remaining = submission.variant_type !== 'none'
+        ? (submission.variants.find((v) => {
+            const lbl = v.colour && v.size ? `${v.colour} / ${v.size}` : v.colour ?? v.size ?? '';
+            return lbl === variantLabel;
+          })?.quantity_remaining ?? 0) - units
         : submission.quantity_remaining - units;
       const t = jumiaEmailTemplates.saleUpdate({
         name: ownerName, productName: submission.name,
-        variantLabel: hasVariants ? variantLabel : undefined,
+        variantLabel: submission.variant_type !== 'none' ? variantLabel : undefined,
         unitsSold: units, remaining: Math.max(0, remaining), appUrl: APP_URL,
       });
       await sendEmail({ to: ownerEmail, subject: t.subject, html: t.body }).catch(() => toast.error('Sale logged, but the email failed to send'));
@@ -129,6 +136,48 @@ export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) 
     setIsWorking(false);
   };
 
+  const handleSendDropoffNotification = async () => {
+    if (!lastSaleId) { toast.error('Log a sale first before sending a drop-off notification'); return; }
+    if (!ownerEmail) { toast.error('No email address for this user'); return; }
+    setIsSendingDropoffNotif(true);
+
+    const result = await createDropoffTask({
+      submission_id: submission.id,
+      sale_id: lastSaleId,
+      owner_id: submission.owner_id,
+      units: Number(unitsSold) || 1,
+      variant_label: submission.variant_type !== 'none' ? variantLabel : null,
+    });
+
+    if (!result.success || !result.task) {
+      toast.error(result.error || 'Could not create drop-off task');
+      setIsSendingDropoffNotif(false);
+      return;
+    }
+
+    const t = jumiaEmailTemplates.dropoffNotification({
+      name: ownerName,
+      productName: submission.name,
+      variantLabel: submission.variant_type !== 'none' ? variantLabel : undefined,
+      units: result.task.units,
+      strikeCount: result.strikeCount ?? 0,
+      deadlineHours: 24,
+      location: result.location
+        ? { name: result.location.name, address: result.location.address }
+        : { name: 'Your chosen VDO location', address: 'Check your original confirmation for the address.' },
+      appUrl: window.location.origin,
+    });
+
+    await sendEmail({ to: ownerEmail, subject: t.subject, html: t.body })
+      .catch(() => toast.error('Task created but email failed to send'));
+
+    toast.success('Drop-off notification sent — user has 24 hours');
+    setLastSaleId(null);
+    setIsSendingDropoffNotif(false);
+    onUpdated();
+  };
+
+  // ── render ──────────────────────────────────────────────────────────────
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-6">
       <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider">Actions</h2>
@@ -176,14 +225,17 @@ export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) 
       {['live', 'out_of_stock'].includes(submission.status) && (
         <div className="space-y-3 pt-4 border-t border-gray-100">
           <h3 className="text-sm font-bold text-gray-700">Log a Sale</h3>
-          {hasVariants && (
+          {submission.variant_type !== 'none' && (
             <select value={variantLabel} onChange={(e) => setVariantLabel(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm">
-              {submission.variants.map((v) => (
-                <option key={v.label} value={v.label} disabled={v.quantity_remaining === 0}>
-                  {v.label} ({v.quantity_remaining} left)
-                </option>
-              ))}
+              {submission.variants.map((v) => {
+                const lbl = v.colour && v.size ? `${v.colour} / ${v.size}` : v.colour ?? v.size ?? '';
+                return (
+                  <option key={lbl} value={lbl} disabled={v.quantity_remaining === 0}>
+                    {lbl} ({v.quantity_remaining} left)
+                  </option>
+                );
+              })}
             </select>
           )}
           <div className="flex gap-2">
@@ -196,6 +248,32 @@ export default function AdminJumiaActionPanel({ submission, onUpdated }: Props) 
             className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-medium hover:bg-orange-600 disabled:opacity-60">
             {isWorking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />} Log Sale & Email User
           </button>
+
+          {/* Drop-off notification — only for self-dropoff submissions */}
+          {submission.fulfillment_method === 'self_dropoff' && (
+            <div className="pt-3 border-t border-gray-100">
+              <p className="text-xs text-gray-500 mb-2">
+                {lastSaleId
+                  ? 'Sale logged. Now notify the seller to drop off within 24 hours.'
+                  : 'Log a sale above first, then send the drop-off notification.'}
+              </p>
+              <button
+                onClick={handleSendDropoffNotification}
+                disabled={isSendingDropoffNotif || !lastSaleId}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50"
+              >
+                {isSendingDropoffNotif
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Mail className="w-4 h-4" />}
+                Send Drop-off Notification (24hr deadline)
+              </button>
+              {submission.strike_count > 0 && (
+                <p className="text-xs text-red-500 mt-1.5 font-medium">
+                  ⚠ This seller has {submission.strike_count} strike{submission.strike_count > 1 ? 's' : ''} — 3 = auto-rejection
+                </p>
+              )}
+            </div>
+          )}
 
           {submission.status !== 'out_of_stock' && (
             <button onClick={handleMarkOutOfStock} disabled={isWorking}
