@@ -76,3 +76,20 @@ export const storeService = {
     return { data, error };
   },
 };
+async switchActiveStore(userId: string, storeId: string) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ active_store_id: storeId })
+    .eq('id', userId);
+  return { error };
+},
+
+async getUserStores(userId: string) {
+  const { data, error } = await supabase
+    .from('stores')
+    .select('id, name, slug, logo_url, niches, is_primary')
+    .eq('owner_id', userId)
+    .eq('is_active', true)
+    .order('is_primary', { ascending: false });
+  return { data, error };
+},
