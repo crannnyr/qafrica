@@ -7,20 +7,14 @@ export default function AdminOrders() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    loadOrders();
-  }, []);
+  useEffect(() => { loadOrders(); }, []);
 
   const loadOrders = async () => {
     setIsLoading(true);
     try {
-      // Calls edge function with mode: 'admin' — requires admin role in profiles
       const { data, error } = await orderService.getAllOrders();
-      if (error) {
-        console.error('Failed to load orders:', error);
-      } else {
-        setOrders(data || []);
-      }
+      if (error) console.error('Failed to load orders:', error);
+      else setOrders(data || []);
     } catch (err) {
       console.error('Failed to load orders:', err);
     } finally {
