@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { storeService, productService, deliveryZoneService } from '@/services';
+import { supabase } from '@/services';
 import type { Store, Product, DeliveryZone } from '@/types';
 
 interface StoreState {
@@ -9,26 +10,30 @@ interface StoreState {
   deliveryZones: DeliveryZone[];
   isLoading: boolean;
   error: string | null;
-  
+
   // Actions
   setCurrentStore: (store: Store | null) => void;
   createStore: (storeData: Partial<Store>) => Promise<{ success: boolean; data?: Store; error?: string }>;
   fetchStore: (storeId: string) => Promise<void>;
   fetchUserStore: (userId: string) => Promise<void>;
   updateStore: (storeId: string, updates: Partial<Store>) => Promise<{ success: boolean; error?: string }>;
-  
+
+  // Multi-store
+  getUserStores: (userId: string) => Promise<Store[]>;
+  switchActiveStore: (storeId: string) => Promise<void>;
+
   // Products
   fetchProducts: (storeId: string) => Promise<void>;
   addProduct: (productData: Partial<Product>) => Promise<{ success: boolean; error?: string }>;
   updateProduct: (productId: string, updates: Partial<Product>) => Promise<{ success: boolean; error?: string }>;
   deleteProduct: (productId: string) => Promise<{ success: boolean; error?: string }>;
-  
+
   // Delivery Zones
   fetchDeliveryZones: (storeId: string) => Promise<void>;
   addDeliveryZone: (zoneData: Partial<DeliveryZone>) => Promise<{ success: boolean; error?: string }>;
   updateDeliveryZone: (zoneId: string, updates: Partial<DeliveryZone>) => Promise<{ success: boolean; error?: string }>;
   deleteDeliveryZone: (zoneId: string) => Promise<{ success: boolean; error?: string }>;
-  
+
   clearError: () => void;
   reset: () => void;
 }
@@ -48,7 +53,7 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { data, error } = await storeService.createStore(storeData);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return { success: false, error: error.message };
@@ -67,7 +72,7 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { data, error } = await storeService.getStore(storeId);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return;
@@ -84,7 +89,7 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { data, error } = await storeService.getUserStore(userId);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return;
@@ -101,7 +106,7 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { data, error } = await storeService.updateStore(storeId, updates);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return { success: false, error: error.message };
@@ -116,11 +121,45 @@ export const useStoreStore = create<StoreState>()(
         }
       },
 
-      // Products
+      // ── Multi-store ────────────────────────────────────────────────────────
+
+      getUserStores: async (userId) => {
+        try {
+          const { data, error } = await supabase
+            .from('stores')
+            .select('*')
+            .eq('owner_id', userId)
+            .order('created_at', { ascending: true });
+
+          if (error || !data) return [];
+          return data as Store[];
+        } catch {
+          return [];
+        }
+      },
+
+      switchActiveStore: async (storeId) => {
+        try {
+          const { data, error } = await supabase
+            .from('stores')
+            .select('*')
+            .eq('id', storeId)
+            .single();
+
+          if (!error && data) {
+            set({ currentStore: data as Store, products: [], deliveryZones: [] });
+          }
+        } catch {
+          // silently fail — reload will re-fetch from persisted currentStore
+        }
+      },
+
+      // ── Products ───────────────────────────────────────────────────────────
+
       fetchProducts: async (storeId) => {
         try {
           const { data, error } = await productService.getStoreProducts(storeId);
-          
+
           if (error) {
             console.error('Failed to fetch products:', error);
             return;
@@ -136,15 +175,15 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { data, error } = await productService.createProduct(productData);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return { success: false, error: error.message };
           }
 
-          set((state) => ({ 
+          set((state) => ({
             products: [data as Product, ...state.products],
-            isLoading: false 
+            isLoading: false,
           }));
           return { success: true };
         } catch (err) {
@@ -158,17 +197,17 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { data, error } = await productService.updateProduct(productId, updates);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return { success: false, error: error.message };
           }
 
           set((state) => ({
-            products: state.products.map((p) => 
+            products: state.products.map((p) =>
               p.id === productId ? { ...p, ...data } as Product : p
             ),
-            isLoading: false
+            isLoading: false,
           }));
           return { success: true };
         } catch (err) {
@@ -182,7 +221,7 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { error } = await productService.deleteProduct(productId);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return { success: false, error: error.message };
@@ -190,7 +229,7 @@ export const useStoreStore = create<StoreState>()(
 
           set((state) => ({
             products: state.products.filter((p) => p.id !== productId),
-            isLoading: false
+            isLoading: false,
           }));
           return { success: true };
         } catch (err) {
@@ -200,11 +239,12 @@ export const useStoreStore = create<StoreState>()(
         }
       },
 
-      // Delivery Zones
+      // ── Delivery Zones ─────────────────────────────────────────────────────
+
       fetchDeliveryZones: async (storeId) => {
         try {
           const { data, error } = await deliveryZoneService.getStoreZones(storeId);
-          
+
           if (error) {
             console.error('Failed to fetch delivery zones:', error);
             return;
@@ -220,15 +260,15 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { data, error } = await deliveryZoneService.createZone(zoneData);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return { success: false, error: error.message };
           }
 
-          set((state) => ({ 
+          set((state) => ({
             deliveryZones: [...state.deliveryZones, data as DeliveryZone],
-            isLoading: false 
+            isLoading: false,
           }));
           return { success: true };
         } catch (err) {
@@ -242,17 +282,17 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { data, error } = await deliveryZoneService.updateZone(zoneId, updates);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return { success: false, error: error.message };
           }
 
           set((state) => ({
-            deliveryZones: state.deliveryZones.map((z) => 
+            deliveryZones: state.deliveryZones.map((z) =>
               z.id === zoneId ? { ...z, ...data } as DeliveryZone : z
             ),
-            isLoading: false
+            isLoading: false,
           }));
           return { success: true };
         } catch (err) {
@@ -266,7 +306,7 @@ export const useStoreStore = create<StoreState>()(
         set({ isLoading: true, error: null });
         try {
           const { error } = await deliveryZoneService.deleteZone(zoneId);
-          
+
           if (error) {
             set({ isLoading: false, error: error.message });
             return { success: false, error: error.message };
@@ -274,7 +314,7 @@ export const useStoreStore = create<StoreState>()(
 
           set((state) => ({
             deliveryZones: state.deliveryZones.filter((z) => z.id !== zoneId),
-            isLoading: false
+            isLoading: false,
           }));
           return { success: true };
         } catch (err) {
