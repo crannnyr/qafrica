@@ -26,27 +26,28 @@ const PERMISSION_COLUMNS =
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout }              = useAuthStore();
-  const { currentStore, fetchUserStore } = useStoreStore();
+  const { user, logout }                                        = useAuthStore();
+  const { currentStore, fetchUserStore, getUserStores, switchActiveStore } = useStoreStore();
 
   // ── UI state ───────────────────────────────────────────────────────────────
-  const [isSidebarOpen, setIsSidebarOpen]       = useState(true);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen]         = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen]   = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showProfileMenu, setShowProfileMenu]   = useState(false);
-  const [comingSoonBrand, setComingSoonBrand]   = useState<MarketplaceBrand | null>(null);
+  const [showProfileMenu, setShowProfileMenu]     = useState(false);
+  const [comingSoonBrand, setComingSoonBrand]     = useState<MarketplaceBrand | null>(null);
 
   // ── Data state ─────────────────────────────────────────────────────────────
-  const [stockAlerts, setStockAlerts]           = useState<StockAlert[]>([]);
-  const [subscription, setSubscription]         = useState<{ tier: string; daysLeft: number } | null>(null);
-  const [domainRequest, setDomainRequest]       = useState<{
+  const [stockAlerts, setStockAlerts]                     = useState<StockAlert[]>([]);
+  const [subscription, setSubscription]                   = useState<{ tier: string; daysLeft: number } | null>(null);
+  const [domainRequest, setDomainRequest]                 = useState<{
     admin_approved: boolean; status: string; domain_name: string;
   } | null>(null);
-  const [pendingDropshipCount, setPendingDropshipCount] = useState(0);
+  const [pendingDropshipCount, setPendingDropshipCount]   = useState(0);
+  const [stores, setStores]                               = useState<typeof currentStore[]>([]);
 
   // Staff's actual granted permissions, fetched from their store_staff row.
   // null while loading / not yet known — treated as "no access" by staffCanAccess until populated.
-  const [staffPermissions, setStaffPermissions] = useState<Record<PermissionKey, boolean> | null>(null);
+  const [staffPermissions, setStaffPermissions]           = useState<Record<PermissionKey, boolean> | null>(null);
   const [staffPermissionsLoaded, setStaffPermissionsLoaded] = useState(false);
 
   const isStaff = user?.role === 'staff';
@@ -57,6 +58,7 @@ export default function DashboardLayout() {
       fetchUserStore(user.id);
       loadStockAlerts();
       fetchSubscriptionStatus();
+      getUserStores(user.id).then((result) => setStores(result ?? []));
     }
   }, [user?.id, fetchUserStore]);
 
@@ -205,6 +207,11 @@ export default function DashboardLayout() {
     navigate('/login');
   };
 
+  const handleStoreSwitch = async (storeId: string) => {
+    await switchActiveStore(storeId);
+    window.location.reload();
+  };
+
   // ── Helpers ────────────────────────────────────────────────────────────────
   const isActive = (path: string) =>
     path === '/dashboard'
@@ -296,6 +303,7 @@ export default function DashboardLayout() {
         <DashboardHeader
           user={user}
           currentStore={currentStore}
+          stores={stores}
           currentLabel={currentLabel}
           isSidebarOpen={isSidebarOpen}
           stockAlerts={stockAlerts}
@@ -315,6 +323,7 @@ export default function DashboardLayout() {
           onMarkAlertRead={handleMarkAlertRead}
           onMarkAllRead={handleMarkAllRead}
           onLogout={handleLogout}
+          onStoreSwitch={handleStoreSwitch}
         />
 
         {/* Scrollable content */}
