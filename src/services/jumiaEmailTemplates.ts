@@ -141,4 +141,72 @@ export const jumiaEmailTemplates = {
       ${ctaButton(`${params.appUrl}/dashboard/jumia/add`, 'Submit Another Item')}
     `),
   }),
+
+  // Sent when admin triggers a drop-off notification for a self-dropoff submission.
+  // Auto-includes VDO location name, address, landmark, hours from the DB row.
+  dropoffNotification: (params: {
+    name: string;
+    productName: string;
+    variantLabel?: string;
+    units: number;
+    strikeCount: number;
+    deadlineHours: number;
+    location: { name: string; address: string };
+    appUrl: string;
+  }) => ({
+    subject: `⚡ Action Required — Drop off ${params.productName} within ${params.deadlineHours} hours`,
+    body: wrapCard(`
+      <p style="margin:0 0 8px;font-size:26px;font-weight:800;color:#111827;">
+        Time to drop it off, ${params.name}
+      </p>
+      <p style="margin:0 0 20px;font-size:16px;color:#6B7280;line-height:1.6;">
+        A sale just came in for <strong style="color:#111827;">${params.productName}${params.variantLabel ? ` (${params.variantLabel})` : ''}</strong>.
+        You need to drop off <strong style="color:#F97316;">${params.units} unit${params.units > 1 ? 's' : ''}</strong> at your Jumia VDO location within <strong style="color:#EF4444;">${params.deadlineHours} hours</strong>.
+      </p>
+
+      <div style="height:2px;background:linear-gradient(to right,#F97316,#FED7AA);border-radius:2px;margin-bottom:24px;"></div>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFF7ED;border-radius:12px;margin-bottom:20px;">
+        <tr><td style="padding:16px 20px;">
+          <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#F97316;text-transform:uppercase;letter-spacing:0.5px;">Your Drop-off Location</p>
+          <p style="margin:0 0 6px;font-size:15px;font-weight:800;color:#111827;">${params.location.name}</p>
+          <p style="margin:0;font-size:13px;color:#374151;line-height:1.6;">${params.location.address}</p>
+        </td></tr>
+      </table>
+
+      <div style="background:#FEF2F2;border-left:4px solid #EF4444;border-radius:0 10px 10px 0;padding:14px 18px;margin-bottom:24px;">
+        <p style="margin:0;font-size:14px;color:#991B1B;line-height:1.6;">
+          <strong>⏰ Deadline: ${params.deadlineHours} hours from now.</strong>
+          Missing this drop-off counts as <strong>Strike ${params.strikeCount + 1}</strong>.
+          ${params.strikeCount + 1 >= 3
+            ? 'This is your final strike — missing it will permanently remove this listing.'
+            : `You currently have ${params.strikeCount} strike${params.strikeCount !== 1 ? 's' : ''}. 3 missed drop-offs and the listing is removed.`
+          }
+        </p>
+      </div>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+        <tr><td style="padding:8px 0;border-bottom:1px solid #F3F4F6;">
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="width:28px;font-size:14px;color:#F97316;">1.</td>
+            <td style="font-size:14px;color:#374151;line-height:1.5;">Ensure your item is <strong>properly sealed and packaged</strong> before going.</td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #F3F4F6;">
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="width:28px;font-size:14px;color:#F97316;">2.</td>
+            <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>Print and attach your shipping label</strong> to the outside of the package. Download it from your Jumia dashboard if needed.</td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:8px 0;">
+          <table cellpadding="0" cellspacing="0"><tr>
+            <td style="width:28px;font-size:14px;color:#F97316;">3.</td>
+            <td style="font-size:14px;color:#374151;line-height:1.5;">Head to the VDO location above during opening hours and drop off your package.</td>
+          </tr></table>
+        </td></tr>
+      </table>
+
+      ${ctaButton(`${params.appUrl}/dashboard/jumia`, 'View My Jumia Dashboard')}
+    `),
+  }),
 };
