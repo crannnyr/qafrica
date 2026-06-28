@@ -8,7 +8,6 @@ import { supabase } from '@/services';
 export type VariantType = 'none' | 'colour' | 'size' | 'colour_size';
 
 export interface JumiaVariant {
-  label: string;
   colour: string | null;
   size: string | null;
   quantity_sent: number;
@@ -18,7 +17,6 @@ export interface JumiaVariant {
 // Auto-generates the display label used for sale logging and stock matching.
 // Must match the server-side label generation in record_jumia_sale RPC.
 export function variantLabel(v: JumiaVariant): string {
-  if (v.label) return v.label;
   if (v.colour && v.size) return `${v.colour} / ${v.size}`;
   if (v.colour) return v.colour;
   if (v.size) return v.size;
@@ -110,7 +108,6 @@ export interface JumiaDropoffTask {
   admin_note: string | null;
   created_at: string;
 }
-
 export interface JumiaWithdrawalRequest {
   id: string;
   amount: number;
@@ -131,6 +128,7 @@ interface JumiaStore {
   transactions: JumiaWalletTransaction[];
   withdrawalRequests: JumiaWithdrawalRequest[];
   allWithdrawalRequests: (JumiaWithdrawalRequest & { user?: { full_name: string; email: string } })[];
+  dropoffTasks: JumiaDropoffTask[];
   isLoading: boolean;
 
   fetchSubmissions: (userId: string) => Promise<void>;
@@ -141,6 +139,16 @@ interface JumiaStore {
   fetchTransactions: (userId: string) => Promise<void>;
   fetchWithdrawalRequests: (userId: string) => Promise<void>;
   fetchAllWithdrawalRequests: () => Promise<void>;
+  createDropoffTask: (params: {
+    submission_id: string;
+    sale_id: string;
+    owner_id: string;
+    units: number;
+    variant_label: string | null;
+  }) => Promise<{ success: boolean; task?: JumiaDropoffTask; location?: JumiaDropOffLocation; strikeCount?: number; error?: string }>;
+  markTaskDroppedOff: (taskId: string) => Promise<{ success: boolean; error?: string }>;
+  markTaskMissed: (taskId: string, adminId: string) => Promise<{ success: boolean; newStrikeCount?: number; autoRejected?: boolean; error?: string }>;
+  fetchUserDropoffTasks: (userId: string) => Promise<void>;
   createSubmission: (payload: Partial<JumiaSubmission>) => Promise<{ success: boolean; id?: string; error?: string }>;
   uploadSubmissionImages: (userId: string, files: File[]) => Promise<{ success: boolean; urls?: string[]; error?: string }>;
   updateSubmissionStatus: (id: string, updates: Partial<JumiaSubmission>) => Promise<{ success: boolean; error?: string }>;
@@ -160,6 +168,7 @@ export const useJumiaStore = create<JumiaStore>((set, get) => ({
   transactions: [],
   withdrawalRequests: [],
   allWithdrawalRequests: [],
+  dropoffTasks: [] as JumiaDropoffTask[],
   isLoading: false,
 
   fetchSubmissions: async (userId) => {
@@ -295,6 +304,80 @@ export const useJumiaStore = create<JumiaStore>((set, get) => ({
     });
     if (error) return { success: false, error: error.message };
     return { success: true, saleId: data as string };
+  },
+
+  fetchUserDropoffTasks: async (userId) => {
+    const { data, error } = await supabase
+      .from('jumia_dropoff_tasks')
+      .select('*')
+      .eq('owner_id', userId)
+      .order('created_at', { ascending: false });
+    if (!error) set({ dropoffTasks: (data as JumiaDropoffTask[]) || [] });
+  },
+
+  // Admin creates a task after logging a sale on a self-dropoff submission.
+  // Returns the task, the VDO location (for the email), and current strike count.
+  createDropoffTask: async ({ submission_id, sale_id, owner_id, units, variant_label }) => {
+    // Fetch submission to get VDO location + strike count
+    const { data: sub, error: subError } = await supabase
+      .from('jumia_submissions')
+      .select('drop_off_location_id, strike_count')
+      .eq('id', submission_id)
+      .single();
+    if (subError || !sub) return { success: false, error: 'Submission not found' };
+
+    const notifiedAt = new Date();
+    const deadlineAt = new Date(notifiedAt.getTime() + 24 * 60 * 60 * 1000);
+
+    const { data: task, error: taskError } = await supabase
+      .from('jumia_dropoff_tasks')
+      .insert({
+        submission_id, sale_id, owner_id,
+        vdo_location_id: sub.drop_off_location_id,
+        status: 'notified',
+        notified_at: notifiedAt.toISOString(),
+        deadline_at: deadlineAt.toISOString(),
+        units, variant_label,
+      })
+      .select('*')
+      .single();
+    if (taskError) return { success: false, error: taskError.message };
+
+    // Fetch VDO location for email
+    let location: JumiaDropOffLocation | undefined;
+    if (sub.drop_off_location_id) {
+      const { data: loc } = await supabase
+        .from('jumia_drop_off_locations')
+        .select('*')
+        .eq('id', sub.drop_off_location_id)
+        .single();
+      if (loc) location = loc as JumiaDropOffLocation;
+    }
+
+    return { success: true, task: task as JumiaDropoffTask, location, strikeCount: sub.strike_count };
+  },
+
+  markTaskDroppedOff: async (taskId) => {
+    const { error } = await supabase
+      .from('jumia_dropoff_tasks')
+      .update({ status: 'dropped_off', completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', taskId);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  markTaskMissed: async (taskId, adminId) => {
+    const { data, error } = await supabase.rpc('mark_jumia_dropoff_missed', {
+      p_task_id: taskId,
+      p_admin_id: adminId,
+    });
+    if (error) return { success: false, error: error.message };
+    return {
+      success: data?.success ?? false,
+      newStrikeCount: data?.new_strike_count,
+      autoRejected: data?.auto_rejected,
+      error: data?.error,
+    };
   },
 
   submitWithdrawal: async ({ user_id, amount, bank_name, account_number, account_name }) => {
