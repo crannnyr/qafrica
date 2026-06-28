@@ -1,12 +1,14 @@
 // src/pages/dashboard/Layout/DashboardHeader.tsx
 
 import { Link } from 'react-router-dom';
-import { Menu, ChevronLeft, Store } from 'lucide-react';
+import { Menu, ChevronLeft, Store, ChevronDown } from 'lucide-react';
 import NotificationDropdown from './NotificationDropdown';
 import ProfileDropdown from './ProfileDropdown';
 import type { StockAlert } from '@/types';
 
 interface Store_ {
+  id?: string;
+  name?: string;
   logo_url?: string;
   slug?: string;
   custom_domain?: string;
@@ -21,6 +23,7 @@ interface User {
 interface Props {
   user: User | null;
   currentStore: Store_ | null;
+  stores: Store_[];
   currentLabel: string;
   isSidebarOpen: boolean;
   stockAlerts: StockAlert[];
@@ -34,11 +37,13 @@ interface Props {
   onMarkAlertRead: (id: string) => void;
   onMarkAllRead: () => void;
   onLogout: () => void;
+  onStoreSwitch: (storeId: string) => void;
 }
 
 export default function DashboardHeader({
   user,
   currentStore,
+  stores,
   currentLabel,
   isSidebarOpen,
   stockAlerts,
@@ -52,6 +57,7 @@ export default function DashboardHeader({
   onMarkAlertRead,
   onMarkAllRead,
   onLogout,
+  onStoreSwitch,
 }: Props) {
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 z-30">
@@ -81,6 +87,25 @@ export default function DashboardHeader({
           <h1 className="text-base font-semibold text-gray-900 dark:text-white hidden sm:block">
             {currentLabel}
           </h1>
+
+          {/* Store switcher — only visible when user has more than 1 store */}
+          {stores.length > 1 && (
+            <div className="relative hidden sm:flex items-center">
+              <Store className="absolute left-2.5 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              <ChevronDown className="absolute right-2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+              <select
+                value={currentStore?.id ?? ''}
+                onChange={(e) => onStoreSwitch(e.target.value)}
+                className="pl-7 pr-7 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-600 rounded-lg appearance-none cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400"
+              >
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name ?? s.slug ?? s.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Right: notifications + profile + view store */}
