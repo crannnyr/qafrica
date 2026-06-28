@@ -9,7 +9,7 @@ import { subscribeToOrders, subscribeToStockAlerts, subscribeToWalletUpdates } f
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import ModalNotificationDisplay from '@/components/ModalNotificationDisplay';
 import { toast } from 'sonner';
-import type { StockAlert } from '@/types';
+import type { StockAlert, Store } from '@/types';
 import type { PermissionKey } from '@/lib/staffPermissions';
 
 import Sidebar from './Layout/Sidebar';
@@ -43,7 +43,7 @@ export default function DashboardLayout() {
     admin_approved: boolean; status: string; domain_name: string;
   } | null>(null);
   const [pendingDropshipCount, setPendingDropshipCount]   = useState(0);
-  const [stores, setStores]                               = useState<typeof currentStore[]>([]);
+  const [stores, setStores]                               = useState<Store[]>([]);
 
   // Staff's actual granted permissions, fetched from their store_staff row.
   // null while loading / not yet known — treated as "no access" by staffCanAccess until populated.
