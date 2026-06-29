@@ -1,4 +1,4 @@
-// src/pages/landing/Landing/HeroSection.tsx
+// src/pages/landing/HeroSection.tsx
 
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -47,9 +47,9 @@ export default function HeroSection({
               </NudgeWord>
               <br />
               <FlipText
-                first="It's giving sales."
+                first="It's giving profit."
                 second="Dropshippers' hub."
-                third="Your business buddy."
+                third="Genz business model."
                 className="text-gray-400 dark:text-gray-500"
               />
             </motion.h1>
@@ -61,7 +61,7 @@ export default function HeroSection({
               transition={{ duration: 0.5, delay: 0.9 }}
               className="text-base text-gray-400 dark:text-gray-500 mb-10 max-w-sm leading-relaxed"
             >
-              Dropship products and access ready-made promo content
+              Sell your products or dropship products and access ready-made promo content
               from sellers' group chats. Grow your retailer base — all on QAFRICA.
             </motion.p>
 
