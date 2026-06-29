@@ -2,7 +2,7 @@
 // Static educational content. No data dependencies, safe to build standalone.
 
 import { Link } from 'react-router-dom';
-import { ArrowLeft, MapPin, TrendingUp, Package, AlertCircle } from 'lucide-react';
+import { ArrowLeft, MapPin, TrendingUp, Package, AlertCircle, Globe } from 'lucide-react';
 
 const SOURCING_TIPS = [
   {
@@ -33,11 +33,22 @@ export default function JumiaHowToScalePage() {
         <Link to="/dashboard/jumia" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-3">
           <ArrowLeft className="w-4 h-4" /> Back to Jumia
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">How to Scale on Jumia Locally</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">How to Scale on Jumia</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
           Practical advice for sourcing products and growing steadily with this model.
         </p>
       </div>
+
+      {/* NEW IMPORTATIONS LINK BANNER */}
+      <Link 
+        to="/importations"
+        className="flex items-center gap-3 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-900/30 rounded-xl p-4 transition-colors hover:bg-blue-100 dark:hover:bg-blue-500/20"
+      >
+        <Globe className="w-5 h-5 text-blue-500 flex-shrink-0" />
+        <p className="text-sm text-blue-800 dark:text-blue-300">
+          Want to get cheap items from china? We also help you do that <span className="font-bold underline cursor-pointer">click here</span>
+        </p>
+      </Link>
 
       <div className="bg-orange-50 dark:bg-orange-500/10 border border-orange-100 dark:border-orange-900/30 rounded-xl p-4 flex gap-3">
         <AlertCircle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
