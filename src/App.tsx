@@ -36,6 +36,9 @@ import ImportAdminPage from '@/pages/import-admin/ImportAdminPage';
 import RecommendationsPage from '@/pages/recommendations/RecommendationsPage';
 import RecommendationsProductDetailPage from '@/pages/recommendations/ProductDetailPage';
 
+// Marketplace Pages
+import MarketplacePage from '@/pages/MarketplacePage';
+
 // Dashboard Pages
 import DashboardLayout from '@/pages/dashboard/DashboardLayout';
 import DashboardHome from '@/pages/dashboard/DashboardHome';
@@ -64,7 +67,7 @@ import CouponsPage from '@/pages/dashboard/CouponsPage';
 import StoreTemplatesPage from '@/pages/dashboard/StoreTemplatesPage';
 import NicheCustomizationPage from '@/pages/dashboard/NicheCustomizationPage';
 
-// Marketplace Pages
+// Marketplace Dashboard Pages
 import JumiaPage from '@/pages/dashboard/JumiaPage';
 import JumiaAddItemPage from '@/pages/dashboard/JumiaAddItemPage';
 import JumiaDropOffLocationsPage from '@/pages/dashboard/JumiaDropOffLocationsPage';
@@ -268,13 +271,7 @@ function App() {
           <Route path="/recommendations/:id" element={<RecommendationsProductDetailPage />} />
 
           {/* ── Marketplace landing — public funnel from blog CTAs ── */}
-          {/*
-            /marketplaces is referenced by all Jumia / Konga / Jiji blog CTAs.
-            Point this route at whichever page you want as the marketplace
-            funnel entry point (e.g. a dedicated MarketplacesPage, or reuse
-            ImportPage temporarily). Swap the element below when ready.
-          */}
-          <Route path="/marketplaces" element={<ImportPage />} />
+          <Route path="/marketplaces" element={<MarketplacePage />} />
 
           {/* ── Onboarding ── */}
           <Route path="/select-niche" element={
