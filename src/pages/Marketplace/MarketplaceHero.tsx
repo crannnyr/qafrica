@@ -1,8 +1,9 @@
 // src/pages/Marketplace/MarketplaceHero.tsx
 
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowRight, ShoppingBag, BookOpen } from 'lucide-react';
+import { motion, useReducedMotion, AnimatePresence } from 'framer-motion';
+import { ArrowRight, ShoppingBag, BookOpen, X, Globe, Package, Store, Zap, Users } from 'lucide-react';
 
 const JUMIA_LOGO = 'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.09368732789771816.webp';
 const KONGA_LOGO = 'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.14995787725112708.webp';
@@ -22,6 +23,7 @@ const stats = [
 
 export default function MarketplaceHero() {
   const prefersReducedMotion = useReducedMotion();
+  const [showModal, setShowModal] = useState(false);
 
   return (
     <>
@@ -127,10 +129,21 @@ export default function MarketplaceHero() {
               </a>
             </div>
 
-            <p className="text-[11px] text-gray-400">
+            {/* Free to list line */}
+            <p className="text-[11px] text-gray-400 mb-3">
               <span className="text-green-600 font-semibold">✓ Free to list</span>
               {' '}· We only earn when you sell · Cancel anytime
             </p>
+
+            {/* Blinking Website & Dropshipping button */}
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-orange-500 text-orange-600 font-bold text-sm transition-all hover:bg-orange-50"
+              style={{ animation: 'blink-border 1.4s ease-in-out infinite' }}
+            >
+              <Globe className="w-4 h-4" />
+              Website & Dropshipping
+            </button>
           </motion.div>
 
           {/* ── RIGHT: Flow diagram ── */}
@@ -140,18 +153,13 @@ export default function MarketplaceHero() {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="relative flex flex-col items-center pb-8 lg:py-14"
           >
-            {/* BG glow */}
             <div
               className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full pointer-events-none"
               style={{ background: 'radial-gradient(circle, #FFF7ED 0%, transparent 70%)' }}
             />
 
-            {/* ── Live order toast — now INSIDE flow, above platform cards ── */}
-            {/* Rendered inline, not absolute, so it never clips off-screen */}
-
             <div className="relative z-10 flex flex-col items-center w-full max-w-[340px]">
 
-              {/* Vendor node */}
               <div
                 className="w-full bg-white border border-gray-200 rounded-2xl px-4 py-3.5 flex items-center gap-3"
                 style={{ boxShadow: '0 2px 16px rgba(0,0,0,0.07)' }}
@@ -166,7 +174,6 @@ export default function MarketplaceHero() {
                 </span>
               </div>
 
-              {/* Arrow + warehouse badge */}
               <div className="flex flex-col items-center">
                 <div className="w-0.5 h-6" style={{ background: 'linear-gradient(to bottom, #E2E8F0, #F97316)' }} />
                 <div
@@ -179,7 +186,6 @@ export default function MarketplaceHero() {
                 <div style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '7px solid #F97316' }} />
               </div>
 
-              {/* Hub */}
               <div className="relative my-1">
                 {!prefersReducedMotion && (
                   <div
@@ -198,7 +204,6 @@ export default function MarketplaceHero() {
                 </div>
               </div>
 
-              {/* Arrow + delivery badge */}
               <div className="flex flex-col items-center">
                 <div className="w-0.5 h-6" style={{ background: 'linear-gradient(to bottom, #F97316, #E2E8F0)' }} />
                 <div
@@ -211,7 +216,6 @@ export default function MarketplaceHero() {
                 <div style={{ width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: '7px solid #F97316' }} />
               </div>
 
-              {/* Platform cards */}
               <div className="flex gap-2 justify-center mt-1 w-full">
                 {platforms.map((p, i) => (
                   <motion.div
@@ -233,10 +237,7 @@ export default function MarketplaceHero() {
                 ))}
               </div>
 
-              {/* ── Toasts: inline below diagram, visible on all screens ── */}
               <div className="flex flex-col gap-2 w-full mt-4">
-
-                {/* Live order toast */}
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -251,7 +252,6 @@ export default function MarketplaceHero() {
                   </div>
                 </motion.div>
 
-                {/* Restock alert toast */}
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -265,7 +265,6 @@ export default function MarketplaceHero() {
                     <p className="text-[10px] text-gray-400 mt-0.5">Ankara Bags — 3 units left · Kano seller</p>
                   </div>
                 </motion.div>
-
               </div>
             </div>
           </motion.div>
@@ -273,7 +272,148 @@ export default function MarketplaceHero() {
         </div>
       </section>
 
-      <style>{`@keyframes hubSpin { to { transform: rotate(360deg); } }`}</style>
+      {/* ── MODAL ── */}
+      <AnimatePresence>
+        {showModal && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowModal(false)}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50"
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 20 }}
+              animate={{ opacity: 1, scale: 1,    y: 0  }}
+              exit={{   opacity: 0, scale: 0.92, y: 20  }}
+              transition={{ duration: 0.25 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
+
+                {/* Modal header */}
+                <div className="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-5 flex items-center justify-between sticky top-0 z-10">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-5 h-5 text-white" />
+                    <h2 className="text-white font-bold text-lg">Website & Dropshipping</h2>
+                  </div>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="text-white/70 hover:text-white transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Modal body */}
+                <div className="px-6 py-5 space-y-5">
+                  
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    You are about to be routed to our <strong className="text-gray-900">Store Owner section</strong> where you get access to:
+                  </p>
+
+                  {/* ── NEW HIGHLIGHTED NOTE BANNER ── */}
+                  <div className="relative overflow-hidden bg-orange-50 border border-orange-100 rounded-xl p-4 shadow-sm">
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500" />
+                    <h3 className="text-sm font-bold text-orange-800 flex items-center gap-2 mb-1.5">
+                      <span className="text-base">🚀</span> Multiply Your Sales
+                    </h3>
+                    <p className="text-xs text-orange-700/90 leading-relaxed">
+                      Set a special <strong>Dropshipping Price</strong> (a discount margin) for your products. Then, connect your <strong>WhatsApp or Telegram group link</strong>. When dropshippers want to resell your items, they join your group to get your contact and share your products to other platforms — bringing you effortless sales!
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Feature 1 */}
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-gray-50 text-gray-600">
+                        <Store className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Your Own Website</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Get a full storefront — buy and connect your own custom domain.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Feature 2 */}
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-blue-50 text-blue-600">
+                        <Package className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Dropshipping Network</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          List your products so other store owners can import and sell them for you across their own websites.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Feature 3 */}
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-purple-50 text-purple-600">
+                        <Users className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">
+                          Group Chat & Reseller Community
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                          Automate your communication by funneling interested resellers directly into your community chats.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Feature 4 */}
+                    <div className="flex items-start gap-3">
+                      <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-green-50 text-green-600">
+                        <Zap className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">Push to Jumia, Konga & Jiji</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Sync your products directly to Nigeria's top marketplaces.{' '}
+                          <strong className="text-gray-700">Requires an active subscription.</strong>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal footer */}
+                <div className="px-6 pb-6 flex items-center gap-3">
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="flex-1 py-3 rounded-xl border-2 border-gray-200 text-gray-600 font-semibold text-sm hover:border-gray-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <Link
+                    to="/store-owners"
+                    onClick={() => setShowModal(false)}
+                    className="flex-1 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-sm text-center transition-colors flex items-center justify-center gap-2"
+                  >
+                    Continue
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      <style>{`
+        @keyframes hubSpin { to { transform: rotate(360deg); } }
+        @keyframes blink-border {
+          0%, 100% { border-color: #f97316; box-shadow: 0 0 0 0 rgba(249,115,22,0); }
+          50%       { border-color: #ea580c; box-shadow: 0 0 0 4px rgba(249,115,22,0.2); }
+        }
+      `}</style>
     </>
   );
 }
