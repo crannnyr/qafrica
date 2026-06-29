@@ -24,6 +24,18 @@ function getContrastColor(hex: string): string {
   return luminance > 0.55 ? '#000000' : '#ffffff';
 }
 
+// ── Detect variant format ─────────────────────────────────────────────────────
+// Format A (QAfrica standard): [{name: "Size", options: ["M", "L", "XL"]}]
+// Format B (legacy Optimal):   [{id, sku, price, stock, options: {Size: "L"}}]
+// "Type" in Optimal = sizes. After our DB migration all products are Format A.
+function isFormatA(variants: any[]): boolean {
+  return (
+    variants.length > 0 &&
+    typeof variants[0].name === 'string' &&
+    Array.isArray(variants[0].options)
+  );
+}
+
 // ── Collapsible description ───────────────────────────────────────────────────
 function CollapsibleDescription({
   text,
@@ -121,6 +133,7 @@ export default function ProductDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
+  // selectedVariantData is only used for Format B (legacy) products that have per-variant price/stock
   const [selectedVariantData, setSelectedVariantData] = useState<ProductVariant | null>(null);
   const [showDropshipModal, setShowDropshipModal] = useState(false);
 
@@ -144,14 +157,29 @@ export default function ProductDetailPage() {
     if (slug && productId) loadData();
   }, [slug, productId]);
 
+  // FIX: Only run selectedVariantData logic for Format B products.
+  // Format A products (all imported from Optimal) have no per-variant price/stock
+  // so setting selectedVariantData to a Format A object caused getCurrentPrice()
+  // to return undefined → white screen crash on .toLocaleString().
   useEffect(() => {
-    if (product?.has_variants && product.variants && selectedVariants) {
-      const match = product.variants.find(v =>
-        Object.entries(selectedVariants).every(([k, val]) => v.options[k] === val)
-      );
-      setSelectedVariantData(match || null);
+    if (!product?.has_variants || !product.variants?.length) return;
+    if (isFormatA(product.variants as any[])) {
+      // Format A: no per-variant price/stock — selectedVariantData stays null
+      setSelectedVariantData(null);
       setQuantity(1);
+      return;
     }
+    // Format B (legacy): find matching combination only when all options are selected
+    const variantNames = getVariantNamesB(product.variants as any[]);
+    const allSelected = variantNames.length > 0 &&
+      variantNames.every(n => selectedVariants[n]);
+    if (!allSelected) { setSelectedVariantData(null); return; }
+
+    const match = (product.variants as any[]).find((v: any) =>
+      Object.entries(selectedVariants).every(([k, val]) => v.options[k] === val)
+    );
+    setSelectedVariantData(match || null);
+    setQuantity(1);
   }, [selectedVariants, product]);
 
   const loadData = async () => {
@@ -195,49 +223,104 @@ export default function ProductDetailPage() {
     setIsLoading(false);
   };
 
-  const getVariantOptions = (name: string) => {
-    if (!product?.variants) return [];
+  // ── Format B helpers (legacy — kept for any remaining Format B products) ──
+  function getVariantNamesB(variants: any[]): string[] {
+    if (!variants?.length) return [];
+    return Object.keys(variants[0].options || {});
+  }
+
+  function getVariantOptionsB(variants: any[], name: string): string[] {
     const opts = new Set<string>();
-    product.variants.forEach(v => { if (v.options[name]) opts.add(v.options[name]); });
+    variants.forEach((v: any) => { if (v.options?.[name]) opts.add(v.options[name]); });
     return Array.from(opts);
-  };
+  }
 
-  const getVariantNames = () => {
+  // ── Format A helpers (QAfrica standard — all imported Optimal products) ──
+  function getVariantNamesA(variants: any[]): string[] {
+    return variants.map((v: any) => v.name).filter(Boolean);
+  }
+
+  function getVariantOptionsA(variants: any[], name: string): string[] {
+    const v = variants.find((v: any) => v.name === name);
+    if (!v) return [];
+    // options is already a string[] in Format A
+    return Array.isArray(v.options) ? v.options.map(String) : [];
+  }
+
+  // ── Unified helpers ────────────────────────────────────────────────────────
+  const getVariantNames = (): string[] => {
     if (!product?.variants?.length) return [];
-    return Object.keys(product.variants[0].options);
+    const v = product.variants as any[];
+    return isFormatA(v) ? getVariantNamesA(v) : getVariantNamesB(v);
   };
 
+  const getVariantOptions = (name: string): string[] => {
+    if (!product?.variants?.length) return [];
+    const v = product.variants as any[];
+    return isFormatA(v) ? getVariantOptionsA(v, name) : getVariantOptionsB(v, name);
+  };
+
+  // FIX: getCurrentPrice now safely handles Format A products (no per-variant price).
+  // Falls through to importRecord → product.selling_price instead of returning undefined.
   const getCurrentPrice = (): number => {
-    if (selectedVariantData) return selectedVariantData.price;
+    // Format B only: per-variant price
+    if (selectedVariantData && typeof (selectedVariantData as any).price === 'number') {
+      return (selectedVariantData as any).price;
+    }
+    // Import catalog overrides
     if (importRecord?.custom_selling_price != null) return importRecord.custom_selling_price;
     if (importRecord?.selling_price != null) return importRecord.selling_price;
-    return product?.selling_price || 0;
+    // Product base price — coerce to number defensively
+    return Number(product?.selling_price) || 0;
   };
 
+  // FIX: getCurrentStock likewise — Format A has no per-variant stock.
   const getCurrentStock = (): number => {
-    if (product?.has_variants && selectedVariantData) return selectedVariantData.stock;
-    return product?.stock_quantity || 0;
+    if (selectedVariantData && typeof (selectedVariantData as any).stock === 'number') {
+      return (selectedVariantData as any).stock;
+    }
+    return Number(product?.stock_quantity) || 0;
   };
 
   const handleAddToCart = (variantOverride?: Record<string, string>, qtyOverride?: number): boolean => {
     if (!product || !store) return false;
     const qty = qtyOverride ?? quantity;
     const variants = variantOverride ?? selectedVariants;
+    const v = product.variants as any[] | undefined;
+    const formatA = v?.length ? isFormatA(v) : false;
 
-    if (product.has_variants && product.variants?.length) {
+    if (product.has_variants && v?.length) {
       const variantNames = getVariantNames();
-      if (variantNames.length !== Object.keys(variants).length) {
-        toast.error('Please select all variant options'); return false;
+
+      // Ensure all options are selected
+      if (variantNames.length !== Object.keys(variants).length ||
+          variantNames.some(n => !variants[n])) {
+        toast.error('Please select all options'); return false;
       }
-      const match = product.variants.find(v =>
-        Object.entries(variants).every(([k, val]) => v.options[k] === val)
-      );
-      if (!match) { toast.error('Variant combination not available'); return false; }
-      if (match.stock < qty) { toast.error(`Only ${match.stock} items available`); return false; }
-      addItem(product, store, qty, variants, match.price);
+
+      if (formatA) {
+        // Format A: no per-variant stock check (use product stock)
+        if (getCurrentStock() < qty) {
+          toast.error(`Only ${getCurrentStock()} items available`); return false;
+        }
+        const resolvedPrice = getCurrentPrice();
+        addItem(product, store, qty, variants, resolvedPrice);
+      } else {
+        // Format B: find exact combination
+        const match = v.find((variant: any) =>
+          Object.entries(variants).every(([k, val]) => variant.options[k] === val)
+        );
+        if (!match) { toast.error('Variant combination not available'); return false; }
+        if (match.stock < qty) { toast.error(`Only ${match.stock} items available`); return false; }
+        addItem(product, store, qty, variants, match.price);
+      }
     } else {
-      if (product.stock_quantity < qty) { toast.error(`Only ${product.stock_quantity} available`); return false; }
-      const resolvedPrice = importRecord?.custom_selling_price ?? importRecord?.selling_price ?? product.selling_price;
+      if (getCurrentStock() < qty) {
+        toast.error(`Only ${getCurrentStock()} available`); return false;
+      }
+      const resolvedPrice = importRecord?.custom_selling_price
+        ?? importRecord?.selling_price
+        ?? Number(product.selling_price);
       addItem(product, store, qty, undefined, resolvedPrice);
     }
 
@@ -274,7 +357,7 @@ export default function ProductDetailPage() {
   const handleBuyNowConfirm = () => {
     if (!product) return;
     if (getVariantNames().length !== Object.keys(buyNowVariants).length) {
-      toast.error('Please select all variant options'); return;
+      toast.error('Please select all options'); return;
     }
     const success = handleAddToCart(buyNowVariants, buyNowQty);
     if (success) { setShowBuyNowModal(false); navigate(`/${slug}/checkout`); }
@@ -348,7 +431,6 @@ export default function ProductDetailPage() {
               enableZoom
               className="w-full"
             />
-            {/* ── Main image watermark badge ── */}
             <div className="absolute bottom-0 right-0 px-2.5 py-1 pointer-events-none z-10 bg-white">
               <span className="text-[9px] font-bold tracking-widest uppercase text-black">
                 {store.name}
@@ -393,12 +475,15 @@ export default function ProductDetailPage() {
 
             <hr className="border-gray-100" />
 
-            {/* Variant selector */}
+            {/* Variant selector — works for both Format A and Format B */}
             {product.has_variants && variantNames.length > 0 && (
               <div className="space-y-4">
                 {variantNames.map(name => (
                   <div key={name}>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{name}</p>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                      {/* "Type" from Optimal = sizes — show "Size" in UI */}
+                      {name.toLowerCase() === 'type' ? 'Size' : name}
+                    </p>
                     <div className="flex flex-wrap gap-2">
                       {getVariantOptions(name).map(option => (
                         <button
@@ -533,7 +618,6 @@ export default function ProductDetailPage() {
                         {related.name.charAt(0)}
                       </div>
                     )}
-                    {/* ── Related product watermark badge ── */}
                     <div className="absolute bottom-0 right-0 px-2 py-0.5 pointer-events-none bg-white">
                       <span className="text-[7px] font-bold tracking-widest uppercase text-black">
                         {store.name}
@@ -542,7 +626,7 @@ export default function ProductDetailPage() {
                   </div>
                   <p className="text-sm font-medium text-gray-800 line-clamp-1 mb-0.5">{related.name}</p>
                   <p className="text-sm font-bold" style={{ color: primary }}>
-                    ₦{related.selling_price.toLocaleString()}
+                    ₦{Number(related.selling_price).toLocaleString()}
                   </p>
                 </Link>
               ))}
@@ -558,10 +642,9 @@ export default function ProductDetailPage() {
         </div>
       </footer>
 
-      {/* ── Dropship modal ── */}
       <DropshipModal open={showDropshipModal} onClose={() => setShowDropshipModal(false)} />
 
-      {/* ── Buy Now variant modal ── */}
+      {/* ── Buy Now modal ── */}
       <AnimatePresence>
         {showBuyNowModal && product && (
           <>
@@ -596,7 +679,7 @@ export default function ProductDetailPage() {
                   {getVariantNames().map(name => (
                     <div key={name}>
                       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                        {name}
+                        {name.toLowerCase() === 'type' ? 'Size' : name}
                         {!buyNowVariants[name] && <span className="ml-2 text-orange-400 normal-case font-normal">required</span>}
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -622,17 +705,13 @@ export default function ProductDetailPage() {
                 <div className="mb-6">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Quantity</p>
                   <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => setBuyNowQty(q => Math.max(1, q - 1))}
-                      className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 transition"
-                    >
+                    <button onClick={() => setBuyNowQty(q => Math.max(1, q - 1))}
+                      className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 transition">
                       <Minus className="w-3.5 h-3.5 text-gray-600" />
                     </button>
                     <span className="w-10 text-center text-sm font-semibold">{buyNowQty}</span>
-                    <button
-                      onClick={() => setBuyNowQty(q => q + 1)}
-                      className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 transition"
-                    >
+                    <button onClick={() => setBuyNowQty(q => q + 1)}
+                      className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 transition">
                       <Plus className="w-3.5 h-3.5 text-gray-600" />
                     </button>
                   </div>
