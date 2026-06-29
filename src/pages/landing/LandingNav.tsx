@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import DarkModeToggle from '@/components/DarkModeToggle';
 
 interface Props {
-  isScrolled:       boolean;
-  isMobileMenuOpen: boolean;
-  logoBoxVisible:   boolean;
-  navLogoBoxRef:    React.RefObject<HTMLDivElement | null>;
+  isScrolled:         boolean;
+  isMobileMenuOpen:   boolean;
+  logoBoxVisible:     boolean;
+  navLogoBoxRef:      React.RefObject<HTMLDivElement | null>;
   onToggleMobileMenu: () => void;
   onScrollToSection:  (id: string) => void;
 }
@@ -78,6 +78,23 @@ export default function LandingNav({
               className="text-gray-600 dark:text-gray-300 hover:text-orange-600 transition-colors text-sm"
             >
               Blog
+            </Link>
+
+            {/* NEW: China Importation */}
+            <Link
+              to="/importations"
+              className="text-gray-600 dark:text-gray-300 hover:text-orange-600 transition-colors text-sm flex items-center gap-1"
+            >
+              🇨🇳 China Importation
+            </Link>
+
+            {/* NEW: Marketplaces — colourful to grab attention */}
+            <Link
+              to="/marketplaces"
+              className="text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-1.5 text-white transition-opacity hover:opacity-90"
+              style={{ background: 'linear-gradient(135deg, #FF6600, #C8202F)' }}
+            >
+              Jumia · Konga · Jiji
             </Link>
           </div>
 
@@ -163,6 +180,25 @@ export default function LandingNav({
                 className="block py-2.5 px-3 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-orange-50 hover:text-orange-600 transition-colors text-sm"
               >
                 Blog
+              </Link>
+
+              {/* NEW: China Importation */}
+              <Link
+                to="/importations"
+                onClick={onToggleMobileMenu}
+                className="block py-2.5 px-3 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-orange-50 hover:text-orange-600 transition-colors text-sm"
+              >
+                🇨🇳 China Importation
+              </Link>
+
+              {/* NEW: Marketplaces */}
+              <Link
+                to="/marketplaces"
+                onClick={onToggleMobileMenu}
+                className="block py-2.5 px-3 rounded-lg text-sm font-semibold text-white"
+                style={{ background: 'linear-gradient(135deg, #FF6600, #C8202F)' }}
+              >
+                🏪 Jumia · Konga · Jiji
               </Link>
 
               <hr className="border-gray-100 dark:border-gray-800 my-2" />
