@@ -114,21 +114,25 @@ export default function ProductDetailPage() {
 
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
 
-  // Fetch if we didn't get state
+  // Always fetch the full product list on mount so "also like" is never empty
+  // when navigating between detail pages. If we already have the product from
+  // navigation state we keep showing it instantly while the fetch runs in bg.
   useEffect(() => {
-    if (!product || allProducts.length === 0) {
-      setIsLoading(true);
-      fetch(`${EDGE_URL}?action=products`)
-        .then(r => r.json())
-        .then(d => {
-          const list: ImportProduct[] = d.products ?? [];
-          setAllProducts(list);
+    if (!product) setIsLoading(true);
+
+    fetch(`${EDGE_URL}?action=products`)
+      .then(r => r.json())
+      .then(d => {
+        const list: ImportProduct[] = d.products ?? [];
+        setAllProducts(list);
+        // Update product too in case we navigated here without state
+        if (!product) {
           const found = list.find(p => p.id === id);
           if (found) setProduct(found);
-        })
-        .catch(() => {})
-        .finally(() => setIsLoading(false));
-    }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIsLoading(false));
 
     fetch(`${EDGE_URL}?action=rates`)
       .then(r => r.json())
