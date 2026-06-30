@@ -53,6 +53,13 @@ function ImageGallery({ images, name }: { images: string[]; name: string }) {
   const [active, setActive] = useState(0);
   const list = images.length > 0 ? images : [];
 
+  // Reset active image whenever the gallery's underlying image set changes
+  // (e.g. when navigating to a different product), otherwise `active` could
+  // point past the end of a shorter image list.
+  useEffect(() => {
+    setActive(0);
+  }, [images]);
+
   if (list.length === 0) return null;
 
   return (
@@ -114,22 +121,42 @@ export default function ProductDetailPage() {
 
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
 
-  // Always fetch the full product list on mount so "also like" is never empty
-  // when navigating between detail pages. If we already have the product from
-  // navigation state we keep showing it instantly while the fetch runs in bg.
+  // Keep `product`/`allProducts` in sync with the route whenever `id` or the
+  // navigation `state` changes. This is what makes "you may also like" clicks
+  // (which navigate to the same component instance, just with a new id/state)
+  // show the new product immediately instead of waiting on a reload or the
+  // background fetch below to resolve.
   useEffect(() => {
-    if (!product) setIsLoading(true);
+    if (location.state?.product && location.state.product.id === id) {
+      setProduct(location.state.product);
+      setIsLoading(false);
+    } else if (!product || product.id !== id) {
+      // No matching state for this id yet — show a loading state until the
+      // background fetch (below) resolves and finds it in allProducts.
+      setProduct(null);
+      setIsLoading(true);
+    }
 
+    if (location.state?.products?.length) {
+      setAllProducts(location.state.products);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, location.state]);
+
+  // Always fetch the full product list on mount/id-change so "also like" is
+  // never empty, and so we can resolve the product when we navigated here
+  // without usable state (e.g. direct link, browser back/forward, refresh).
+  useEffect(() => {
     fetch(`${EDGE_URL}?action=products`)
       .then(r => r.json())
       .then(d => {
         const list: ImportProduct[] = d.products ?? [];
         setAllProducts(list);
-        // Update product too in case we navigated here without state
-        if (!product) {
+        setProduct(prev => {
+          if (prev && prev.id === id) return prev;
           const found = list.find(p => p.id === id);
-          if (found) setProduct(found);
-        }
+          return found ?? prev;
+        });
       })
       .catch(() => {})
       .finally(() => setIsLoading(false));
@@ -258,7 +285,7 @@ export default function ProductDetailPage() {
           {/* Collapsible description */}
           {product.description && (
             <div className="mb-4">
-              <Description text={product.description} />
+              <Description key={product.id} text={product.description} />
             </div>
           )}
 
