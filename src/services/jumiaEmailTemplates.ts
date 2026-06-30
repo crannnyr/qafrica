@@ -60,6 +60,30 @@ const ctaButton = (href: string, label: string) => `
     </tr>
   </table>`;
 
+const divider = `<div style="height:2px;background:linear-gradient(to right,#F97316,#FED7AA);border-radius:2px;margin-bottom:28px;"></div>`;
+
+// Numbered step row, matches storeCreatedTemplate's circular-badge step list
+const stepRow = (icon: string, html: string, isLast = false) => `
+  <tr>
+    <td style="padding:12px 0;${isLast ? '' : 'border-bottom:1px solid #F3F4F6;'}">
+      <table cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="width:36px;height:36px;background:#FFF7ED;border-radius:50%;text-align:center;vertical-align:middle;font-size:16px;">${icon}</td>
+          <td style="padding-left:14px;font-size:14px;color:#374151;line-height:1.5;">${html}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>`;
+
+// Orange-tinted stat box, used for highlighting a single key number (e.g. price, units, balance)
+const statBox = (label: string, value: string) => `
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFF7ED;border-radius:12px;margin-bottom:24px;">
+    <tr><td style="padding:16px 20px;">
+      <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#F97316;text-transform:uppercase;letter-spacing:0.5px;">${label}</p>
+      <p style="margin:0;font-size:22px;font-weight:800;color:#111827;">${value}</p>
+    </td></tr>
+  </table>`;
+
 export const jumiaEmailTemplates = {
   // Sent when admin marks a submission as live on Jumia
   nowLive: (params: { name: string; productName: string; appUrl: string }) => ({
@@ -70,10 +94,13 @@ export const jumiaEmailTemplates = {
         Your item <strong style="color:#111827;">${params.productName}</strong> has been received,
         approved, and is now <strong style="color:#F97316;">live on Jumia</strong>. Customers can buy it right now.
       </p>
-      <div style="height:2px;background:linear-gradient(to right,#F97316,#FED7AA);border-radius:2px;margin-bottom:28px;"></div>
-      <p style="margin:0 0 24px;font-size:14px;color:#374151;line-height:1.6;">
-        We'll keep you updated daily on sales. Track everything from your Jumia dashboard.
-      </p>
+      ${divider}
+      <p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#111827;">🚀 What happens next</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+        ${stepRow('👀', '<strong style="color:#111827;">Your listing goes live</strong> on Jumia\'s marketplace, visible to millions of shoppers')}
+        ${stepRow('📦', '<strong style="color:#111827;">When it sells</strong>, we\'ll notify you and walk you through getting it dropped off or picked up')}
+        ${stepRow('💰', '<strong style="color:#111827;">Your earnings land</strong> in your Jumia wallet, ready to withdraw once payout conditions are met', true)}
+      </table>
       ${ctaButton(`${params.appUrl}/dashboard/jumia`, 'View My Jumia Dashboard')}
     `),
   }),
@@ -83,16 +110,30 @@ export const jumiaEmailTemplates = {
     subject: `📦 Jumia sold ${params.unitsSold} unit(s) of ${params.productName}`,
     body: wrapCard(`
       <p style="margin:0 0 8px;font-size:26px;font-weight:800;color:#111827;">You made a sale! 💰</p>
-      <p style="margin:0 0 20px;font-size:16px;color:#6B7280;line-height:1.6;">
-        Jumia sold <strong style="color:#F97316;">${params.unitsSold} unit(s)</strong> of
+      <p style="margin:0 0 24px;font-size:16px;color:#6B7280;line-height:1.6;">
+        Jumia sold units of
         <strong style="color:#111827;">${params.productName}${params.variantLabel ? ` (${params.variantLabel})` : ''}</strong> today.
       </p>
-      <div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 10px 10px 0;padding:16px 20px;margin-bottom:28px;">
-        <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">
-          <strong style="color:#F97316;">Remaining stock:</strong> ${params.remaining} unit(s).
-          ${params.remaining <= 0 ? 'This item is now out of stock — request a restock from your dashboard.' : ''}
+      ${divider}
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+        <tr>
+          <td width="50%" style="padding-right:8px;">
+            ${statBox('Units Sold', `${params.unitsSold}`)}
+          </td>
+          <td width="50%" style="padding-left:8px;">
+            ${statBox('Remaining Stock', `${params.remaining}`)}
+          </td>
+        </tr>
+      </table>
+      ${params.remaining <= 0 ? `
+      <div style="background:#FEF2F2;border-left:4px solid #EF4444;border-radius:0 10px 10px 0;padding:16px 20px;margin-bottom:28px;">
+        <p style="margin:0;font-size:14px;color:#991B1B;line-height:1.6;">
+          <strong>This item is now out of stock.</strong> Request a restock from your dashboard to keep selling.
         </p>
-      </div>
+      </div>` : `
+      <p style="margin:0 0 28px;font-size:14px;color:#374151;line-height:1.6;">
+        Your earnings from this sale have been credited to your Jumia wallet.
+      </p>`}
       ${ctaButton(`${params.appUrl}/dashboard/jumia/wallet`, 'View Jumia Wallet')}
     `),
   }),
@@ -102,10 +143,17 @@ export const jumiaEmailTemplates = {
     subject: `⚠️ ${params.productName} is out of stock on Jumia`,
     body: wrapCard(`
       <p style="margin:0 0 8px;font-size:26px;font-weight:800;color:#111827;">Time to restock, ${params.name}</p>
-      <p style="margin:0 0 28px;font-size:16px;color:#6B7280;line-height:1.6;">
+      <p style="margin:0 0 24px;font-size:16px;color:#6B7280;line-height:1.6;">
         <strong style="color:#111827;">${params.productName}</strong> has sold out on Jumia.
-        Send us at least 10 more units of the same item to keep selling.
+        Send us more units of the same item to keep selling and avoid losing momentum on this listing.
       </p>
+      ${divider}
+      <p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#111827;">📋 How to restock</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+        ${stepRow('1', '<strong style="color:#111827;">Request a restock</strong> from your Jumia dashboard — minimum 10 units of the same item')}
+        ${stepRow('2', '<strong style="color:#111827;">Drop off or schedule pickup</strong> the same way you did for the original submission')}
+        ${stepRow('3', '<strong style="color:#111827;">We\'ll notify you</strong> once it\'s back live on Jumia', true)}
+      </table>
       ${ctaButton(`${params.appUrl}/dashboard/jumia/add`, 'Request Restock')}
     `),
   }),
@@ -115,14 +163,28 @@ export const jumiaEmailTemplates = {
     subject: `📍 Drop-off details ready for ${params.productName}`,
     body: wrapCard(`
       <p style="margin:0 0 8px;font-size:26px;font-weight:800;color:#111827;">You're ready to send it in, ${params.name}</p>
-      <p style="margin:0 0 20px;font-size:16px;color:#6B7280;line-height:1.6;">
+      <p style="margin:0 0 24px;font-size:16px;color:#6B7280;line-height:1.6;">
         ${params.method === 'self_dropoff'
           ? 'Here are your drop-off details for'
           : 'Our agent will pick up'} <strong style="color:#111827;">${params.productName}</strong>.
       </p>
-      <div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 10px 10px 0;padding:16px 20px;margin-bottom:28px;">
-        <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">${params.note}</p>
-      </div>
+      ${divider}
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFF7ED;border-radius:12px;margin-bottom:24px;">
+        <tr><td style="padding:16px 20px;">
+          <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#F97316;text-transform:uppercase;letter-spacing:0.5px;">
+            ${params.method === 'self_dropoff' ? 'Drop-off Details' : 'Pickup Details'}
+          </p>
+          <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">${params.note}</p>
+        </td></tr>
+      </table>
+      <p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#111827;">✅ Before you go</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+        ${stepRow('1', '<strong style="color:#111827;">Package it securely</strong> — make sure the item is sealed and protected')}
+        ${stepRow('2', '<strong style="color:#111827;">Attach your shipping label</strong>, downloadable from your Jumia dashboard')}
+        ${stepRow('3', params.method === 'self_dropoff'
+          ? '<strong style="color:#111827;">Head to your assigned location</strong> during opening hours'
+          : '<strong style="color:#111827;">Be available</strong> at the pickup time and location confirmed above', true)}
+      </table>
       ${ctaButton(`${params.appUrl}/dashboard/jumia`, 'View My Jumia Dashboard')}
     `),
   }),
@@ -132,12 +194,19 @@ export const jumiaEmailTemplates = {
     subject: `${params.productName} wasn't approved by Jumia`,
     body: wrapCard(`
       <p style="margin:0 0 8px;font-size:26px;font-weight:800;color:#111827;">Hi ${params.name},</p>
-      <p style="margin:0 0 20px;font-size:16px;color:#6B7280;line-height:1.6;">
+      <p style="margin:0 0 24px;font-size:16px;color:#6B7280;line-height:1.6;">
         Unfortunately <strong style="color:#111827;">${params.productName}</strong> wasn't approved by Jumia.
       </p>
+      ${divider}
       <div style="background:#FEF2F2;border-left:4px solid #EF4444;border-radius:0 10px 10px 0;padding:16px 20px;margin-bottom:28px;">
-        <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;"><strong>Reason:</strong> ${params.reason}</p>
+        <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#EF4444;text-transform:uppercase;letter-spacing:0.5px;">Reason</p>
+        <p style="margin:0;font-size:14px;color:#374151;line-height:1.6;">${params.reason}</p>
       </div>
+      <p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#111827;">🔄 What you can do</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+        ${stepRow('1', '<strong style="color:#111827;">Review the reason above</strong> and adjust your item or listing details accordingly')}
+        ${stepRow('2', '<strong style="color:#111827;">Resubmit</strong> the corrected item from your Jumia dashboard', true)}
+      </table>
       ${ctaButton(`${params.appUrl}/dashboard/jumia/add`, 'Submit Another Item')}
     `),
   }),
@@ -164,7 +233,7 @@ export const jumiaEmailTemplates = {
         You need to drop off <strong style="color:#F97316;">${params.units} unit${params.units > 1 ? 's' : ''}</strong> at your Jumia VDO location within <strong style="color:#EF4444;">${params.deadlineHours} hours</strong>.
       </p>
 
-      <div style="height:2px;background:linear-gradient(to right,#F97316,#FED7AA);border-radius:2px;margin-bottom:24px;"></div>
+      ${divider}
 
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#FFF7ED;border-radius:12px;margin-bottom:20px;">
         <tr><td style="padding:16px 20px;">
@@ -185,25 +254,11 @@ export const jumiaEmailTemplates = {
         </p>
       </div>
 
+      <p style="margin:0 0 16px;font-size:18px;font-weight:700;color:#111827;">✅ Before you go</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-        <tr><td style="padding:8px 0;border-bottom:1px solid #F3F4F6;">
-          <table cellpadding="0" cellspacing="0"><tr>
-            <td style="width:28px;font-size:14px;color:#F97316;">1.</td>
-            <td style="font-size:14px;color:#374151;line-height:1.5;">Ensure your item is <strong>properly sealed and packaged</strong> before going.</td>
-          </tr></table>
-        </td></tr>
-        <tr><td style="padding:8px 0;border-bottom:1px solid #F3F4F6;">
-          <table cellpadding="0" cellspacing="0"><tr>
-            <td style="width:28px;font-size:14px;color:#F97316;">2.</td>
-            <td style="font-size:14px;color:#374151;line-height:1.5;"><strong>Print and attach your shipping label</strong> to the outside of the package. Download it from your Jumia dashboard if needed.</td>
-          </tr></table>
-        </td></tr>
-        <tr><td style="padding:8px 0;">
-          <table cellpadding="0" cellspacing="0"><tr>
-            <td style="width:28px;font-size:14px;color:#F97316;">3.</td>
-            <td style="font-size:14px;color:#374151;line-height:1.5;">Head to the VDO location above during opening hours and drop off your package.</td>
-          </tr></table>
-        </td></tr>
+        ${stepRow('1', 'Ensure your item is <strong style="color:#111827;">properly sealed and packaged</strong> before going.')}
+        ${stepRow('2', '<strong style="color:#111827;">Print and attach your shipping label</strong> to the outside of the package. Download it from your Jumia dashboard if needed.')}
+        ${stepRow('3', 'Head to the VDO location above during opening hours and drop off your package.', true)}
       </table>
 
       ${ctaButton(`${params.appUrl}/dashboard/jumia`, 'View My Jumia Dashboard')}
