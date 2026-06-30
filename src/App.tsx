@@ -10,6 +10,7 @@ import ScrollToTop from '@/components/ScrollToTop';
 
 // Pages
 import LandingPage from '@/pages/landing/LandingPage';
+import StoreOwnersPage from '@/pages/landing/StoreOwnersPage';
 import LoginPage from '@/pages/auth/LoginPage';
 import SignupPage from '@/pages/auth/SignupPage';
 import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage';
@@ -250,6 +251,7 @@ function App() {
         <Routes>
           {/* ── Public Routes ── */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/store-owners" element={<StoreOwnersPage />} />
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
