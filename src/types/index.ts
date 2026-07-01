@@ -79,6 +79,11 @@ export interface StoreOwner extends User {
   block_reason?: string;
   onboarding_step?: number;
   onboarding_completed?: boolean;
+  // Jumia seller intent fields
+  signup_intent?: 'store' | 'jumia';
+  jumia_referral_source?: 'tiktok' | 'instagram' | 'friend' | null;
+  jumia_goal?: 'has_goods' | 'needs_sourcing' | null;
+  has_seen_jumia_intro?: boolean;
 }
 
 // ============================================
