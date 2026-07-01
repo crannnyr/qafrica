@@ -10,7 +10,7 @@ import {
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
-const WHATSAPP_NUMBER = '2348166888001';
+const WHATSAPP_NUMBER = '2349069149803';
 const MIN_QTY = 20;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
