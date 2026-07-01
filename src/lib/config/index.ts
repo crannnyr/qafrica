@@ -22,7 +22,7 @@ export const CONFIG = {
   },
   
   // Paystack
-  PAYSTACK_PUBLIC_KEY: 'pk_test_07abb96718985968696bbbbc3bcd5f9f943c040d',
+  PAYSTACK_PUBLIC_KEY: 'pk_live_1129941b7ea653fcbd4e1042663fcb0e57957860',
   
   // Resend Email
   RESEND_API_KEY: 're_2xf4TkfF_3k9sS22aaFRh98RM4j9zgvoL',
