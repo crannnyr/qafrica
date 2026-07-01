@@ -16,7 +16,7 @@ interface AuthState {
   error: string | null;
 
   setUser: (user: StoreOwner | null) => void;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; onboardingIncomplete?: boolean; currentStep?: number }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; onboardingIncomplete?: boolean; currentStep?: number; intent?: string }>;
   signup: (email: string, password: string, userData: Partial<User>) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   fetchProfile: () => Promise<void>;
@@ -81,7 +81,7 @@ export const useAuthStore = create<AuthState>()(
               return { success: true, onboardingIncomplete: true, currentStep };
             }
 
-            return { success: true };
+            return { success: true, intent: profile.signup_intent ?? 'store' };
           }
 
           set({ isLoading: false });
