@@ -75,6 +75,7 @@ import JumiaAddItemPage from '@/pages/dashboard/JumiaAddItemPage';
 import JumiaDropOffLocationsPage from '@/pages/dashboard/JumiaDropOffLocationsPage';
 import JumiaWalletPage from '@/pages/dashboard/JumiaWalletPage';
 import JumiaHowToScalePage from '@/pages/dashboard/JumiaHowToScalePage';
+import JumiaItemDetailPage from '@/pages/dashboard/Jumia/JumiaItemDetailPage';
 import KongaPage from '@/pages/dashboard/KongaPage';
 import JijiPage from '@/pages/dashboard/JijiPage';
 
@@ -336,6 +337,7 @@ function App() {
             <Route path="jumia/locations" element={<JumiaDropOffLocationsPage />} />
             <Route path="jumia/wallet" element={<JumiaWalletPage />} />
             <Route path="jumia/how-to-scale" element={<JumiaHowToScalePage />} />
+            <Route path="jumia/items/:id" element={<JumiaItemDetailPage />} />
             <Route path="konga" element={<KongaPage />} />
             <Route path="jiji" element={<JijiPage />} />
           </Route>
