@@ -13,6 +13,7 @@ import JumiaDropoffTaskCard from './Jumia/JumiaDropoffTaskCard';
 import { generateJumiaLabel } from './Jumia/generateJumiaLabel';
 
 type Tab = 'items' | 'dropoffs';
+const LOW_STOCK_THRESHOLD = 5;
 
 function JumiaOverview() {
   const { user } = useAuthStore();
@@ -47,6 +48,12 @@ function JumiaOverview() {
 
   const submissionNameFor = (task: typeof dropoffTasks[0]) =>
     submissions.find((s) => s.id === task.submission_id)?.name ?? 'Item';
+
+  // Remaining stock for a submission, whether flat or variant-based — used for the low-stock badge.
+  const remainingFor = (s: typeof submissions[0]) =>
+    s.variant_type !== 'none' && s.variants?.length
+      ? s.variants.reduce((sum, v) => sum + v.quantity_remaining, 0)
+      : s.quantity_remaining;
 
   return (
     <div className="space-y-6">
@@ -162,29 +169,46 @@ function JumiaOverview() {
             </div>
           ) : (
             <div className="divide-y divide-gray-100 dark:divide-gray-700">
-              {recentSubmissions.map((s) => (
-                <motion.div key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors">
-                  <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl overflow-hidden flex-shrink-0">
-                    {s.images?.[0] && <img src={s.images[0]} alt="" className="w-full h-full object-cover" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-gray-900 dark:text-white truncate text-sm">{s.name}</p>
-                    <p className="text-xs text-gray-500">₦{Number(s.selling_price).toLocaleString()}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <JumiaSubmissionStatusBadge status={s.status} />
-                    {s.payment_status === 'paid' && (
-                      <button
-                        onClick={() => generateJumiaLabel(s, currentStore?.name ?? 'My Store', user?.full_name ?? user?.email ?? '')}
-                        title="Re-download shipping label"
-                        className="p-1.5 text-gray-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg transition-colors">
-                        <Download className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              ))}
+              {recentSubmissions.map((s) => {
+                const remaining = remainingFor(s);
+                const lowStock = ['live', 'out_of_stock'].includes(s.status) && remaining <= LOW_STOCK_THRESHOLD;
+                return (
+                  <motion.div key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <Link
+                      to={`/dashboard/jumia/items/${s.id}`}
+                      className="flex items-center gap-4 p-4 hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+                    >
+                      <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-xl overflow-hidden flex-shrink-0">
+                        {s.images?.[0] && <img src={s.images[0]} alt="" className="w-full h-full object-cover" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-gray-900 dark:text-white truncate text-sm">{s.name}</p>
+                        <p className="text-xs text-gray-500">
+                          ₦{Number(s.selling_price).toLocaleString()}
+                          {lowStock && (
+                            <span className="ml-2 text-red-500 font-semibold">· {remaining} left</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <JumiaSubmissionStatusBadge status={s.status} />
+                        {s.payment_status === 'paid' && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              generateJumiaLabel(s, currentStore?.name ?? 'My Store', user?.full_name ?? user?.email ?? '');
+                            }}
+                            title="Re-download shipping label"
+                            className="p-1.5 text-gray-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 rounded-lg transition-colors">
+                            <Download className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </Link>
+                  </motion.div>
+                );
+              })}
             </div>
           )
         )}
