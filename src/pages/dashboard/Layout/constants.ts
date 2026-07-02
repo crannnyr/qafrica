@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Package, ShoppingCart, Wallet,
   MapPin, ChartBar as BarChart3, Settings, BookOpen,
   MessageSquare, Tag, Upload, Import, Palette, Layers,
-  Globe, Calculator, Truck, ShoppingBag,
+  Globe, Calculator, Truck, ShoppingBag, Plus,
 } from 'lucide-react';
 import type { PermissionKey } from '@/lib/staffPermissions';
 
@@ -73,22 +73,23 @@ export const sidebarItems: NavItem[] = [
   },
   {
     icon: ShoppingBag,
-    label: 'Sell Online',
+    label: 'Jumia',
     path: '/dashboard/jumia',
     children: [
-      { icon: ShoppingBag, label: 'Jumia', path: '/dashboard/jumia' },
-      {
-        icon: ShoppingBag,
-        label: 'Konga',
-        path: '/dashboard/konga',
-        comingSoon: true,
-      },
-      {
-        icon: ShoppingBag,
-        label: 'Jiji',
-        path: '/dashboard/jiji',
-        comingSoon: true,
-      },
+      { icon: LayoutDashboard, label: 'Overview',            path: '/dashboard/jumia' },
+      { icon: Plus,            label: 'Add Item',            path: '/dashboard/jumia/add' },
+      { icon: MapPin,          label: 'Drop-off Locations',  path: '/dashboard/jumia/locations' },
+      { icon: Wallet,          label: 'Earnings',            path: '/dashboard/jumia/wallet' },
+      { icon: BookOpen,        label: 'How to Scale',        path: '/dashboard/jumia/how-to-scale' },
+    ],
+  },
+  {
+    icon: ShoppingBag,
+    label: 'Other Marketplaces',
+    path: '/dashboard/konga',
+    children: [
+      { icon: ShoppingBag, label: 'Konga', path: '/dashboard/konga', comingSoon: true },
+      { icon: ShoppingBag, label: 'Jiji',  path: '/dashboard/jiji',  comingSoon: true },
     ],
   },
   {
