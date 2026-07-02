@@ -21,6 +21,7 @@ import PostSignupChoice from '@/pages/auth/PostSignupChoice';
 import PricingPage from '@/pages/auth/PricingPage';
 import PaymentCallbackPage from '@/pages/auth/PaymentCallbackPage';
 import AcceptStaffInvitePage from '@/pages/auth/AcceptStaffInvitePage';
+import JumiaSignupPage from '@/pages/auth/JumiaSignupPage';
 
 // Legal Pages
 import PrivacyPolicyPage from '@/pages/legal/PrivacyPolicyPage';
@@ -254,6 +255,7 @@ function App() {
           <Route path="/store-owners" element={<StoreOwnersPage />} />
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
+          <Route path="/signup/jumia" element={<PublicRoute><JumiaSignupPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
