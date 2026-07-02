@@ -15,6 +15,12 @@ import { generateJumiaLabel } from './Jumia/generateJumiaLabel';
 type Tab = 'items' | 'dropoffs';
 const LOW_STOCK_THRESHOLD = 5;
 
+const JUMIA_BANNER_URL =
+  'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.2768702912076506.webp';
+
+const JUMIA_MARQUEE_TEXT =
+  'Send your products to Jumia and reach more customers. We handle the logistics — you track your sales and earnings.';
+
 function JumiaOverview() {
   const { user } = useAuthStore();
   const { currentStore } = useStoreStore();
@@ -57,6 +63,17 @@ function JumiaOverview() {
 
   return (
     <div className="space-y-6">
+      {/* Marquee animation keyframes — scoped, no tailwind config needed */}
+      <style>{`
+        @keyframes jumia-marquee-scroll {
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .jumia-marquee-track {
+          animation: jumia-marquee-scroll 20s linear infinite;
+        }
+      `}</style>
+
       {/* Urgent banner */}
       {pendingTasks.length > 0 && (
         <motion.div
@@ -79,17 +96,26 @@ function JumiaOverview() {
         </motion.div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Sell on Jumia</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1 max-w-xl">
-            Send your products to Jumia and reach more customers. We handle the logistics — you track your sales and earnings.
-          </p>
+      {/* Header — banner image + looping text + Send an Item button */}
+      <div className="space-y-3">
+        <div className="rounded-2xl overflow-hidden">
+          <img
+            src={JUMIA_BANNER_URL}
+            alt="Jumia x Qafrica"
+            className="w-full h-auto object-cover"
+          />
         </div>
+
+        <div className="overflow-hidden whitespace-nowrap">
+          <div className="inline-flex jumia-marquee-track">
+            <span className="text-sm text-gray-500 dark:text-gray-400 pr-12">{JUMIA_MARQUEE_TEXT}</span>
+            <span className="text-sm text-gray-500 dark:text-gray-400 pr-12" aria-hidden="true">{JUMIA_MARQUEE_TEXT}</span>
+          </div>
+        </div>
+
         <Link to="/dashboard/jumia/add">
-          <Button className="bg-orange-500 hover:bg-orange-600 text-white">
-            <Plus className="w-4 h-4 mr-2" /> Send an Item
+          <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white">
+            <Plus className="w-4 h-4 mr-1.5" /> Send an Item
           </Button>
         </Link>
       </div>
