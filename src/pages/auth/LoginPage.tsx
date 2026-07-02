@@ -42,7 +42,7 @@ export default function LoginPage() {
         }
       } else {
         toast.success('Welcome back!');
-        navigate('/dashboard');
+        navigate(result.intent === 'jumia' ? '/jumia-dashboard' : '/dashboard');
       }
     } else {
       toast.error(result.error || 'Login failed');
