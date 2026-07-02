@@ -120,6 +120,20 @@ export interface JumiaWithdrawalRequest {
   paid_at: string | null;
 }
 
+// A single admin-entered daily sale record for one submission (one variant, one day's entry).
+export interface JumiaDailySale {
+  id: string;
+  submission_id: string;
+  owner_id: string;
+  variant_label: string | null;
+  units_sold: number;
+  unit_price: number;
+  sale_date: string;
+  entered_by_admin_id: string;
+  email_sent: boolean;
+  created_at: string;
+}
+
 interface JumiaStore {
   submissions: JumiaSubmission[];
   allSubmissions: JumiaSubmission[];
@@ -129,6 +143,7 @@ interface JumiaStore {
   withdrawalRequests: JumiaWithdrawalRequest[];
   allWithdrawalRequests: (JumiaWithdrawalRequest & { user?: { full_name: string; email: string } })[];
   dropoffTasks: JumiaDropoffTask[];
+  dailySales: JumiaDailySale[];
   isLoading: boolean;
 
   fetchSubmissions: (userId: string) => Promise<void>;
@@ -158,6 +173,10 @@ interface JumiaStore {
   submitWithdrawal: (payload: {
     user_id: string; amount: number; bank_name: string; account_number: string; account_name: string;
   }) => Promise<{ success: boolean; error?: string }>;
+  // Fetches the admin-entered daily sale log for one submission — used by the item detail
+  // page to show sale history and to compute an accurate "total sold" independent of
+  // whatever the current stock-remaining snapshot says.
+  fetchDailySales: (submissionId: string) => Promise<void>;
 }
 
 export const useJumiaStore = create<JumiaStore>((set, get) => ({
@@ -169,6 +188,7 @@ export const useJumiaStore = create<JumiaStore>((set, get) => ({
   withdrawalRequests: [],
   allWithdrawalRequests: [],
   dropoffTasks: [] as JumiaDropoffTask[],
+  dailySales: [] as JumiaDailySale[],
   isLoading: false,
 
   fetchSubmissions: async (userId) => {
@@ -203,6 +223,7 @@ export const useJumiaStore = create<JumiaStore>((set, get) => ({
   },
 
   // Single submission with owner joined, used by the admin detail page (route gives only an id).
+  // Also reused by the store-owner item detail page — RLS restricts non-admins to their own row.
   fetchSubmissionById: async (id) => {
     const { data, error } = await supabase
       .from('jumia_submissions')
@@ -391,5 +412,15 @@ export const useJumiaStore = create<JumiaStore>((set, get) => ({
     });
     if (error) return { success: false, error: error.message };
     return { success: true };
+  },
+
+  fetchDailySales: async (submissionId) => {
+    const { data, error } = await supabase
+      .from('jumia_daily_sales')
+      .select('*')
+      .eq('submission_id', submissionId)
+      .order('sale_date', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (!error) set({ dailySales: (data as JumiaDailySale[]) || [] });
   },
 }));
