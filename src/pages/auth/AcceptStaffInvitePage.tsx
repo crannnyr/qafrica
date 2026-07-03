@@ -82,7 +82,7 @@ export default function AcceptStaffInvitePage() {
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: inviteInfo.email,
         password,
-        options: { data: { full_name: fullName } },
+        options: { data: { full_name: fullName, user_type: 'staff' } },
       });
 
       if (signUpError) {
