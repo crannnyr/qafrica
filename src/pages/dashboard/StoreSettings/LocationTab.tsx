@@ -199,7 +199,7 @@ export default function LocationTab() {
               onClick={() => setFormData(p => ({ ...p, location_enabled: !p.location_enabled }))}
               className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${formData.location_enabled ? 'bg-orange-500' : 'bg-gray-200'}`}
             >
-              <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${formData.location_enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+              <span className={`absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${formData.location_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
             </button>
           </div>
 
