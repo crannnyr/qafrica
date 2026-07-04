@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Loader2, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Loader2, ChevronDown, ChevronUp, MoreVertical, RotateCw, Trash2 } from 'lucide-react';
 import type { StoreStaff } from '@/types';
 import { PERMISSIONS, type PermissionKey } from './permissions';
 
@@ -20,10 +20,44 @@ const STATUS_BADGE: Record<StoreStaff['status'], string> = {
 
 export default function StaffListItem({ staff, isMutating, onRemove, onResend, onTogglePermission }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const grantedCount = PERMISSIONS.filter(p => staff[p.key]).length;
+
+  // Close the overflow menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setConfirmingRemove(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [menuOpen]);
+
+  const handleRemoveClick = () => {
+    if (!confirmingRemove) {
+      setConfirmingRemove(true);
+      return;
+    }
+    onRemove(staff.id);
+    setConfirmingRemove(false);
+    setMenuOpen(false);
+  };
+
+  const handleResendClick = () => {
+    onResend(staff.id);
+    setMenuOpen(false);
+  };
 
   return (
     <div className="border border-gray-100 rounded-xl hover:border-gray-200 transition-colors">
-      <div className="flex items-center justify-between p-4">
+      <div className="flex items-center justify-between gap-3 p-4">
+        {/* Identity block */}
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-9 h-9 bg-violet-100 rounded-full flex items-center justify-center flex-shrink-0">
             <span className="text-violet-700 font-bold text-sm">
@@ -31,38 +65,61 @@ export default function StaffListItem({ staff, isMutating, onRemove, onResend, o
             </span>
           </div>
           <div className="min-w-0">
-            <p className="font-medium text-gray-900 text-sm truncate">{staff.full_name ?? '—'}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-medium text-gray-900 text-sm truncate">{staff.full_name ?? '—'}</p>
+              <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full capitalize flex-shrink-0 ${STATUS_BADGE[staff.status] ?? STATUS_BADGE.pending}`}>
+                {staff.status}
+              </span>
+            </div>
             <p className="text-xs text-gray-500 truncate">{staff.email}</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 ml-3 flex-shrink-0">
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-full capitalize ${STATUS_BADGE[staff.status] ?? STATUS_BADGE.pending}`}>
-            {staff.status}
-          </span>
-          {staff.status === 'pending' && (
-            <button
-              onClick={() => onResend(staff.id)}
-              disabled={isMutating}
-              className="text-xs text-orange-600 hover:text-orange-700 font-medium px-2 py-1 rounded-lg hover:bg-orange-50 disabled:opacity-50"
-            >
-              Resend
-            </button>
-          )}
+        {/* Actions */}
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => setExpanded(v => !v)}
-            className="text-xs text-gray-500 hover:text-gray-700 font-medium px-2 py-1 rounded-lg hover:bg-gray-50 flex items-center gap-1"
+            className="text-xs text-gray-600 hover:text-gray-800 font-medium px-2.5 py-1.5 rounded-lg hover:bg-gray-50 flex items-center gap-1 whitespace-nowrap"
           >
-            Permissions
+            {grantedCount} perm{grantedCount === 1 ? '' : 's'}
             {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
-          <button
-            onClick={() => onRemove(staff.id)}
-            disabled={isMutating}
-            className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
-          >
-            {isMutating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Remove'}
-          </button>
+
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen(v => !v)}
+              disabled={isMutating}
+              aria-label="More actions"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {isMutating ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreVertical className="w-4 h-4" />}
+            </button>
+
+            {menuOpen && !isMutating && (
+              <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-100 rounded-xl shadow-lg py-1 z-10">
+                {staff.status === 'pending' && (
+                  <button
+                    onClick={handleResendClick}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                  >
+                    <RotateCw className="w-3.5 h-3.5" />
+                    Resend invite
+                  </button>
+                )}
+                <button
+                  onClick={handleRemoveClick}
+                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                    confirmingRemove
+                      ? 'bg-red-50 text-red-700 font-medium'
+                      : 'text-red-500 hover:bg-red-50'
+                  }`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {confirmingRemove ? 'Click again to confirm' : 'Remove staff'}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
