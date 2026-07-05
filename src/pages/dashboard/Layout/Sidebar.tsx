@@ -45,6 +45,10 @@ interface Props {
   onCloseMobile: () => void;
   onLogout: () => void;
   onComingSoon: (brand: MarketplaceBrand) => void;
+  /** Where the sidebar logo links to. Defaults to '/dashboard' for the regular
+   * store dashboard. The standalone Jumia dashboard passes '/jumia-dashboard'
+   * so the logo never sends a Jumia-only seller into a route their guard blocks. */
+  homePath?: string;
 }
 
 export default function Sidebar({
@@ -63,6 +67,7 @@ export default function Sidebar({
   onCloseMobile,
   onLogout,
   onComingSoon,
+  homePath = '/dashboard',
 }: Props) {
   return (
     <aside
@@ -77,7 +82,7 @@ export default function Sidebar({
         !isSidebarOpen ? 'lg:justify-center' : ''
       }`}>
         <Link
-          to="/dashboard"
+          to={homePath}
           className={`flex items-center gap-3 ${!isSidebarOpen ? 'lg:hidden' : ''}`}
         >
           <div className="w-9 h-9 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
