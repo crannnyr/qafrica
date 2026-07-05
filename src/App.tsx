@@ -79,6 +79,9 @@ import JumiaItemDetailPage from '@/pages/dashboard/Jumia/JumiaItemDetailPage';
 import KongaPage from '@/pages/dashboard/KongaPage';
 import JijiPage from '@/pages/dashboard/JijiPage';
 
+// Standalone Jumia-only dashboard (signup_intent === 'jumia')
+import JumiaDashboardLayout from '@/pages/dashboard/JumiaDashboardLayout';
+
 // Store Pages
 import StorePage from '@/pages/store/StorePage';
 import ProductDetailPage from '@/pages/store/ProductDetailPage';
@@ -153,10 +156,14 @@ const ProtectedRoute = ({
   children,
   requireAdmin = false,
   isOnboardingRoute = false,
+  isJumiaRoute = false,
 }: {
   children: React.ReactNode;
   requireAdmin?: boolean;
   isOnboardingRoute?: boolean;
+  /** Routes under /jumia-dashboard/*. Keeps Jumia-only sellers and regular store
+   * owners in their own separate route trees regardless of which URL they land on. */
+  isJumiaRoute?: boolean;
 }) => {
   const { isAuthenticated, user } = useAuthStore();
 
@@ -175,6 +182,22 @@ const ProtectedRoute = ({
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Jumia-only sellers (signup_intent === 'jumia') and regular store owners
+  // live in separate route trees. Cross-redirect anyone who lands in the wrong one.
+  const isJumiaUser = user?.signup_intent === 'jumia';
+
+  if (isJumiaRoute && !isJumiaUser) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  if (!isJumiaRoute && isJumiaUser) {
+    return <Navigate to="/jumia-dashboard" replace />;
+  }
+  if (isJumiaRoute) {
+    // Jumia-only sellers have onboarding_completed=true set at signup and no
+    // niche/staff/admin concept — nothing further to check.
+    return <>{children}</>;
   }
 
   if (requireAdmin && user?.role !== 'admin') {
@@ -218,6 +241,10 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (user?.role === 'admin') {
     return <Navigate to="/admin" replace />;
+  }
+
+  if (user?.signup_intent === 'jumia') {
+    return <Navigate to="/jumia-dashboard" replace />;
   }
 
   return <Navigate to="/dashboard" replace />;
@@ -345,6 +372,24 @@ function App() {
             <Route path="jumia/items/:id" element={<JumiaItemDetailPage />} />
             <Route path="konga" element={<KongaPage />} />
             <Route path="jiji" element={<JijiPage />} />
+          </Route>
+
+          {/* ── Standalone Jumia-only Dashboard (signup_intent === 'jumia') ──
+              Reuses the same Jumia page components as /dashboard/jumia/*.
+              NOTE: those components still contain some hardcoded '/dashboard/jumia'
+              internal links/redirects — being swapped to useJumiaBasePath() in an
+              upcoming pass. Mounting the route tree now is safe for the build;
+              some in-page navigation will point to the wrong tree until that lands.
+              'settings' route intentionally omitted until JumiaSettingsPage.tsx exists. */}
+          <Route path="/jumia-dashboard" element={
+            <ProtectedRoute isJumiaRoute={true}><JumiaDashboardLayout /></ProtectedRoute>
+          }>
+            <Route index element={<JumiaPage />} />
+            <Route path="add" element={<JumiaAddItemPage />} />
+            <Route path="locations" element={<JumiaDropOffLocationsPage />} />
+            <Route path="wallet" element={<JumiaWalletPage />} />
+            <Route path="how-to-scale" element={<JumiaHowToScalePage />} />
+            <Route path="items/:id" element={<JumiaItemDetailPage />} />
           </Route>
 
           {/* ── Admin ── */}
