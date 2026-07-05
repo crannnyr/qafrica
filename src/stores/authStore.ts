@@ -57,7 +57,7 @@ export const useAuthStore = create<AuthState>()(
               };
             }
 
-            if (profile.role !== 'store_owner' && profile.role !== 'admin') {
+            if (profile.role !== 'store_owner' && profile.role !== 'admin' && profile.role !== 'staff') {
               await authService.signOut();
               set({ isLoading: false });
               return {
@@ -177,7 +177,7 @@ export const useAuthStore = create<AuthState>()(
           const { data, error } = await userService.getProfile(authUser.id);
 
           if (data && !error) {
-            if (data.role !== 'store_owner' && data.role !== 'admin') {
+            if (data.role !== 'store_owner' && data.role !== 'admin' && data.role !== 'staff') {
               set({ user: null, isAuthenticated: false });
               return;
             }
