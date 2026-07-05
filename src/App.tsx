@@ -315,26 +315,26 @@ function App() {
             <Route index element={<DashboardHome />} />
             <Route path="store-setup" element={<StoreSetup />} />
             <Route path="products" element={<ProductsPage />} />
-            <Route path="products/add" element={<StaffGuard><AddProductPage /></StaffGuard>} />
-            <Route path="products/edit/:productId" element={<StaffGuard><EditProductPage /></StaffGuard>} />
-            <Route path="products/bulk-import" element={<StaffGuard><BulkImportPage /></StaffGuard>} />
-            <Route path="import-catalog" element={<StaffGuard><ImportCatalogPage /></StaffGuard>} />
+            <Route path="products/add" element={<StaffGuard permission="can_manage_products"><AddProductPage /></StaffGuard>} />
+            <Route path="products/edit/:productId" element={<StaffGuard permission="can_manage_products"><EditProductPage /></StaffGuard>} />
+            <Route path="products/bulk-import" element={<StaffGuard permission="can_manage_products"><BulkImportPage /></StaffGuard>} />
+            <Route path="import-catalog" element={<StaffGuard permission="can_manage_products"><ImportCatalogPage /></StaffGuard>} />
             <Route path="orders" element={<OrdersPage />} />
             <Route path="orders/:orderId" element={<OrderDetailPage />} />
             <Route path="order-management" element={<OrderManagementPage />} />
             <Route path="dropship-orders" element={<DropshipOrdersPage />} />
             <Route path="dropship-orders/:orderId" element={<DropshipOrderDetailPage />} />
             <Route path="reviews" element={<ReviewsPage />} />
-            <Route path="coupons" element={<StaffGuard><CouponsPage /></StaffGuard>} />
-            <Route path="wallet" element={<StaffGuard><WalletPage /></StaffGuard>} />
-            <Route path="delivery-zones" element={<StaffGuard><DeliveryZonesPage /></StaffGuard>} />
-            <Route path="domain" element={<StaffGuard><DomainPage /></StaffGuard>} />
-            <Route path="analytics" element={<StaffGuard><AnalyticsPage /></StaffGuard>} />
-            <Route path="tax-expenses" element={<StaffGuard><TaxExpensesPage /></StaffGuard>} />
+            <Route path="coupons" element={<StaffGuard permission="can_manage_products"><CouponsPage /></StaffGuard>} />
+            <Route path="wallet" element={<StaffGuard permission="can_manage_wallet"><WalletPage /></StaffGuard>} />
+            <Route path="delivery-zones" element={<StaffGuard permission="can_manage_settings"><DeliveryZonesPage /></StaffGuard>} />
+            <Route path="domain" element={<StaffGuard permission="can_manage_settings"><DomainPage /></StaffGuard>} />
+            <Route path="analytics" element={<StaffGuard permission="can_view_analytics"><AnalyticsPage /></StaffGuard>} />
+            <Route path="tax-expenses" element={<StaffGuard permission="can_manage_wallet"><TaxExpensesPage /></StaffGuard>} />
             <Route path="settings" element={<StaffGuard><StoreSettingsPage /></StaffGuard>} />
-            <Route path="templates" element={<StaffGuard><StoreTemplatesPage /></StaffGuard>} />
+            <Route path="templates" element={<StaffGuard permission="can_manage_settings"><StoreTemplatesPage /></StaffGuard>} />
             <Route path="subscription" element={<StaffGuard><SubscriptionPage /></StaffGuard>} />
-            <Route path="niches" element={<StaffGuard><NicheCustomizationPage /></StaffGuard>} />
+            <Route path="niches" element={<StaffGuard permission="can_manage_settings"><NicheCustomizationPage /></StaffGuard>} />
             <Route path="how-to-use" element={<HowToUsePage />} />
             <Route path="manual-sales" element={<ManualSalesPage />} />
             <Route path="jumia" element={<JumiaPage />} />
