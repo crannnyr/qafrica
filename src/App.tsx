@@ -162,7 +162,12 @@ const ProtectedRoute = ({
 
   if (isOnboardingRoute) {
     const inOnboarding = isInOnboardingFlow(user);
-    if (!isAuthenticated && !inOnboarding) {
+    // A returning user who logged in successfully (so we have their real profile)
+    // but hasn't finished onboarding yet should be allowed in even if their
+    // sessionStorage flags from the original signup session are long gone
+    // (e.g. they closed the app and came back later to continue).
+    const hasValidPendingOnboardingUser = !!user && user.onboarding_completed !== true;
+    if (!isAuthenticated && !inOnboarding && !hasValidPendingOnboardingUser) {
       return <Navigate to="/login" replace />;
     }
     return <>{children}</>;
