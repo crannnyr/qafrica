@@ -113,6 +113,20 @@ export const allNavItems = sidebarItems.flatMap((item) =>
   item.children ? [item, ...item.children] : [item],
 );
 
+// ── Standalone Jumia-only dashboard sidebar ──────────────────────────────────
+// Flat, top-level items only (no nested children) — used by JumiaDashboardLayout
+// for sellers whose signup_intent === 'jumia'. Paths point at /jumia-dashboard/*.
+// NOT included in allNavItems / staff permission logic — those only apply to the
+// regular store dashboard, which jumia-intent users never see.
+export const jumiaSidebarItems: NavItem[] = [
+  { icon: LayoutDashboard, label: 'Overview',           path: '/jumia-dashboard' },
+  { icon: Plus,            label: 'Add Item',           path: '/jumia-dashboard/add' },
+  { icon: MapPin,          label: 'Drop-off Locations', path: '/jumia-dashboard/locations' },
+  { icon: Wallet,          label: 'Wallet',             path: '/jumia-dashboard/wallet' },
+  { icon: BookOpen,        label: 'How to Scale',       path: '/jumia-dashboard/how-to-scale' },
+  { icon: Settings,        label: 'Settings',           path: '/jumia-dashboard/settings' },
+];
+
 // ── Staff permission gating ──────────────────────────────────────────────────
 // Maps each path to the permission required to see/access it.
 // `null` = always visible to staff (no gate needed — informational or universal).
