@@ -49,6 +49,12 @@ interface Props {
    * store dashboard. The standalone Jumia dashboard passes '/jumia-dashboard'
    * so the logo never sends a Jumia-only seller into a route their guard blocks. */
   homePath?: string;
+  /** Whether to show the "Free Plan / Upgrade" subscription card at the bottom
+   * of the sidebar. Defaults to true for the regular store dashboard. Jumia-only
+   * sellers have no subscriptions row at all — that card (and its link to
+   * /dashboard/subscription) doesn't apply to them, so the standalone Jumia
+   * dashboard passes false to hide it entirely. */
+  showSubscriptionCard?: boolean;
 }
 
 export default function Sidebar({
@@ -68,6 +74,7 @@ export default function Sidebar({
   onLogout,
   onComingSoon,
   homePath = '/dashboard',
+  showSubscriptionCard = true,
 }: Props) {
   return (
     <aside
@@ -142,10 +149,12 @@ export default function Sidebar({
       </nav>
 
       {/* ── Subscription card ── */}
-      <SidebarSubscriptionCard
-        isSidebarOpen={isSidebarOpen}
-        subscription={subscription}
-      />
+      {showSubscriptionCard && (
+        <SidebarSubscriptionCard
+          isSidebarOpen={isSidebarOpen}
+          subscription={subscription}
+        />
+      )}
 
       {/* ── User footer ── */}
       <SidebarUserFooter
