@@ -3,6 +3,11 @@
 // upgrade prompt instead of the feature. Checks subscriptions.tier !== 'free' AND
 // is_active AND not expired — not just is_active, since an expired row may not have
 // been flipped to inactive yet by a background job.
+//
+// EXCEPTION: Jumia-only sellers (signup_intent === 'jumia') never have a
+// subscriptions row at all — they skip the store subscription flow entirely at
+// signup. The plan requirement only applies to regular store owners using Jumia
+// as an add-on feature, so jumia-intent users bypass this check completely.
 
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -12,10 +17,19 @@ import { useAuthStore } from '@/stores';
 
 export default function JumiaPlanGate({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
-  const [isChecking, setIsChecking] = useState(true);
-  const [hasActivePlan, setHasActivePlan] = useState(false);
+  const isJumiaOnlyUser = user?.signup_intent === 'jumia';
+
+  const [isChecking, setIsChecking] = useState(!isJumiaOnlyUser);
+  const [hasActivePlan, setHasActivePlan] = useState(isJumiaOnlyUser);
 
   useEffect(() => {
+    // Jumia-only sellers never have a subscriptions row — nothing to check.
+    if (isJumiaOnlyUser) {
+      setHasActivePlan(true);
+      setIsChecking(false);
+      return;
+    }
+
     if (!user?.id) return;
     let cancelled = false;
 
@@ -38,7 +52,7 @@ export default function JumiaPlanGate({ children }: { children: React.ReactNode 
     })();
 
     return () => { cancelled = true; };
-  }, [user?.id]);
+  }, [user?.id, isJumiaOnlyUser]);
 
   if (isChecking) {
     return <div className="p-12 text-center text-gray-400 text-sm">Checking your plan…</div>;
