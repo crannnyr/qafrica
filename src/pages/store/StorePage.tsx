@@ -402,9 +402,6 @@ export default function StorePage() {
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent flex items-end">
             <div className="px-6 pb-6 text-white">
               <h1 className="text-2xl md:text-3xl font-bold">{store.name}</h1>
-              {store.description && (
-                <p className="text-sm opacity-80 mt-1 max-w-md">{store.description}</p>
-              )}
             </div>
           </div>
 
