@@ -23,35 +23,37 @@ export default function JumiaDashboardLayout() {
   const location = useLocation();
   const { user, logout } = useAuthStore();
 
-  // ── UI state ───────────────────────────────────────────────────────────────
+  // ── UI state ───────────────────────────────────────────────────────────
   const [isSidebarOpen, setIsSidebarOpen]         = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen]   = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu]     = useState(false);
 
-  // ── Data state ─────────────────────────────────────────────────────────────
+  // ── Data state ─────────────────────────────────────────────────────────
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([]);
 
-  // ── Init ───────────────────────────────────────────────────────────────────
+  // ── Init ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (user?.id) loadStockAlerts();
   }, [user?.id]);
 
-  // ── Realtime ───────────────────────────────────────────────────────────────
+  // ── Realtime ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
     const sub = subscribeToStockAlerts(user.id, () => loadStockAlerts());
-    return () => sub.unsubscribe();
+    return () => {
+      void sub.unsubscribe();
+    };
   }, [user?.id]);
 
-  // ── Data fetchers ──────────────────────────────────────────────────────────
+  // ── Data fetchers ────────────────────────────────────────────────────────
   const loadStockAlerts = async () => {
     if (!user?.id) return;
     const { data } = await stockAlertService.getUnreadAlerts(user.id);
     if (data) setStockAlerts(data as StockAlert[]);
   };
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // ── Handlers ───────────────────────────────────────────────────────────
   const handleMarkAlertRead = async (alertId: string) => {
     const { error } = await stockAlertService.markAsRead(alertId);
     if (!error) setStockAlerts((prev) => prev.filter((a) => a.id !== alertId));
@@ -69,7 +71,7 @@ export default function JumiaDashboardLayout() {
     navigate('/login');
   };
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────────
   const isActive = (path: string) =>
     path === '/jumia-dashboard'
       ? location.pathname === '/jumia-dashboard'
@@ -78,7 +80,7 @@ export default function JumiaDashboardLayout() {
   const currentLabel =
     jumiaSidebarItems.find((item) => isActive(item.path))?.label || 'Jumia Dashboard';
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex">
 
