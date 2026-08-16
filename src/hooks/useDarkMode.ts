@@ -5,22 +5,22 @@ type Theme = 'light' | 'dark' | 'system';
 export function useDarkMode() {
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window !== 'undefined') {
-      return (localStorage.getItem('theme') as Theme) || 'system';
+      return (localStorage.getItem('theme') as Theme) || 'light';
     }
-    return 'system';
+    return 'light';
   });
 
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
     const root = window.document.documentElement;
-    
+
     const applyTheme = () => {
-      const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const systemDark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
       const isDarkMode = theme === 'dark' || (theme === 'system' && systemDark);
-      
+
       setIsDark(isDarkMode);
-      
+
       if (isDarkMode) {
         root.classList.add('dark');
       } else {
@@ -29,22 +29,35 @@ export function useDarkMode() {
     };
 
     applyTheme();
-    
-    // Listen for system theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    // Only listen for system changes when user explicitly selected 'system'
+    let mediaQuery: MediaQueryList | null = null;
+
     const handler = () => {
       if (theme === 'system') {
         applyTheme();
       }
     };
-    
-    mediaQuery.addEventListener('change', handler);
-    return () => mediaQuery.removeEventListener('change', handler);
+
+    if (theme === 'system' && typeof window !== 'undefined' && window.matchMedia) {
+      mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      mediaQuery.addEventListener('change', handler);
+    }
+
+    return () => {
+      if (mediaQuery) {
+        mediaQuery.removeEventListener('change', handler);
+      }
+    };
   }, [theme]);
 
   const setThemeValue = (newTheme: Theme) => {
     setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
+    try {
+      localStorage.setItem('theme', newTheme);
+    } catch (e) {
+      // ignore localStorage errors (private mode, etc.)
+    }
   };
 
   const toggleTheme = () => {
