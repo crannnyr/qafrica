@@ -10,11 +10,9 @@ import CONFIG from '@/lib/config';
 import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
 import type { CartItem } from './RecommendationsPage';
 import { fmt } from './RecommendationsPage';
+import ManualPaymentFlow, { COMMUNITY_LINK } from './ManualPaymentFlow';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
-
-// TODO(product): replace with the real community group link once provided.
-const COMMUNITY_LINK = 'https://chat.whatsapp.com/qafrica-import-community';
 
 interface Props {
   cart: CartItem[];
@@ -99,6 +97,21 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   };
 
   // ── Success screen ──────────────────────────────────────────────────────
+  // Manual bank transfer goes through the shared warning -> details -> "I have
+  // paid" -> community link flow. Paystack payments are already verified
+  // server-side by the time we get here, so they get a simpler screen.
+  if (result?.bank) {
+    return (
+      <ManualPaymentFlow
+        amountLabel={fmt(total)}
+        bank={result.bank}
+        onConfirmPaid={() => {}}
+        onClose={onClose}
+        dashboardHref="/importations/dashboard"
+      />
+    );
+  }
+
   if (result) {
     return (
       <motion.div
@@ -114,20 +127,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
             <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
               <CheckCircle2 className="w-6 h-6 text-emerald-600" />
             </div>
-            <h3 className="font-bold text-gray-900 text-lg mb-1">
-              {result.bank ? "Order placed — awaiting your transfer" : 'Payment received!'}
-            </h3>
+            <h3 className="font-bold text-gray-900 text-lg mb-1">Payment received!</h3>
             <p className="text-gray-400 text-xs">Order code: <span className="font-bold text-gray-700">{result.code}</span></p>
           </div>
-
-          {result.bank && (
-            <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-4 space-y-1 text-sm">
-              <p className="text-gray-500 text-xs mb-1.5">Transfer the total to:</p>
-              <p className="font-bold text-gray-900">{result.bank.bank_account_number}</p>
-              <p className="text-gray-600">{result.bank.bank_account_name} · {result.bank.bank_name}</p>
-              <p className="text-[11px] text-gray-400 mt-2">We'll confirm your payment and update your order status.</p>
-            </div>
-          )}
 
           <a
             href={COMMUNITY_LINK} target="_blank" rel="noopener noreferrer"
