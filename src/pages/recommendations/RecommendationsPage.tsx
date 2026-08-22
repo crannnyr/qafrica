@@ -4,7 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingBag, Plus, Minus, Package,
-  ChevronRight, Search, X, User, LogOut,
+  ChevronRight, Search, X, User, LogOut, LayoutDashboard,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
@@ -193,12 +193,21 @@ export default function RecommendationsPage() {
 
           <div className="flex items-center gap-2">
             {isAuthenticated ? (
-              <button
-                onClick={() => logout()}
-                className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 font-medium px-3 py-1.5 rounded-lg hover:bg-gray-50"
-              >
-                <LogOut className="w-3.5 h-3.5" /> Sign out
-              </button>
+              <>
+                <Link
+                  to="/importations/dashboard"
+                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 font-medium px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-gray-50 border border-gray-200 sm:border-transparent"
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">My Dashboard</span>
+                </Link>
+                <button
+                  onClick={() => logout()}
+                  className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 font-medium px-3 py-1.5 rounded-lg hover:bg-gray-50"
+                >
+                  <LogOut className="w-3.5 h-3.5" /> Sign out
+                </button>
+              </>
             ) : (
               <button
                 onClick={() => setShowAuth(true)}
