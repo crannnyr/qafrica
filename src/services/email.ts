@@ -2,6 +2,96 @@ import { supabase } from './supabase';
 
 // Email templates
 export const emailTemplates = {
+// Distinct welcome email for the Importation section — separate from the
+// regular dropship-store welcome, since the pitch and mental model are different.
+importWelcome: (name: string, appUrl?: string) => ({
+    subject: '📦 Welcome to QAFRICA Import — Here\'s how ₦5,000 shipping works',
+    body: `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Welcome to QAFRICA Import</title>
+</head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:'Segoe UI',Arial,sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;">
+
+          <!-- Header -->
+          <tr>
+            <td align="center" style="padding-bottom:32px;">
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background:#F97316;border-radius:14px;padding:14px 20px;">
+                    <span style="color:#fff;font-size:22px;font-weight:800;letter-spacing:1px;">QAFRICA Import</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td style="background:#ffffff;border-radius:20px;padding:40px 36px;box-shadow:0 4px 24px rgba(0,0,0,0.07);">
+
+              <p style="margin:0 0 8px;font-size:26px;font-weight:800;color:#111827;">
+                Welcome, ${name} 👋
+              </p>
+              <p style="margin:0 0 28px;font-size:16px;color:#6B7280;line-height:1.6;">
+                You're in. Here's the one thing worth knowing before your first order.
+              </p>
+
+              <div style="height:2px;background:linear-gradient(to right,#F97316,#FED7AA);border-radius:2px;margin-bottom:28px;"></div>
+
+              <p style="margin:0 0 12px;font-size:18px;font-weight:700;color:#111827;">
+                Why your shipping can land around ₦5,000
+              </p>
+              <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.7;">
+                Importing on your own usually means paying for clearance and freight
+                <strong style="color:#F97316;">alone</strong> — that's how a small item ends up costing
+                far more in shipping than the item itself. We consolidate your order with everyone
+                else importing at the same time, so the freight and clearance cost gets spread
+                across the whole group instead of sitting on you alone.
+              </p>
+              <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.7;">
+                No minimum order. Order just one item if that's all you need — you still get
+                the same group rate.
+              </p>
+
+              <!-- CTA -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
+                <tr>
+                  <td align="center" style="background:#F97316;border-radius:12px;">
+                    <a href="${appUrl || 'https://qafrica.store'}/recommendations"
+                       style="display:block;padding:14px 24px;color:#fff;font-size:15px;font-weight:700;text-decoration:none;">
+                      Browse the catalog →
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <tr>
+            <td align="center" style="padding-top:24px;">
+              <p style="margin:0;font-size:12px;color:#9CA3AF;">
+                QAFRICA · support@qafrica.store
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+  }),
+
 welcome: (name: string, appUrl?: string) => ({
     subject: '🛍️ Welcome to QAFRICA — Your Store Awaits',
     body: `<!DOCTYPE html>
@@ -351,6 +441,12 @@ export const sendEmail = async ({
 // Send welcome email
 export const sendWelcomeEmail = async (email: string, name: string) => {
   const template = emailTemplates.welcome(name);
+  return sendEmail({ to: email, subject: template.subject, html: template.body });
+};
+
+// Send the distinct Importation-section welcome email
+export const sendImportWelcomeEmail = async (email: string, name: string) => {
+  const template = emailTemplates.importWelcome(name);
   return sendEmail({ to: email, subject: template.subject, html: template.body });
 };
 

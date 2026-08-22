@@ -24,6 +24,8 @@ export default function CustomerSignupPage() {
 
   const searchParams = new URLSearchParams(location.search);
   const returnUrl = searchParams.get('return') || '/';
+  // ?source=importation tags the account + sends the distinct import welcome email
+  const signupSource = searchParams.get('source') === 'importation' ? 'importation' : 'dropship';
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -58,7 +60,8 @@ export default function CustomerSignupPage() {
       formData.email,
       formData.password,
       formData.fullName,
-      formData.phone
+      formData.phone,
+      signupSource
     );
 
     if (!signupResult.success) {

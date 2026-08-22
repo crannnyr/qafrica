@@ -6,12 +6,11 @@ import {
   ArrowLeft, ShoppingBag, Plus, Minus,
   Package, ExternalLink, ChevronRight, Tag, ChevronDown, ChevronUp,
 } from 'lucide-react';
-import { CodeModal, fmt } from './RecommendationsPage';
+import { fmt } from './RecommendationsPage';
 import type { CartItem, ImportProduct } from './RecommendationsPage';
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
-const MIN_QTY  = 20;
 const DESC_PREVIEW_LENGTH = 80;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -117,9 +116,8 @@ export default function ProductDetailPage() {
 
   // Cart state — lives here, passed back to RecommendationsPage via navigate state
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [qty, setQty]   = useState(MIN_QTY);
-
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const moq = product?.moq ?? 1;
+  const [qty, setQty]   = useState(moq);
 
   // Keep `product`/`allProducts` in sync with the route whenever `id` or the
   // navigation `state` changes. This is what makes "you may also like" clicks
@@ -167,7 +165,7 @@ export default function ProductDetailPage() {
       .catch(() => {});
   }, [id]);
 
-  useEffect(() => { setQty(MIN_QTY); }, [id]);
+  useEffect(() => { setQty(moq); }, [id, moq]);
 
   const cartCount   = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal   = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
@@ -186,7 +184,7 @@ export default function ProductDetailPage() {
     setCart(prev => {
       const item = prev.find(i => i.id === product.id);
       if (!item) return prev;
-      if (item.quantity <= MIN_QTY) return prev.filter(i => i.id !== product.id);
+      if (item.quantity <= moq) return prev.filter(i => i.id !== product.id);
       return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity - 1 } : i);
     });
   };
@@ -317,14 +315,16 @@ export default function ProductDetailPage() {
             </a>
           </p>
 
-          {/* Min order notice */}
-          <div className="bg-amber-50 border border-amber-100 rounded-xl px-3.5 py-3 mb-5 flex items-start gap-2">
-            <Package className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-            <p className="text-[11px] text-amber-700 leading-relaxed">
-              <span className="font-bold">Minimum order: {MIN_QTY} units.</span>{' '}
-              Wholesale pricing — cost shown is per unit at bulk quantity.
-            </p>
-          </div>
+          {/* Min order notice — only shown when the product actually has a MOQ above 1 */}
+          {moq > 1 && (
+            <div className="bg-amber-50 border border-amber-100 rounded-xl px-3.5 py-3 mb-5 flex items-start gap-2">
+              <Package className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-700 leading-relaxed">
+                <span className="font-bold">Minimum order: {moq} units.</span>{' '}
+                Wholesale pricing — cost shown is per unit at bulk quantity.
+              </p>
+            </div>
+          )}
 
           {/* Qty selector / cart control */}
           {!itemInCart ? (
@@ -333,7 +333,7 @@ export default function ProductDetailPage() {
                 <p className="text-xs font-semibold text-gray-700">Quantity</p>
                 <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
                   <button
-                    onClick={() => setQty(q => Math.max(MIN_QTY, q - 1))}
+                    onClick={() => setQty(q => Math.max(moq, q - 1))}
                     className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-900"
                   >
                     <Minus className="w-3.5 h-3.5" />
@@ -429,7 +429,7 @@ export default function ProductDetailPage() {
                       <span className="text-gray-200 text-[9px]">·</span>
                       <span className="text-[9px] text-gray-400">{fmtCny(p.price_cny)}</span>
                     </div>
-                    <p className="text-[9px] text-gray-300 mt-0.5">Min. {MIN_QTY} units</p>
+                    {(p.moq ?? 1) > 1 && <p className="text-[9px] text-gray-300 mt-0.5">Min. {p.moq} units</p>}
                   </div>
                 </button>
               ))}
@@ -461,12 +461,6 @@ export default function ProductDetailPage() {
               </div>
             </button>
           </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {generatedCode && (
-          <CodeModal code={generatedCode} onClose={() => setGeneratedCode(null)} />
         )}
       </AnimatePresence>
     </div>

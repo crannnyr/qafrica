@@ -94,22 +94,22 @@ const STEPS = [
   {
     icon: ShoppingCart,
     title: 'Add to Cart',
-    desc: 'Add your selected items to your order.',
+    desc: 'Add your selected items — order just one if that\'s all you need.',
   },
   {
     icon: Zap,
-    title: 'Generate Code',
-    desc: 'Get your unique order code instantly.',
+    title: 'Sign In',
+    desc: 'Quick sign up or log in — takes under a minute.',
   },
   {
-    icon: MessageCircle,
-    title: 'Send on WhatsApp',
-    desc: 'Tap the WhatsApp link and send us your code.',
+    icon: CreditCard,
+    title: 'Check Out',
+    desc: 'Pay by card or manual bank transfer, right on the site.',
   },
   {
     icon: Calculator,
-    title: 'We Calculate',
-    desc: 'We prepare a comprehensive bill for your shipment.',
+    title: 'We Consolidate',
+    desc: 'Your order is grouped with others to cut shipping costs.',
   },
   {
     icon: Package,
@@ -117,9 +117,9 @@ const STEPS = [
     desc: 'Ship to your address or our warehouse to sell on Jumia.',
   },
   {
-    icon: CreditCard,
-    title: 'Pay & Ship',
-    desc: 'Make payment and your order is on its way.',
+    icon: MessageCircle,
+    title: 'Track Your Order',
+    desc: 'Follow your order status right from your account.',
   },
   {
     icon: TrendingUp,

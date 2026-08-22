@@ -13,7 +13,7 @@ interface CustomerAuthState {
   // Actions
   setCustomer: (customer: Customer | null) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signup: (email: string, password: string, fullName: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (email: string, password: string, fullName: string, phone?: string, signupSource?: 'dropship' | 'importation') => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   fetchProfile: () => Promise<void>;
   updateProfile: (updates: Partial<Customer>) => Promise<{ success: boolean; error?: string }>;
@@ -99,7 +99,7 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
         }
       },
 
-      signup: async (email, password, fullName, phone) => {
+      signup: async (email, password, fullName, phone, signupSource = 'dropship') => {
         set({ isLoading: true, error: null });
         try {
           const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -110,6 +110,7 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
                 full_name: fullName,
                 phone: phone || '',
                 user_type: 'customer',
+                signup_source: signupSource,
               },
             },
           });
@@ -121,6 +122,13 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
 
           if (authData.user) {
             set({ isLoading: false });
+            // Fire-and-forget: distinct welcome email for importation sign-ups.
+            // Dropship customer signups keep existing behavior (unchanged here).
+            if (signupSource === 'importation') {
+              import('@/services/email').then(({ sendImportWelcomeEmail }) => {
+                sendImportWelcomeEmail(email, fullName || 'there').catch(() => {});
+              });
+            }
             return { success: true };
           }
 

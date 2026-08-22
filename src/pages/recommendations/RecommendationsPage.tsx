@@ -1,17 +1,18 @@
 // src/pages/recommendations/RecommendationsPage.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ShoppingBag, Plus, Minus, X, ArrowLeft,
-  MessageCircle, Check, Copy, Info, Package,
-  ChevronRight, Loader, ExternalLink,
+  ShoppingBag, Plus, Minus, Package,
+  ChevronRight, Search, X, User, LogOut,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
+import { useCustomerAuthStore } from '@/stores';
+import DailyPromoModal from './DailyPromoModal';
+import ImportAuthSheet from './ImportAuthSheet';
+import ImportCheckoutSheet from './ImportCheckoutSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
-const WHATSAPP_NUMBER = '2349063606657';
-const MIN_QTY = 20;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface ImportProduct {
@@ -22,7 +23,9 @@ export interface ImportProduct {
   image_urls?: string[];
   price_cny: number;
   price_ngn: number;
+  price_usd?: number;
   category: string;
+  moq: number;
 }
 
 export interface CartItem extends ImportProduct {
@@ -39,311 +42,43 @@ function fmtCny(n: number) {
   return `¥${n.toFixed(0)}`;
 }
 
-// ── Cart Sheet ─────────────────────────────────────────────────────────────────
-function CartSheet({
-  cart,
-  onClose,
-  onAdd,
-  onRemove,
-  onGenerate,
-  isGenerating,
-}: {
-  cart: CartItem[];
-  onClose: () => void;
-  onAdd: (id: string) => void;
-  onRemove: (id: string) => void;
-  onGenerate: (name: string, whatsapp: string, delivery: 'to_qafrica' | 'to_me') => void;
-  isGenerating: boolean;
-}) {
-  const [name, setName]         = useState('');
-  const [whatsapp, setWhatsapp] = useState('');
-  const [delivery, setDelivery] = useState<'to_qafrica' | 'to_me'>('to_qafrica');
-
-  const subtotal  = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
-  const jumiaFee  = delivery === 'to_qafrica' ? cart.reduce((s, i) => s + 200 * i.quantity, 0) : 0;
-  const total     = subtotal + jumiaFee;
-  const canSubmit = name.trim() && whatsapp.trim() && cart.length > 0;
-
-  return (
-    <motion.div
-      initial={{ x: '100%' }}
-      animate={{ x: 0 }}
-      exit={{ x: '100%' }}
-      transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-      className="fixed inset-0 z-50 bg-white flex flex-col"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
-        <h2 className="font-bold text-gray-900 text-sm">Your order</h2>
-        <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
-          <X className="w-4 h-4 text-gray-500" />
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
-        {/* Items */}
-        <div className="space-y-3">
-          {cart.map(item => (
-            <div key={item.id} className="flex items-center gap-3">
-              <img
-                src={item.image_url}
-                alt={item.name}
-                className="w-12 h-12 rounded-xl object-cover border border-gray-100 flex-shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-gray-900 text-xs leading-snug truncate">{item.name}</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">{fmt(item.price_ngn)} · min {MIN_QTY}</p>
-              </div>
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <button
-                  onClick={() => onRemove(item.id)}
-                  className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"
-                >
-                  <Minus className="w-2.5 h-2.5" />
-                </button>
-                <span className="font-bold text-sm w-7 text-center">{item.quantity}</span>
-                <button
-                  onClick={() => onAdd(item.id)}
-                  className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"
-                >
-                  <Plus className="w-2.5 h-2.5" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Delivery */}
-        <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-            Delivery preference
-          </p>
-          <div className="space-y-2">
-            {[
-              { key: 'to_qafrica' as const, label: 'Deliver to QAFRICA', sub: 'We receive, inspect & list on Jumia for you. +₦200/item' },
-              { key: 'to_me' as const,      label: 'Deliver to my address', sub: 'Shipped directly to you. Cost confirmed after.' },
-            ].map(opt => (
-              <button
-                key={opt.key}
-                onClick={() => setDelivery(opt.key)}
-                className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${
-                  delivery === opt.key ? 'border-gray-900 bg-gray-50' : 'border-gray-100'
-                }`}
-              >
-                <div className="flex items-start gap-2.5">
-                  <div className={`w-3.5 h-3.5 rounded-full border-2 mt-0.5 flex-shrink-0 transition-colors ${
-                    delivery === opt.key ? 'border-gray-900 bg-gray-900' : 'border-gray-300'
-                  }`} />
-                  <div>
-                    <p className="font-semibold text-gray-900 text-xs">{opt.label}</p>
-                    <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{opt.sub}</p>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Totals */}
-        <div className="bg-gray-50 rounded-xl p-3.5 space-y-1.5">
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Subtotal</span>
-            <span className="font-medium">{fmt(subtotal)}</span>
-          </div>
-          {delivery === 'to_qafrica' && (
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>Jumia listing fee</span>
-              <span className="font-medium">{fmt(jumiaFee)}</span>
-            </div>
-          )}
-          <div className="flex justify-between text-xs font-bold text-gray-900 pt-1.5 border-t border-gray-200">
-            <span>Total</span>
-            <span className="text-orange-500">{fmt(total)}</span>
-          </div>
-          <p className="text-[10px] text-gray-400">Shipping confirmed after you send your code.</p>
-        </div>
-
-        {/* Details */}
-        <div className="space-y-2">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your details</p>
-          <input
-            type="text"
-            placeholder="Full name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
-          />
-          <input
-            type="tel"
-            placeholder="WhatsApp number (e.g. 08012345678)"
-            value={whatsapp}
-            onChange={e => setWhatsapp(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
-          />
-        </div>
-      </div>
-
-      <div className="px-4 py-4 border-t border-gray-100">
-        <button
-          disabled={!canSubmit || isGenerating}
-          onClick={() => onGenerate(name.trim(), whatsapp.trim(), delivery)}
-          className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
-        >
-          {isGenerating ? <Loader className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
-          {isGenerating ? 'Generating…' : 'Generate my code'}
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-// ── Code Modal ────────────────────────────────────────────────────────────────
-export function CodeModal({ code, onClose }: { code: string; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const message  = encodeURIComponent(`Hi QAFRICA! My import order code is: *${code}*\nPlease help me process this order.`);
-  const waLink   = `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/60 flex items-end justify-center px-4 pb-8"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ y: 60, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 60, opacity: 0 }}
-        transition={{ type: 'spring', damping: 26 }}
-        onClick={e => e.stopPropagation()}
-        className="bg-white rounded-2xl w-full max-w-sm p-6"
-      >
-        <div className="text-center mb-5">
-          <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <Check className="w-6 h-6 text-emerald-600" />
-          </div>
-          <h3 className="font-bold text-gray-900 text-lg mb-1">Your order code</h3>
-          <p className="text-gray-400 text-xs">Copy and send to us on WhatsApp</p>
-        </div>
-
-        <div className="bg-gray-50 rounded-xl p-5 text-center mb-4">
-          <p className="font-black text-4xl tracking-[0.2em] text-gray-900 mb-2">{code}</p>
-          <button
-            onClick={handleCopy}
-            className="flex items-center gap-1.5 mx-auto text-xs text-orange-500 font-semibold"
-          >
-            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-            {copied ? 'Copied!' : 'Copy code'}
-          </button>
-        </div>
-
-        <div className="bg-orange-50 rounded-xl p-3 mb-4 flex items-start gap-2">
-          <Info className="w-3.5 h-3.5 text-orange-400 flex-shrink-0 mt-0.5" />
-          <p className="text-[11px] text-orange-600 leading-relaxed">
-            Our team will confirm your shipping cost on WhatsApp before you pay anything.
-          </p>
-        </div>
-
-        <a
-          href={waLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 transition-colors mb-2"
-        >
-          <MessageCircle className="w-4 h-4" />
-          Send code on WhatsApp
-        </a>
-        <button onClick={onClose} className="w-full py-2 text-xs text-gray-400 font-medium">
-          Close
-        </button>
-      </motion.div>
-    </motion.div>
-  );
-}
-
 // ── Product Card ──────────────────────────────────────────────────────────────
 function ProductCard({
-  product,
-  cartQty,
-  onAdd,
-  onRemove,
-  onClick,
-  usdRate,
+  product, cartQty, onAdd, onRemove, onClick, usdRate,
 }: {
-  product: ImportProduct;
-  cartQty: number;
-  onAdd: () => void;
-  onRemove: () => void;
-  onClick: () => void;
-  usdRate: number;
+  product: ImportProduct; cartQty: number; onAdd: () => void; onRemove: () => void; onClick: () => void; usdRate: number;
 }) {
+  const moq = product.moq ?? 1;
   return (
-    <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 flex flex-col">
-      {/* Image */}
+    <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 flex flex-col hover:shadow-md transition-shadow">
       <button onClick={onClick} className="aspect-square bg-gray-50 overflow-hidden w-full relative">
-        <img
-          src={product.image_url}
-          alt={product.name}
-          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-          loading="lazy"
-        />
+        <img src={product.image_url} alt={product.name} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" loading="lazy" />
       </button>
 
-      <div className="p-2.5 flex flex-col flex-1">
-        {/* Name */}
+      <div className="p-2.5 lg:p-3.5 flex flex-col flex-1">
         <button onClick={onClick} className="text-left mb-2 flex-1">
-          <p className="text-[11px] font-medium text-gray-700 leading-snug line-clamp-2">{product.name}</p>
+          <p className="text-[11px] lg:text-sm font-medium text-gray-700 leading-snug line-clamp-2">{product.name}</p>
         </button>
 
-        {/* Multi-currency pricing — compact */}
         <div className="mb-2 space-y-0.5">
-          <p className="font-bold text-orange-500 text-sm leading-none">{fmt(product.price_ngn)}</p>
+          <p className="font-bold text-orange-500 text-sm lg:text-base leading-none">{fmt(product.price_ngn)}</p>
           <div className="flex items-center gap-1.5">
-            {usdRate > 0 && (
-              <span className="text-[10px] text-gray-400 font-medium">
-                {fmtUsd(product.price_ngn, usdRate)}
-              </span>
-            )}
+            {usdRate > 0 && <span className="text-[10px] text-gray-400 font-medium">{fmtUsd(product.price_ngn, usdRate)}</span>}
             <span className="text-gray-200 text-[10px]">·</span>
-            <span className="text-[10px] text-gray-400 font-medium">
-              {fmtCny(product.price_cny)}
-            </span>
+            <span className="text-[10px] text-gray-400 font-medium">{fmtCny(product.price_cny)}</span>
           </div>
-          <p className="text-[9px] text-gray-300">Min. {MIN_QTY} units</p>
+          {moq > 1 && <p className="text-[9px] text-gray-300">Min. {moq} units</p>}
         </div>
 
-        {/* Cart control */}
         {cartQty === 0 ? (
-          <button
-            onClick={onAdd}
-            className="w-full py-1.5 bg-gray-900 hover:bg-gray-700 text-white text-[11px] font-bold rounded-lg transition-colors flex items-center justify-center gap-1"
-          >
-            <Plus className="w-2.5 h-2.5" />
-            Add
+          <button onClick={onAdd} className="w-full py-1.5 lg:py-2 bg-gray-900 hover:bg-gray-700 text-white text-[11px] lg:text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1">
+            <Plus className="w-2.5 h-2.5" /> Add
           </button>
         ) : (
           <div className="flex items-center justify-between bg-gray-50 rounded-lg px-2 py-1">
-            <button
-              onClick={onRemove}
-              className="w-5 h-5 flex items-center justify-center text-gray-500"
-            >
-              <Minus className="w-3 h-3" />
-            </button>
+            <button onClick={onRemove} className="w-5 h-5 flex items-center justify-center text-gray-500"><Minus className="w-3 h-3" /></button>
             <span className="font-bold text-gray-900 text-xs">{cartQty}</span>
-            <button
-              onClick={onAdd}
-              className="w-5 h-5 flex items-center justify-center text-gray-500"
-            >
-              <Plus className="w-3 h-3" />
-            </button>
+            <button onClick={onAdd} className="w-5 h-5 flex items-center justify-center text-gray-500"><Plus className="w-3 h-3" /></button>
           </div>
         )}
       </div>
@@ -353,27 +88,27 @@ function ProductCard({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function RecommendationsPage() {
-  const navigate  = useNavigate();
-  const location  = useLocation();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { customer, isAuthenticated, logout } = useCustomerAuthStore();
 
-  const [products, setProducts]         = useState<ImportProduct[]>([]);
-  const [isLoading, setIsLoading]       = useState(true);
+  const [products, setProducts] = useState<ImportProduct[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('All');
-  const [cart, setCart]                 = useState<CartItem[]>([]);
-  const [showCart, setShowCart]         = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
-  const [usdRate, setUsdRate]           = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [usdRate, setUsdRate] = useState(0);
 
-  // ── Restore cart passed back from ProductDetailPage ──────────────────────
+  // Restore cart passed back from ProductDetailPage's "goToCart"
   useEffect(() => {
     if (location.state?.cartFromDetail) {
       setCart(location.state.cartFromDetail);
-      // Open the cart sheet immediately so the transition feels seamless
-      setShowCart(true);
-      // Clear the state so a back-navigation doesn't re-trigger
+      setShowCheckout(false); // land back on the grid with cart bar visible, not the sheet
       window.history.replaceState({}, '');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -383,7 +118,6 @@ export default function RecommendationsPage() {
       .catch(() => setProducts([]))
       .finally(() => setIsLoading(false));
 
-    // Fetch exchange rates for multi-currency display
     fetch(`${EDGE_URL}?action=rates`)
       .then(r => r.json())
       .then(d => setUsdRate(d.rates?.usdToNgn ?? 0))
@@ -391,9 +125,29 @@ export default function RecommendationsPage() {
   }, []);
 
   const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
-  const filtered   = activeCategory === 'All'
-    ? products
-    : products.filter(p => p.category === activeCategory);
+
+  // Trending: one product per category (first ~5 categories), rotates by day
+  const trending = useMemo(() => {
+    if (searchQuery || activeCategory !== 'All') return null;
+    const byCategory = new Map<string, ImportProduct[]>();
+    products.forEach(p => {
+      if (!byCategory.has(p.category)) byCategory.set(p.category, []);
+      byCategory.get(p.category)!.push(p);
+    });
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000);
+    const picks: ImportProduct[] = [];
+    Array.from(byCategory.entries()).slice(0, 5).forEach(([, items]) => {
+      picks.push(items[dayOfYear % items.length]);
+    });
+    return picks;
+  }, [products, searchQuery, activeCategory]);
+
+  const filtered = products.filter(p => {
+    if (searchQuery.trim()) {
+      return p.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+    }
+    return activeCategory === 'All' ? true : p.category === activeCategory;
+  });
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
@@ -402,7 +156,7 @@ export default function RecommendationsPage() {
     setCart(prev => {
       const exists = prev.find(i => i.id === product.id);
       if (exists) return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { ...product, quantity: MIN_QTY }];
+      return [...prev, { ...product, quantity: product.moq ?? 1 }];
     });
   };
 
@@ -410,112 +164,104 @@ export default function RecommendationsPage() {
     setCart(prev => {
       const item = prev.find(i => i.id === id);
       if (!item) return prev;
-      if (item.quantity <= MIN_QTY) return prev.filter(i => i.id !== id);
+      const floor = item.moq ?? 1;
+      if (item.quantity <= floor) return prev.filter(i => i.id !== id);
       return prev.map(i => i.id === id ? { ...i, quantity: i.quantity - 1 } : i);
     });
   };
 
-  const handleGenerate = async (name: string, whatsapp: string, delivery: 'to_qafrica' | 'to_me') => {
-    setIsGenerating(true);
-    try {
-      const res = await fetch(`${EDGE_URL}?action=generate-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_name:     name,
-          customer_whatsapp: whatsapp,
-          delivery_type:     delivery,
-          items: cart.map(i => ({
-            id: i.id, name: i.name,
-            price_ngn: i.price_ngn, price_cny: i.price_cny,
-            quantity: i.quantity, image_url: i.image_url,
-          })),
-        }),
-      });
-      const data = await res.json();
-      if (data.code) {
-        setGeneratedCode(data.code);
-        setShowCart(false);
-        setCart([]);
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsGenerating(false);
-    }
+  const handleCheckoutClick = () => {
+    if (!isAuthenticated) { setShowAuth(true); return; }
+    setShowCheckout(true);
   };
+
+  const displayItems = trending ?? filtered;
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {isAuthenticated && <DailyPromoModal customerId={customer?.id} />}
+
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
-          <Link
-            to="/importations"
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 font-medium"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Back
-          </Link>
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 bg-orange-500 rounded-md flex items-center justify-center">
-              <ShoppingBag className="w-3 h-3 text-white" />
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <Link to="/importations" className="flex items-center gap-1.5 text-xs lg:text-sm text-gray-500 hover:text-gray-900 font-medium">
+            <div className="w-5 h-5 lg:w-6 lg:h-6 bg-orange-500 rounded-md flex items-center justify-center">
+              <ShoppingBag className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-white" />
             </div>
-            <span className="font-bold text-gray-900 text-xs">Catalog</span>
+            <span className="font-bold text-gray-900 text-xs lg:text-sm">Catalog</span>
+          </Link>
+
+          <div className="flex items-center gap-2">
+            {isAuthenticated ? (
+              <button
+                onClick={() => logout()}
+                className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 font-medium px-3 py-1.5 rounded-lg hover:bg-gray-50"
+              >
+                <LogOut className="w-3.5 h-3.5" /> Sign out
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowAuth(true)}
+                className="flex items-center gap-1.5 text-xs lg:text-sm text-gray-700 hover:text-gray-900 font-semibold px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50"
+              >
+                <User className="w-3.5 h-3.5" /> Sign in
+              </button>
+            )}
+            {cartCount > 0 ? (
+              <button onClick={handleCheckoutClick} className="flex items-center gap-1 bg-gray-900 text-white px-2.5 py-1.5 rounded-lg text-[11px] lg:text-xs font-bold">
+                <ShoppingBag className="w-3 h-3" /> {cartCount}
+              </button>
+            ) : null}
           </div>
-          {cartCount > 0 ? (
-            <button
-              onClick={() => setShowCart(true)}
-              className="flex items-center gap-1 bg-gray-900 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold"
-            >
-              <ShoppingBag className="w-3 h-3" />
-              {cartCount}
-            </button>
-          ) : <div className="w-14" />}
         </div>
       </header>
 
-      <div className="max-w-lg mx-auto px-4 pt-5 pb-28">
-        {/* Heading */}
-        <div className="mb-4">
-          <h1 className="font-black text-gray-900 text-lg">Recommended items</h1>
-          <p className="text-gray-400 text-xs mt-1 leading-relaxed">
-            Bestsellers on Jumia, sourced from{' '}
-            <a
-              href="https://www.1688.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-orange-500 font-semibold inline-flex items-center gap-0.5 hover:underline"
-            >
-              1688.com <ExternalLink className="w-2.5 h-2.5" />
-            </a>
-            . Need a different colour or size? Mention it when you send your code.
-          </p>
+      <div className="max-w-7xl mx-auto px-4 pt-5 pb-28 lg:pb-16">
+        {/* Heading + search */}
+        <div className="mb-4 lg:flex lg:items-end lg:justify-between lg:gap-6">
+          <div>
+            <h1 className="font-black text-gray-900 text-lg lg:text-2xl">Recommended items</h1>
+            <p className="text-gray-400 text-xs lg:text-sm mt-1 leading-relaxed max-w-lg">
+              Bestsellers sourced from verified vendors. Need a different colour or size? Mention it at checkout.
+            </p>
+          </div>
+          <div className="relative mt-3 lg:mt-0 lg:w-72">
+            <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search products…"
+              className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-xs lg:text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-100 outline-none"
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Category filters */}
-        {!isLoading && categories.length > 2 && (
+        {!isLoading && !searchQuery && categories.length > 2 && (
           <div className="flex gap-1.5 overflow-x-auto pb-3 mb-3 -mx-4 px-4">
             {categories.map(cat => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(cat)}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors flex-shrink-0 ${
-                  activeCategory === cat
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-white border border-gray-200 text-gray-500'
-                }`}
-              >
+              <button key={cat} onClick={() => setActiveCategory(cat)}
+                className={`px-3 py-1 rounded-full text-[11px] lg:text-xs font-bold whitespace-nowrap transition-colors flex-shrink-0 ${
+                  activeCategory === cat ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-500'
+                }`}>
                 {cat}
               </button>
             ))}
           </div>
         )}
 
-        {/* Grid */}
+        {trending && (
+          <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-3">Trending today</p>
+        )}
+
+        {/* Grid — 2 cols on phones, up to 5 on large desktop */}
         {isLoading ? (
-          <div className="grid grid-cols-2 gap-2.5">
-            {Array.from({ length: 6 }).map((_, i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4">
+            {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
                 <div className="aspect-square bg-gray-100" />
                 <div className="p-2.5 space-y-2">
@@ -526,20 +272,19 @@ export default function RecommendationsPage() {
               </div>
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : displayItems.length === 0 ? (
           <div className="text-center py-20">
             <Package className="w-8 h-8 text-gray-200 mx-auto mb-3" />
-            <p className="text-gray-400 text-xs font-medium">No products yet. Check back soon.</p>
+            <p className="text-gray-700 text-sm font-bold mb-1">Nothing here yet</p>
+            <p className="text-gray-400 text-xs font-medium">Check back soon — new items are added often.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2.5">
-            {filtered.map(p => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4">
+            {displayItems.map(p => (
               <ProductCard
-                key={p.id}
-                product={p}
+                key={p.id} product={p}
                 cartQty={cart.find(i => i.id === p.id)?.quantity ?? 0}
-                onAdd={() => addToCart(p)}
-                onRemove={() => removeFromCart(p.id)}
+                onAdd={() => addToCart(p)} onRemove={() => removeFromCart(p.id)}
                 onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
                 usdRate={usdRate}
               />
@@ -548,50 +293,37 @@ export default function RecommendationsPage() {
         )}
       </div>
 
-      {/* Floating cart bar */}
+      {/* Floating cart bar (mobile) */}
       <AnimatePresence>
-        {cartCount > 0 && !showCart && (
-          <motion.div
-            initial={{ y: 80, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 80, opacity: 0 }}
-            className="fixed bottom-6 left-4 right-4 z-20 max-w-lg mx-auto"
-          >
-            <button
-              onClick={() => setShowCart(true)}
-              className="w-full py-3.5 bg-gray-900 hover:bg-gray-800 text-white font-bold text-sm rounded-2xl shadow-xl flex items-center justify-between px-5 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="w-4 h-4" />
-                <span>{cartCount} unit{cartCount !== 1 ? 's' : ''} in order</span>
-              </div>
-              <div className="flex items-center gap-1 text-orange-400">
-                <span className="text-sm font-bold">{fmt(cartTotal)}</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </div>
+        {cartCount > 0 && !showCheckout && (
+          <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
+            className="fixed bottom-6 left-4 right-4 z-20 max-w-lg mx-auto lg:hidden">
+            <button onClick={handleCheckoutClick}
+              className="w-full py-3.5 bg-gray-900 hover:bg-gray-800 text-white font-bold text-sm rounded-2xl shadow-xl flex items-center justify-between px-5 transition-colors">
+              <div className="flex items-center gap-2"><ShoppingBag className="w-4 h-4" /><span>{cartCount} unit{cartCount !== 1 ? 's' : ''} in order</span></div>
+              <div className="flex items-center gap-1 text-orange-400"><span className="text-sm font-bold">{fmt(cartTotal)}</span><ChevronRight className="w-3.5 h-3.5" /></div>
             </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Cart sheet */}
       <AnimatePresence>
-        {showCart && (
-          <CartSheet
-            cart={cart}
-            onClose={() => setShowCart(false)}
-            onAdd={id => { const p = products.find(p => p.id === id); if (p) addToCart(p); }}
-            onRemove={removeFromCart}
-            onGenerate={handleGenerate}
-            isGenerating={isGenerating}
+        {showAuth && (
+          <ImportAuthSheet
+            onClose={() => setShowAuth(false)}
+            onSuccess={() => { setShowAuth(false); if (cartCount > 0) setShowCheckout(true); }}
           />
         )}
       </AnimatePresence>
 
-      {/* Code modal */}
       <AnimatePresence>
-        {generatedCode && (
-          <CodeModal code={generatedCode} onClose={() => setGeneratedCode(null)} />
+        {showCheckout && customer && (
+          <ImportCheckoutSheet
+            cart={cart} customer={customer}
+            onClose={() => setShowCheckout(false)}
+            onAdd={id => { const p = products.find(p => p.id === id); if (p) addToCart(p); }}
+            onRemove={removeFromCart}
+          />
         )}
       </AnimatePresence>
     </div>
