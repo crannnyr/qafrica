@@ -36,6 +36,7 @@ interface ImportOrder {
   status: 'pending' | 'shipping_quoted' | 'order_placed' | 'shipped' | 'delivered';
   admin_note: string | null;
   created_at: string;
+  user_id: string | null;
 }
 
 interface ImportProduct {
@@ -106,7 +107,7 @@ function useImportAuth() {
   };
 
   useEffect(() => {
-    if (!token || !manager) navigate('/import-admin/login');
+    if (!token || !manager) navigate('/importations/admin/login');
   }, []);
 
   return { token, manager, logout };
@@ -396,14 +397,18 @@ function OrdersList({ token }: { token: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter]       = useState('all');
   const [search, setSearch]       = useState('');
+  const [billingOrder, setBillingOrder] = useState<ImportOrder | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await fetch(`${EDGE_URL}?action=all-orders`, {
-        headers: { 'x-manager-token': token },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token }),
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to load orders');
       setOrders(data.orders ?? []);
     } catch {
     } finally {
@@ -519,8 +524,130 @@ function OrdersList({ token }: { token: string }) {
                   {order.delivery_type === 'to_qafrica' ? 'Jumia' : 'To customer'}
                 </span>
               </div>
+              {order.user_id && (
+                <button
+                  onClick={() => setBillingOrder(order)}
+                  className="mt-2 text-[11px] font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg transition-colors"
+                >
+                  Bill for consolidation drop-off
+                </button>
+              )}
             </div>
           ))
+        )}
+      </div>
+
+      {billingOrder && (
+        <BillCustomerModal
+          token={token}
+          order={billingOrder}
+          onClose={() => setBillingOrder(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Bill Customer Modal (consolidation drop-off fee) ────────────────────────
+function BillCustomerModal({
+  token,
+  order,
+  onClose,
+}: {
+  token: string;
+  order: ImportOrder;
+  onClose: () => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState('Consolidation drop-off fee');
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async () => {
+    const amountNum = Number(amount);
+    if (!amountNum || amountNum <= 0) { setError('Enter a valid amount'); return; }
+    setIsSaving(true);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-create-bill`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_token: token,
+          user_id: order.user_id,
+          order_id: order.id,
+          amount_ngn: amountNum,
+          reason: reason.trim() || 'Consolidation drop-off fee',
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to create bill');
+      setDone(true);
+    } catch (e: any) {
+      setError(e?.message ?? 'Something went wrong');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center sm:p-4">
+      <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6">
+        {done ? (
+          <div className="text-center py-4">
+            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+            </div>
+            <h3 className="font-bold text-gray-900 text-lg mb-1">Bill sent</h3>
+            <p className="text-gray-400 text-xs mb-5">
+              {order.customer_name} will see this on their dashboard and can pay by bank transfer.
+            </p>
+            <button onClick={onClose} className="w-full py-3 bg-gray-900 text-white font-bold text-sm rounded-xl">
+              Done
+            </button>
+          </div>
+        ) : (
+          <>
+            <h3 className="font-bold text-gray-900 text-lg mb-1">Bill for consolidation drop-off</h3>
+            <p className="text-gray-400 text-xs mb-4">
+              Order {order.code} · {order.customer_name}
+            </p>
+
+            <label className="text-xs font-semibold text-gray-700 mb-1.5 block">Amount (₦)</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={e => setAmount(e.target.value)}
+              placeholder="e.g. 5000"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none mb-3"
+            />
+
+            <label className="text-xs font-semibold text-gray-700 mb-1.5 block">Reason</label>
+            <input
+              type="text"
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none mb-4"
+            />
+
+            {error && (
+              <p className="text-red-500 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg mb-3">{error}</p>
+            )}
+
+            <div className="flex gap-2">
+              <button onClick={onClose} className="flex-1 py-3 text-sm font-semibold text-gray-500 bg-gray-100 rounded-xl">
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={isSaving || !amount}
+                className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2"
+              >
+                {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : 'Send bill'}
+              </button>
+            </div>
+          </>
         )}
       </div>
     </div>
