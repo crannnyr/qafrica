@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { compressImage } from '@/lib/imageCompression';
 import CONFIG from '@/lib/config';
+import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import ImportAdminAnalytics from './ImportAdminAnalytics';
 import ImportAdminCustomers from './ImportAdminCustomers';
 
@@ -969,7 +970,7 @@ function ProductsManager({ token }: { token: string }) {
   const openEdit = (p: ImportProduct) => {
     setEditProduct(p);
     setName(p.name); setDesc(p.description); setCategory(p.category);
-    // Show the original (pre-markup) 1688 price for editing, in CNY
+    // Show the original (pre-markup) supplier price for editing, in CNY
     setPriceAmount((p.price_cny_original ?? p.price_cny).toString());
     setPriceCurrency('cny');
     setMoq((p.moq ?? 1).toString());
@@ -1403,6 +1404,7 @@ function ProductsManager({ token }: { token: string }) {
 
 // ── Main Admin Page ───────────────────────────────────────────────────────────
 export default function ImportAdminPage() {
+  useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
   const [tab, setTab] = useState<'analytics' | 'orders' | 'products' | 'clients'>('analytics');
 

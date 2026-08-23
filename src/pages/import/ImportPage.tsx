@@ -7,6 +7,7 @@ import {
   Calculator, Package, CreditCard, TrendingUp,
   Shield, Globe, CheckCircle,
 } from 'lucide-react';
+import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 
 // -- Hero ---------------------------------------------------------------------
 function Hero() {
@@ -22,18 +23,18 @@ function Hero() {
             {/* Eyebrow */}
             <div className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 text-xs font-bold px-3 py-1.5 rounded-full mb-5">
               <Globe className="w-3.5 h-3.5" />
-              Powered by 1688.com
+              Sourced from verified Chinese manufacturers
             </div>
 
             <h1 className="text-2xl font-black text-gray-900 leading-tight mb-5 text-left">
-              We help you safely import from China's largest wholesale platform,{' '}
-              <span className="text-orange-500">1688.</span>
+              We help you safely import from{' '}
+              <span className="text-orange-500">China's largest wholesale markets.</span>
             </h1>
 
             <p className="text-gray-500 text-sm leading-relaxed mb-7 text-left max-w-sm">
-              We can help you source from verified vendors on 1688. View our catalog
-              for recommended products that sell best on Jumia. Or visit 1688.com and
-              send us screenshots -- we'll handle the rest.
+              We source from verified manufacturers on your behalf. View our catalog
+              for recommended products that sell best on Jumia, and we'll handle
+              sourcing, quality control and shipping — start to finish.
             </p>
 
             {/* CTAs */}
@@ -183,7 +184,7 @@ const TRUST_POINTS = [
   {
     icon: Shield,
     title: 'Verified vendors only',
-    desc: 'Every supplier we work with is vetted on 1688 before we place a single order.',
+    desc: 'Every supplier we work with is vetted and verified before we place a single order.',
   },
   {
     icon: CheckCircle,
@@ -266,6 +267,7 @@ function WhyTrustUs() {
 
 // -- Main Page ----------------------------------------------------------------
 export default function ImportPage() {
+  useImportPwaManifest();
   return (
     <div className="min-h-screen bg-white">
       {/* Single sticky nav */}

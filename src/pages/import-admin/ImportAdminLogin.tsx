@@ -4,8 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Eye, EyeOff, Loader } from 'lucide-react';
 
 import CONFIG from '@/lib/config';
+import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 export default function ImportAdminLogin() {
+  useImportPwaManifest();
   const navigate = useNavigate();
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');

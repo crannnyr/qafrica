@@ -9,6 +9,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, Package, Receipt, ChevronLeft, RefreshCw, Clock } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
+import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { fmt } from './RecommendationsPage';
 import ManualPaymentFlow from './ManualPaymentFlow';
 
@@ -72,6 +73,7 @@ const BILL_STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ImporterDashboardPage() {
+  useImportPwaManifest();
   const navigate = useNavigate();
   const { customer, isAuthenticated } = useCustomerAuthStore();
 

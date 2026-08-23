@@ -4,11 +4,12 @@ import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ShoppingBag, Plus, Minus,
-  Package, ExternalLink, ChevronRight, Tag, ChevronDown, ChevronUp,
+  Package, ChevronRight, Tag, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { fmt, buildCartKey } from './RecommendationsPage';
 import type { CartItem, ImportProduct, VariantGroup } from './RecommendationsPage';
 import CONFIG from '@/lib/config';
+import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const DESC_PREVIEW_LENGTH = 80;
@@ -138,6 +139,7 @@ function ImageGallery({ images, name }: { images: string[]; name: string }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProductDetailPage() {
+  useImportPwaManifest();
   const { id }       = useParams<{ id: string }>();
   const location     = useLocation();
   const navigate     = useNavigate();
@@ -350,15 +352,7 @@ export default function ProductDetailPage() {
           </div>
 
           <p className="text-[10px] text-gray-400 mt-1 mb-5">
-            Sourced from{' '}
-            <a
-              href="https://www.1688.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-orange-500 font-semibold inline-flex items-center gap-0.5 hover:underline"
-            >
-              1688.com <ExternalLink className="w-2.5 h-2.5" />
-            </a>
+            Sourced from verified manufacturers in China
           </p>
 
           {/* Variant selection */}

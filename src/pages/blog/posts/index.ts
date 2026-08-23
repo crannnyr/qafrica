@@ -49,7 +49,7 @@ export const posts: BlogPost[] = [
     date:        'June 2026',
     keywords:    [
       'dropshipping china nigeria','source products china nigeria','import from china nigeria',
-      'dropshipping nigeria 2026','1688 nigeria','how to import from china','china to nigeria shipping',
+      'dropshipping nigeria 2026','china wholesale nigeria','how to import from china','china to nigeria shipping',
       'alibaba nigeria seller','dropship to jumia','dropship to konga',
     ],
     featured:    true,
@@ -100,13 +100,13 @@ export const posts: BlogPost[] = [
   {
     slug:        'import-products-from-china-nigeria',
     title:       'How to Import Products from China to Nigeria Without a Freight Agent',
-    description: 'QAFRICA handles sourcing, quality control, warehousing and customs. You pick products from our catalog or send screenshots from 1688 — we handle everything else.',
+    description: 'QAFRICA handles sourcing, quality control, warehousing and customs. Pick products from our catalog or send us screenshots of what you want — we handle everything else.',
     category:    'Importation',
     readTime:    '6 min read',
     date:        'June 2026',
     keywords:    [
       'import from china nigeria','china to nigeria shipping','importation business nigeria',
-      'source products china nigeria 2026','1688 app nigeria','how to buy from 1688 nigeria',
+      'source products china nigeria 2026','china wholesale app nigeria','how to import products from china',
       'alibaba to nigeria','clearing agent nigeria','import duty nigeria',
     ],
     featured:    false,
@@ -120,7 +120,7 @@ export const posts: BlogPost[] = [
     date:        'June 2026',
     keywords:    [
       'china shipping cost nigeria','why is shipping from china expensive','consolidated shipping china',
-      'air freight vs sea freight nigeria','group shipping china nigeria','1688 shipping cost',
+      'air freight vs sea freight nigeria','group shipping china nigeria','china wholesale shipping cost',
       'cheap shipping from china','import shipping rates nigeria',
     ],
     featured:    false,

@@ -179,7 +179,7 @@ function DropshippingPipelineDiagram() {
     {
       emoji:  '🛍️',
       label:  'Select',
-      detail: 'Browse QAFRICA catalog or 1688 app',
+      detail: 'Browse QAFRICA catalog or send us what you want',
       color:  'bg-blue-50 text-blue-700 border-blue-200',
     },
     {
@@ -509,19 +509,19 @@ function PostContent({ slug }: { slug: string }) {
           </p>
         </div>
         <div className="bg-blue-50 border border-blue-100 rounded-xl p-5">
-          <p className="text-sm font-bold text-blue-700 mb-2">🔎 Browse 1688 Yourself</p>
+          <p className="text-sm font-bold text-blue-700 mb-2">🔎 Found Something Elsewhere?</p>
           <p className="text-sm text-gray-700 leading-relaxed">
-            Prefer to hunt for deals yourself? Browse 1688 directly, screenshot
-            the products you like and send them to QAFRICA. We'll source, verify
-            and import them for you. Our team handles the rest.
+            Prefer to hunt for deals yourself? Screenshot or link any product
+            you like and send it to QAFRICA. We'll source, verify
+            and import it for you. Our team handles the rest.
           </p>
         </div>
       </div>
 
       <WarningBox>
-        If you browse 1688 yourself, only send products to QAFRICA for sourcing — never
-        pay a supplier on 1688 directly. Scammers are common on the platform. QAFRICA's
-        team verifies every supplier before any money moves. Let us protect your cash.
+        If you find products yourself, only send them to QAFRICA for sourcing — never
+        pay an unfamiliar supplier directly. Scammers are common in wholesale sourcing.
+        QAFRICA's team verifies every supplier before any money moves. Let us protect your cash.
       </WarningBox>
 
       <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">
@@ -534,7 +534,7 @@ function PostContent({ slug }: { slug: string }) {
         <StepCard
           number="1"
           title="Select Your Products"
-          description="Browse QAFRICA's curated catalog or search 1688 directly and screenshot products that interest you. There's no minimum order — you can start with as little as one product line."
+          description="Browse QAFRICA's curated catalog, or send us screenshots or links to products you've found elsewhere. There's no minimum order — you can start with as little as one product line."
         />
         <StepCard
           number="2"
@@ -624,7 +624,7 @@ function PostContent({ slug }: { slug: string }) {
       <CtaBanner
         context="importations"
         headline="Start importing from China — without leaving Nigeria"
-        sub="Browse our catalog or send us 1688 screenshots. We calculate your price, handle shipping, QC and warehousing — you decide where to store and which channels to sell on."
+        sub="Browse our catalog or send us screenshots of products you want. We calculate your price, handle shipping, QC and warehousing — you decide where to store and which channels to sell on."
       />
     </div>
   );
@@ -726,7 +726,7 @@ function PostContent({ slug }: { slug: string }) {
       </h2>
       <p className="text-gray-600 leading-relaxed mb-4">
         Your store doesn't sit in isolation. It's connected directly to QAFRICA's
-        China procurement pipeline. If you find a product on 1688 you want to list,
+        China procurement pipeline. If you find a product you want to list,
         submit it through your dashboard. QAFRICA will source it, ship it, QC it and
         add it to your store — ready to push live on Jumia, Konga and Jiji.
       </p>
@@ -780,7 +780,7 @@ function PostContent({ slug }: { slug: string }) {
         },
         {
           q: 'How do I source products from China through my QAFRICA store?',
-          a: 'You can browse QAFRICA\'s curated catalog directly from your dashboard and add products in one click. Alternatively, screenshot or copy a link from 1688 and submit it through the procurement tool. QAFRICA verifies the supplier, calculates your landed cost (product + shipping + customs + QC) and sends you a quote before anything is ordered.',
+          a: 'You can browse QAFRICA\'s curated catalog directly from your dashboard and add products in one click. Alternatively, screenshot or copy a link to a product you\'ve found elsewhere and submit it through the procurement tool. QAFRICA verifies the supplier, calculates your landed cost (product + shipping + customs + QC) and sends you a quote before anything is ordered.',
         },
         {
           q: 'Is QAFRICA suitable for first-time online sellers in Nigeria?',
@@ -922,8 +922,8 @@ function PostContent({ slug }: { slug: string }) {
       />
 
       <WarningBox>
-        Thinking of ordering directly from 1688 yourself? It's possible — but the
-        platform is in Mandarin, payments require a Chinese bank account or proxy
+        Thinking of sourcing directly from Chinese wholesale platforms yourself? It's possible — but
+        most are in Mandarin, payments often require a Chinese bank account or proxy
         service, and unverified sellers are common. Send us the screenshots instead.
         We source safely on your behalf.
       </WarningBox>

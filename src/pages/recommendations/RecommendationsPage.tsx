@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
+import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import DailyPromoModal from './DailyPromoModal';
 import ImportAuthSheet from './ImportAuthSheet';
 import ImportCheckoutSheet from './ImportCheckoutSheet';
@@ -111,6 +112,7 @@ function ProductCard({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function RecommendationsPage() {
+  useImportPwaManifest();
   const navigate = useNavigate();
   const location = useLocation();
   const { customer, isAuthenticated, logout } = useCustomerAuthStore();
@@ -167,7 +169,8 @@ export default function RecommendationsPage() {
 
   const filtered = products.filter(p => {
     if (searchQuery.trim()) {
-      return p.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+      const q = searchQuery.trim().toLowerCase();
+      return p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q);
     }
     return activeCategory === 'All' ? true : p.category === activeCategory;
   });
@@ -256,7 +259,7 @@ export default function RecommendationsPage() {
           <div>
             <h1 className="font-black text-gray-900 text-lg lg:text-2xl">Recommended items</h1>
             <p className="text-gray-400 text-xs lg:text-sm mt-1 leading-relaxed max-w-lg">
-              Bestsellers sourced from verified vendors.
+              Split importation and clearance fees with hundreds of others — cutting rates by up to 90%. Join our community after your first purchase, we'd love to hear from you!
             </p>
           </div>
           <div className="relative mt-3 lg:mt-0 lg:w-72">
