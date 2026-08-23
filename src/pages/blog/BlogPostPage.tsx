@@ -936,6 +936,96 @@ function PostContent({ slug }: { slug: string }) {
     </div>
   );
 
+  // ── 8. Why shipping costs so much — consolidation explained ────────────────
+  if (slug === 'why-shipping-costs-so-much-and-how-we-fix-it') return (
+    <div className="prose-content">
+      <p className="text-lg text-gray-600 leading-relaxed mb-6">
+        If you've ever asked a shipping company to quote a single pair of shoes from
+        China, the number that comes back can be shocking. A ₦40,000 pair of shoes
+        might come with a ₦20,000 shipping bill — not because the item is heavy,
+        but because of how freight pricing actually works.
+      </p>
+
+      <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">
+        Shipping companies charge a minimum, not a rate per item
+      </h2>
+      <p className="text-gray-600 leading-relaxed mb-4">
+        Every courier and freight forwarder sets a minimum chargeable weight —
+        commonly around 10kg — no matter how light your actual parcel is. If your
+        order weighs 1kg, you're still billed as if it weighs 10kg. On top of that,
+        many carriers have a flat minimum fee around $29 per shipment, regardless
+        of size. Ship one item on your own and you're paying for space you never use.
+      </p>
+
+      <PullQuote>
+        The problem isn't your item. It's that shipping companies are built to
+        move pallets, not parcels — and they price accordingly.
+      </PullQuote>
+
+      <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">
+        How we bring the cost down: we play a game of numbers
+      </h2>
+      <p className="text-gray-600 leading-relaxed mb-4">
+        Instead of shipping your one order alone, we combine it with everyone else's
+        orders heading to Nigeria in the same window. A shipment that would cost
+        one person nearly $100 gets split across a hundred people — each paying
+        only their true share of the space and weight they actually use.
+      </p>
+
+      <InfoBox
+        title="The math, simplified"
+        items={[
+          'Shipping alone: you absorb the courier\'s full minimum — often $29+ per shipment regardless of size',
+          'Shipping with QAFRICA: your order is pooled with hundreds of others heading the same way',
+          'The shared minimum gets divided across everyone in the pool, not charged to you alone',
+          'Result: consolidated orders can bring your effective shipping cost down to a small fraction of shipping solo',
+        ]}
+      />
+
+      <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">
+        Flight or sea freight — same consolidation, different speed
+      </h2>
+      <p className="text-gray-600 leading-relaxed mb-4">
+        We consolidate both ways you can ship with us:
+      </p>
+      <p className="text-gray-600 leading-relaxed mb-4">
+        <strong>Flight (air freight)</strong> — faster, and the better choice when
+        you need stock quickly. Air freight has a higher per-kg cost than sea,
+        which is exactly why consolidation matters most here.
+      </p>
+      <p className="text-gray-600 leading-relaxed mb-6">
+        <strong>Sea freight</strong> — slower, but significantly cheaper per kg
+        for bulkier or heavier orders. If you're not in a rush and want to
+        maximise your margin, sea freight paired with consolidation is usually
+        the cheapest way to move goods from China to Nigeria.
+      </p>
+
+      <WarningBox>
+        Consolidation means your order ships alongside others on the same
+        schedule — so delivery timing is tied to when the group's shipment
+        departs, not the moment you place your order. We'll always let you know
+        where things stand.
+      </WarningBox>
+
+      <h2 className="text-xl font-bold text-gray-900 mt-8 mb-4">
+        What happens after it lands
+      </h2>
+      <p className="text-gray-600 leading-relaxed mb-6">
+        Once your shipment reaches Nigeria, we handle sourcing and coordination
+        on our end, then reach out to you individually — either to arrange
+        pickup from our Lagos location or to get your items sent on to you.
+        You'll always be able to see where your order sits, right from your
+        dashboard.
+      </p>
+
+      <CtaBanner
+        context="importations"
+        headline="Ship smarter, not solo"
+        sub="Every QAFRICA import order is pooled with others automatically. Pick flight or sea freight at checkout — we handle the rest."
+      />
+    </div>
+  );
+
   return null;
 }
 

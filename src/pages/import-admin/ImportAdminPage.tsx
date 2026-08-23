@@ -30,6 +30,14 @@ interface ImportOrder {
     image_url: string;
   }>;
   delivery_type: 'to_qafrica' | 'to_me';
+  shipping_method?: 'flight' | 'sea_freight' | null;
+  delivery_address?: {
+    name: string; phone: string; address_line1: string; address_line2: string;
+    city: string; state: string; landmark: string;
+  } | null;
+  delivery_latitude?: number | null;
+  delivery_longitude?: number | null;
+  location_shared?: boolean;
   subtotal_ngn: number;
   jumia_fee_ngn: number;
   shipping_ngn: number | null;
@@ -104,6 +112,22 @@ function timeSince(d: string) {
   if (hrs < 24) return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
 }
+
+// Prefers precise GPS coords when the customer shared them; falls back to a
+// text search built from the manually entered address.
+function googleMapsLink(order: Pick<ImportOrder, 'delivery_latitude' | 'delivery_longitude' | 'delivery_address'>) {
+  if (order.delivery_latitude != null && order.delivery_longitude != null) {
+    return `https://www.google.com/maps/search/?api=1&query=${order.delivery_latitude},${order.delivery_longitude}`;
+  }
+  const a = order.delivery_address;
+  if (!a) return null;
+  const parts = [a.address_line1, a.address_line2, a.landmark, a.city, a.state].filter(Boolean).join(', ');
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(parts)}`;
+}
+
+const SHIPPING_METHOD_LABELS: Record<string, string> = {
+  flight: 'Flight', sea_freight: 'Sea freight',
+};
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
@@ -288,18 +312,50 @@ function LoadCodePanel({ token }: { token: string }) {
                 <div>
                   <p className="font-bold text-gray-900">{order.customer_name}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{order.customer_whatsapp} · {timeSince(order.created_at)}</p>
-                  <span className={`inline-flex mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    order.delivery_type === 'to_qafrica'
-                      ? 'bg-orange-50 text-orange-600'
-                      : 'bg-sky-50 text-sky-600'
-                  }`}>
-                    {order.delivery_type === 'to_qafrica' ? 'To QAFRICA / Jumia' : 'To Customer'}
-                  </span>
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                    <span className={`inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      order.delivery_type === 'to_qafrica'
+                        ? 'bg-orange-50 text-orange-600'
+                        : 'bg-sky-50 text-sky-600'
+                    }`}>
+                      {order.delivery_type === 'to_qafrica' ? 'To QAFRICA / Jumia' : 'To Customer'}
+                    </span>
+                    {order.shipping_method && (
+                      <span className="inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                        {SHIPPING_METHOD_LABELS[order.shipping_method] ?? order.shipping_method}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${STATUS_COLORS[order.status]}`}>
                   {STATUS_LABELS[order.status]}
                 </span>
               </div>
+
+              {/* Delivery address — only present for to_me orders */}
+              {order.delivery_type === 'to_me' && order.delivery_address && (
+                <div className="bg-gray-50 rounded-xl px-3.5 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-xs text-gray-600 leading-relaxed">
+                      <p className="font-semibold text-gray-800">{order.delivery_address.name} · {order.delivery_address.phone}</p>
+                      <p>{order.delivery_address.address_line1}{order.delivery_address.address_line2 ? `, ${order.delivery_address.address_line2}` : ''}</p>
+                      <p>{order.delivery_address.city}, {order.delivery_address.state}</p>
+                      {order.delivery_address.landmark && <p className="text-gray-400">Near: {order.delivery_address.landmark}</p>}
+                      {order.location_shared && (
+                        <p className="text-emerald-600 font-semibold mt-1">📍 GPS location shared</p>
+                      )}
+                    </div>
+                    {googleMapsLink(order) && (
+                      <a
+                        href={googleMapsLink(order)!} target="_blank" rel="noopener noreferrer"
+                        className="flex-shrink-0 flex items-center gap-1 text-[11px] font-bold text-white bg-gray-900 hover:bg-gray-700 px-2.5 py-1.5 rounded-lg transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" /> Maps
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <Divider />
 

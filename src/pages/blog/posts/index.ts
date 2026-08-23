@@ -111,6 +111,20 @@ export const posts: BlogPost[] = [
     ],
     featured:    false,
   },
+  {
+    slug:        'why-shipping-costs-so-much-and-how-we-fix-it',
+    title:       'Why Shipping From China Costs So Much — And How We Cut It Down',
+    description: 'Shipping companies charge a minimum no matter how small your order is. We pool hundreds of orders together so you only pay your share — for both flight and sea freight.',
+    category:    'Importation',
+    readTime:    '4 min read',
+    date:        'June 2026',
+    keywords:    [
+      'china shipping cost nigeria','why is shipping from china expensive','consolidated shipping china',
+      'air freight vs sea freight nigeria','group shipping china nigeria','1688 shipping cost',
+      'cheap shipping from china','import shipping rates nigeria',
+    ],
+    featured:    false,
+  },
 ];
 
 export const getFeatured  = ()              => posts.filter(p => p.featured);
