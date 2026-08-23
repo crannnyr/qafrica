@@ -6,7 +6,7 @@ import {
   ShoppingBag, LogOut, Package, Search, RefreshCw,
   Plus, Trash2, Edit2, Check, ChevronDown, ChevronUp,
   Upload, Loader, TrendingUp, AlertCircle, ExternalLink, X,
-  Info,
+  Info, CheckCircle2,
 } from 'lucide-react';
 import { compressImage } from '@/lib/imageCompression';
 import CONFIG from '@/lib/config';
