@@ -399,6 +399,9 @@ export default function ProductDetailPage() {
               </span>
               <span className="text-[10px] text-gray-400">per unit</span>
             </div>
+            {!!product.units_sold && product.units_sold > 0 && (
+              <p className="text-[11px] text-gray-400 font-medium mt-1">{product.units_sold.toLocaleString()} sold</p>
+            )}
           </div>
 
           <p className="text-[10px] text-gray-400 mt-1 mb-5">

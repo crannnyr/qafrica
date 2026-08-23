@@ -36,6 +36,7 @@ export interface ImportProduct {
   moq: number;
   has_variants?: boolean;
   variants?: VariantGroup[];
+  units_sold?: number;
 }
 
 export interface CartItem extends ImportProduct {
@@ -130,6 +131,9 @@ function ProductCard({
             <span className="text-[10px] text-gray-400 font-medium">{fmtCny(product.price_cny)}</span>
           </div>
           {moq > 1 && <p className="text-[9px] text-gray-300">Min. {moq} units</p>}
+          {!!product.units_sold && product.units_sold > 0 && (
+            <p className="text-[9px] text-gray-400">{product.units_sold.toLocaleString()} sold</p>
+          )}
         </div>
 
         {hasVariants ? (
@@ -246,7 +250,7 @@ export default function RecommendationsPage() {
     setShowCheckout(true);
   };
 
-  const displayItems = trending ?? filtered;
+  const displayItems = filtered;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -334,8 +338,27 @@ export default function RecommendationsPage() {
           </div>
         )}
 
-        {trending && (
-          <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-3">Trending today</p>
+        {trending && trending.length > 0 && (
+          <div className="mb-4">
+            <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">Trending today</p>
+            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4">
+              {trending.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
+                  className="flex-shrink-0 w-28 bg-white rounded-xl border border-gray-100 overflow-hidden text-left hover:shadow-sm transition-shadow"
+                >
+                  <div className="aspect-square bg-gray-50">
+                    <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                  </div>
+                  <div className="p-1.5">
+                    <p className="text-[10px] font-medium text-gray-700 line-clamp-1">{p.name}</p>
+                    <p className="text-[11px] font-bold text-orange-500">{fmt(p.price_ngn)}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Grid — 2 cols on phones, up to 5 on large desktop */}

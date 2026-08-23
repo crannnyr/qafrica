@@ -74,6 +74,7 @@ interface ImportProduct {
   moq?: number;
   has_variants?: boolean;
   variants?: VariantGroup[];
+  units_sold?: number;
 }
 
 // Quick-add presets for the variant builder
@@ -872,6 +873,7 @@ function ProductsManager({ token }: { token: string }) {
   const [priceAmount, setPriceAmount] = useState(''); // raw price as entered by admin
   const [priceCurrency, setPriceCurrency] = useState<'cny' | 'usd' | 'ngn'>('cny');
   const [moq, setMoq]                 = useState('1');
+  const [unitsSold, setUnitsSold]     = useState('');
   const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
   const [expandedVariantGroups, setExpandedVariantGroups] = useState<Set<string>>(new Set());
   const toggleVariantGroupExpanded = (key: string) =>
@@ -985,7 +987,7 @@ function ProductsManager({ token }: { token: string }) {
   const openAdd = () => {
     setEditProduct(null);
     setName(''); setDesc(''); setCategory('General');
-    setPriceAmount(''); setPriceCurrency('cny'); setMoq('1');
+    setPriceAmount(''); setPriceCurrency('cny'); setMoq('1'); setUnitsSold('');
     setVariantGroups([]); setCustomGroupName(''); setCustomOptionDrafts({}); setExpandedVariantGroups(new Set());
     setImagePreviews([]); setImageFiles([null, null, null]);
     setSaveError('');
@@ -999,6 +1001,7 @@ function ProductsManager({ token }: { token: string }) {
     setPriceAmount((p.price_cny_original ?? p.price_cny).toString());
     setPriceCurrency('cny');
     setMoq((p.moq ?? 1).toString());
+    setUnitsSold((p.units_sold ?? 0).toString());
     setVariantGroups(p.variants?.length ? p.variants.map(g => ({ ...g, id: g.id || genId() })) : []);
     setExpandedVariantGroups(new Set());
     setCustomGroupName(''); setCustomOptionDrafts({});
@@ -1085,6 +1088,7 @@ function ProductsManager({ token }: { token: string }) {
         image_url:       resolvedUrls[0] ?? '',
         image_urls:      resolvedUrls,
         manager_token:   token,
+        ...(unitsSold.trim() !== '' ? { units_sold: parseInt(unitsSold, 10) } : {}),
       };
 
       const action = editProduct ? 'update-product' : 'add-product';
@@ -1255,6 +1259,16 @@ function ProductsManager({ token }: { token: string }) {
                 <input type="number" min={1} value={moq} onChange={e => setMoq(e.target.value)}
                   placeholder="1"
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+              </div>
+
+              <div>
+                <Label>Sold count</Label>
+                <input type="number" min={0} value={unitsSold} onChange={e => setUnitsSold(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Shown to customers as "X sold". Set this to seed prior real sales, or give a new listing a head start. Leave blank to keep it unchanged — it otherwise only increases automatically when a real order is confirmed paid.
+                </p>
               </div>
 
               {/* Variants */}
@@ -1462,6 +1476,9 @@ function ProductsManager({ token }: { token: string }) {
                       {p.variants.map(g => g.name).join(', ')}
                     </span>
                   ) : null}
+                  {!!p.units_sold && (
+                    <span className="text-[10px] text-gray-400">{p.units_sold.toLocaleString()} sold</span>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-1">
