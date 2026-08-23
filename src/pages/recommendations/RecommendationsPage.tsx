@@ -15,6 +15,12 @@ import ImportCheckoutSheet from './ImportCheckoutSheet';
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+export interface VariantGroup {
+  id: string;
+  name: string;      // e.g. "Color", "Size", or a custom name
+  options: string[]; // e.g. ["Red", "Blue"]
+}
+
 export interface ImportProduct {
   id: string;
   name: string;
@@ -26,10 +32,21 @@ export interface ImportProduct {
   price_usd?: number;
   category: string;
   moq: number;
+  has_variants?: boolean;
+  variants?: VariantGroup[];
 }
 
 export interface CartItem extends ImportProduct {
   quantity: number;
+  variant_selection?: Record<string, string>;
+  cart_key: string;
+}
+
+// Builds the cart dedupe key: same product + same variant selection = same line.
+export function buildCartKey(productId: string, selection?: Record<string, string>) {
+  if (!selection || Object.keys(selection).length === 0) return productId;
+  const sorted = Object.keys(selection).sort().map(k => `${k}:${selection[k]}`).join('|');
+  return `${productId}::${sorted}`;
 }
 
 export function fmt(n: number) {
@@ -49,6 +66,7 @@ function ProductCard({
   product: ImportProduct; cartQty: number; onAdd: () => void; onRemove: () => void; onClick: () => void; usdRate: number;
 }) {
   const moq = product.moq ?? 1;
+  const hasVariants = !!product.has_variants && (product.variants?.length ?? 0) > 0;
   return (
     <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 flex flex-col hover:shadow-md transition-shadow">
       <button onClick={onClick} className="aspect-square bg-gray-50 overflow-hidden w-full relative">
@@ -70,7 +88,12 @@ function ProductCard({
           {moq > 1 && <p className="text-[9px] text-gray-300">Min. {moq} units</p>}
         </div>
 
-        {cartQty === 0 ? (
+        {hasVariants ? (
+          // Variant products require picking options on the detail page — no quick-add here.
+          <button onClick={onClick} className="w-full py-1.5 lg:py-2 bg-gray-900 hover:bg-gray-700 text-white text-[11px] lg:text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1">
+            {cartQty > 0 ? `${cartQty} in order · Edit` : 'Select options'}
+          </button>
+        ) : cartQty === 0 ? (
           <button onClick={onAdd} className="w-full py-1.5 lg:py-2 bg-gray-900 hover:bg-gray-700 text-white text-[11px] lg:text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1">
             <Plus className="w-2.5 h-2.5" /> Add
           </button>
@@ -152,21 +175,23 @@ export default function RecommendationsPage() {
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
 
+  // Only used for non-variant products (variant products are added from the detail page).
   const addToCart = (product: ImportProduct) => {
+    const cart_key = buildCartKey(product.id);
     setCart(prev => {
-      const exists = prev.find(i => i.id === product.id);
-      if (exists) return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { ...product, quantity: product.moq ?? 1 }];
+      const exists = prev.find(i => i.cart_key === cart_key);
+      if (exists) return prev.map(i => i.cart_key === cart_key ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { ...product, quantity: product.moq ?? 1, cart_key }];
     });
   };
 
-  const removeFromCart = (id: string) => {
+  const removeFromCart = (cart_key: string) => {
     setCart(prev => {
-      const item = prev.find(i => i.id === id);
+      const item = prev.find(i => i.cart_key === cart_key);
       if (!item) return prev;
       const floor = item.moq ?? 1;
-      if (item.quantity <= floor) return prev.filter(i => i.id !== id);
-      return prev.map(i => i.id === id ? { ...i, quantity: i.quantity - 1 } : i);
+      if (item.quantity <= floor) return prev.filter(i => i.cart_key !== cart_key);
+      return prev.map(i => i.cart_key === cart_key ? { ...i, quantity: i.quantity - 1 } : i);
     });
   };
 
@@ -231,7 +256,7 @@ export default function RecommendationsPage() {
           <div>
             <h1 className="font-black text-gray-900 text-lg lg:text-2xl">Recommended items</h1>
             <p className="text-gray-400 text-xs lg:text-sm mt-1 leading-relaxed max-w-lg">
-              Bestsellers sourced from verified vendors. Need a different colour or size? Mention it at checkout.
+              Bestsellers sourced from verified vendors.
             </p>
           </div>
           <div className="relative mt-3 lg:mt-0 lg:w-72">
@@ -292,8 +317,8 @@ export default function RecommendationsPage() {
             {displayItems.map(p => (
               <ProductCard
                 key={p.id} product={p}
-                cartQty={cart.find(i => i.id === p.id)?.quantity ?? 0}
-                onAdd={() => addToCart(p)} onRemove={() => removeFromCart(p.id)}
+                cartQty={cart.filter(i => i.id === p.id).reduce((s, i) => s + i.quantity, 0)}
+                onAdd={() => addToCart(p)} onRemove={() => removeFromCart(buildCartKey(p.id))}
                 onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
                 usdRate={usdRate}
               />
@@ -330,7 +355,7 @@ export default function RecommendationsPage() {
           <ImportCheckoutSheet
             cart={cart} customer={customer}
             onClose={() => setShowCheckout(false)}
-            onAdd={id => { const p = products.find(p => p.id === id); if (p) addToCart(p); }}
+            onAdd={cart_key => setCart(prev => prev.map(i => i.cart_key === cart_key ? { ...i, quantity: i.quantity + 1 } : i))}
             onRemove={removeFromCart}
           />
         )}

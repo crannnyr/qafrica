@@ -6,8 +6,8 @@ import {
   ArrowLeft, ShoppingBag, Plus, Minus,
   Package, ExternalLink, ChevronRight, Tag, ChevronDown, ChevronUp,
 } from 'lucide-react';
-import { fmt } from './RecommendationsPage';
-import type { CartItem, ImportProduct } from './RecommendationsPage';
+import { fmt, buildCartKey } from './RecommendationsPage';
+import type { CartItem, ImportProduct, VariantGroup } from './RecommendationsPage';
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
@@ -43,6 +43,43 @@ function Description({ text }: { text: string }) {
           )}
         </button>
       )}
+    </div>
+  );
+}
+
+// ── Variant selector ─────────────────────────────────────────────────────────
+function VariantPicker({
+  groups, selection, onSelect,
+}: {
+  groups: VariantGroup[];
+  selection: Record<string, string>;
+  onSelect: (groupName: string, option: string) => void;
+}) {
+  return (
+    <div className="space-y-4 mb-5">
+      {groups.map(group => (
+        <div key={group.id}>
+          <p className="text-xs font-semibold text-gray-700 mb-2">
+            {group.name}
+            {!selection[group.name] && <span className="text-red-400 font-normal"> · required</span>}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {group.options.map(opt => (
+              <button
+                key={opt}
+                onClick={() => onSelect(group.name, opt)}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                  selection[group.name] === opt
+                    ? 'border-gray-900 bg-gray-900 text-white'
+                    : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -118,6 +155,14 @@ export default function ProductDetailPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const moq = product?.moq ?? 1;
   const [qty, setQty]   = useState(moq);
+  const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
+
+  const variantGroups = (product?.has_variants && product?.variants?.length) ? product.variants : [];
+  const allVariantsSelected = variantGroups.every(g => !!selectedVariants[g.name]);
+  const cartKey = product ? buildCartKey(product.id, variantGroups.length ? selectedVariants : undefined) : '';
+
+  // Reset variant selection whenever the product changes
+  useEffect(() => { setSelectedVariants({}); }, [id]);
 
   // Keep `product`/`allProducts` in sync with the route whenever `id` or the
   // navigation `state` changes. This is what makes "you may also like" clicks
@@ -169,29 +214,30 @@ export default function ProductDetailPage() {
 
   const cartCount   = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal   = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
-  const itemInCart  = product ? cart.find(i => i.id === product.id) : null;
+  const itemInCart  = product ? cart.find(i => i.cart_key === cartKey) : null;
 
-  const addToCart = (p: ImportProduct, quantity: number) => {
+  const addToCart = (p: ImportProduct, quantity: number, variant_selection?: Record<string, string>) => {
+    const cart_key = buildCartKey(p.id, variant_selection);
     setCart(prev => {
-      const exists = prev.find(i => i.id === p.id);
-      if (exists) return prev.map(i => i.id === p.id ? { ...i, quantity: i.quantity + quantity } : i);
-      return [...prev, { ...p, quantity }];
+      const exists = prev.find(i => i.cart_key === cart_key);
+      if (exists) return prev.map(i => i.cart_key === cart_key ? { ...i, quantity: i.quantity + quantity } : i);
+      return [...prev, { ...p, quantity, variant_selection, cart_key }];
     });
   };
 
   const removeOne = () => {
     if (!product) return;
     setCart(prev => {
-      const item = prev.find(i => i.id === product.id);
+      const item = prev.find(i => i.cart_key === cartKey);
       if (!item) return prev;
-      if (item.quantity <= moq) return prev.filter(i => i.id !== product.id);
-      return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity - 1 } : i);
+      if (item.quantity <= moq) return prev.filter(i => i.cart_key !== cartKey);
+      return prev.map(i => i.cart_key === cartKey ? { ...i, quantity: i.quantity - 1 } : i);
     });
   };
 
   const addOne = () => {
     if (!product) return;
-    setCart(prev => prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i));
+    setCart(prev => prev.map(i => i.cart_key === cartKey ? { ...i, quantity: i.quantity + 1 } : i));
   };
 
   // Navigate back to catalog — pass cart so it can be restored
@@ -315,6 +361,17 @@ export default function ProductDetailPage() {
             </a>
           </p>
 
+          {/* Variant selection */}
+          {variantGroups.length > 0 && (
+            <VariantPicker
+              groups={variantGroups}
+              selection={selectedVariants}
+              onSelect={(groupName, option) =>
+                setSelectedVariants(prev => ({ ...prev, [groupName]: option }))
+              }
+            />
+          )}
+
           {/* Min order notice — only shown when the product actually has a MOQ above 1 */}
           {moq > 1 && (
             <div className="bg-amber-50 border border-amber-100 rounded-xl px-3.5 py-3 mb-5 flex items-start gap-2">
@@ -362,17 +419,27 @@ export default function ProductDetailPage() {
               </div>
 
               <button
-                onClick={() => addToCart(product, qty)}
-                className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
+                onClick={() => addToCart(product, qty, variantGroups.length ? selectedVariants : undefined)}
+                disabled={variantGroups.length > 0 && !allVariantsSelected}
+                className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
               >
                 <Plus className="w-3.5 h-3.5" />
-                Add {qty} units to order
+                {variantGroups.length > 0 && !allVariantsSelected
+                  ? 'Select options to continue'
+                  : `Add ${qty} units to order`}
               </button>
             </div>
           ) : (
             <div className="space-y-3">
               <div className="flex items-center justify-between bg-orange-50 rounded-xl px-4 py-3">
-                <span className="text-xs font-bold text-orange-700">In your order</span>
+                <div>
+                  <span className="text-xs font-bold text-orange-700">In your order</span>
+                  {itemInCart.variant_selection && (
+                    <p className="text-[10px] text-orange-500 mt-0.5">
+                      {Object.entries(itemInCart.variant_selection).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                    </p>
+                  )}
+                </div>
                 <div className="flex items-center gap-3">
                   <button onClick={removeOne} className="w-6 h-6 flex items-center justify-center text-orange-400">
                     <Minus className="w-3.5 h-3.5" />

@@ -12,7 +12,6 @@ import { compressImage } from '@/lib/imageCompression';
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
-const PLATFORM_MARKUP = 0.01; // 1%
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ImportOrder {
@@ -39,6 +38,12 @@ interface ImportOrder {
   user_id: string | null;
 }
 
+interface VariantGroup {
+  id: string;
+  name: string;
+  options: string[];
+}
+
 interface ImportProduct {
   id: string;
   name: string;
@@ -48,9 +53,32 @@ interface ImportProduct {
   price_cny: number;
   price_cny_original: number;
   price_ngn: number;
+  price_usd?: number;
   category: string;
   is_active: boolean;
   sort_order: number;
+  moq?: number;
+  has_variants?: boolean;
+  variants?: VariantGroup[];
+}
+
+// Quick-add presets for the variant builder
+const PRESET_COLORS = ['Black', 'White', 'Red', 'Blue', 'Green', 'Yellow', 'Grey', 'Pink', 'Purple', 'Orange', 'Brown', 'Beige'];
+const PRESET_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'One Size'];
+
+function genId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
+// Mirrors the china-import edge function's getTieredMarkupNgn() — used only
+// for the live price preview shown to the admin while typing.
+function getTieredMarkupNgn(baseNgn: number): number {
+  if (baseNgn < 10_000) return 1_000;
+  if (baseNgn < 20_000) return 1_500;
+  if (baseNgn < 50_000) return 2_000;
+  if (baseNgn < 100_000) return 5_000;
+  if (baseNgn < 200_000) return 9_000;
+  return 25_000;
 }
 
 interface Rates {
@@ -706,17 +734,74 @@ function ProductsManager({ token }: { token: string }) {
   const [name, setName]               = useState('');
   const [description, setDesc]        = useState('');
   const [category, setCategory]       = useState('General');
-  const [priceCnyOriginal, setPriceCnyOriginal] = useState(''); // raw 1688 price entered by admin
+  const [priceAmount, setPriceAmount] = useState(''); // raw price as entered by admin
+  const [priceCurrency, setPriceCurrency] = useState<'cny' | 'usd' | 'ngn'>('cny');
+  const [moq, setMoq]                 = useState('1');
+  const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
+  const [customGroupName, setCustomGroupName] = useState('');
+  const [customOptionDrafts, setCustomOptionDrafts] = useState<Record<string, string>>({});
   const [imagePreviews, setImagePreviews] = useState<string[]>([]); // up to 3 preview URLs
   const [imageFiles, setImageFiles]   = useState<(File | null)[]>([null, null, null]);
   const [isSaving, setIsSaving]       = useState(false);
   const [saveError, setSaveError]     = useState('');
 
-  // Derived values with 1% markup
-  const rawCny = parseFloat(priceCnyOriginal) || 0;
-  const markedUpCny = rawCny > 0 ? rawCny * (1 + PLATFORM_MARKUP) : 0;
-  const priceNgn = rates && markedUpCny ? markedUpCny * rates.cnyToNgn : 0;
-  const priceUsd = rates && markedUpCny ? markedUpCny * rates.cnyToUsd : 0;
+  // Live preview using the same tiered-markup logic the backend applies
+  const rawAmount = parseFloat(priceAmount) || 0;
+  let previewCostNgn = 0;
+  if (rawAmount > 0 && rates) {
+    if (priceCurrency === 'ngn') previewCostNgn = rawAmount;
+    else if (priceCurrency === 'usd') previewCostNgn = rawAmount * rates.usdToNgn;
+    else previewCostNgn = (rawAmount / rates.cnyToUsd) * rates.usdToNgn; // cny -> usd -> ngn
+  }
+  const previewMarkupNgn = previewCostNgn > 0 ? getTieredMarkupNgn(previewCostNgn) : 0;
+  const priceNgn = previewCostNgn > 0 ? previewCostNgn + previewMarkupNgn : 0;
+  const priceUsd = rates && priceNgn ? priceNgn / rates.usdToNgn : 0;
+  const priceCnyPreview = rates && priceUsd ? priceUsd * rates.cnyToUsd : 0;
+
+  // ── Variant helpers ─────────────────────────────────────────────────────
+  const toggleGroupOption = (groupName: string, option: string) => {
+    setVariantGroups(prev => {
+      const existingGroup = prev.find(g => g.name === groupName);
+      if (!existingGroup) {
+        return [...prev, { id: genId(), name: groupName, options: [option] }];
+      }
+      const hasOption = existingGroup.options.includes(option);
+      const updatedOptions = hasOption
+        ? existingGroup.options.filter(o => o !== option)
+        : [...existingGroup.options, option];
+      if (updatedOptions.length === 0) {
+        return prev.filter(g => g.id !== existingGroup.id);
+      }
+      return prev.map(g => g.id === existingGroup.id ? { ...g, options: updatedOptions } : g);
+    });
+  };
+
+  const addCustomGroup = () => {
+    const trimmed = customGroupName.trim();
+    if (!trimmed) return;
+    if (variantGroups.some(g => g.name.toLowerCase() === trimmed.toLowerCase())) return;
+    setVariantGroups(prev => [...prev, { id: genId(), name: trimmed, options: [] }]);
+    setCustomGroupName('');
+  };
+
+  const addCustomOption = (groupId: string) => {
+    const draft = (customOptionDrafts[groupId] ?? '').trim();
+    if (!draft) return;
+    setVariantGroups(prev => prev.map(g =>
+      g.id === groupId && !g.options.includes(draft) ? { ...g, options: [...g.options, draft] } : g
+    ));
+    setCustomOptionDrafts(prev => ({ ...prev, [groupId]: '' }));
+  };
+
+  const removeCustomOption = (groupId: string, option: string) => {
+    setVariantGroups(prev => prev
+      .map(g => g.id === groupId ? { ...g, options: g.options.filter(o => o !== option) } : g)
+      .filter(g => g.options.length > 0));
+  };
+
+  const removeGroup = (groupId: string) => {
+    setVariantGroups(prev => prev.filter(g => g.id !== groupId));
+  };
 
   useEffect(() => {
     loadProducts();
@@ -741,7 +826,8 @@ function ProductsManager({ token }: { token: string }) {
   const openAdd = () => {
     setEditProduct(null);
     setName(''); setDesc(''); setCategory('General');
-    setPriceCnyOriginal('');
+    setPriceAmount(''); setPriceCurrency('cny'); setMoq('1');
+    setVariantGroups([]); setCustomGroupName(''); setCustomOptionDrafts({});
     setImagePreviews([]); setImageFiles([null, null, null]);
     setSaveError('');
     setShowForm(true);
@@ -750,8 +836,12 @@ function ProductsManager({ token }: { token: string }) {
   const openEdit = (p: ImportProduct) => {
     setEditProduct(p);
     setName(p.name); setDesc(p.description); setCategory(p.category);
-    // Show the original (pre-markup) price for editing
-    setPriceCnyOriginal(p.price_cny_original?.toString() ?? p.price_cny.toString());
+    // Show the original (pre-markup) 1688 price for editing, in CNY
+    setPriceAmount((p.price_cny_original ?? p.price_cny).toString());
+    setPriceCurrency('cny');
+    setMoq((p.moq ?? 1).toString());
+    setVariantGroups(p.variants?.length ? p.variants.map(g => ({ ...g, id: g.id || genId() })) : []);
+    setCustomGroupName(''); setCustomOptionDrafts({});
     // Populate previews from existing image_urls or fallback to image_url
     const existing = p.image_urls?.length ? p.image_urls : (p.image_url ? [p.image_url] : []);
     setImagePreviews(existing.slice(0, 3));
@@ -804,7 +894,7 @@ function ProductsManager({ token }: { token: string }) {
   };
 
   const handleSave = async () => {
-    if (!name || !priceCnyOriginal || imagePreviews.length === 0) return;
+    if (!name || !priceAmount || imagePreviews.length === 0) return;
     setIsSaving(true);
     setSaveError('');
     try {
@@ -822,12 +912,14 @@ function ProductsManager({ token }: { token: string }) {
         name,
         description,
         category,
-        price_cny_original: rawCny,
-        price_cny:          parseFloat(markedUpCny.toFixed(4)),
-        price_ngn:          Math.round(priceNgn),
-        image_url:          resolvedUrls[0] ?? '',
-        image_urls:         resolvedUrls,
-        manager_token:      token,
+        price_amount:   rawAmount,
+        price_currency: priceCurrency,
+        moq:             parseInt(moq, 10) >= 1 ? parseInt(moq, 10) : 1,
+        has_variants:    variantGroups.length > 0,
+        variants:        variantGroups,
+        image_url:       resolvedUrls[0] ?? '',
+        image_urls:      resolvedUrls,
+        manager_token:   token,
       };
 
       const action = editProduct ? 'update-product' : 'add-product';
@@ -943,30 +1035,38 @@ function ProductsManager({ token }: { token: string }) {
 
               {/* Price input with markup note */}
               <div>
-                <Label>Price from 1688 (CNY ¥)</Label>
+                <Label>Price from source</Label>
 
                 {/* Markup info banner */}
                 <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 mb-2">
                   <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />
                   <p className="text-[11px] text-blue-600 leading-relaxed">
-                    Enter the <strong>exact price from 1688</strong>. A 1% platform markup is added automatically before saving.
+                    Enter the <strong>exact cost price</strong> in whatever currency you have it. A tiered platform markup (₦1,000–₦25,000 depending on price band) is added automatically before saving.
                   </p>
                 </div>
 
-                <input type="number" value={priceCnyOriginal} onChange={e => setPriceCnyOriginal(e.target.value)}
-                  placeholder="e.g. 45.00"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+                <div className="flex gap-2">
+                  <input type="number" value={priceAmount} onChange={e => setPriceAmount(e.target.value)}
+                    placeholder="e.g. 45.00"
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+                  <select value={priceCurrency} onChange={e => setPriceCurrency(e.target.value as 'cny' | 'usd' | 'ngn')}
+                    className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:border-gray-400 outline-none">
+                    <option value="cny">CNY ¥</option>
+                    <option value="usd">USD $</option>
+                    <option value="ngn">NGN ₦</option>
+                  </select>
+                </div>
 
                 {/* Live conversion preview */}
-                {markedUpCny > 0 && rates && (
+                {priceNgn > 0 && rates && (
                   <div className="mt-2 bg-white border border-gray-100 rounded-xl px-4 py-3 space-y-1.5">
                     <div className="flex justify-between text-xs text-gray-500">
-                      <span>1688 price</span>
-                      <span className="font-medium">¥{rawCny.toFixed(2)}</span>
+                      <span>Cost price</span>
+                      <span className="font-medium">{fmt(previewCostNgn)}</span>
                     </div>
                     <div className="flex justify-between text-xs text-gray-500">
-                      <span>+ 1% markup</span>
-                      <span className="font-medium text-orange-500">¥{markedUpCny.toFixed(2)}</span>
+                      <span>+ Platform markup</span>
+                      <span className="font-medium text-orange-500">{fmt(previewMarkupNgn)}</span>
                     </div>
                     <div className="h-px bg-gray-100" />
                     <div className="flex justify-between text-xs font-bold text-gray-800">
@@ -978,11 +1078,105 @@ function ProductsManager({ token }: { token: string }) {
                         ${priceUsd.toFixed(2)} USD
                       </span>
                       <span className="text-[10px] bg-red-50 text-red-500 px-2 py-0.5 rounded-lg font-semibold">
-                        ¥{markedUpCny.toFixed(2)} CNY
+                        ¥{priceCnyPreview.toFixed(2)} CNY
                       </span>
                     </div>
                   </div>
                 )}
+              </div>
+
+              <div>
+                <Label>Minimum order quantity</Label>
+                <input type="number" min={1} value={moq} onChange={e => setMoq(e.target.value)}
+                  placeholder="1"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+              </div>
+
+              {/* Variants */}
+              <div>
+                <Label>Variants (optional)</Label>
+
+                {/* Quick-add: Colors */}
+                <div className="mb-3">
+                  <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Colors</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRESET_COLORS.map(color => {
+                      const active = variantGroups.find(g => g.name === 'Color')?.options.includes(color);
+                      return (
+                        <button key={color} type="button" onClick={() => toggleGroupOption('Color', color)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                            active ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                          }`}>
+                          {color}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Quick-add: Sizes */}
+                <div className="mb-3">
+                  <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Sizes</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRESET_SIZES.map(size => {
+                      const active = variantGroups.find(g => g.name === 'Size')?.options.includes(size);
+                      return (
+                        <button key={size} type="button" onClick={() => toggleGroupOption('Size', size)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
+                            active ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
+                          }`}>
+                          {size}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom variant groups (also covers "unspecified" variants) */}
+                {variantGroups.filter(g => g.name !== 'Color' && g.name !== 'Size').map(group => (
+                  <div key={group.id} className="mb-3 bg-white border border-gray-100 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[11px] font-semibold text-gray-700">{group.name}</p>
+                      <button type="button" onClick={() => removeGroup(group.id)} className="text-gray-300 hover:text-red-400">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {group.options.map(opt => (
+                        <span key={opt} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600">
+                          {opt}
+                          <button type="button" onClick={() => removeCustomOption(group.id, opt)} className="text-gray-400 hover:text-red-400">
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input type="text" value={customOptionDrafts[group.id] ?? ''}
+                        onChange={e => setCustomOptionDrafts(prev => ({ ...prev, [group.id]: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomOption(group.id); } }}
+                        placeholder="Add an option…"
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-gray-400" />
+                      <button type="button" onClick={() => addCustomOption(group.id)}
+                        className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600">
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Add a fully custom variant group — for anything not covered by color/size */}
+                <div className="flex gap-1.5">
+                  <input type="text" value={customGroupName}
+                    onChange={e => setCustomGroupName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomGroup(); } }}
+                    placeholder="Custom variant name (e.g. Material)"
+                    className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-xs outline-none focus:border-gray-400" />
+                  <button type="button" onClick={addCustomGroup}
+                    className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-600 text-xs font-semibold flex items-center gap-1">
+                    <Plus className="w-3 h-3" /> Add
+                  </button>
+                </div>
               </div>
 
               {saveError && (
@@ -994,7 +1188,7 @@ function ProductsManager({ token }: { token: string }) {
 
               <div className="flex gap-2 pt-1">
                 <button onClick={handleSave}
-                  disabled={isSaving || !name || !priceCnyOriginal || imagePreviews.length === 0}
+                  disabled={isSaving || !name || !priceAmount || imagePreviews.length === 0}
                   className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2">
                   {isSaving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                   {editProduct ? 'Save changes' : 'Add product'}
@@ -1049,6 +1243,11 @@ function ProductsManager({ token }: { token: string }) {
                   <span className="text-[10px] bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded-full">
                     {p.category}
                   </span>
+                  {p.has_variants && p.variants?.length ? (
+                    <span className="text-[10px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-full font-medium">
+                      {p.variants.map(g => g.name).join(', ')}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <div className="flex items-center gap-1">

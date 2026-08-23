@@ -18,8 +18,8 @@ interface Props {
   cart: CartItem[];
   customer: { id: string; email: string; full_name: string; phone?: string };
   onClose: () => void;
-  onAdd: (id: string) => void;
-  onRemove: (id: string) => void;
+  onAdd: (cart_key: string) => void;
+  onRemove: (cart_key: string) => void;
 }
 
 export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove }: Props) {
@@ -52,6 +52,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           items: cart.map(i => ({
             id: i.id, name: i.name, price_ngn: i.price_ngn, price_cny: i.price_cny,
             quantity: i.quantity, image_url: i.image_url,
+            variant_options: i.variant_selection ?? undefined,
           })),
         }),
       });
@@ -160,16 +161,21 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       <div className="flex-1 overflow-y-auto px-4 py-5 space-y-5">
         <div className="space-y-3">
           {cart.map(item => (
-            <div key={item.id} className="flex items-center gap-3">
+            <div key={item.cart_key} className="flex items-center gap-3">
               <img src={item.image_url} alt={item.name} className="w-12 h-12 rounded-xl object-cover border border-gray-100 flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-gray-900 text-xs leading-snug truncate">{item.name}</p>
+                {item.variant_selection && (
+                  <p className="text-[10px] text-gray-400 mt-0.5 truncate">
+                    {Object.entries(item.variant_selection).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+                  </p>
+                )}
                 <p className="text-[11px] text-gray-400 mt-0.5">{fmt(item.price_ngn)}</p>
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                <button onClick={() => onRemove(item.id)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Minus className="w-2.5 h-2.5" /></button>
+                <button onClick={() => onRemove(item.cart_key)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Minus className="w-2.5 h-2.5" /></button>
                 <span className="font-bold text-sm w-7 text-center">{item.quantity}</span>
-                <button onClick={() => onAdd(item.id)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Plus className="w-2.5 h-2.5" /></button>
+                <button onClick={() => onAdd(item.cart_key)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Plus className="w-2.5 h-2.5" /></button>
               </div>
             </div>
           ))}
