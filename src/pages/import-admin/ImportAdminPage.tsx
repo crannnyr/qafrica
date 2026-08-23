@@ -1023,11 +1023,16 @@ function ProductsManager({ token }: { token: string }) {
   };
 
   const handleImageRemove = (slot: number) => {
+    // Both arrays must shift together — previously imagePreviews spliced
+    // (compacting slots) while imageFiles only nulled the slot in place,
+    // which silently misaligned "this file" with "this preview" after any
+    // removal and could save the wrong (or a stale) image on the next edit.
     const newPreviews = [...imagePreviews];
     newPreviews.splice(slot, 1);
     setImagePreviews(newPreviews);
     const newFiles = [...imageFiles];
-    newFiles[slot] = null;
+    newFiles.splice(slot, 1);
+    newFiles.push(null); // keep a fixed length of 3 for the slot-index checks in handleSave
     setImageFiles(newFiles);
   };
 
