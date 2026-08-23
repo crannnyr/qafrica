@@ -35,6 +35,7 @@ import BlogPostPage from '@/pages/blog/BlogPostPage';
 import ImportPage from '@/pages/import/ImportPage';
 import ImportAdminLogin from '@/pages/import-admin/ImportAdminLogin';
 import ImportAdminPage from '@/pages/import-admin/ImportAdminPage';
+import ImporterDashboardPage from '@/pages/recommendations/ImporterDashboardPage';
 import RecommendationsPage from '@/pages/recommendations/RecommendationsPage';
 import RecommendationsProductDetailPage from '@/pages/recommendations/ProductDetailPage';
 
@@ -304,6 +305,7 @@ function App() {
           <Route path="/importations" element={<ImportPage />} />
           <Route path="/importations/admin/login" element={<ImportAdminLogin />} />
           <Route path="/importations/admin" element={<ImportAdminPage />} />
+          <Route path="/importations/dashboard" element={<ImporterDashboardPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
           <Route path="/recommendations/:id" element={<RecommendationsProductDetailPage />} />
 
