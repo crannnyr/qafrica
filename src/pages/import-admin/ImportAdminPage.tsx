@@ -10,6 +10,8 @@ import {
 } from 'lucide-react';
 import { compressImage } from '@/lib/imageCompression';
 import CONFIG from '@/lib/config';
+import ImportAdminAnalytics from './ImportAdminAnalytics';
+import ImportAdminCustomers from './ImportAdminCustomers';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -1271,7 +1273,7 @@ function ProductsManager({ token }: { token: string }) {
 // ── Main Admin Page ───────────────────────────────────────────────────────────
 export default function ImportAdminPage() {
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'orders' | 'products'>('orders');
+  const [tab, setTab] = useState<'analytics' | 'orders' | 'products' | 'clients'>('analytics');
 
   if (!token) return null;
 
@@ -1279,7 +1281,7 @@ export default function ImportAdminPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
-        <div className="flex items-center justify-between px-4 py-3 max-w-2xl mx-auto">
+        <div className="flex items-center justify-between px-4 py-3 max-w-3xl mx-auto">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 bg-gray-900 rounded-lg flex items-center justify-center">
               <ShoppingBag className="w-3.5 h-3.5 text-white" />
@@ -1299,14 +1301,14 @@ export default function ImportAdminPage() {
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+      <div className="max-w-3xl mx-auto px-4 py-5 space-y-4">
         {/* Tabs */}
-        <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1">
-          {(['orders', 'products'] as const).map(t => (
+        <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
+          {(['analytics', 'orders', 'products', 'clients'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors capitalize ${
+              className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors capitalize whitespace-nowrap ${
                 tab === t
                   ? 'bg-gray-900 text-white shadow-sm'
                   : 'text-gray-400 hover:text-gray-700'
@@ -1317,13 +1319,17 @@ export default function ImportAdminPage() {
           ))}
         </div>
 
-        {tab === 'orders' ? (
+        {tab === 'analytics' ? (
+          <ImportAdminAnalytics token={token} />
+        ) : tab === 'orders' ? (
           <>
             <LoadCodePanel token={token} />
             <OrdersList token={token} />
           </>
-        ) : (
+        ) : tab === 'products' ? (
           <ProductsManager token={token} />
+        ) : (
+          <ImportAdminCustomers token={token} />
         )}
       </div>
     </div>
