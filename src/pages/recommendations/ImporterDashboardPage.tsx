@@ -17,8 +17,8 @@ const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 interface DashboardOrder {
   id: string;
   code: string;
-  status: 'pending' | 'shipping_quoted' | 'order_placed' | 'shipped' | 'delivered';
-  payment_status: 'unpaid' | 'paid' | 'failed';
+  status: 'pending' | 'shipping_quoted' | 'order_placed' | 'billed' | 'awaiting_shipment' | 'shipped' | 'delivered';
+  payment_status: 'unpaid' | 'awaiting_confirmation' | 'paid' | 'failed';
   payment_method: 'paystack' | 'manual' | null;
   total_ngn: number;
   delivery_type: 'to_qafrica' | 'to_me';
@@ -41,6 +41,8 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
   shipping_quoted: 'Quoted',
   order_placed: 'Ordered',
+  billed: 'Billed — fee due',
+  awaiting_shipment: 'Awaiting shipment',
   shipped: 'Shipped',
   delivered: 'Delivered',
 };
@@ -49,6 +51,8 @@ const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
   shipping_quoted: 'bg-sky-50 text-sky-700',
   order_placed: 'bg-violet-50 text-violet-700',
+  billed: 'bg-rose-50 text-rose-700',
+  awaiting_shipment: 'bg-cyan-50 text-cyan-700',
   shipped: 'bg-indigo-50 text-indigo-700',
   delivered: 'bg-emerald-50 text-emerald-700',
 };
@@ -226,7 +230,8 @@ export default function ImporterDashboardPage() {
                     </div>
                     <p className="text-[11px] text-gray-400">
                       {order.delivery_type === 'to_qafrica' ? 'Consolidated to QAfrica' : 'Direct to you'}
-                      {order.payment_status === 'unpaid' && order.payment_method === 'manual' && ' · payment pending confirmation'}
+                      {order.payment_status === 'awaiting_confirmation' && ' · payment submitted, awaiting admin confirmation'}
+                      {order.payment_status === 'failed' && ' · payment failed'}
                     </p>
                   </div>
                   <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>

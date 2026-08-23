@@ -44,7 +44,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [whatsapp, setWhatsapp] = useState(customer.phone ?? '');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ code: string; bank?: any } | null>(null);
+  const [result, setResult] = useState<{ code: string; bank?: any; order_id?: string } | null>(null);
 
   // Delivery address — only required when delivery === 'to_me'
   const [address, setAddress] = useState<DeliveryAddress>({
@@ -64,18 +64,46 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       setLocationError('Location isn\'t supported on this device/browser.');
       return;
     }
+    // Geolocation is blocked outright on non-HTTPS origins (except localhost)
+    // — this is the single most common cause of "always fails".
+    if (typeof window !== 'undefined' && window.isSecureContext === false) {
+      setLocationError('Location needs a secure (https) connection. You can still fill in the address manually.');
+      return;
+    }
+
     setIsLocating(true);
     setLocationError('');
+
+    const onSuccess = (pos: GeolocationPosition) => {
+      setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setIsLocating(false);
+    };
+
+    const describeError = (err: GeolocationPositionError) => {
+      if (err.code === err.PERMISSION_DENIED) return 'Location access was denied. Check your browser/site permissions, or fill in the address manually.';
+      if (err.code === err.POSITION_UNAVAILABLE) return 'Your position couldn\'t be determined right now. You can still fill in the address manually.';
+      if (err.code === err.TIMEOUT) return 'Location took too long to respond. You can still fill in the address manually.';
+      return 'Couldn\'t access your location. You can still fill in the address manually.';
+    };
+
+    // High-accuracy GPS can time out indoors or on some devices. Retry once
+    // with a coarser, longer-timeout request before giving up — this is what
+    // was previously causing location sharing to fail almost every time.
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-        setIsLocating(false);
+      onSuccess,
+      (err) => {
+        if (err.code === err.PERMISSION_DENIED) {
+          setLocationError(describeError(err));
+          setIsLocating(false);
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          onSuccess,
+          (err2) => { setLocationError(describeError(err2)); setIsLocating(false); },
+          { enableHighAccuracy: false, timeout: 20_000, maximumAge: 60_000 }
+        );
       },
-      () => {
-        setLocationError('Couldn\'t access your location. You can still fill in the address manually.');
-        setIsLocating(false);
-      },
-      { enableHighAccuracy: true, timeout: 10_000 }
+      { enableHighAccuracy: true, timeout: 8_000, maximumAge: 0 }
     );
   };
 
@@ -118,7 +146,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       if (!res.ok) throw new Error(data.error ?? 'Checkout failed');
 
       if (paymentMethod === 'manual') {
-        setResult({ code: data.code, bank: data.bank });
+        setResult({ code: data.code, bank: data.bank, order_id: data.order_id });
         setIsProcessing(false);
         return;
       }
@@ -164,7 +192,15 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       <ManualPaymentFlow
         amountLabel={fmt(total)}
         bank={result.bank}
-        onConfirmPaid={() => {}}
+        onConfirmPaid={async () => {
+          const res = await fetch(`${EDGE_URL}?action=checkout-mark-paid-claim`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer_id: customer.id, order_id: result.order_id }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? 'Could not submit payment confirmation. Please try again.');
+        }}
         onClose={onClose}
         dashboardHref="/importations/dashboard"
       />

@@ -11,7 +11,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Copy, Check, CheckCircle2, ArrowRight } from 'lucide-react';
+import { AlertTriangle, Copy, Check, CheckCircle2, ArrowRight, Clock as Clock3 } from 'lucide-react';
 
 // The one real destination for every manual transfer in the importation
 // section. If this ever needs to change, update it here — every screen that
@@ -145,12 +145,13 @@ export default function ManualPaymentFlow({ amountLabel, bank, onConfirmPaid, on
           {step === 'done' && (
             <motion.div key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <div className="text-center mb-5">
-                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Clock3 className="w-6 h-6 text-amber-600" />
                 </div>
-                <h3 className="font-bold text-gray-900 text-lg mb-1">Thanks — we'll confirm shortly</h3>
+                <h3 className="font-bold text-gray-900 text-lg mb-1">Submitted — awaiting confirmation</h3>
                 <p className="text-gray-400 text-xs">
-                  We'll verify your transfer and update your status. This usually takes a little while, not instantly.
+                  We haven't verified your transfer yet. An admin will check and confirm it —
+                  this usually takes a little while, not instantly.
                 </p>
               </div>
 

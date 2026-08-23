@@ -42,7 +42,9 @@ interface ImportOrder {
   jumia_fee_ngn: number;
   shipping_ngn: number | null;
   total_ngn: number;
-  status: 'pending' | 'shipping_quoted' | 'order_placed' | 'shipped' | 'delivered';
+  status: 'pending' | 'shipping_quoted' | 'order_placed' | 'billed' | 'awaiting_shipment' | 'shipped' | 'delivered';
+  payment_status: 'unpaid' | 'awaiting_confirmation' | 'paid' | 'failed';
+  payment_method: 'paystack' | 'manual' | null;
   admin_note: string | null;
   created_at: string;
   user_id: string | null;
@@ -74,7 +76,10 @@ interface ImportProduct {
 
 // Quick-add presets for the variant builder
 const PRESET_COLORS = ['Black', 'White', 'Red', 'Blue', 'Green', 'Yellow', 'Grey', 'Pink', 'Purple', 'Orange', 'Brown', 'Beige'];
-const PRESET_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'One Size'];
+const PRESET_SIZES = [
+  'XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL', 'One Size',
+  '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46',
+];
 
 function genId() {
   return Math.random().toString(36).slice(2, 10);
@@ -133,6 +138,8 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
   shipping_quoted: 'Quoted',
   order_placed: 'Ordered',
+  billed: 'Billed — fee due',
+  awaiting_shipment: 'Awaiting shipment',
   shipped: 'Shipped',
   delivered: 'Delivered',
 };
@@ -141,11 +148,27 @@ const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
   shipping_quoted: 'bg-sky-50 text-sky-700',
   order_placed: 'bg-violet-50 text-violet-700',
+  billed: 'bg-rose-50 text-rose-700',
+  awaiting_shipment: 'bg-cyan-50 text-cyan-700',
   shipped: 'bg-indigo-50 text-indigo-700',
   delivered: 'bg-emerald-50 text-emerald-700',
 };
 
-const STATUS_FLOW = ['pending', 'shipping_quoted', 'order_placed', 'shipped', 'delivered'];
+const STATUS_FLOW = ['pending', 'shipping_quoted', 'order_placed', 'billed', 'awaiting_shipment', 'shipped', 'delivered'];
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  unpaid: 'Unpaid',
+  awaiting_confirmation: 'Awaiting confirmation',
+  paid: 'Paid',
+  failed: 'Failed',
+};
+
+const PAYMENT_STATUS_COLORS: Record<string, string> = {
+  unpaid: 'bg-gray-100 text-gray-500',
+  awaiting_confirmation: 'bg-amber-50 text-amber-700',
+  paid: 'bg-emerald-50 text-emerald-700',
+  failed: 'bg-red-50 text-red-600',
+};
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 function useImportAuth() {
@@ -189,7 +212,9 @@ function LoadCodePanel({ token }: { token: string }) {
   const [error, setError]         = useState('');
   const [shipping, setShipping]   = useState('');
   const [note, setNote]           = useState('');
+  const [statusDraft, setStatusDraft] = useState('');
   const [isSaving, setIsSaving]   = useState(false);
+  const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [rates, setRates]         = useState<Rates | null>(null);
   const [expanded, setExpanded]   = useState(true);
 
@@ -216,6 +241,7 @@ function LoadCodePanel({ token }: { token: string }) {
       setOrder(data.order);
       setNote(data.order.admin_note ?? '');
       setShipping(data.order.shipping_ngn?.toString() ?? '');
+      setStatusDraft(data.order.status);
     } catch {
       setError('Connection error');
     } finally {
@@ -223,12 +249,15 @@ function LoadCodePanel({ token }: { token: string }) {
     }
   };
 
-  const updateOrder = async (newStatus?: string) => {
+  // overrides lets a single call update status and/or payment_status together
+  // (e.g. "Confirm Payment" sets payment_status without touching status).
+  const updateOrder = async (overrides?: { status?: string; payment_status?: string }) => {
     if (!order) return;
     setIsSaving(true);
     try {
       const body: any = { id: order.id, manager_token: token };
-      body.status = newStatus ?? order.status;
+      body.status = overrides?.status ?? statusDraft ?? order.status;
+      if (overrides?.payment_status) body.payment_status = overrides.payment_status;
       if (shipping) body.shipping_ngn = parseFloat(shipping);
       if (note !== undefined) body.admin_note = note;
 
@@ -238,12 +267,15 @@ function LoadCodePanel({ token }: { token: string }) {
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (data.order) setOrder(data.order);
+      if (data.order) { setOrder(data.order); setStatusDraft(data.order.status); }
     } catch {
     } finally {
       setIsSaving(false);
     }
   };
+
+  const confirmPayment = () => { setIsConfirmingPayment(true); updateOrder({ payment_status: 'paid' }).finally(() => setIsConfirmingPayment(false)); };
+  const rejectPayment = () => { setIsConfirmingPayment(true); updateOrder({ payment_status: 'failed' }).finally(() => setIsConfirmingPayment(false)); };
 
   const shippingNgn = parseFloat(shipping) || 0;
   const shippingCny = rates ? shippingNgn / rates.cnyToNgn : null;
@@ -325,12 +357,41 @@ function LoadCodePanel({ token }: { token: string }) {
                         {SHIPPING_METHOD_LABELS[order.shipping_method] ?? order.shipping_method}
                       </span>
                     )}
+                    <span className={`inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full ${PAYMENT_STATUS_COLORS[order.payment_status] ?? 'bg-gray-100 text-gray-500'}`}>
+                      {PAYMENT_STATUS_LABELS[order.payment_status] ?? order.payment_status}
+                      {order.payment_method === 'paystack' && order.payment_status === 'paid' ? ' · auto-verified' : ''}
+                    </span>
                   </div>
                 </div>
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${STATUS_COLORS[order.status]}`}>
                   {STATUS_LABELS[order.status]}
                 </span>
               </div>
+
+              {/* Manual transfer awaiting verification — admin must confirm or reject before it counts as paid */}
+              {order.payment_status === 'awaiting_confirmation' && (
+                <div className="bg-amber-50 border border-amber-100 rounded-xl px-3.5 py-3">
+                  <p className="text-xs text-amber-800 font-semibold mb-0.5">Customer says they've paid by bank transfer</p>
+                  <p className="text-[11px] text-amber-600 mb-2.5">Check your bank statement before confirming — this is a self-report, not a verified payment.</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={confirmPayment}
+                      disabled={isConfirmingPayment}
+                      className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      {isConfirmingPayment ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      Confirm Payment
+                    </button>
+                    <button
+                      onClick={rejectPayment}
+                      disabled={isConfirmingPayment}
+                      className="flex-1 py-2 bg-white border border-amber-200 hover:bg-amber-100 disabled:opacity-40 text-amber-700 text-xs font-bold rounded-lg transition-colors"
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Delivery address — only present for to_me orders */}
               {order.delivery_type === 'to_me' && order.delivery_address && (
@@ -400,6 +461,20 @@ function LoadCodePanel({ token }: { token: string }) {
 
               <Divider />
 
+              {/* Status — jump directly to any status (billed/awaiting_shipment are usually set automatically by billing actions, but can be overridden here) */}
+              <div>
+                <Label>Order status</Label>
+                <select
+                  value={statusDraft}
+                  onChange={e => setStatusDraft(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none bg-white"
+                >
+                  {STATUS_FLOW.map(s => (
+                    <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* Shipping input */}
               <div>
                 <Label>Shipping cost (₦)</Label>
@@ -450,7 +525,7 @@ function LoadCodePanel({ token }: { token: string }) {
 
                 {nextStatus && (
                   <button
-                    onClick={() => updateOrder(nextStatus)}
+                    onClick={() => updateOrder({ status: nextStatus })}
                     disabled={isSaving}
                     className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
                   >
