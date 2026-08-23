@@ -20,6 +20,7 @@ export interface VariantGroup {
   id: string;
   name: string;      // e.g. "Color", "Size", or a custom name
   options: string[]; // e.g. ["Red", "Blue"]
+  price_deltas?: Record<string, number>; // option value -> NGN price adjustment vs base price; missing/absent = 0
 }
 
 export interface ImportProduct {
@@ -50,6 +51,41 @@ export function buildCartKey(productId: string, selection?: Record<string, strin
   return `${productId}::${sorted}`;
 }
 
+// The final price for a specific variant selection. Purely a display
+// estimate — the server always recomputes this from scratch at checkout, so
+// a tampered/stale client price can never reach an actual order total.
+export function computeVariantPriceNgn(product: ImportProduct, selection?: Record<string, string>): number {
+  let price = product.price_ngn;
+  if (!selection || !product.variants?.length) return price;
+  for (const group of product.variants) {
+    const selected = selection[group.name];
+    if (selected == null) continue;
+    const delta = group.price_deltas?.[selected];
+    if (typeof delta === 'number') price += delta;
+  }
+  return price;
+}
+
+// Min/max price across every possible variant combination — used to show a
+// "₦3,000~₦5,000" range on listing cards before a variant is chosen.
+// Returns null when the product has no variants or no option carries a
+// price delta (i.e. a single flat price applies, nothing to range).
+export function variantPriceRange(product: ImportProduct): { min: number; max: number } | null {
+  if (!product.has_variants || !product.variants?.length) return null;
+  let minDelta = 0;
+  let maxDelta = 0;
+  let hasAnyDelta = false;
+  for (const group of product.variants) {
+    if (!group.price_deltas || Object.keys(group.price_deltas).length === 0) continue;
+    const deltas = group.options.map(opt => group.price_deltas?.[opt] ?? 0);
+    minDelta += Math.min(...deltas);
+    maxDelta += Math.max(...deltas);
+    hasAnyDelta = true;
+  }
+  if (!hasAnyDelta || minDelta === maxDelta) return null;
+  return { min: product.price_ngn + minDelta, max: product.price_ngn + maxDelta };
+}
+
 export function fmt(n: number) {
   return `₦${Math.round(n).toLocaleString()}`;
 }
@@ -68,6 +104,7 @@ function ProductCard({
 }) {
   const moq = product.moq ?? 1;
   const hasVariants = !!product.has_variants && (product.variants?.length ?? 0) > 0;
+  const priceRange = variantPriceRange(product);
   return (
     <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 flex flex-col hover:shadow-md transition-shadow">
       <button onClick={onClick} className="aspect-square bg-gray-50 overflow-hidden w-full relative">
@@ -80,7 +117,13 @@ function ProductCard({
         </button>
 
         <div className="mb-2 space-y-0.5">
-          <p className="font-bold text-orange-500 text-sm lg:text-base leading-none">{fmt(product.price_ngn)}</p>
+          {priceRange ? (
+            <p className="font-bold text-orange-500 text-sm lg:text-base leading-none">
+              {fmt(priceRange.min)}~{fmt(priceRange.max)}
+            </p>
+          ) : (
+            <p className="font-bold text-orange-500 text-sm lg:text-base leading-none">{fmt(product.price_ngn)}</p>
+          )}
           <div className="flex items-center gap-1.5">
             {usdRate > 0 && <span className="text-[10px] text-gray-400 font-medium">{fmtUsd(product.price_ngn, usdRate)}</span>}
             <span className="text-gray-200 text-[10px]">·</span>

@@ -6,7 +6,7 @@ import {
   ArrowLeft, ShoppingBag, Plus, Minus,
   Package, ChevronRight, Tag, ChevronDown, ChevronUp,
 } from 'lucide-react';
-import { fmt, buildCartKey } from './RecommendationsPage';
+import { fmt, buildCartKey, computeVariantPriceNgn, variantPriceRange } from './RecommendationsPage';
 import type { CartItem, ImportProduct, VariantGroup } from './RecommendationsPage';
 import CONFIG from '@/lib/config';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
@@ -65,19 +65,27 @@ function VariantPicker({
             {!selection[group.name] && <span className="text-red-400 font-normal"> · required</span>}
           </p>
           <div className="flex flex-wrap gap-2">
-            {group.options.map(opt => (
-              <button
-                key={opt}
-                onClick={() => onSelect(group.name, opt)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
-                  selection[group.name] === opt
-                    ? 'border-gray-900 bg-gray-900 text-white'
-                    : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                }`}
-              >
-                {opt}
-              </button>
-            ))}
+            {group.options.map(opt => {
+              const delta = group.price_deltas?.[opt];
+              return (
+                <button
+                  key={opt}
+                  onClick={() => onSelect(group.name, opt)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                    selection[group.name] === opt
+                      ? 'border-gray-900 bg-gray-900 text-white'
+                      : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                  }`}
+                >
+                  {opt}
+                  {typeof delta === 'number' && delta !== 0 && (
+                    <span className={selection[group.name] === opt ? 'text-gray-300' : 'text-gray-400'}>
+                      {' '}{delta > 0 ? '+' : ''}{fmt(delta)}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
       ))}
@@ -163,6 +171,17 @@ export default function ProductDetailPage() {
   const allVariantsSelected = variantGroups.every(g => !!selectedVariants[g.name]);
   const cartKey = product ? buildCartKey(product.id, variantGroups.length ? selectedVariants : undefined) : '';
 
+  // Live price reflecting whatever variants are currently selected. Once
+  // every group has a selection, this is the exact final price; before that,
+  // fall back to the product's overall min~max range (if variants affect
+  // price at all) so the customer always sees an honest number.
+  const priceRange = product ? variantPriceRange(product) : null;
+  const displayPriceNgn = product
+    ? (variantGroups.length && allVariantsSelected
+        ? computeVariantPriceNgn(product, selectedVariants)
+        : product.price_ngn)
+    : 0;
+
   // Reset variant selection whenever the product changes
   useEffect(() => { setSelectedVariants({}); }, [id]);
 
@@ -220,10 +239,11 @@ export default function ProductDetailPage() {
 
   const addToCart = (p: ImportProduct, quantity: number, variant_selection?: Record<string, string>) => {
     const cart_key = buildCartKey(p.id, variant_selection);
+    const price_ngn = computeVariantPriceNgn(p, variant_selection);
     setCart(prev => {
       const exists = prev.find(i => i.cart_key === cart_key);
       if (exists) return prev.map(i => i.cart_key === cart_key ? { ...i, quantity: i.quantity + quantity } : i);
-      return [...prev, { ...p, quantity, variant_selection, cart_key }];
+      return [...prev, { ...p, price_ngn, quantity, variant_selection, cart_key }];
     });
   };
 
@@ -337,7 +357,11 @@ export default function ProductDetailPage() {
 
           {/* Tri-currency pricing */}
           <div className="mb-1">
-            <p className="font-black text-orange-500 text-2xl leading-none">{fmt(product.price_ngn)}</p>
+            {priceRange && !allVariantsSelected ? (
+              <p className="font-black text-orange-500 text-2xl leading-none">{fmt(priceRange.min)}~{fmt(priceRange.max)}</p>
+            ) : (
+              <p className="font-black text-orange-500 text-2xl leading-none">{fmt(displayPriceNgn)}</p>
+            )}
             <div className="flex items-center gap-2 mt-1">
               {usdPrice && (
                 <span className="text-xs text-gray-400 font-medium bg-gray-50 px-2 py-0.5 rounded-lg">
@@ -403,10 +427,10 @@ export default function ProductDetailPage() {
               <div className="flex items-center justify-between bg-gray-50 rounded-xl px-4 py-2.5">
                 <span className="text-xs text-gray-500">Order total</span>
                 <div className="text-right">
-                  <p className="font-bold text-gray-900 text-sm">{fmt(product.price_ngn * qty)}</p>
+                  <p className="font-bold text-gray-900 text-sm">{fmt(displayPriceNgn * qty)}</p>
                   {usdPrice && (
                     <p className="text-[10px] text-gray-400">
-                      ≈ {fmtUsd(product.price_ngn * qty, usdRate)} USD
+                      ≈ {fmtUsd(displayPriceNgn * qty, usdRate)} USD
                     </p>
                   )}
                 </div>
@@ -447,10 +471,10 @@ export default function ProductDetailPage() {
               <div className="flex items-center justify-between px-1">
                 <span className="text-xs text-gray-500">Subtotal</span>
                 <div className="text-right">
-                  <p className="font-bold text-gray-900 text-sm">{fmt(product.price_ngn * itemInCart.quantity)}</p>
+                  <p className="font-bold text-gray-900 text-sm">{fmt(itemInCart.price_ngn * itemInCart.quantity)}</p>
                   {usdPrice && (
                     <p className="text-[10px] text-gray-400">
-                      ≈ {fmtUsd(product.price_ngn * itemInCart.quantity, usdRate)} USD
+                      ≈ {fmtUsd(itemInCart.price_ngn * itemInCart.quantity, usdRate)} USD
                     </p>
                   )}
                 </div>

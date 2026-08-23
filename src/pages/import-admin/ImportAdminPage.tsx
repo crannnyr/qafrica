@@ -55,6 +55,7 @@ interface VariantGroup {
   id: string;
   name: string;
   options: string[];
+  price_deltas?: Record<string, number>;
 }
 
 interface ImportProduct {
@@ -937,6 +938,23 @@ function ProductsManager({ token }: { token: string }) {
     setVariantGroups(prev => prev.filter(g => g.id !== groupId));
   };
 
+  // Sets (or clears, if left blank/0) the NGN price adjustment for one
+  // specific option within a group — e.g. Size "XL" costs +₦1,500 more.
+  const setOptionDelta = (groupId: string, option: string, deltaStr: string) => {
+    const trimmed = deltaStr.trim();
+    const delta = trimmed === '' ? undefined : Number(trimmed);
+    setVariantGroups(prev => prev.map(g => {
+      if (g.id !== groupId) return g;
+      const price_deltas = { ...(g.price_deltas ?? {}) };
+      if (delta === undefined || Number.isNaN(delta) || delta === 0) {
+        delete price_deltas[option];
+      } else {
+        price_deltas[option] = delta;
+      }
+      return { ...g, price_deltas: Object.keys(price_deltas).length ? price_deltas : undefined };
+    }));
+  };
+
   useEffect(() => {
     loadProducts();
     fetch(`${EDGE_URL}?action=rates`)
@@ -1298,6 +1316,32 @@ function ProductsManager({ token }: { token: string }) {
                     </div>
                   </div>
                 ))}
+
+                {/* Per-option price adjustments — lets a costly variant (e.g. a larger
+                    size or premium color) actually cost more than the base price. */}
+                {variantGroups.length > 0 && (
+                  <div className="mb-3 bg-white border border-gray-100 rounded-xl p-3">
+                    <p className="text-[11px] font-semibold text-gray-700 mb-0.5">Price adjustments (optional)</p>
+                    <p className="text-[10px] text-gray-400 mb-2.5">Leave blank for no change vs. the base price above. Customers see this reflected live when they pick options.</p>
+                    <div className="space-y-2">
+                      {variantGroups.flatMap(group => group.options.map(opt => (
+                        <div key={`${group.id}:${opt}`} className="flex items-center gap-2">
+                          <span className="text-[11px] text-gray-500 flex-1 truncate">{group.name}: <span className="font-semibold text-gray-700">{opt}</span></span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] text-gray-400">₦</span>
+                            <input
+                              type="number"
+                              value={group.price_deltas?.[opt] ?? ''}
+                              onChange={e => setOptionDelta(group.id, opt, e.target.value)}
+                              placeholder="0"
+                              className="w-24 px-2 py-1 rounded-lg border border-gray-200 text-xs text-right outline-none focus:border-gray-400"
+                            />
+                          </div>
+                        </div>
+                      )))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Add a fully custom variant group — for anything not covered by color/size */}
                 <div className="flex gap-1.5">
