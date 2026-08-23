@@ -873,6 +873,13 @@ function ProductsManager({ token }: { token: string }) {
   const [priceCurrency, setPriceCurrency] = useState<'cny' | 'usd' | 'ngn'>('cny');
   const [moq, setMoq]                 = useState('1');
   const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
+  const [expandedVariantGroups, setExpandedVariantGroups] = useState<Set<string>>(new Set());
+  const toggleVariantGroupExpanded = (key: string) =>
+    setExpandedVariantGroups(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
   const [customGroupName, setCustomGroupName] = useState('');
   const [customOptionDrafts, setCustomOptionDrafts] = useState<Record<string, string>>({});
   const [imagePreviews, setImagePreviews] = useState<string[]>([]); // up to 3 preview URLs
@@ -979,7 +986,7 @@ function ProductsManager({ token }: { token: string }) {
     setEditProduct(null);
     setName(''); setDesc(''); setCategory('General');
     setPriceAmount(''); setPriceCurrency('cny'); setMoq('1');
-    setVariantGroups([]); setCustomGroupName(''); setCustomOptionDrafts({});
+    setVariantGroups([]); setCustomGroupName(''); setCustomOptionDrafts({}); setExpandedVariantGroups(new Set());
     setImagePreviews([]); setImageFiles([null, null, null]);
     setSaveError('');
     setShowForm(true);
@@ -993,6 +1000,7 @@ function ProductsManager({ token }: { token: string }) {
     setPriceCurrency('cny');
     setMoq((p.moq ?? 1).toString());
     setVariantGroups(p.variants?.length ? p.variants.map(g => ({ ...g, id: g.id || genId() })) : []);
+    setExpandedVariantGroups(new Set());
     setCustomGroupName(''); setCustomOptionDrafts({});
     // Populate previews from existing image_urls or fallback to image_url
     const existing = p.image_urls?.length ? p.image_urls : (p.image_url ? [p.image_url] : []);
@@ -1285,63 +1293,86 @@ function ProductsManager({ token }: { token: string }) {
                 </div>
 
                 {/* Custom variant groups (also covers "unspecified" variants) */}
-                {variantGroups.filter(g => g.name !== 'Color' && g.name !== 'Size').map(group => (
-                  <div key={group.id} className="mb-3 bg-white border border-gray-100 rounded-xl p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-[11px] font-semibold text-gray-700">{group.name}</p>
-                      <button type="button" onClick={() => removeGroup(group.id)} className="text-gray-300 hover:text-red-400">
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 mb-2">
-                      {group.options.map(opt => (
-                        <span key={opt} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600">
-                          {opt}
-                          <button type="button" onClick={() => removeCustomOption(group.id, opt)} className="text-gray-400 hover:text-red-400">
-                            <X className="w-2.5 h-2.5" />
+                {variantGroups.filter(g => g.name !== 'Color' && g.name !== 'Size').map(group => {
+                  const isLong = group.options.length > 10;
+                  const isExpanded = expandedVariantGroups.has(`chips:${group.id}`);
+                  const visibleOptions = isLong && !isExpanded ? group.options.slice(0, 10) : group.options;
+                  return (
+                    <div key={group.id} className="mb-3 bg-white border border-gray-100 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[11px] font-semibold text-gray-700">{group.name} <span className="text-gray-400 font-normal">({group.options.length})</span></p>
+                        <button type="button" onClick={() => removeGroup(group.id)} className="text-gray-300 hover:text-red-400">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {visibleOptions.map(opt => (
+                          <span key={opt} className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-medium bg-gray-100 text-gray-600">
+                            {opt}
+                            <button type="button" onClick={() => removeCustomOption(group.id, opt)} className="text-gray-400 hover:text-red-400">
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </span>
+                        ))}
+                        {isLong && (
+                          <button type="button" onClick={() => toggleVariantGroupExpanded(`chips:${group.id}`)}
+                            className="px-2 py-1 rounded-lg text-[11px] font-semibold border border-dashed border-gray-300 text-gray-500 hover:border-gray-400">
+                            {isExpanded ? 'Show less' : `+${group.options.length - 10} more`}
                           </button>
-                        </span>
-                      ))}
+                        )}
+                      </div>
+                      <div className="flex gap-1.5">
+                        <input type="text" value={customOptionDrafts[group.id] ?? ''}
+                          onChange={e => setCustomOptionDrafts(prev => ({ ...prev, [group.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomOption(group.id); } }}
+                          placeholder="Add an option…"
+                          className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-gray-400" />
+                        <button type="button" onClick={() => addCustomOption(group.id)}
+                          className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600">
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex gap-1.5">
-                      <input type="text" value={customOptionDrafts[group.id] ?? ''}
-                        onChange={e => setCustomOptionDrafts(prev => ({ ...prev, [group.id]: e.target.value }))}
-                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomOption(group.id); } }}
-                        placeholder="Add an option…"
-                        className="flex-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs outline-none focus:border-gray-400" />
-                      <button type="button" onClick={() => addCustomOption(group.id)}
-                        className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-600">
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
 
                 {/* Per-option price adjustments — lets a costly variant (e.g. a larger
                     size or premium color) actually cost more than the base price. */}
-                {variantGroups.length > 0 && (
-                  <div className="mb-3 bg-white border border-gray-100 rounded-xl p-3">
-                    <p className="text-[11px] font-semibold text-gray-700 mb-0.5">Price adjustments (optional)</p>
-                    <p className="text-[10px] text-gray-400 mb-2.5">Leave blank for no change vs. the base price above. Customers see this reflected live when they pick options.</p>
-                    <div className="space-y-2">
-                      {variantGroups.flatMap(group => group.options.map(opt => (
-                        <div key={`${group.id}:${opt}`} className="flex items-center gap-2">
-                          <span className="text-[11px] text-gray-500 flex-1 truncate">{group.name}: <span className="font-semibold text-gray-700">{opt}</span></span>
-                          <div className="flex items-center gap-1">
-                            <span className="text-[11px] text-gray-400">₦</span>
-                            <input
-                              type="number"
-                              value={group.price_deltas?.[opt] ?? ''}
-                              onChange={e => setOptionDelta(group.id, opt, e.target.value)}
-                              placeholder="0"
-                              className="w-24 px-2 py-1 rounded-lg border border-gray-200 text-xs text-right outline-none focus:border-gray-400"
-                            />
+                {variantGroups.length > 0 && (() => {
+                  const allOptionRows = variantGroups.flatMap(group => group.options.map(opt => ({ group, opt })));
+                  const isLong = allOptionRows.length > 10;
+                  const isExpanded = expandedVariantGroups.has('price-panel');
+                  const visibleRows = isLong && !isExpanded ? allOptionRows.slice(0, 10) : allOptionRows;
+                  return (
+                    <div className="mb-3 bg-white border border-gray-100 rounded-xl p-3">
+                      <p className="text-[11px] font-semibold text-gray-700 mb-0.5">Price adjustments (optional)</p>
+                      <p className="text-[10px] text-gray-400 mb-2.5">Leave blank for no change vs. the base price above. Customers see this reflected live when they pick options.</p>
+                      <div className="space-y-2">
+                        {visibleRows.map(({ group, opt }) => (
+                          <div key={`${group.id}:${opt}`} className="flex items-center gap-2">
+                            <span className="text-[11px] text-gray-500 flex-1 truncate">{group.name}: <span className="font-semibold text-gray-700">{opt}</span></span>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[11px] text-gray-400">₦</span>
+                              <input
+                                type="number"
+                                value={group.price_deltas?.[opt] ?? ''}
+                                onChange={e => setOptionDelta(group.id, opt, e.target.value)}
+                                placeholder="0"
+                                className="w-24 px-2 py-1 rounded-lg border border-gray-200 text-xs text-right outline-none focus:border-gray-400"
+                              />
+                            </div>
                           </div>
-                        </div>
-                      )))}
+                        ))}
+                      </div>
+                      {isLong && (
+                        <button type="button" onClick={() => toggleVariantGroupExpanded('price-panel')}
+                          className="mt-2.5 w-full text-center py-1.5 rounded-lg text-[11px] font-semibold border border-dashed border-gray-300 text-gray-500 hover:border-gray-400">
+                          {isExpanded ? 'Show less' : `Show all ${allOptionRows.length} options`}
+                        </button>
+                      )}
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Add a fully custom variant group — for anything not covered by color/size */}
                 <div className="flex gap-1.5">

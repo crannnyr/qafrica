@@ -48,6 +48,8 @@ function Description({ text }: { text: string }) {
   );
 }
 
+const VARIANT_TRUNCATE_THRESHOLD = 10;
+
 // ── Variant selector ─────────────────────────────────────────────────────────
 function VariantPicker({
   groups, selection, onSelect,
@@ -56,39 +58,63 @@ function VariantPicker({
   selection: Record<string, string>;
   onSelect: (groupName: string, option: string) => void;
 }) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleExpanded = (groupId: string) =>
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      next.has(groupId) ? next.delete(groupId) : next.add(groupId);
+      return next;
+    });
+
   return (
     <div className="space-y-4 mb-5">
-      {groups.map(group => (
-        <div key={group.id}>
-          <p className="text-xs font-semibold text-gray-700 mb-2">
-            {group.name}
-            {!selection[group.name] && <span className="text-red-400 font-normal"> · required</span>}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {group.options.map(opt => {
-              const delta = group.price_deltas?.[opt];
-              return (
+      {groups.map(group => {
+        const isLong = group.options.length > VARIANT_TRUNCATE_THRESHOLD;
+        const isExpanded = expandedGroups.has(group.id);
+        const visibleOptions = isLong && !isExpanded
+          ? group.options.slice(0, VARIANT_TRUNCATE_THRESHOLD)
+          : group.options;
+
+        return (
+          <div key={group.id}>
+            <p className="text-xs font-semibold text-gray-700 mb-2">
+              {group.name}
+              {!selection[group.name] && <span className="text-red-400 font-normal"> · required</span>}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {visibleOptions.map(opt => {
+                const delta = group.price_deltas?.[opt];
+                return (
+                  <button
+                    key={opt}
+                    onClick={() => onSelect(group.name, opt)}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                      selection[group.name] === opt
+                        ? 'border-gray-900 bg-gray-900 text-white'
+                        : 'border-gray-200 text-gray-600 hover:border-gray-400'
+                    }`}
+                  >
+                    {opt}
+                    {typeof delta === 'number' && delta !== 0 && (
+                      <span className={selection[group.name] === opt ? 'text-gray-300' : 'text-gray-400'}>
+                        {' '}{delta > 0 ? '+' : ''}{fmt(delta)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              {isLong && (
                 <button
-                  key={opt}
-                  onClick={() => onSelect(group.name, opt)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
-                    selection[group.name] === opt
-                      ? 'border-gray-900 bg-gray-900 text-white'
-                      : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                  }`}
+                  onClick={() => toggleExpanded(group.id)}
+                  className="px-3.5 py-1.5 rounded-lg text-xs font-semibold border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
                 >
-                  {opt}
-                  {typeof delta === 'number' && delta !== 0 && (
-                    <span className={selection[group.name] === opt ? 'text-gray-300' : 'text-gray-400'}>
-                      {' '}{delta > 0 ? '+' : ''}{fmt(delta)}
-                    </span>
-                  )}
+                  {isExpanded ? 'Show less' : `+${group.options.length - VARIANT_TRUNCATE_THRESHOLD} more`}
                 </button>
-              );
-            })}
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
