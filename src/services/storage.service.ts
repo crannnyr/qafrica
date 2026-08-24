@@ -2,6 +2,13 @@ import { supabase } from './supabase';
 import { compressImage } from '@/lib/imageCompression';
 
 export const storageService = {
+  // Unlike uploadImage below, this takes a caller-supplied path with
+  // upsert:true — meaning the same path CAN be legitimately overwritten
+  // with different content. A long cache here would risk serving stale
+  // content after a re-upload, so this intentionally does NOT get the
+  // 1-year cache treatment. (Currently has zero callers in the app — if
+  // you're adding one, consider using uploadImage's unique-filename
+  // pattern instead, which is what makes long-term caching safe there.)
   async uploadFile(bucket: string, path: string, file: File) {
     const { data, error } = await supabase
       .storage
@@ -40,7 +47,11 @@ export const storageService = {
       .storage
       .from(bucket)
       .upload(filePath, fileToUpload, {
-        cacheControl: '3600',
+        // 1 year, not the previous 1 hour. Safe because every filename here
+        // is unique (timestamp + random suffix) and upsert is false — a
+        // given URL's content can never change after upload, so there's no
+        // staleness risk in caching it as long as the browser/CDN will let us.
+        cacheControl: '31536000',
         upsert: false,
         contentType: fileToUpload.type,
       });
