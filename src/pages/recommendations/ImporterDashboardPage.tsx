@@ -13,6 +13,7 @@ import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { fmt } from './RecommendationsPage';
 import ManualPaymentFlow from './ManualPaymentFlow';
 import ImportSettingsSheet from './ImportSettingsSheet';
+import RetryPaymentSheet from './RetryPaymentSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -24,6 +25,7 @@ interface DashboardOrder {
   payment_method: 'paystack' | 'manual' | null;
   total_ngn: number;
   delivery_type: 'to_qafrica' | 'to_me';
+  items: Array<{ id: string; name: string; price_ngn: number; quantity: number; image_url: string; variant_options?: Record<string, string> }>;
   created_at: string;
 }
 
@@ -82,6 +84,7 @@ export default function ImporterDashboardPage() {
   const [bills, setBills] = useState<ConsolidationBill[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
+  const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
   const [payingBill, setPayingBill] = useState<ConsolidationBill | null>(null);
 
   // Bounce logged-out visitors back to the recommendations page rather than
@@ -203,11 +206,59 @@ export default function ImporterDashboardPage() {
           )}
         </section>
 
-        {/* ── Orders / consolidation status ───────────────────────────── */}
+        {/* ── To Pay: needs action ────────────────────────────────────── */}
+        {(() => {
+          const toPay = orders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'failed');
+          return (
+            <section className="mb-8">
+              <div className="flex items-center gap-2 mb-3">
+                <Package className="w-4 h-4 text-gray-400" />
+                <h2 className="font-bold text-gray-800 text-sm">To Pay</h2>
+                {toPay.length > 0 && (
+                  <span className="text-[10px] font-bold bg-red-500 text-white px-2 py-0.5 rounded-full">
+                    {toPay.length}
+                  </span>
+                )}
+              </div>
+
+              {isLoading ? (
+                <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
+              ) : toPay.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
+                  <Clock className="w-7 h-7 text-gray-200 mx-auto mb-2" />
+                  <p className="text-xs text-gray-300">Nothing waiting on payment right now.</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+                  {toPay.map(order => (
+                    <button
+                      key={order.id}
+                      onClick={() => setRetryOrder(order)}
+                      className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-bold text-gray-900 font-mono text-xs tracking-wider">{order.code}</span>
+                          {order.payment_status === 'failed' && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Payment failed</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-400">{order.items?.length ?? 0} item{order.items?.length === 1 ? '' : 's'} · Tap to complete payment</p>
+                      </div>
+                      <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          );
+        })()}
+
+        {/* ── Order history ───────────────────────────────────────────── */}
         <section>
           <div className="flex items-center gap-2 mb-3">
-            <Package className="w-4 h-4 text-gray-400" />
-            <h2 className="font-bold text-gray-800 text-sm">My orders</h2>
+            <ShoppingBag className="w-4 h-4 text-gray-400" />
+            <h2 className="font-bold text-gray-800 text-sm">Order history</h2>
           </div>
 
           {isLoading ? (
@@ -263,6 +314,15 @@ export default function ImporterDashboardPage() {
       )}
 
       {showSettings && <ImportSettingsSheet onClose={() => setShowSettings(false)} />}
+
+      {retryOrder && customer && (
+        <RetryPaymentSheet
+          order={retryOrder}
+          customer={{ id: customer.id, email: customer.email, full_name: customer.full_name }}
+          onClose={() => setRetryOrder(null)}
+          onPaid={() => { setRetryOrder(null); load(); }}
+        />
+      )}
     </div>
   );
 }

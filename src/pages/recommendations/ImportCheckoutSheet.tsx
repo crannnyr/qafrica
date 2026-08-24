@@ -143,7 +143,12 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Checkout failed');
+      if (!res.ok) {
+        if (data.error === 'duplicate_pending_order') {
+          throw new Error(data.message ?? 'You already have a pending order for this — check your dashboard to complete payment.');
+        }
+        throw new Error(data.error ?? 'Checkout failed');
+      }
 
       if (paymentMethod === 'manual') {
         setResult({ code: data.code, bank: data.bank, order_id: data.order_id });
