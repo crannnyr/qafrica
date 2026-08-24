@@ -6,12 +6,13 @@
 // Route: /importations/dashboard (added in App.tsx)
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Package, Receipt, ChevronLeft, RefreshCw, Clock } from 'lucide-react';
+import { ShoppingBag, Package, Receipt, ChevronLeft, RefreshCw, Clock, Settings } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { fmt } from './RecommendationsPage';
 import ManualPaymentFlow from './ManualPaymentFlow';
+import ImportSettingsSheet from './ImportSettingsSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -80,6 +81,7 @@ export default function ImporterDashboardPage() {
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
   const [bills, setBills] = useState<ConsolidationBill[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
   const [payingBill, setPayingBill] = useState<ConsolidationBill | null>(null);
 
   // Bounce logged-out visitors back to the recommendations page rather than
@@ -142,6 +144,9 @@ export default function ImporterDashboardPage() {
           </Link>
           <button onClick={load} disabled={isLoading} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
             <RefreshCw className={`w-4 h-4 text-gray-400 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
+          <button onClick={() => setShowSettings(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+            <Settings className="w-4 h-4 text-gray-400" />
           </button>
         </div>
       </header>
@@ -256,6 +261,8 @@ export default function ImporterDashboardPage() {
           onClose={() => setPayingBill(null)}
         />
       )}
+
+      {showSettings && <ImportSettingsSheet onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
