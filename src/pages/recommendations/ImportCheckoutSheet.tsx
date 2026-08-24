@@ -3,7 +3,7 @@
 // bank transfer. Replaces the old "generate code, send on WhatsApp" flow —
 // the code is still generated server-side for continuity, it's just no
 // longer the primary path.
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
@@ -38,7 +38,8 @@ interface Props {
 }
 
 export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove }: Props) {
-  const [delivery, setDelivery] = useState<'to_qafrica' | 'to_me'>('to_qafrica');
+  const [delivery, setDelivery] = useState<'to_qafrica' | 'to_me'>('to_me');
+  const [showWhyQafrica, setShowWhyQafrica] = useState(false);
   const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'manual'>('paystack');
   const [whatsapp, setWhatsapp] = useState(customer.phone ?? '');
@@ -110,6 +111,19 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
   const jumiaFee = delivery === 'to_qafrica' ? cart.reduce((s, i) => s + 200 * i.quantity, 0) : 0;
   const total = subtotal + jumiaFee;
+
+  // "Deliver to QAFRICA" (Jumia consolidation) only makes sense in bulk — it's
+  // gated behind a 20-unit cart minimum.
+  const cartTotalQty = cart.reduce((s, i) => s + i.quantity, 0);
+  const QAFRICA_MOQ = 20;
+  const qafricaUnlocked = cartTotalQty >= QAFRICA_MOQ;
+
+  // If the cart drops below that threshold after the option was already
+  // selected (items removed), fall back to "to_me" automatically rather
+  // than leaving an invalid state selected.
+  useEffect(() => {
+    if (delivery === 'to_qafrica' && !qafricaUnlocked) setDelivery('to_me');
+  }, [delivery, qafricaUnlocked]);
 
   const addressComplete = delivery === 'to_qafrica' || (
     address.name.trim() && address.phone.trim() && address.address_line1.trim() &&
@@ -281,20 +295,47 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         </div>
 
         <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Delivery preference</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Delivery preference</p>
+          </div>
           <div className="space-y-2">
-            {[
-              { key: 'to_qafrica' as const, label: 'Deliver to QAFRICA', sub: 'We receive, inspect & list on Jumia for you. +₦200/item' },
-              { key: 'to_me' as const, label: 'Deliver to my address', sub: 'Shipped directly to you. Cost confirmed after.' },
-            ].map(opt => (
-              <button key={opt.key} onClick={() => setDelivery(opt.key)}
-                className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${delivery === opt.key ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
-                <p className="font-semibold text-gray-900 text-xs">{opt.label}</p>
-                <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">{opt.sub}</p>
-              </button>
-            ))}
+            <button
+              onClick={() => qafricaUnlocked && setDelivery('to_qafrica')}
+              disabled={!qafricaUnlocked}
+              className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${
+                !qafricaUnlocked ? 'border-gray-100 opacity-50 cursor-not-allowed' :
+                delivery === 'to_qafrica' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <p className="font-semibold text-gray-900 text-xs">Deliver to QAFRICA</p>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setShowWhyQafrica(true); }}
+                  className="text-[10px] font-bold text-orange-500 flex-shrink-0"
+                >
+                  Why this?
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">
+                We receive, inspect & list on Jumia for you. +₦200/item
+              </p>
+              {!qafricaUnlocked && (
+                <p className="text-[11px] text-orange-500 mt-1 font-medium">
+                  Needs {QAFRICA_MOQ}+ units in cart — you have {cartTotalQty}
+                </p>
+              )}
+            </button>
+            <button onClick={() => setDelivery('to_me')}
+              className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${delivery === 'to_me' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
+              <p className="font-semibold text-gray-900 text-xs">Deliver to my address</p>
+              <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">Shipped directly to you. Cost confirmed after.</p>
+            </button>
           </div>
         </div>
+
+        {showWhyQafrica && <WhyQafricaExplainer onClose={() => setShowWhyQafrica(false)} />}
+
 
         {/* Shipping method — flight vs sea freight, with a link explaining why consolidation keeps rates low */}
         <div>
@@ -428,3 +469,54 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     </motion.div>
   );
 }
+
+function WhyQafricaExplainer({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center sm:p-4"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }}
+        transition={{ type: 'spring', damping: 28 }}
+        onClick={e => e.stopPropagation()}
+        className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6 max-h-[80vh] overflow-y-auto"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-bold text-gray-900 text-lg">Why deliver to QAFRICA?</h2>
+          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="space-y-5 text-sm text-gray-600 leading-relaxed">
+          <div>
+            <p className="font-semibold text-gray-900 text-xs mb-1">The setup</p>
+            <p>
+              Instead of each unit shipping straight to you, we receive your whole order at our warehouse first, inspect it for quality, then list it for resale on Jumia. This only makes sense at bulk quantities — which is why it needs 20+ units in your cart — because consolidating a handful of items wouldn't cover its own handling cost.
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900 text-xs mb-1">When your order arrives</p>
+            <p>
+              We notify you the moment your shipment lands at the warehouse and clears inspection, so you always know where things stand — you're never left guessing whether it's arrived.
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900 text-xs mb-1">Want a sample first?</p>
+            <p>
+              If you'd rather test a product before committing to a bulk Jumia order, reach out and we'll walk you through ordering a sample to "Deliver to my address" instead — no pressure to go straight to the bulk route.
+            </p>
+          </div>
+        </div>
+
+        <button onClick={onClose}
+          className="w-full mt-6 py-3 bg-gray-900 hover:bg-gray-700 text-white font-bold text-sm rounded-xl transition-colors">
+          Got it
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+

@@ -13,6 +13,7 @@ import CONFIG from '@/lib/config';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import ImportAdminAnalytics from './ImportAdminAnalytics';
 import ImportAdminCustomers from './ImportAdminCustomers';
+import QuestionsManager from './QuestionsManager';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -1503,7 +1504,7 @@ function ProductsManager({ token }: { token: string }) {
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'orders' | 'products' | 'clients'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'orders' | 'products' | 'clients' | 'questions'>('analytics');
 
   if (!token) return null;
 
@@ -1534,7 +1535,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl mx-auto px-4 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'orders', 'products', 'clients'] as const).map(t => (
+          {(['analytics', 'orders', 'products', 'clients', 'questions'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -1558,6 +1559,8 @@ export default function ImportAdminPage() {
           </>
         ) : tab === 'products' ? (
           <ProductsManager token={token} />
+        ) : tab === 'questions' ? (
+          <QuestionsManager token={token} />
         ) : (
           <ImportAdminCustomers token={token} />
         )}

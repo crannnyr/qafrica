@@ -5,11 +5,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ShoppingBag, Plus, Minus,
   Package, ChevronRight, Tag, ChevronDown, ChevronUp,
+  Plane, Ship, HelpCircle, MessageCircleQuestion,
 } from 'lucide-react';
 import { fmt, buildCartKey, computeVariantPriceNgn, variantPriceRange } from './RecommendationsPage';
 import type { CartItem, ImportProduct, VariantGroup } from './RecommendationsPage';
 import CONFIG from '@/lib/config';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
+import AskQuestionSheet from './AskQuestionSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const DESC_PREVIEW_LENGTH = 80;
@@ -186,6 +188,7 @@ export default function ProductDetailPage() {
   );
   const [isLoading, setIsLoading] = useState(!product);
   const [usdRate, setUsdRate]     = useState(0);
+  const [showAskQuestion, setShowAskQuestion] = useState(false);
 
   // Cart state — lives here, passed back to RecommendationsPage via navigate state
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -404,9 +407,29 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          <p className="text-[10px] text-gray-400 mt-1 mb-5">
+          <p className="text-[10px] text-gray-400 mt-1 mb-2">
             Sourced from verified manufacturers in China
           </p>
+
+          <div className="flex items-center gap-3 mb-4">
+            <span className="flex items-center gap-1 text-[11px] text-gray-400">
+              <Plane className="w-3 h-3" /> Flight 20–30 days
+            </span>
+            <span className="text-gray-200">·</span>
+            <span className="flex items-center gap-1 text-[11px] text-gray-400">
+              <Ship className="w-3 h-3" /> Sea 60–90 days
+            </span>
+          </div>
+
+          <motion.button
+            onClick={() => setShowAskQuestion(true)}
+            animate={{ opacity: [1, 0.5, 1] }}
+            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+            className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500 mb-5"
+          >
+            <MessageCircleQuestion className="w-3.5 h-3.5" />
+            Ask about this product
+          </motion.button>
 
           {/* Variant selection */}
           {variantGroups.length > 0 && (
@@ -577,6 +600,14 @@ export default function ProductDetailPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showAskQuestion && product && (
+        <AskQuestionSheet
+          productId={product.id}
+          productName={product.name}
+          onClose={() => setShowAskQuestion(false)}
+        />
+      )}
     </div>
   );
 }
