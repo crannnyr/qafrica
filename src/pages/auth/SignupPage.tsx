@@ -5,6 +5,7 @@ import { Eye, EyeOff, ShoppingBag, ArrowRight, Loader2, CheckCircle, AlertCircle
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores';
 import { toast } from 'sonner';
+import LiveActivityPanel from './LiveActivityPanel';
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -98,19 +99,31 @@ export default function SignupPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center p-4">
-      {/* Background Elements */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 rounded-full blur-3xl" />
+    <div className="min-h-screen lg:grid lg:grid-cols-2 bg-gradient-to-br from-orange-50 via-white to-orange-50 lg:bg-none">
+      {/* ── Right: live activity panel — desktop only, rendered first in the
+          grid so it visually sits second (order-2) while keeping the form
+          as the first, more important, DOM element for accessibility ── */}
+      <div className="hidden lg:block lg:order-2">
+        <LiveActivityPanel
+          headline="Join sellers scaling smoothly across Nigeria."
+          sub="Every store on QAFRICA starts the same way you're about to — one signup, then it compounds."
+        />
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-lg relative z-10"
-      >
+      {/* ── Left: the form, unchanged ── */}
+      <div className="relative flex items-center justify-center p-4 py-16 lg:order-1 lg:bg-white">
+        {/* Background Elements — mobile/tablet only, panel replaces this on desktop */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none lg:hidden">
+          <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 rounded-full blur-3xl" />
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-lg relative z-10"
+        >
         {/* Logo */}
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
@@ -317,6 +330,7 @@ export default function SignupPage() {
           </Link>
         </p>
       </motion.div>
+      </div>
     </div>
   );
 }
