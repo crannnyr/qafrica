@@ -46,8 +46,7 @@ const DELIVERY_LABELS: Record<string, string> = {
   to_qafrica: 'To QAFRICA', to_me: 'Direct to customer', unknown: 'Unspecified',
 };
 const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending', shipping_quoted: 'Quoted', order_placed: 'Ordered',
-  shipped: 'Shipped', delivered: 'Delivered', unknown: 'Unknown',
+  pending: 'Pending', confirmed: 'Confirmed', billed: 'Billed', to_review: 'To Review', unknown: 'Unknown',
 };
 
 function KpiCard({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {

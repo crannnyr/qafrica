@@ -55,6 +55,9 @@ function timeAgo(d: string | null) {
 const REMINDER_MESSAGE = (name: string, code: string) =>
   `Hi ${name}! Did something go wrong? We noticed you haven't completed payment for your order ${code}. Kindly reach out to us on WhatsApp so we can assist you further.`;
 
+const BILL_REMINDER_MESSAGE = (name: string, reason: string, amount: number) =>
+  `Hi ${name}! Just a friendly reminder that you have an outstanding fee — ${reason} (₦${Math.round(amount).toLocaleString()}). Please make payment when you can so we can keep your order moving. Let us know if you have any questions!`;
+
 function waLink(phone: string, message: string) {
   return `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
 }
@@ -68,6 +71,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }
 }) {
   const [customer, setCustomer] = useState<any>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [bills, setBills] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -79,7 +83,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }
       body: JSON.stringify({ manager_token: token, customer_id: customerId }),
     })
       .then(r => r.json())
-      .then(d => { setCustomer(d.customer ?? null); setOrders(d.orders ?? []); })
+      .then(d => { setCustomer(d.customer ?? null); setOrders(d.orders ?? []); setBills(d.bills ?? []); })
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [token, customerId]);
@@ -207,6 +211,39 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* Bills — consolidation & shipping fees, with a reminder action for any still pending */}
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Bills</p>
+            {bills.length === 0 ? (
+              <p className="text-xs text-gray-300">No bills yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {bills.map((b: any) => (
+                  <div key={b.id} className="bg-white border border-gray-100 rounded-xl px-3.5 py-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-gray-800">{b.reason}</span>
+                      <span className="font-semibold text-gray-900 text-xs">{fmt(b.amount_ngn)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] text-gray-400 capitalize">
+                        {b.kind === 'shipping' ? 'Shipping fee' : 'Consolidation fee'} · {b.status.replace(/_/g, ' ')}
+                      </p>
+                      {b.status === 'pending' && customer.phone && (
+                        <a
+                          href={waLink(customer.phone, BILL_REMINDER_MESSAGE(customer.full_name, b.reason, b.amount_ngn))}
+                          target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-700"
+                        >
+                          <MessageCircle className="w-3 h-3" /> Remind
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

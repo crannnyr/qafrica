@@ -47,7 +47,7 @@ interface ImportOrder {
   jumia_fee_ngn: number;
   shipping_ngn: number | null;
   total_ngn: number;
-  status: 'pending' | 'shipping_quoted' | 'order_placed' | 'billed' | 'awaiting_shipment' | 'shipped' | 'delivered';
+  status: 'pending' | 'confirmed' | 'billed' | 'to_review';
   payment_status: 'unpaid' | 'awaiting_confirmation' | 'paid' | 'failed';
   payment_method: 'paystack' | 'manual' | null;
   admin_note: string | null;
@@ -144,25 +144,23 @@ const SHIPPING_METHOD_LABELS: Record<string, string> = {
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
-  shipping_quoted: 'Quoted',
-  order_placed: 'Ordered',
+  confirmed: 'Confirmed',
   billed: 'Billed — fee due',
-  awaiting_shipment: 'Awaiting shipment',
-  shipped: 'Shipped',
-  delivered: 'Delivered',
+  to_review: 'To Review',
 };
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
-  shipping_quoted: 'bg-sky-50 text-sky-700',
-  order_placed: 'bg-violet-50 text-violet-700',
+  confirmed: 'bg-sky-50 text-sky-700',
   billed: 'bg-rose-50 text-rose-700',
-  awaiting_shipment: 'bg-cyan-50 text-cyan-700',
-  shipped: 'bg-indigo-50 text-indigo-700',
-  delivered: 'bg-emerald-50 text-emerald-700',
+  to_review: 'bg-emerald-50 text-emerald-700',
 };
 
-const STATUS_FLOW = ['pending', 'shipping_quoted', 'order_placed', 'billed', 'awaiting_shipment', 'shipped', 'delivered'];
+// Simplified pipeline: pending -> confirmed -> billed -> to_review. Folded
+// from the old 7-stage pipeline (shipping_quoted/order_placed -> confirmed;
+// awaiting_shipment -> billed; shipped/delivered -> to_review) via an
+// expand -> migrate -> contract DB migration.
+const STATUS_FLOW = ['pending', 'confirmed', 'billed', 'to_review'];
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
   unpaid: 'Unpaid',
@@ -469,7 +467,7 @@ function LoadCodePanel({ token }: { token: string }) {
 
               <Divider />
 
-              {/* Status — jump directly to any status (billed/awaiting_shipment are usually set automatically by billing actions, but can be overridden here) */}
+              {/* Status — jump directly to any status (confirmed/billed/to_review are usually set automatically by payment/billing actions, but can be overridden here) */}
               <div>
                 <Label>Order status</Label>
                 <select
@@ -703,7 +701,7 @@ function OrdersList({ token }: { token: string }) {
                   onClick={(e) => { e.stopPropagation(); setBillingOrder(order); }}
                   className="mt-2 text-[11px] font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg transition-colors"
                 >
-                  Bill for consolidation drop-off
+                  Bill this customer
                 </button>
               )}
             </div>
@@ -741,11 +739,21 @@ function BillCustomerModal({
   order: ImportOrder;
   onClose: () => void;
 }) {
+  const [kind, setKind] = useState<'consolidation' | 'shipping'>('consolidation');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('Consolidation drop-off fee');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState(false);
+
+  const selectKind = (k: 'consolidation' | 'shipping') => {
+    setKind(k);
+    // Only swap the reason if it still matches one of the two defaults —
+    // if admin already typed something custom, don't clobber it.
+    if (reason === 'Consolidation drop-off fee' || reason === 'Shipping fee to Nigeria') {
+      setReason(k === 'shipping' ? 'Shipping fee to Nigeria' : 'Consolidation drop-off fee');
+    }
+  };
 
   const handleSubmit = async () => {
     const amountNum = Number(amount);
@@ -761,7 +769,8 @@ function BillCustomerModal({
           user_id: order.user_id,
           order_id: order.id,
           amount_ngn: amountNum,
-          reason: reason.trim() || 'Consolidation drop-off fee',
+          reason: reason.trim() || undefined,
+          kind,
         }),
       });
       const data = await res.json();
@@ -785,6 +794,7 @@ function BillCustomerModal({
             <h3 className="font-bold text-gray-900 text-lg mb-1">Bill sent</h3>
             <p className="text-gray-400 text-xs mb-5">
               {order.customer_name} will see this on their dashboard and can pay by bank transfer.
+              {kind === 'shipping' && ' Once confirmed paid, this order moves to To Review.'}
             </p>
             <button onClick={onClose} className="w-full py-3 bg-gray-900 text-white font-bold text-sm rounded-xl">
               Done
@@ -792,9 +802,34 @@ function BillCustomerModal({
           </div>
         ) : (
           <>
-            <h3 className="font-bold text-gray-900 text-lg mb-1">Bill for consolidation drop-off</h3>
+            <h3 className="font-bold text-gray-900 text-lg mb-1">Bill this customer</h3>
             <p className="text-gray-400 text-xs mb-4">
               Order {order.code} · {order.customer_name}
+            </p>
+
+            <label className="text-xs font-semibold text-gray-700 mb-1.5 block">Fee type</label>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button
+                onClick={() => selectKind('consolidation')}
+                className={`py-2.5 rounded-xl text-xs font-bold border-2 transition-colors ${
+                  kind === 'consolidation' ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-100 text-gray-400'
+                }`}
+              >
+                Consolidation
+              </button>
+              <button
+                onClick={() => selectKind('shipping')}
+                className={`py-2.5 rounded-xl text-xs font-bold border-2 transition-colors ${
+                  kind === 'shipping' ? 'border-gray-900 bg-gray-50 text-gray-900' : 'border-gray-100 text-gray-400'
+                }`}
+              >
+                Shipping to Nigeria
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400 -mt-2.5 mb-4">
+              {kind === 'shipping'
+                ? 'This is the final fee — once paid, the order moves to "To Review".'
+                : 'The warehouse drop-off/consolidation fee. Paying this keeps the order at "Billed" in case a shipping fee follows later.'}
             </p>
 
             <label className="text-xs font-semibold text-gray-700 mb-1.5 block">Amount (₦)</label>

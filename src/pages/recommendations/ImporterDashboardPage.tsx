@@ -20,7 +20,7 @@ const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 interface DashboardOrder {
   id: string;
   code: string;
-  status: 'pending' | 'shipping_quoted' | 'order_placed' | 'billed' | 'awaiting_shipment' | 'shipped' | 'delivered';
+  status: 'pending' | 'confirmed' | 'billed' | 'to_review';
   payment_status: 'unpaid' | 'awaiting_confirmation' | 'paid' | 'failed';
   payment_method: 'paystack' | 'manual' | null;
   total_ngn: number;
@@ -34,6 +34,7 @@ interface ConsolidationBill {
   order_id: string | null;
   amount_ngn: number;
   reason: string;
+  kind: 'consolidation' | 'shipping';
   bank_account_number: string;
   bank_name: string;
   bank_account_name: string;
@@ -41,24 +42,22 @@ interface ConsolidationBill {
   created_at: string;
 }
 
+// Simplified pipeline: pending -> confirmed -> billed -> to_review. "Billed"
+// covers both a consolidation drop-off fee and a shipping-to-Nigeria fee —
+// which one is shown per-bill via ConsolidationBill.kind, not the order
+// status itself.
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending',
-  shipping_quoted: 'Quoted',
-  order_placed: 'Ordered',
+  confirmed: 'Confirmed',
   billed: 'Billed — fee due',
-  awaiting_shipment: 'Awaiting shipment',
-  shipped: 'Shipped',
-  delivered: 'Delivered',
+  to_review: 'To Review',
 };
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700',
-  shipping_quoted: 'bg-sky-50 text-sky-700',
-  order_placed: 'bg-violet-50 text-violet-700',
+  confirmed: 'bg-sky-50 text-sky-700',
   billed: 'bg-rose-50 text-rose-700',
-  awaiting_shipment: 'bg-cyan-50 text-cyan-700',
-  shipped: 'bg-indigo-50 text-indigo-700',
-  delivered: 'bg-emerald-50 text-emerald-700',
+  to_review: 'bg-emerald-50 text-emerald-700',
 };
 
 const BILL_STATUS_LABELS: Record<string, string> = {
