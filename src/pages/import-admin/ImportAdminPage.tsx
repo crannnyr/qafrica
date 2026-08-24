@@ -13,7 +13,9 @@ import CONFIG from '@/lib/config';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import ImportAdminAnalytics from './ImportAdminAnalytics';
 import ImportAdminCustomers from './ImportAdminCustomers';
+import { CustomerDetail } from './ImportAdminCustomers';
 import QuestionsManager from './QuestionsManager';
+import TotalOrdersView from './TotalOrdersView';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -30,6 +32,7 @@ interface ImportOrder {
     price_cny: number;
     quantity: number;
     image_url: string;
+    variant_options?: Record<string, string>;
   }>;
   delivery_type: 'to_qafrica' | 'to_me';
   shipping_method?: 'flight' | 'sea_freight' | null;
@@ -50,6 +53,7 @@ interface ImportOrder {
   admin_note: string | null;
   created_at: string;
   user_id: string | null;
+  staged_at: string | null;
 }
 
 interface VariantGroup {
@@ -220,7 +224,7 @@ function LoadCodePanel({ token }: { token: string }) {
   const [isSaving, setIsSaving]   = useState(false);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [rates, setRates]         = useState<Rates | null>(null);
-  const [expanded, setExpanded]   = useState(true);
+  const [expanded, setExpanded]   = useState(false);
 
   useEffect(() => {
     fetch(`${EDGE_URL}?action=rates`)
@@ -563,6 +567,7 @@ function OrdersList({ token }: { token: string }) {
   const [filter, setFilter]       = useState('all');
   const [search, setSearch]       = useState('');
   const [billingOrder, setBillingOrder] = useState<ImportOrder | null>(null);
+  const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -663,7 +668,11 @@ function OrdersList({ token }: { token: string }) {
           </div>
         ) : (
           filtered.map(order => (
-            <div key={order.id} className="px-5 py-3.5 hover:bg-gray-50 transition-colors">
+            <div
+              key={order.id}
+              onClick={() => order.user_id && setProfileCustomerId(order.user_id)}
+              className={`px-5 py-3.5 hover:bg-gray-50 transition-colors ${order.user_id ? 'cursor-pointer' : ''}`}
+            >
               <div className="flex items-start justify-between gap-2 mb-0.5">
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-gray-900 font-mono tracking-wider text-xs">
@@ -691,7 +700,7 @@ function OrdersList({ token }: { token: string }) {
               </div>
               {order.user_id && (
                 <button
-                  onClick={() => setBillingOrder(order)}
+                  onClick={(e) => { e.stopPropagation(); setBillingOrder(order); }}
                   className="mt-2 text-[11px] font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg transition-colors"
                 >
                   Bill for consolidation drop-off
@@ -707,6 +716,15 @@ function OrdersList({ token }: { token: string }) {
           token={token}
           order={billingOrder}
           onClose={() => setBillingOrder(null)}
+        />
+      )}
+
+      {profileCustomerId && (
+        <CustomerDetail
+          token={token}
+          customerId={profileCustomerId}
+          onClose={() => { setProfileCustomerId(null); load(); }}
+          onFavoriteToggled={() => {}}
         />
       )}
     </div>
@@ -1504,7 +1522,7 @@ function ProductsManager({ token }: { token: string }) {
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'orders' | 'products' | 'clients' | 'questions'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'orders' | 'total-orders' | 'products' | 'clients' | 'questions'>('analytics');
 
   if (!token) return null;
 
@@ -1535,7 +1553,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl mx-auto px-4 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'orders', 'products', 'clients', 'questions'] as const).map(t => (
+          {(['analytics', 'orders', 'total-orders', 'products', 'clients', 'questions'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -1545,7 +1563,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t}
+              {t === 'total-orders' ? 'Total Orders' : t}
             </button>
           ))}
         </div>
@@ -1554,9 +1572,11 @@ export default function ImportAdminPage() {
           <ImportAdminAnalytics token={token} />
         ) : tab === 'orders' ? (
           <>
-            <LoadCodePanel token={token} />
             <OrdersList token={token} />
+            <LoadCodePanel token={token} />
           </>
+        ) : tab === 'total-orders' ? (
+          <TotalOrdersView token={token} />
         ) : tab === 'products' ? (
           <ProductsManager token={token} />
         ) : tab === 'questions' ? (

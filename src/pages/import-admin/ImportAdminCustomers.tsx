@@ -63,16 +63,17 @@ const FILTERS = ['All', 'Favorites', 'Newly joined', 'Awaiting confirmation'] as
 type Filter = typeof FILTERS[number];
 
 // ── Customer detail panel ──────────────────────────────────────────────────
-function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }: {
+export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }: {
   token: string; customerId: string; onClose: () => void; onFavoriteToggled: (id: string, val: boolean) => void;
 }) {
   const [customer, setCustomer] = useState<any>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     setIsLoading(true);
-    fetch(`${EDGE_URL}?action=admin-customer-detail`, {
+    return fetch(`${EDGE_URL}?action=admin-customer-detail`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ manager_token: token, customer_id: customerId }),
@@ -82,6 +83,8 @@ function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }: {
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [token, customerId]);
+
+  useEffect(() => { load(); }, [load]);
 
   const toggleFavorite = async () => {
     if (!customer) return;
@@ -93,6 +96,24 @@ function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }: {
     const data = await res.json();
     setCustomer((c: any) => ({ ...c, is_favorite: data.is_favorite }));
     onFavoriteToggled(customerId, data.is_favorite);
+  };
+
+  // Quick "Confirm Order" — flips payment_status straight to paid for orders
+  // still unpaid/awaiting confirmation (e.g. a manual transfer admin has
+  // verified outside the app). Reuses the same update-order action that
+  // already handles the sold-counter increment and confirmation email.
+  const confirmOrder = async (orderId: string) => {
+    setConfirmingId(orderId);
+    try {
+      await fetch(`${EDGE_URL}?action=update-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, id: orderId, payment_status: 'paid' }),
+      });
+      await load();
+    } finally {
+      setConfirmingId(null);
+    }
   };
 
   return (
@@ -154,6 +175,7 @@ function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }: {
               <div className="space-y-2">
                 {orders.map(o => {
                   const needsReminder = o.payment_status === 'unpaid' && o.payment_method === 'manual';
+                  const needsConfirmation = o.payment_status === 'unpaid' || o.payment_status === 'awaiting_confirmation';
                   return (
                     <div key={o.id} className="bg-white border border-gray-100 rounded-xl px-3.5 py-3">
                       <div className="flex items-center justify-between mb-1">
@@ -172,6 +194,16 @@ function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }: {
                           </a>
                         )}
                       </div>
+                      {needsConfirmation && (
+                        <button
+                          onClick={() => confirmOrder(o.id)}
+                          disabled={confirmingId === o.id}
+                          className="mt-2 w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-white bg-gray-900 hover:bg-gray-700 disabled:opacity-40 px-2.5 py-1.5 rounded-lg transition-colors"
+                        >
+                          {confirmingId === o.id ? <Loader className="w-3 h-3 animate-spin" /> : null}
+                          Confirm Order
+                        </button>
+                      )}
                     </div>
                   );
                 })}

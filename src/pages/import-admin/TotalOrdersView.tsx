@@ -1,0 +1,183 @@
+// src/pages/import-admin/TotalOrdersView.tsx
+// Groups identical product+spec combinations across all paid, not-yet-staged
+// orders — streamlines bulk purchasing by showing total quantity needed and
+// the full list of buyers for that exact combo. Admin can "Close" a group
+// once it's been sourced, which stamps every order in it with a shared
+// staged_at timestamp and moves it into the Closed view for reference.
+import { useState, useEffect, useCallback } from 'react';
+import { Loader, Package, Users, Archive, CheckCircle2 } from 'lucide-react';
+import CONFIG from '@/lib/config';
+
+const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+
+interface OrderItem {
+  id: string;
+  name: string;
+  image_url: string;
+  quantity: number;
+  variant_options?: Record<string, string>;
+}
+interface OrderRow {
+  id: string;
+  code: string;
+  customer_name: string;
+  customer_whatsapp: string;
+  items: OrderItem[];
+  payment_status: string;
+  staged_at: string | null;
+  created_at: string;
+}
+interface Group {
+  key: string;
+  productId: string;
+  name: string;
+  image_url: string;
+  variantLabel: string;
+  totalQty: number;
+  buyers: Array<{ name: string; whatsapp: string; qty: number; orderCode: string }>;
+  orderIds: string[];
+  stagedAt: string | null;
+}
+
+function buildGroups(orders: OrderRow[], showClosed: boolean): Group[] {
+  const map = new Map<string, Group>();
+  for (const order of orders) {
+    const isStaged = !!order.staged_at;
+    if (isStaged !== showClosed) continue;
+    for (const item of order.items ?? []) {
+      const variantLabel = item.variant_options
+        ? Object.entries(item.variant_options).map(([k, v]) => `${k}: ${v}`).join(', ')
+        : '';
+      const key = `${item.id}::${variantLabel}::${isStaged ? order.staged_at : ''}`;
+      const existing = map.get(key) ?? {
+        key, productId: item.id, name: item.name, image_url: item.image_url,
+        variantLabel, totalQty: 0, buyers: [], orderIds: [], stagedAt: isStaged ? order.staged_at : null,
+      };
+      existing.totalQty += item.quantity;
+      existing.buyers.push({ name: order.customer_name, whatsapp: order.customer_whatsapp, qty: item.quantity, orderCode: order.code });
+      existing.orderIds.push(order.id);
+      map.set(key, existing);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.totalQty - a.totalQty);
+}
+
+export default function TotalOrdersView({ token }: { token: string }) {
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showClosed, setShowClosed] = useState(false);
+  const [closingKey, setClosingKey] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${EDGE_URL}?action=all-orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, payment_status: 'paid' }),
+      });
+      const data = await res.json();
+      setOrders(data.orders ?? []);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const groups = buildGroups(orders, showClosed);
+
+  const closeGroup = async (group: Group) => {
+    setClosingKey(group.key);
+    try {
+      await fetch(`${EDGE_URL}?action=admin-close-group`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_ids: group.orderIds }),
+      });
+      await load();
+    } finally {
+      setClosingKey(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1">
+        <button
+          onClick={() => setShowClosed(false)}
+          className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${!showClosed ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'}`}
+        >
+          Active
+        </button>
+        <button
+          onClick={() => setShowClosed(true)}
+          className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${showClosed ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'}`}
+        >
+          Closed
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+          <Loader className="w-5 h-5 animate-spin text-gray-300 mx-auto" />
+        </div>
+      ) : groups.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+          <Package className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+          <p className="text-sm text-gray-300">
+            {showClosed ? 'No closed batches yet.' : 'Nothing to group right now — paid orders will show up here.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {groups.map(g => (
+            <div key={g.key} className="bg-white rounded-2xl border border-gray-100 p-4">
+              <div className="flex items-start gap-3 mb-3">
+                {g.image_url && <img src={g.image_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 line-clamp-1">{g.name}</p>
+                  {g.variantLabel && <p className="text-[11px] text-gray-400">{g.variantLabel}</p>}
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="font-black text-orange-500 text-lg leading-none">{g.totalQty}</p>
+                  <p className="text-[10px] text-gray-400">units</p>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-3 mb-3">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 flex items-center gap-1">
+                  <Users className="w-3 h-3" /> {g.buyers.length} buyer{g.buyers.length !== 1 ? 's' : ''}
+                </p>
+                <div className="space-y-1">
+                  {g.buyers.map((b, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600">{b.name} <span className="text-gray-300 font-mono">· {b.orderCode}</span></span>
+                      <span className="font-semibold text-gray-700">×{b.qty}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {showClosed ? (
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Closed {g.stagedAt ? new Date(g.stagedAt).toLocaleDateString() : ''}
+                </div>
+              ) : (
+                <button
+                  onClick={() => closeGroup(g)}
+                  disabled={closingKey === g.key}
+                  className="w-full py-2.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+                >
+                  {closingKey === g.key ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                  Close batch
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
