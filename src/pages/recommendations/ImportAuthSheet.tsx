@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { X, Loader, Eye, EyeOff } from 'lucide-react';
 import { useCustomerAuthStore } from '@/stores';
 import { toast } from 'sonner';
+import ImportForgotPasswordSheet from './ImportForgotPasswordSheet';
 
 export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const { login, signup } = useCustomerAuthStore();
@@ -17,6 +18,7 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,6 +105,16 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
             </button>
           </div>
 
+          {mode === 'login' && (
+            <button
+              type="button"
+              onClick={() => setShowForgotPassword(true)}
+              className="block ml-auto text-[11px] font-semibold text-gray-400 hover:text-orange-500 transition-colors"
+            >
+              Forgot password?
+            </button>
+          )}
+
           <button
             type="submit" disabled={isLoading}
             className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
@@ -120,6 +132,13 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
           <span className="text-orange-500 font-semibold">{mode === 'signup' ? 'Sign in' : 'Sign up'}</span>
         </button>
       </motion.div>
+
+      {showForgotPassword && (
+        <ImportForgotPasswordSheet
+          onClose={() => setShowForgotPassword(false)}
+          onSuccess={() => { setShowForgotPassword(false); onSuccess(); }}
+        />
+      )}
     </motion.div>
   );
 }
