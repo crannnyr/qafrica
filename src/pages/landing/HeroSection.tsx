@@ -70,7 +70,7 @@ export default function HeroSection({
               initial={{ opacity: 0, x: -16 }}
               animate={{ opacity: 1, x: 0  }}
               transition={{ duration: 0.5, delay: 1.1 }}
-              className="space-y-2 mb-0"
+              className="mb-0"
             >
               <Link to="/signup">
                 <Button
@@ -81,9 +81,28 @@ export default function HeroSection({
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>
-              <p className="text-sm text-gray-400 pl-1">
+              <p className="text-sm text-gray-400 pl-1 mt-2 mb-5">
                 ₦5,000/month after trial · Cancel anytime
               </p>
+
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <Link
+                  to="/recommendations"
+                  className="group flex items-center justify-center gap-1.5 px-5 py-3 rounded-xl border border-gray-200 dark:border-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:border-orange-300 hover:text-orange-600 transition-colors"
+                >
+                  Order from China
+                  <ArrowRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                </Link>
+                <a
+                  href="https://opticsview.store"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-center justify-center gap-1.5 px-5 py-3 rounded-xl border border-gray-200 dark:border-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:border-orange-300 hover:text-orange-600 transition-colors"
+                >
+                  Shop from the Genzees
+                  <ArrowRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                </a>
+              </div>
             </motion.div>
 
             {/* Mobile store card + chips */}

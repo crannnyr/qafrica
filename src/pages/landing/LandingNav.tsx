@@ -1,8 +1,9 @@
 // src/pages/landing/Landing/LandingNav.tsx
 
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, ShoppingBag } from 'lucide-react';
+import { Menu, X, ShoppingBag, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import DarkModeToggle from '@/components/DarkModeToggle';
 
@@ -23,6 +24,20 @@ export default function LandingNav({
   onToggleMobileMenu,
   onScrollToSection,
 }: Props) {
+  const [exploreOpen, setExploreOpen] = useState(false);
+  const [loginOpen, setLoginOpen]     = useState(false);
+  const exploreRef = useRef<HTMLDivElement>(null);
+  const loginRef   = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (exploreRef.current && !exploreRef.current.contains(e.target as Node)) setExploreOpen(false);
+      if (loginRef.current && !loginRef.current.contains(e.target as Node)) setLoginOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
       isScrolled
@@ -48,7 +63,7 @@ export default function LandingNav({
           </Link>
 
           {/* Desktop links */}
-          <div className="hidden lg:flex items-center gap-8">
+          <div className="hidden lg:flex items-center gap-7">
             <Link
               to="/stores"
               className="text-gray-600 dark:text-gray-300 hover:text-orange-600 transition-colors text-sm"
@@ -80,43 +95,87 @@ export default function LandingNav({
               Blog
             </Link>
 
-            {/* NEW: China Importation */}
-            <Link
-              to="/importations"
-              className="text-gray-600 dark:text-gray-300 hover:text-orange-600 transition-colors text-sm flex items-center gap-1"
-            >
-              🇨🇳 China Importation
-            </Link>
-
-            {/* NEW: Marketplaces — colourful to grab attention */}
-            <Link
-              to="/marketplaces"
-              className="text-sm font-semibold px-3 py-1 rounded-full flex items-center gap-1.5 text-white transition-opacity hover:opacity-90"
-              style={{ background: 'linear-gradient(135deg, #FF6600, #C8202F)' }}
-            >
-              Jumia · Konga · Jiji
-            </Link>
+            {/* Explore: China Importation + Marketplaces, grouped so the nav
+                row doesn't have to carry both as separate top-level items */}
+            <div className="relative" ref={exploreRef}>
+              <button
+                onClick={() => setExploreOpen(o => !o)}
+                className="flex items-center gap-1 text-gray-600 dark:text-gray-300 hover:text-orange-600 transition-colors text-sm"
+              >
+                Explore
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${exploreOpen ? 'rotate-180' : ''}`} />
+              </button>
+              <AnimatePresence>
+                {exploreOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0  }}
+                    exit={{   opacity: 0, y: -6 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-56 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-lg shadow-black/5 p-1.5"
+                  >
+                    <Link
+                      to="/importations"
+                      onClick={() => setExploreOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-orange-50 dark:hover:bg-orange-950/30 hover:text-orange-600 transition-colors"
+                    >
+                      🇨🇳 China Importation
+                    </Link>
+                    <Link
+                      to="/marketplaces"
+                      onClick={() => setExploreOpen(false)}
+                      className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-orange-50 dark:hover:bg-orange-950/30 hover:text-orange-600 transition-colors"
+                    >
+                      🏪 Jumia · Konga · Jiji
+                    </Link>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           {/* Desktop CTAs */}
-          <div className="hidden lg:flex items-center gap-4">
+          <div className="hidden lg:flex items-center gap-3">
             <DarkModeToggle />
-            <Link to="/login">
-              <Button
-                variant="ghost"
-                className="text-gray-600 dark:text-gray-300 hover:text-orange-600"
+
+            {/* Log In: Seller vs Shopper grouped under one trigger instead
+                of two separate ghost buttons competing for space */}
+            <div className="relative" ref={loginRef}>
+              <button
+                onClick={() => setLoginOpen(o => !o)}
+                className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-300 hover:text-orange-600 transition-colors px-3 py-2"
               >
-                Sign In
-              </Button>
-            </Link>
-            <Link to="/customer/login">
-              <Button
-                variant="ghost"
-                className="text-gray-600 dark:text-gray-300 hover:text-orange-600"
-              >
-                Shopper Login
-              </Button>
-            </Link>
+                Log In
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${loginOpen ? 'rotate-180' : ''}`} />
+              </button>
+              <AnimatePresence>
+                {loginOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0  }}
+                    exit={{   opacity: 0, y: -6 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute top-full mt-2 right-0 w-48 bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-lg shadow-black/5 p-1.5"
+                  >
+                    <Link
+                      to="/login"
+                      onClick={() => setLoginOpen(false)}
+                      className="block px-3 py-2.5 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-orange-50 dark:hover:bg-orange-950/30 hover:text-orange-600 transition-colors"
+                    >
+                      Seller Sign In
+                    </Link>
+                    <Link
+                      to="/customer/login"
+                      onClick={() => setLoginOpen(false)}
+                      className="block px-3 py-2.5 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-orange-50 dark:hover:bg-orange-950/30 hover:text-orange-600 transition-colors"
+                    >
+                      Shopper Login
+                    </Link>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <Link to="/signup">
               <Button className="bg-orange-500 hover:bg-orange-600 text-white">
                 Start Free Trial
@@ -182,7 +241,7 @@ export default function LandingNav({
                 Blog
               </Link>
 
-              {/* NEW: China Importation */}
+              <p className="pt-3 pb-1 px-3 text-[10px] font-bold text-gray-300 dark:text-gray-600 uppercase tracking-widest">Explore</p>
               <Link
                 to="/importations"
                 onClick={onToggleMobileMenu}
@@ -190,25 +249,23 @@ export default function LandingNav({
               >
                 🇨🇳 China Importation
               </Link>
-
-              {/* NEW: Marketplaces */}
               <Link
                 to="/marketplaces"
                 onClick={onToggleMobileMenu}
-                className="block py-2.5 px-3 rounded-lg text-sm font-semibold text-white"
-                style={{ background: 'linear-gradient(135deg, #FF6600, #C8202F)' }}
+                className="block py-2.5 px-3 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-orange-50 hover:text-orange-600 transition-colors text-sm"
               >
                 🏪 Jumia · Konga · Jiji
               </Link>
 
               <hr className="border-gray-100 dark:border-gray-800 my-2" />
 
+              <p className="pb-1 px-3 text-[10px] font-bold text-gray-300 dark:text-gray-600 uppercase tracking-widest">Log in</p>
               <Link
                 to="/login"
                 onClick={onToggleMobileMenu}
                 className="block py-2.5 px-3 rounded-lg text-gray-600 dark:text-gray-300 hover:bg-orange-50 hover:text-orange-600 transition-colors text-sm"
               >
-                Sign In
+                Seller Sign In
               </Link>
               <Link
                 to="/customer/login"
