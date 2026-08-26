@@ -5,7 +5,7 @@
 // once it's been sourced, which stamps every order in it with a shared
 // staged_at timestamp and moves it into the Closed view for reference.
 import { useState, useEffect, useCallback } from 'react';
-import { Loader, Package, Users, Archive, CheckCircle2 } from 'lucide-react';
+import { Loader, Package, Users, Archive, CheckCircle2, FileDown } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
@@ -67,6 +67,7 @@ export default function TotalOrdersView({ token }: { token: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [showClosed, setShowClosed] = useState(false);
   const [closingKey, setClosingKey] = useState<string | null>(null);
+  const [closingAll, setClosingAll] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -101,6 +102,51 @@ export default function TotalOrdersView({ token }: { token: string }) {
     }
   };
 
+  // Builds a CSV of every buyer line across the currently active (open)
+  // batches, listed by customer name, and triggers a browser download.
+  const downloadCsv = (rows: Group[]) => {
+    const header = ['Customer Name', 'WhatsApp', 'Order Code', 'Product', 'Variant', 'Quantity'];
+    const lines = [header.join(',')];
+    for (const g of rows) {
+      for (const b of g.buyers) {
+        const cells = [b.name, b.whatsapp, b.orderCode, g.name, g.variantLabel || '—', String(b.qty)]
+          .map(v => `"${String(v).replace(/"/g, '""')}"`);
+        lines.push(cells.join(','));
+      }
+    }
+    const csv = lines.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `qafrica-batches-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Closes every currently active batch in one go — collects every order id
+  // across all groups (deduped, since one order can span multiple groups if
+  // it has multiple different line items), downloads a CSV record of what's
+  // being closed, then stamps them all closed in a single request.
+  const closeAll = async () => {
+    if (groups.length === 0) return;
+    setClosingAll(true);
+    try {
+      downloadCsv(groups);
+      const allOrderIds = Array.from(new Set(groups.flatMap(g => g.orderIds)));
+      await fetch(`${EDGE_URL}?action=admin-close-group`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_ids: allOrderIds }),
+      });
+      await load();
+    } finally {
+      setClosingAll(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1">
@@ -117,6 +163,36 @@ export default function TotalOrdersView({ token }: { token: string }) {
           Closed
         </button>
       </div>
+
+      {!showClosed && !isLoading && groups.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">
+              {groups.length} batch{groups.length !== 1 ? 'es' : ''} open
+            </p>
+            <p className="text-[11px] text-gray-400">
+              {groups.reduce((s, g) => s + g.totalQty, 0)} units total
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => downloadCsv(groups)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              Download CSV
+            </button>
+            <button
+              onClick={closeAll}
+              disabled={closingAll || closingKey !== null}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-white bg-gray-900 hover:bg-gray-700 disabled:opacity-40 transition-colors"
+            >
+              {closingAll ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+              Close All
+            </button>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
