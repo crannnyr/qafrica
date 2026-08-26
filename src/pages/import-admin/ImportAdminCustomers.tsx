@@ -27,6 +27,7 @@ interface CustomerRow {
   total_spent_ngn: number;
   last_order_at: string | null;
   awaiting_confirmation_count: number;
+  failed_order_count: number;
 }
 
 interface OrderRow {
@@ -89,6 +90,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
   const [customer, setCustomer] = useState<any>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [bills, setBills] = useState<any[]>([]);
+  const [failedOrders, setFailedOrders] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
@@ -101,7 +103,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
       body: JSON.stringify({ manager_token: token, customer_id: customerId }),
     })
       .then(r => r.json())
-      .then(d => { setCustomer(d.customer ?? null); setOrders(d.orders ?? []); setBills(d.bills ?? []); })
+      .then(d => { setCustomer(d.customer ?? null); setOrders(d.orders ?? []); setBills(d.bills ?? []); setFailedOrders(d.failed_orders ?? []); })
       .catch(() => {})
       .finally(() => setIsLoading(false));
   }, [token, customerId]);
@@ -333,6 +335,26 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
               </div>
             )}
           </div>
+
+          {/* Failed orders — expired unpaid orders, kept as history only */}
+          {failedOrders.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-2">Failed orders</p>
+              <div className="space-y-2">
+                {failedOrders.map((f: any) => (
+                  <div key={f.id} className="bg-red-50/40 border border-red-100 rounded-xl px-3.5 py-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-mono text-xs font-bold text-gray-700">{f.code}</span>
+                      <span className="font-semibold text-gray-600 text-xs">{fmt(f.total_ngn)}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400">
+                      Never paid · expired {timeAgo(f.failed_at)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </motion.div>
@@ -572,6 +594,11 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
                   {c.awaiting_confirmation_count > 0 && (
                     <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
                       <Clock className="w-2.5 h-2.5" /> {c.awaiting_confirmation_count}
+                    </span>
+                  )}
+                  {c.failed_order_count > 0 && (
+                    <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full">
+                      <X className="w-2.5 h-2.5" /> {c.failed_order_count} failed
                     </span>
                   )}
                 </div>

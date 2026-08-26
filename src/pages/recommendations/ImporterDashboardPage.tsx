@@ -16,6 +16,17 @@ import ImportSettingsSheet from './ImportSettingsSheet';
 import RetryPaymentSheet from './RetryPaymentSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const REMINDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/order-reminders`;
+
+interface FailedOrder {
+  id: string;
+  code: string;
+  items: Array<{ id: string; name: string; price_ngn: number; quantity: number }>;
+  total_ngn: number;
+  delivery_type: 'to_qafrica' | 'to_me';
+  order_created_at: string;
+  failed_at: string;
+}
 
 interface DashboardOrder {
   id: string;
@@ -74,6 +85,13 @@ const BILL_STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-400',
 };
 
+function timeAgo(d: string) {
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000);
+  if (days < 1) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${days}d ago`;
+}
+
 export default function ImporterDashboardPage() {
   useImportPwaManifest();
   const navigate = useNavigate();
@@ -81,6 +99,7 @@ export default function ImporterDashboardPage() {
 
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
   const [bills, setBills] = useState<ConsolidationBill[]>([]);
+  const [failedOrders, setFailedOrders] = useState<FailedOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showSettings, setShowSettings] = useState(false);
   const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
@@ -96,7 +115,7 @@ export default function ImporterDashboardPage() {
     if (!customer?.id) return;
     setIsLoading(true);
     try {
-      const [ordersRes, billsRes] = await Promise.all([
+      const [ordersRes, billsRes, failedRes] = await Promise.all([
         fetch(`${EDGE_URL}?action=my-orders`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -107,11 +126,18 @@ export default function ImporterDashboardPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ customer_id: customer.id }),
         }),
+        fetch(`${REMINDERS_EDGE_URL}?action=my-failed-orders`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: customer.id }),
+        }),
       ]);
       const ordersData = await ordersRes.json();
       const billsData = await billsRes.json();
+      const failedData = await failedRes.json();
       setOrders(ordersData.orders ?? []);
       setBills(billsData.bills ?? []);
+      setFailedOrders(failedData.failed_orders ?? []);
     } catch {
       // leave lists empty; the UI already handles empty state gracefully
     } finally {
@@ -297,6 +323,32 @@ export default function ImporterDashboardPage() {
             </div>
           )}
         </section>
+
+        {/* ── Failed orders — expired unpaid orders, kept for reference ──── */}
+        {failedOrders.length > 0 && (
+          <section className="mt-8">
+            <div className="flex items-center gap-2 mb-3">
+              <Clock className="w-4 h-4 text-red-300" />
+              <h2 className="font-bold text-gray-800 text-sm">Failed orders</h2>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+              {failedOrders.map(f => (
+                <div key={f.id} className="px-5 py-4 flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="font-bold text-gray-500 font-mono text-xs tracking-wider">{f.code}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-500">Removed</span>
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Payment wasn't confirmed in time · removed {timeAgo(f.failed_at)}
+                    </p>
+                  </div>
+                  <span className="font-semibold text-gray-400 text-sm flex-shrink-0">{fmt(f.total_ngn)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
 
       {payingBill && (
