@@ -25,6 +25,7 @@ interface ImportOrder {
   code: string;
   customer_name: string;
   customer_whatsapp: string;
+  customer_email?: string | null;
   items: Array<{
     id: string;
     name: string;
@@ -567,6 +568,7 @@ function OrdersList({ token }: { token: string }) {
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter]       = useState('all');
   const [search, setSearch]       = useState('');
+  const [todayOnly, setTodayOnly] = useState(false);
   const [billingOrder, setBillingOrder] = useState<ImportOrder | null>(null);
   const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
 
@@ -589,14 +591,24 @@ function OrdersList({ token }: { token: string }) {
 
   useEffect(() => { load(); }, [load]);
 
+  const isToday = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const now = new Date();
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  };
+
   const filtered = orders.filter(o => {
     const matchStatus = filter === 'all' || o.status === filter;
     const matchSearch = !search ||
       o.code.includes(search.toUpperCase()) ||
       o.customer_name.toLowerCase().includes(search.toLowerCase()) ||
-      o.customer_whatsapp.includes(search);
-    return matchStatus && matchSearch;
+      o.customer_whatsapp.includes(search) ||
+      (o.customer_email ?? '').toLowerCase().includes(search.toLowerCase());
+    const matchToday = !todayOnly || isToday((o as any).created_at);
+    return matchStatus && matchSearch && matchToday;
   });
+
+  const todayCount = orders.filter(o => isToday((o as any).created_at)).length;
 
   const counts = STATUS_FLOW.reduce((acc, s) => {
     acc[s] = orders.filter(o => o.status === s).length;
@@ -626,7 +638,7 @@ function OrdersList({ token }: { token: string }) {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by code, name or number…"
+            placeholder="Search by code, name, email or number…"
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 outline-none"
           />
         </div>
@@ -638,6 +650,14 @@ function OrdersList({ token }: { token: string }) {
             }`}
           >
             All ({orders.length})
+          </button>
+          <button
+            onClick={() => setTodayOnly(v => !v)}
+            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+              todayOnly ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            Today ({todayCount})
           </button>
           {STATUS_FLOW.map(s => counts[s] > 0 && (
             <button
