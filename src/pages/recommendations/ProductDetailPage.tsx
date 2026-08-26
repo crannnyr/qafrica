@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ShoppingBag, Plus, Minus,
   Package, ChevronRight, Tag, ChevronDown, ChevronUp,
-  Plane, Ship, HelpCircle, MessageCircleQuestion,
+  Plane, Ship, HelpCircle, MessageCircleQuestion, Truck,
 } from 'lucide-react';
 import { fmt, buildCartKey, computeVariantPriceNgn, variantPriceRange } from './RecommendationsPage';
 import type { ImportProduct, VariantGroup } from './RecommendationsPage';
@@ -429,15 +429,27 @@ export default function ProductDetailPage() {
             </span>
           </div>
 
-          <motion.button
-            onClick={() => setShowAskQuestion(true)}
-            animate={{ opacity: [1, 0.5, 1] }}
-            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-            className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500 mb-5"
-          >
-            <MessageCircleQuestion className="w-3.5 h-3.5" />
-            Ask about this product
-          </motion.button>
+          <div className="flex items-center justify-between gap-3 mb-5">
+            <motion.button
+              onClick={() => setShowAskQuestion(true)}
+              animate={{ opacity: [1, 0.5, 1] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+              className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500"
+            >
+              <MessageCircleQuestion className="w-3.5 h-3.5" />
+              Ask about this product
+            </motion.button>
+
+            <motion.button
+              onClick={() => navigate('/recommendations/logistics')}
+              animate={{ opacity: [1, 0.5, 1] }}
+              transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
+              className="flex items-center gap-1.5 text-[11px] font-bold text-orange-500"
+            >
+              <Truck className="w-3.5 h-3.5" />
+              Shipping calculation
+            </motion.button>
+          </div>
 
           {/* Variant selection */}
           {variantGroups.length > 0 && (

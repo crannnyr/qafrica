@@ -38,6 +38,7 @@ import ImportAdminPage from '@/pages/import-admin/ImportAdminPage';
 import ImporterDashboardPage from '@/pages/recommendations/ImporterDashboardPage';
 import RecommendationsPage from '@/pages/recommendations/RecommendationsPage';
 import RecommendationsProductDetailPage from '@/pages/recommendations/ProductDetailPage';
+import LogisticsBlogPage from '@/pages/recommendations/LogisticsBlogPage';
 
 // Marketplace Pages
 import MarketplacePage from '@/pages/MarketplacePage';
@@ -307,6 +308,7 @@ function App() {
           <Route path="/importations/admin" element={<ImportAdminPage />} />
           <Route path="/importations/dashboard" element={<ImporterDashboardPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
+          <Route path="/recommendations/logistics" element={<LogisticsBlogPage />} />
           <Route path="/recommendations/:id" element={<RecommendationsProductDetailPage />} />
 
           {/* ── Marketplace landing — public funnel from blog CTAs ── */}
