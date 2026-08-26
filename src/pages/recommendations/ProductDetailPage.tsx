@@ -8,10 +8,14 @@ import {
   Plane, Ship, HelpCircle, MessageCircleQuestion,
 } from 'lucide-react';
 import { fmt, buildCartKey, computeVariantPriceNgn, variantPriceRange } from './RecommendationsPage';
-import type { CartItem, ImportProduct, VariantGroup } from './RecommendationsPage';
+import type { ImportProduct, VariantGroup } from './RecommendationsPage';
+import { useImportCartStore } from '@/stores/importCartStore';
+import { useCustomerAuthStore } from '@/stores';
 import CONFIG from '@/lib/config';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import AskQuestionSheet from './AskQuestionSheet';
+import ImportAuthSheet from './ImportAuthSheet';
+import ImportCheckoutSheet from './ImportCheckoutSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const DESC_PREVIEW_LENGTH = 80;
@@ -190,8 +194,16 @@ export default function ProductDetailPage() {
   const [usdRate, setUsdRate]     = useState(0);
   const [showAskQuestion, setShowAskQuestion] = useState(false);
 
-  // Cart state — lives here, passed back to RecommendationsPage via navigate state
-  const [cart, setCart] = useState<CartItem[]>([]);
+  // Cart now lives in a shared store so it stays in sync with the catalog
+  // page — no more passing it back and forth through router state.
+  const cart = useImportCartStore(s => s.cart);
+  const storeAddToCart = useImportCartStore(s => s.addToCart);
+  const storeAddOne = useImportCartStore(s => s.addOne);
+  const storeRemoveOne = useImportCartStore(s => s.removeOne);
+  const { customer, isAuthenticated } = useCustomerAuthStore();
+  const [showAuth, setShowAuth] = useState(false);
+  const [showCheckout, setShowCheckout] = useState(false);
+
   const moq = product?.moq ?? 1;
   const [qty, setQty]   = useState(moq);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
@@ -267,33 +279,25 @@ export default function ProductDetailPage() {
   const itemInCart  = product ? cart.find(i => i.cart_key === cartKey) : null;
 
   const addToCart = (p: ImportProduct, quantity: number, variant_selection?: Record<string, string>) => {
-    const cart_key = buildCartKey(p.id, variant_selection);
     const price_ngn = computeVariantPriceNgn(p, variant_selection);
-    setCart(prev => {
-      const exists = prev.find(i => i.cart_key === cart_key);
-      if (exists) return prev.map(i => i.cart_key === cart_key ? { ...i, quantity: i.quantity + quantity } : i);
-      return [...prev, { ...p, price_ngn, quantity, variant_selection, cart_key }];
-    });
+    storeAddToCart(p, quantity, price_ngn, variant_selection);
   };
 
   const removeOne = () => {
     if (!product) return;
-    setCart(prev => {
-      const item = prev.find(i => i.cart_key === cartKey);
-      if (!item) return prev;
-      if (item.quantity <= moq) return prev.filter(i => i.cart_key !== cartKey);
-      return prev.map(i => i.cart_key === cartKey ? { ...i, quantity: i.quantity - 1 } : i);
-    });
+    storeRemoveOne(cartKey, moq);
   };
 
   const addOne = () => {
     if (!product) return;
-    setCart(prev => prev.map(i => i.cart_key === cartKey ? { ...i, quantity: i.quantity + 1 } : i));
+    storeAddOne(cartKey);
   };
 
-  // Navigate back to catalog — pass cart so it can be restored
+  // Opens the cart slide-out right here on the product page — no more
+  // redirecting to the catalog first just to see the cart.
   const goToCart = () => {
-    navigate('/recommendations', { state: { cartFromDetail: cart } });
+    if (!isAuthenticated) { setShowAuth(true); return; }
+    setShowCheckout(true);
   };
 
   // "You may also like"
@@ -582,7 +586,7 @@ export default function ProductDetailPage() {
 
       {/* Floating order bar — navigates back to catalog and opens the cart */}
       <AnimatePresence>
-        {cartCount > 0 && (
+        {cartCount > 0 && !showCheckout && (
           <motion.div
             initial={{ y: 80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -613,6 +617,29 @@ export default function ProductDetailPage() {
           onClose={() => setShowAskQuestion(false)}
         />
       )}
+
+      <AnimatePresence>
+        {showAuth && (
+          <ImportAuthSheet
+            onClose={() => setShowAuth(false)}
+            onSuccess={() => { setShowAuth(false); if (cartCount > 0) setShowCheckout(true); }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCheckout && customer && (
+          <ImportCheckoutSheet
+            cart={cart} customer={customer}
+            onClose={() => setShowCheckout(false)}
+            onAdd={cart_key => storeAddOne(cart_key)}
+            onRemove={(cart_key) => {
+              const item = cart.find(i => i.cart_key === cart_key);
+              storeRemoveOne(cart_key, item?.moq ?? 1);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

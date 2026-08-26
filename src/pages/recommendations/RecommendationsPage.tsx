@@ -1,6 +1,6 @@
 // src/pages/recommendations/RecommendationsPage.tsx
 import { useState, useEffect, useMemo } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingBag, Plus, Minus, Package,
@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
+import { useImportCartStore, buildImportCartKey } from '@/stores/importCartStore';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import DailyPromoModal from './DailyPromoModal';
 import ImportAuthSheet from './ImportAuthSheet';
@@ -161,27 +162,23 @@ function ProductCard({
 export default function RecommendationsPage() {
   useImportPwaManifest();
   const navigate = useNavigate();
-  const location = useLocation();
   const { customer, isAuthenticated, logout } = useCustomerAuthStore();
 
   const [products, setProducts] = useState<ImportProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [cart, setCart] = useState<CartItem[]>([]);
+  const cart = useImportCartStore(s => s.cart);
+  const storeAddToCart = useImportCartStore(s => s.addToCart);
+  const storeAddOne = useImportCartStore(s => s.addOne);
+  const storeRemoveOne = useImportCartStore(s => s.removeOne);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [usdRate, setUsdRate] = useState(0);
 
-  // Restore cart passed back from ProductDetailPage's "goToCart"
-  useEffect(() => {
-    if (location.state?.cartFromDetail) {
-      setCart(location.state.cartFromDetail);
-      setShowCheckout(false); // land back on the grid with cart bar visible, not the sheet
-      window.history.replaceState({}, '');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Cart is now shared via useImportCartStore, so it stays in sync with the
+  // product detail page automatically — no more passing it through router
+  // state on navigation.
 
   useEffect(() => {
     fetch(`${EDGE_URL}?action=products`)
@@ -227,22 +224,12 @@ export default function RecommendationsPage() {
 
   // Only used for non-variant products (variant products are added from the detail page).
   const addToCart = (product: ImportProduct) => {
-    const cart_key = buildCartKey(product.id);
-    setCart(prev => {
-      const exists = prev.find(i => i.cart_key === cart_key);
-      if (exists) return prev.map(i => i.cart_key === cart_key ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { ...product, quantity: product.moq ?? 1, cart_key }];
-    });
+    storeAddToCart(product, product.moq ?? 1, product.price_ngn);
   };
 
   const removeFromCart = (cart_key: string) => {
-    setCart(prev => {
-      const item = prev.find(i => i.cart_key === cart_key);
-      if (!item) return prev;
-      const floor = item.moq ?? 1;
-      if (item.quantity <= floor) return prev.filter(i => i.cart_key !== cart_key);
-      return prev.map(i => i.cart_key === cart_key ? { ...i, quantity: i.quantity - 1 } : i);
-    });
+    const item = cart.find(i => i.cart_key === cart_key);
+    storeRemoveOne(cart_key, item?.moq ?? 1);
   };
 
   const handleCheckoutClick = () => {
@@ -424,7 +411,7 @@ export default function RecommendationsPage() {
           <ImportCheckoutSheet
             cart={cart} customer={customer}
             onClose={() => setShowCheckout(false)}
-            onAdd={cart_key => setCart(prev => prev.map(i => i.cart_key === cart_key ? { ...i, quantity: i.quantity + 1 } : i))}
+            onAdd={cart_key => storeAddOne(cart_key)}
             onRemove={removeFromCart}
           />
         )}
