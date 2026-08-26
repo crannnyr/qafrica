@@ -114,10 +114,7 @@ export default function ManualPaymentFlow({ amountLabel, bank, onConfirmPaid, on
 
               <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 mb-5">
                 <p className="text-[11px] text-gray-400 mb-0.5">Account name</p>
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  You may see this reflect as either <span className="font-semibold text-gray-800">"{bank.bank_account_name}"</span> —
-                  both are correct and belong to QAfrica. Don't worry if the name doesn't match ours exactly.
-                </p>
+                <p className="text-sm font-semibold text-gray-800">{bank.bank_account_name}</p>
               </div>
 
               {error && (
