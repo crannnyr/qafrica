@@ -16,6 +16,7 @@ import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import AskQuestionSheet from './AskQuestionSheet';
 import ImportAuthSheet from './ImportAuthSheet';
 import ImportCheckoutSheet from './ImportCheckoutSheet';
+import ImportReviews from '@/components/ImportReviews';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const DESC_PREVIEW_LENGTH = 80;
@@ -543,6 +544,9 @@ export default function ProductDetailPage() {
         </div>
 
         </div>
+
+        {/* Reviews */}
+        {product && <ImportReviews productId={product.id} />}
 
         {/* You may also like */}
         {alsoLike.length > 0 && (
