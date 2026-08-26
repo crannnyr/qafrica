@@ -163,7 +163,7 @@ export default function ImportAdminAnalytics({ token }: { token: string }) {
       </div>
 
       {isLoading && !data ? (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 h-24 animate-pulse" />
           ))}
@@ -175,7 +175,7 @@ export default function ImportAdminAnalytics({ token }: { token: string }) {
       ) : (
         <>
           {/* KPI grid */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <KpiCard icon={DollarSign} label="Revenue" value={fmtCompact(data.revenue_ngn)} sub={`${data.orders_count} paid orders`} />
             <KpiCard icon={TrendingUp} label="Profit" value={fmtCompact(data.profit_ngn)} sub={`${data.margin_pct}% margin`} />
             <KpiCard icon={Package} label="Units sold" value={data.units_sold.toLocaleString()} sub={`Cost ${fmtCompact(data.cost_ngn)}`} />

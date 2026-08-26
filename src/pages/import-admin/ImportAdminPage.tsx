@@ -1579,7 +1579,7 @@ export default function ImportAdminPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
-        <div className="flex items-center justify-between px-4 py-3 max-w-3xl mx-auto">
+        <div className="flex items-center justify-between px-4 lg:px-8 py-3 max-w-3xl lg:max-w-6xl mx-auto">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 bg-gray-900 rounded-lg flex items-center justify-center">
               <ShoppingBag className="w-3.5 h-3.5 text-white" />
@@ -1599,7 +1599,7 @@ export default function ImportAdminPage() {
         </div>
       </header>
 
-      <div className="max-w-3xl mx-auto px-4 py-5 space-y-4">
+      <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
           {(['analytics', 'orders', 'total-orders', 'products', 'clients', 'questions'] as const).map(t => (
