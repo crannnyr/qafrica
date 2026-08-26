@@ -2,8 +2,10 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, Store, ArrowLeft, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useForceLightMode } from '@/hooks/useForceLightMode';
 
 export default function StoreNotFoundPage() {
+  useForceLightMode();
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
       <motion.div

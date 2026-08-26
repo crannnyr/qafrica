@@ -13,6 +13,7 @@ import { loadPaystackScript, initializePayment, generateReference } from '@/serv
 import { toast } from 'sonner';
 import { getThemeById } from '@/lib/themes';
 import { useCartStore } from '@/stores/cartStore';
+import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { useCustomerAuthStore } from '@/stores';
 import CONFIG from '@/lib/config';
 import type { Store, DeliveryZone } from '@/types';
@@ -202,6 +203,7 @@ function DirectTransferFlow({
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CheckoutPage() {
+  useForceLightMode();
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [store, setStore] = useState<Store | null>(null);

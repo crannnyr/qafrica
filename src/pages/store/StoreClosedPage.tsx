@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Clock, Store, ArrowLeft, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useForceLightMode } from '@/hooks/useForceLightMode';
 
 interface StoreClosedPageProps {
   storeName?: string;
@@ -9,6 +10,7 @@ interface StoreClosedPageProps {
 }
 
 export default function StoreClosedPage({ storeName, reason = 'expired' }: StoreClosedPageProps) {
+  useForceLightMode();
   const messages = {
     expired: {
       title: 'Store Temporarily Closed',

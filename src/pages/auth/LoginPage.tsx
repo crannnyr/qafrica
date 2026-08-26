@@ -52,10 +52,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-orange-50 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 flex items-center justify-center p-4">
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 rounded-full blur-3xl" />
+        <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 dark:bg-orange-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 dark:bg-orange-500/10 rounded-full blur-3xl" />
       </div>
 
       <motion.div
@@ -69,19 +69,19 @@ export default function LoginPage() {
             <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
               <ShoppingBag className="w-7 h-7 text-white" />
             </div>
-            <span className="text-2xl font-bold text-gray-900">QAFRICA</span>
+            <span className="text-2xl font-bold text-gray-900 dark:text-white">QAFRICA</span>
           </Link>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-            <p className="text-gray-500">Sign in to access your seller dashboard</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Welcome Back</h1>
+            <p className="text-gray-500 dark:text-gray-400">Sign in to access your seller dashboard</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email Address</label>
               <input
                 type="email"
                 value={formData.email}
@@ -93,7 +93,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -106,7 +106,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -117,9 +117,9 @@ export default function LoginPage() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  className="w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                  className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-orange-500 focus:ring-orange-500"
                 />
-                <span className="text-sm text-gray-600">Remember me</span>
+                <span className="text-sm text-gray-600 dark:text-gray-400">Remember me</span>
               </label>
               <Link to="/forgot-password" className="text-sm text-orange-500 hover:text-orange-600">
                 Forgot password?
@@ -139,7 +139,7 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <p className="text-center text-xs text-gray-400 mt-6">
+          <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">
             By signing in, you agree to our{' '}
             <Link to="/terms-of-service" className="underline hover:text-orange-500">Terms of Service</Link>
             {' '}and{' '}
@@ -147,12 +147,12 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <p className="text-center mt-6 text-gray-600">
+        <p className="text-center mt-6 text-gray-600 dark:text-gray-400">
           Don't have an account?{' '}
           <Link to="/signup" className="text-orange-500 hover:text-orange-600 font-medium">Create one free</Link>
         </p>
 
-        <p className="text-center mt-2 text-sm text-gray-500">
+        <p className="text-center mt-2 text-sm text-gray-500 dark:text-gray-400">
           Shopping on QAFRICA?{' '}
           <Link to="/customer/login" className="text-orange-500 hover:text-orange-600 font-medium">Shopper login</Link>
         </p>

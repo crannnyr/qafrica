@@ -12,6 +12,7 @@ import ImageCarousel from '@/components/ImageCarousel';
 import { toast } from 'sonner';
 import { getThemeById } from '@/lib/themes';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
+import { useForceLightMode } from '@/hooks/useForceLightMode';
 import type { Store as StoreType, Product, ProductVariant } from '@/types';
 
 // ── Helper: pick black or white text based on background color ────────────────
@@ -122,6 +123,7 @@ function DropshipModal({ open, onClose }: { open: boolean; onClose: () => void }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ProductDetailPage() {
+  useForceLightMode();
   const { slug, productId } = useParams<{ slug: string; productId: string }>();
   const navigate = useNavigate();
   const { addItem, addToWishlist, removeFromWishlist, isInWishlist } = useCartStore();

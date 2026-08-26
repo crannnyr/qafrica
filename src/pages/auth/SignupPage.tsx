@@ -99,7 +99,7 @@ export default function SignupPage() {
   ];
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-2 bg-gradient-to-br from-orange-50 via-white to-orange-50 lg:bg-none">
+    <div className="min-h-screen lg:grid lg:grid-cols-2 bg-gradient-to-br from-orange-50 via-white to-orange-50 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 lg:bg-none">
       {/* ── Right: live activity panel — desktop only, rendered first in the
           grid so it visually sits second (order-2) while keeping the form
           as the first, more important, DOM element for accessibility ── */}
@@ -111,11 +111,11 @@ export default function SignupPage() {
       </div>
 
       {/* ── Left: the form, unchanged ── */}
-      <div className="relative flex items-center justify-center p-4 py-16 lg:order-1 lg:bg-white">
+      <div className="relative flex items-center justify-center p-4 py-16 lg:order-1 lg:bg-white dark:lg:bg-gray-900">
         {/* Background Elements — mobile/tablet only, panel replaces this on desktop */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none lg:hidden">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 rounded-full blur-3xl" />
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 rounded-full blur-3xl" />
+          <div className="absolute top-20 left-10 w-72 h-72 bg-orange-200/30 dark:bg-orange-500/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 dark:bg-orange-500/10 rounded-full blur-3xl" />
         </div>
 
         <motion.div
@@ -130,25 +130,25 @@ export default function SignupPage() {
             <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
               <ShoppingBag className="w-7 h-7 text-white" />
             </div>
-            <span className="text-2xl font-bold text-gray-900">QAFRICA</span>
+            <span className="text-2xl font-bold text-gray-900 dark:text-white">QAFRICA</span>
           </Link>
         </div>
 
         {/* Signup Card */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8">
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Create Your Account</h1>
-            <p className="text-gray-500">Start your e-commerce journey today</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Create Your Account</h1>
+            <p className="text-gray-500 dark:text-gray-400">Start your e-commerce journey today</p>
           </div>
 
           {/* Rate Limit Warning */}
           {rateLimitError && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+            <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
               <div className="flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-red-800">Too Many Attempts</p>
-                  <p className="text-sm text-red-600">
+                  <p className="font-medium text-red-800 dark:text-red-300">Too Many Attempts</p>
+                  <p className="text-sm text-red-600 dark:text-red-400">
                     We've hit a rate limit. Please wait 2-3 minutes before trying again.
                   </p>
                 </div>
@@ -164,26 +164,26 @@ export default function SignupPage() {
               </div>
               <span className="text-sm font-medium text-orange-600">Account</span>
             </div>
-            <div className="w-12 h-0.5 bg-gray-200" />
+            <div className="w-12 h-0.5 bg-gray-200 dark:bg-gray-700" />
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-sm font-medium">
+              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full flex items-center justify-center text-sm font-medium">
                 2
               </div>
-              <span className="text-sm text-gray-500">Niche</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">Niche</span>
             </div>
-            <div className="w-12 h-0.5 bg-gray-200" />
+            <div className="w-12 h-0.5 bg-gray-200 dark:bg-gray-700" />
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 bg-gray-200 text-gray-500 rounded-full flex items-center justify-center text-sm font-medium">
+              <div className="w-8 h-8 bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full flex items-center justify-center text-sm font-medium">
                 3
               </div>
-              <span className="text-sm text-gray-500">Plan</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">Plan</span>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {/* Full Name */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Full Name
               </label>
               <input
@@ -199,7 +199,7 @@ export default function SignupPage() {
             {/* Email & Phone */}
             <div className="grid sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Email Address
                 </label>
                 <input
@@ -212,7 +212,7 @@ export default function SignupPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Phone Number
                 </label>
                 <input
@@ -228,7 +228,7 @@ export default function SignupPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Password
               </label>
               <div className="relative">
@@ -243,7 +243,7 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -252,7 +252,7 @@ export default function SignupPage() {
 
             {/* Confirm Password */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Confirm Password
               </label>
               <div className="relative">
@@ -267,7 +267,7 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                 >
                   {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -276,12 +276,12 @@ export default function SignupPage() {
 
             {/* Password Requirements */}
             {formData.password && (
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                <p className="text-sm font-medium text-gray-700">Password requirements:</p>
+              <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 space-y-2">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Password requirements:</p>
                 {passwordRequirements.map((req, index) => (
                   <div key={index} className="flex items-center gap-2">
-                    <CheckCircle className={`w-4 h-4 ${req.met ? 'text-green-500' : 'text-gray-300'}`} />
-                    <span className={`text-sm ${req.met ? 'text-green-600' : 'text-gray-500'}`}>
+                    <CheckCircle className={`w-4 h-4 ${req.met ? 'text-green-500' : 'text-gray-300 dark:text-gray-600'}`} />
+                    <span className={`text-sm ${req.met ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
                       {req.label}
                     </span>
                   </div>
@@ -293,10 +293,10 @@ export default function SignupPage() {
             <div className="flex items-start gap-3">
               <input 
                 type="checkbox" 
-                className="w-5 h-5 rounded border-gray-300 text-orange-500 focus:ring-orange-500 mt-0.5"
+                className="w-5 h-5 rounded border-gray-300 dark:border-gray-600 text-orange-500 focus:ring-orange-500 mt-0.5"
                 required
               />
-            <label className="text-sm text-gray-600">
+            <label className="text-sm text-gray-600 dark:text-gray-400">
   I agree to the{' '}
   <Link to="/terms-of-service" target="_blank" className="text-orange-500 hover:text-orange-600">Terms of Service</Link>
   {' '}and{' '}
@@ -323,7 +323,7 @@ export default function SignupPage() {
         </div>
 
         {/* Sign In Link */}
-        <p className="text-center mt-6 text-gray-600">
+        <p className="text-center mt-6 text-gray-600 dark:text-gray-400">
           Already have an account?{' '}
           <Link to="/login" className="text-orange-500 hover:text-orange-600 font-medium">
             Sign in

@@ -13,6 +13,7 @@ import { storeService, productService, supabase } from '@/services';
 import { toast } from 'sonner';
 import { getThemeById } from '@/lib/themes';
 import { useCustomerAuthStore, useCartStore } from '@/stores';
+import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { useCustomDomainSlug } from '@/components/CustomDomainRouter';
 import StoreLocationBanner from './StoreLocationBanner';
 import type { Store, Product } from '@/types';
@@ -29,6 +30,7 @@ function getContrastColor(hex: string): string {
 }
 
 export default function StorePage() {
+  useForceLightMode();
   const { slug: paramSlug } = useParams<{ slug: string }>();
   const domainSlug = useCustomDomainSlug();
   const slug = paramSlug ?? domainSlug ?? '';
