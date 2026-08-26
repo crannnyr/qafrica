@@ -73,9 +73,9 @@ const BUILT_IN_FILTERS = ['All', 'Favorites', 'Newly joined', 'Awaiting confirma
 type Filter = typeof BUILT_IN_FILTERS[number] | { listId: string; name: string };
 
 // ── Customer detail panel ──────────────────────────────────────────────────
-export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, lists, onToggleListMember }: {
+export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, lists = [], onToggleListMember = () => {} }: {
   token: string; customerId: string; onClose: () => void; onFavoriteToggled: (id: string, val: boolean) => void;
-  lists: ClientList[]; onToggleListMember: (listId: string, customerId: string) => void;
+  lists?: ClientList[]; onToggleListMember?: (listId: string, customerId: string) => void;
 }) {
   const [customer, setCustomer] = useState<any>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
