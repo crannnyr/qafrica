@@ -3,7 +3,7 @@
 // templates (editable before sending) or a fully custom reply — either way
 // sending emails the customer via the china-import edge function.
 import { useState, useEffect, useCallback } from 'react';
-import { Loader, MessageCircleQuestion, CheckCircle2, Send } from 'lucide-react';
+import { Loader, MessageCircleQuestion, CheckCircle2, Send, ExternalLink } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
@@ -124,13 +124,24 @@ export default function QuestionsManager({ token }: { token: string }) {
           {questions.map(q => (
             <div key={q.id} className="bg-white rounded-2xl border border-gray-100 p-4">
               <div className="flex items-start gap-3 mb-3">
-                {q.china_import_products?.image_url && (
-                  <img src={q.china_import_products.image_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-gray-800 line-clamp-1">{q.china_import_products?.name ?? 'Unknown product'}</p>
-                  <p className="text-[11px] text-gray-400">{q.customer_name ?? 'Customer'} · {new Date(q.created_at).toLocaleDateString()}</p>
-                </div>
+                <a
+                  href={`/recommendations/${q.product_id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-3 flex-1 min-w-0 group"
+                  title="View on live site"
+                >
+                  {q.china_import_products?.image_url && (
+                    <img src={q.china_import_products.image_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-gray-800 line-clamp-1 flex items-center gap-1 group-hover:text-orange-600 transition-colors">
+                      {q.china_import_products?.name ?? 'Unknown product'}
+                      <ExternalLink className="w-3 h-3 text-gray-300 group-hover:text-orange-400 flex-shrink-0" />
+                    </p>
+                    <p className="text-[11px] text-gray-400">{q.customer_name ?? 'Customer'} · {new Date(q.created_at).toLocaleDateString()}</p>
+                  </div>
+                </a>
                 {q.status === 'answered' && (
                   <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full flex-shrink-0">
                     <CheckCircle2 className="w-3 h-3" /> Answered

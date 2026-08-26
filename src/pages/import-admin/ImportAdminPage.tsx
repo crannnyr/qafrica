@@ -1550,6 +1550,12 @@ function ProductsManager({ token }: { token: string }) {
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                <a href={`/recommendations/${p.id}`} target="_blank" rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-300 hover:text-orange-500 transition-colors"
+                  title="View on live site">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
                 <button onClick={() => openEdit(p)}
                   className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-300 hover:text-gray-600 transition-colors">
                   <Edit2 className="w-3.5 h-3.5" />
