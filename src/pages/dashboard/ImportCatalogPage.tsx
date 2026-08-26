@@ -348,7 +348,7 @@ export default function ImportCatalogPage() {
                     {/* Change 3 — tightened card padding on mobile */}
                     <div className="p-2 lg:p-4">
                       <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1 text-xs lg:text-sm">{product.name}</h3>
-                      <p className="text-xs text-gray-500 mb-2 lg:mb-3 line-clamp-2 hidden lg:block">{product.description}</p>
+                      <p className="text-xs text-gray-500 mb-2 lg:mb-3 line-clamp-2">{product.description}</p>
                       
                       <div className="flex items-center gap-2 mb-3">
                         <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
