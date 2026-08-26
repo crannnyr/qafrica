@@ -7,11 +7,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Star, ChevronRight, X, MessageCircle, Package,
-  Clock, UserPlus, Loader,
+  Clock, UserPlus, Loader, Plus, ListPlus, Trash2, Tag,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const LISTS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/client-lists`;
 
 interface CustomerRow {
   id: string;
@@ -62,12 +63,19 @@ function waLink(phone: string, message: string) {
   return `https://wa.me/${phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`;
 }
 
-const FILTERS = ['All', 'Favorites', 'Newly joined', 'Awaiting confirmation'] as const;
-type Filter = typeof FILTERS[number];
+interface ClientList {
+  id: string;
+  name: string;
+  customer_ids: string[];
+}
+
+const BUILT_IN_FILTERS = ['All', 'Favorites', 'Newly joined', 'Awaiting confirmation'] as const;
+type Filter = typeof BUILT_IN_FILTERS[number] | { listId: string; name: string };
 
 // ── Customer detail panel ──────────────────────────────────────────────────
-export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }: {
+export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, lists, onToggleListMember }: {
   token: string; customerId: string; onClose: () => void; onFavoriteToggled: (id: string, val: boolean) => void;
+  lists: ClientList[]; onToggleListMember: (listId: string, customerId: string) => void;
 }) {
   const [customer, setCustomer] = useState<any>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -170,6 +178,27 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled }
             </div>
           </div>
 
+          {/* Custom lists */}
+          {lists.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Lists</p>
+              <div className="flex flex-wrap gap-1.5">
+                {lists.map(l => {
+                  const isMember = l.customer_ids.includes(customerId);
+                  return (
+                    <button key={l.id} onClick={() => onToggleListMember(l.id, customerId)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1 transition-colors ${
+                        isMember ? 'bg-orange-500 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-orange-300'
+                      }`}>
+                      <Tag className="w-2.5 h-2.5" />
+                      {l.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Orders */}
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Order history</p>
@@ -260,6 +289,70 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [lists, setLists] = useState<ClientList[]>([]);
+  const [showNewList, setShowNewList] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const [creatingList, setCreatingList] = useState(false);
+
+  const loadLists = useCallback(async () => {
+    try {
+      const res = await fetch(`${LISTS_EDGE_URL}?action=list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token }),
+      });
+      const data = await res.json();
+      setLists(data.lists ?? []);
+    } catch {
+      setLists([]);
+    }
+  }, [token]);
+
+  useEffect(() => { loadLists(); }, [loadLists]);
+
+  const createList = async () => {
+    if (!newListName.trim()) return;
+    setCreatingList(true);
+    try {
+      const res = await fetch(`${LISTS_EDGE_URL}?action=create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, name: newListName.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.list) {
+        setLists(prev => [...prev, data.list]);
+        setNewListName('');
+        setShowNewList(false);
+      }
+    } finally {
+      setCreatingList(false);
+    }
+  };
+
+  const deleteList = async (listId: string) => {
+    setLists(prev => prev.filter(l => l.id !== listId));
+    if (typeof filter === 'object' && filter.listId === listId) setFilter('All');
+    await fetch(`${LISTS_EDGE_URL}?action=delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manager_token: token, list_id: listId }),
+    });
+  };
+
+  const toggleListMember = async (listId: string, customerId: string) => {
+    // Optimistic update
+    setLists(prev => prev.map(l => {
+      if (l.id !== listId) return l;
+      const isMember = l.customer_ids.includes(customerId);
+      return { ...l, customer_ids: isMember ? l.customer_ids.filter(id => id !== customerId) : [...l.customer_ids, customerId] };
+    }));
+    await fetch(`${LISTS_EDGE_URL}?action=toggle-member`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manager_token: token, list_id: listId, customer_id: customerId }),
+    });
+  };
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -300,9 +393,14 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
     if (filter === 'Favorites') list = list.filter(c => c.is_favorite);
     else if (filter === 'Newly joined') list = list.filter(c => new Date(c.joined_at).getTime() >= sevenDaysAgo);
     else if (filter === 'Awaiting confirmation') list = list.filter(c => c.awaiting_confirmation_count > 0);
+    else if (typeof filter === 'object') {
+      const activeList = lists.find(l => l.id === filter.listId);
+      const idSet = new Set(activeList?.customer_ids ?? []);
+      list = list.filter(c => idSet.has(c.id));
+    }
     // Favorites always float to top within whatever filter is active
     return [...list].sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0));
-  }, [customers, filter]);
+  }, [customers, filter, lists]);
 
   return (
     <div className="space-y-3">
@@ -318,22 +416,69 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
 
       {/* Filters */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {FILTERS.map(f => {
+        {BUILT_IN_FILTERS.map(f => {
           const count = f === 'Favorites' ? customers.filter(c => c.is_favorite).length
             : f === 'Awaiting confirmation' ? customers.filter(c => c.awaiting_confirmation_count > 0).length
             : f === 'Newly joined' ? customers.filter(c => new Date(c.joined_at).getTime() >= Date.now() - 7 * 86_400_000).length
             : customers.length;
+          const isActive = filter === f;
           return (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors flex-shrink-0 flex items-center gap-1 ${
-                filter === f ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-500'
+                isActive ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-500'
               }`}>
               {f}
-              <span className={`text-[9px] ${filter === f ? 'text-gray-300' : 'text-gray-300'}`}>{count}</span>
+              <span className="text-[9px] text-gray-300">{count}</span>
             </button>
           );
         })}
+
+        {lists.map(l => {
+          const isActive = typeof filter === 'object' && filter.listId === l.id;
+          return (
+            <button key={l.id} onClick={() => setFilter({ listId: l.id, name: l.name })}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors flex-shrink-0 flex items-center gap-1 ${
+                isActive ? 'bg-orange-500 text-white' : 'bg-white border border-orange-200 text-orange-600'
+              }`}>
+              <Tag className="w-2.5 h-2.5" />
+              {l.name}
+              <span className={`text-[9px] ${isActive ? 'text-orange-100' : 'text-orange-300'}`}>{l.customer_ids.length}</span>
+            </button>
+          );
+        })}
+
+        <button onClick={() => setShowNewList(v => !v)}
+          className="px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors flex-shrink-0 flex items-center gap-1 bg-white border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600">
+          <Plus className="w-3 h-3" />
+          New list
+        </button>
       </div>
+
+      {showNewList && (
+        <div className="flex items-center gap-2">
+          <input
+            type="text" value={newListName} onChange={e => setNewListName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && createList()}
+            placeholder="List name, e.g. VIP customers"
+            autoFocus
+            className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none"
+          />
+          <button onClick={createList} disabled={creatingList || !newListName.trim()}
+            className="px-3 py-2 rounded-xl bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5">
+            {creatingList ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <ListPlus className="w-3.5 h-3.5" />}
+            Create
+          </button>
+        </div>
+      )}
+
+      {typeof filter === 'object' && (
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[11px] text-gray-400">Viewing list: <span className="font-semibold text-gray-600">{filter.name}</span></p>
+          <button onClick={() => deleteList(filter.listId)} className="flex items-center gap-1 text-[11px] text-red-400 hover:text-red-600">
+            <Trash2 className="w-3 h-3" /> Delete list
+          </button>
+        </div>
+      )}
 
       {/* List */}
       <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
@@ -390,6 +535,8 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
             customerId={detailId}
             onClose={() => setDetailId(null)}
             onFavoriteToggled={(id, val) => setCustomers(prev => prev.map(c => c.id === id ? { ...c, is_favorite: val } : c))}
+            lists={lists}
+            onToggleListMember={toggleListMember}
           />
         )}
       </AnimatePresence>
