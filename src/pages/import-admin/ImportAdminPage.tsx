@@ -17,6 +17,8 @@ import { CustomerDetail } from './ImportAdminCustomers';
 import QuestionsManager from './QuestionsManager';
 import TotalOrdersView from './TotalOrdersView';
 
+import TrendingManager from './TrendingManager';
+
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -1597,7 +1599,7 @@ function ProductsManager({ token }: { token: string }) {
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'orders' | 'total-orders' | 'products' | 'clients' | 'questions'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions'>('analytics');
 
   if (!token) return null;
 
@@ -1628,7 +1630,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'orders', 'total-orders', 'products', 'clients', 'questions'] as const).map(t => (
+          {(['analytics', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -1654,6 +1656,8 @@ export default function ImportAdminPage() {
           <TotalOrdersView token={token} />
         ) : tab === 'products' ? (
           <ProductsManager token={token} />
+        ) : tab === 'trending' ? (
+          <TrendingManager token={token} />
         ) : tab === 'questions' ? (
           <QuestionsManager token={token} />
         ) : (

@@ -38,6 +38,9 @@ export interface ImportProduct {
   has_variants?: boolean;
   variants?: VariantGroup[];
   units_sold?: number;
+  is_trending?: boolean;
+  trending_order?: number;
+  created_at?: string;
 }
 
 export interface CartItem extends ImportProduct {
@@ -195,20 +198,23 @@ export default function RecommendationsPage() {
 
   const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
 
-  // Trending: one product per category (first ~5 categories), rotates by day
+  // Trending is now admin/DB-driven (is_trending + trending_order), up to 20
+  // items, instead of a client-side pseudo-random daily pick.
   const trending = useMemo(() => {
     if (searchQuery || activeCategory !== 'All') return null;
-    const byCategory = new Map<string, ImportProduct[]>();
-    products.forEach(p => {
-      if (!byCategory.has(p.category)) byCategory.set(p.category, []);
-      byCategory.get(p.category)!.push(p);
-    });
-    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000);
-    const picks: ImportProduct[] = [];
-    Array.from(byCategory.entries()).slice(0, 5).forEach(([, items]) => {
-      picks.push(items[dayOfYear % items.length]);
-    });
-    return picks;
+    return products
+      .filter(p => p.is_trending)
+      .sort((a, b) => (a.trending_order ?? 0) - (b.trending_order ?? 0))
+      .slice(0, 20);
+  }, [products, searchQuery, activeCategory]);
+
+  // "New ins" — the ~10 most recently added products, shown after the main
+  // grid so shoppers who browse the whole catalog still see what's fresh.
+  const newIns = useMemo(() => {
+    if (searchQuery || activeCategory !== 'All') return null;
+    return [...products]
+      .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
+      .slice(0, 10);
   }, [products, searchQuery, activeCategory]);
 
   const filtered = products.filter(p => {
@@ -326,21 +332,21 @@ export default function RecommendationsPage() {
         )}
 
         {trending && trending.length > 0 && (
-          <div className="mb-4">
+          <div className="mb-5">
             <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">Trending today</p>
-            <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4">
+            <div className="flex gap-2.5 lg:gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x snap-mandatory scroll-smooth">
               {trending.map(p => (
                 <button
                   key={p.id}
                   onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
-                  className="flex-shrink-0 w-28 bg-white rounded-xl border border-gray-100 overflow-hidden text-left hover:shadow-sm transition-shadow"
+                  className="flex-shrink-0 w-28 lg:w-36 bg-white rounded-xl border border-gray-100 overflow-hidden text-left hover:shadow-sm transition-shadow snap-start"
                 >
                   <div className="aspect-square bg-gray-50">
                     <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
                   </div>
-                  <div className="p-1.5">
-                    <p className="text-[10px] font-medium text-gray-700 line-clamp-1">{p.name}</p>
-                    <p className="text-[11px] font-bold text-orange-500">{fmt(p.price_ngn)}</p>
+                  <div className="p-1.5 lg:p-2">
+                    <p className="text-[10px] lg:text-xs font-medium text-gray-700 line-clamp-1">{p.name}</p>
+                    <p className="text-[11px] lg:text-sm font-bold text-orange-500">{fmt(p.price_ngn)}</p>
                   </div>
                 </button>
               ))}
@@ -379,6 +385,32 @@ export default function RecommendationsPage() {
                 usdRate={usdRate}
               />
             ))}
+          </div>
+        )}
+        {/* New Ins — most recently added products */}
+        {newIns && newIns.length > 0 && (
+          <div className="mt-6">
+            <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">New ins</p>
+            <div className="flex gap-2.5 lg:gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x snap-mandatory scroll-smooth">
+              {newIns.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
+                  className="flex-shrink-0 w-28 lg:w-36 bg-white rounded-xl border border-gray-100 overflow-hidden text-left hover:shadow-sm transition-shadow snap-start relative"
+                >
+                  <div className="aspect-square bg-gray-50 relative">
+                    <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                    <span className="absolute top-1.5 left-1.5 bg-gray-900 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                      New
+                    </span>
+                  </div>
+                  <div className="p-1.5 lg:p-2">
+                    <p className="text-[10px] lg:text-xs font-medium text-gray-700 line-clamp-1">{p.name}</p>
+                    <p className="text-[11px] lg:text-sm font-bold text-orange-500">{fmt(p.price_ngn)}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
