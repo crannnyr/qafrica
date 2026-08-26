@@ -13,7 +13,7 @@ import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 function Hero() {
   return (
     <section className="bg-white pt-8 pb-14 px-4 overflow-hidden">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl lg:max-w-6xl mx-auto">
 
         {/* 2-col grid */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-center mb-10">
@@ -132,7 +132,7 @@ const STEPS = [
 function HowItWorks() {
   return (
     <section className="bg-gray-50 px-4 py-14">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl lg:max-w-6xl mx-auto">
         <div className="mb-8">
           <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">
             How It Works
@@ -206,7 +206,7 @@ const TRUST_POINTS = [
 function WhyTrustUs() {
   return (
     <section className="bg-white px-4 py-14">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl lg:max-w-6xl mx-auto">
         <div className="mb-8">
           <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">
             Why Trust Us?
@@ -272,7 +272,7 @@ export default function ImportPage() {
     <div className="min-h-screen bg-white">
       {/* Single sticky nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
+        <div className="max-w-2xl lg:max-w-6xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-7 h-7 bg-orange-500 rounded-md flex items-center justify-center">
               <ShoppingBag className="w-4 h-4 text-white" />
