@@ -41,6 +41,18 @@ const TEMPLATES = [
     text: () =>
       `Yes, we can accommodate custom requests like a specific colour or size — just place your order and let us know your preference, and we'll take it from there.`,
   },
+  {
+    key: 'shipping_fee',
+    label: 'Shipping fee',
+    text: () =>
+      `Great question! We don't show a fixed shipping fee upfront because we combine orders with other customers' orders and split the total shipping cost between everyone — this brings the fee down to the bare minimum. That's why shipping can end up as low as ₦500 for a single item, instead of a high flat rate. We also fully handle logistics and door delivery to your location anywhere in Nigeria, so once your order ships, it comes straight to your doorstep.`,
+  },
+  {
+    key: 'quality',
+    label: 'Product quality',
+    text: () =>
+      `We source all our products directly from manufacturers and large wholesale warehouses, so you're getting the best possible quality at an affordable price — no middlemen markups. Combined with our shipping structure, this lets us deliver genuinely good products to you at a low minimum shipping fee.`,
+  },
 ];
 
 export default function QuestionsManager({ token }: { token: string }) {
