@@ -84,20 +84,20 @@ export default function PasswordTab() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-red-100 dark:bg-red-500/10 rounded-lg flex items-center justify-center">
           <Lock className="w-5 h-5 text-red-500" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Change Password</h2>
-          <p className="text-sm text-gray-500">You'll need your current password to make changes</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Change Password</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">You'll need your current password to make changes</p>
         </div>
       </div>
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current Password</label>
           <div className="relative">
             <input
               type={showCurrentPw ? 'text' : 'password'}
@@ -106,14 +106,14 @@ export default function PasswordTab() {
               className="input-custom pr-12"
               placeholder="Enter current password"
             />
-            <button type="button" onClick={() => setShowCurrentPw(!showCurrentPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <button type="button" onClick={() => setShowCurrentPw(!showCurrentPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
               {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Password</label>
           <div className="relative">
             <input
               type={showNewPw ? 'text' : 'password'}
@@ -122,25 +122,25 @@ export default function PasswordTab() {
               className="input-custom pr-12"
               placeholder="Create a strong password"
             />
-            <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <button type="button" onClick={() => setShowNewPw(!showNewPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
               {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
         {passwordData.newPassword && (
-          <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 space-y-2">
             {pwRequirements.map((req, i) => (
               <div key={i} className="flex items-center gap-2">
-                <CheckCircle className={`w-4 h-4 ${req.met ? 'text-green-500' : 'text-gray-300'}`} />
-                <span className={`text-xs ${req.met ? 'text-green-600' : 'text-gray-500'}`}>{req.label}</span>
+                <CheckCircle className={`w-4 h-4 ${req.met ? 'text-green-500' : 'text-gray-300 dark:text-gray-600'}`} />
+                <span className={`text-xs ${req.met ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>{req.label}</span>
               </div>
             ))}
           </div>
         )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Confirm New Password</label>
           <div className="relative">
             <input
               type={showConfirmPw ? 'text' : 'password'}
@@ -149,7 +149,7 @@ export default function PasswordTab() {
               className="input-custom pr-12"
               placeholder="Confirm your new password"
             />
-            <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+            <button type="button" onClick={() => setShowConfirmPw(!showConfirmPw)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
               {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
           </div>

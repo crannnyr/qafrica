@@ -23,9 +23,9 @@ export default function StaffList({ staffList, isLoading, mutatingId, onRemove, 
 
   if (staffList.length === 0) {
     return (
-      <div className="text-center py-8 border border-dashed border-gray-200 rounded-xl">
-        <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-        <p className="text-gray-500 text-sm">No staff invited yet</p>
+      <div className="text-center py-8 border border-dashed border-gray-200 dark:border-gray-600 rounded-xl">
+        <Users className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+        <p className="text-gray-500 dark:text-gray-400 text-sm">No staff invited yet</p>
       </div>
     );
   }

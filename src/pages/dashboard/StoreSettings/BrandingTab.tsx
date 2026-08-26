@@ -32,17 +32,17 @@ export default function BrandingTab() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-purple-100 dark:bg-purple-500/10 rounded-lg flex items-center justify-center">
           <Palette className="w-5 h-5 text-purple-500" />
         </div>
-        <h2 className="text-lg font-semibold text-gray-900">Branding</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Branding</h2>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Primary Color</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Color</label>
           <div className="flex items-center gap-3">
             <input
               type="color"
@@ -59,7 +59,7 @@ export default function BrandingTab() {
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Secondary Color</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Secondary Color</label>
           <div className="flex items-center gap-3">
             <input
               type="color"
@@ -77,17 +77,17 @@ export default function BrandingTab() {
         </div>
       </div>
 
-      <div className="border-t border-gray-100 pt-4">
+      <div className="border-t border-gray-100 dark:border-gray-700 pt-4">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center">
+          <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-500/10 rounded-lg flex items-center justify-center">
             <Moon className="w-5 h-5 text-indigo-500" />
           </div>
-          <p className="text-sm font-semibold text-gray-900">Appearance</p>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Appearance</p>
         </div>
-        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
           <div>
-            <p className="font-medium text-gray-900 text-sm">Dark Mode</p>
-            <p className="text-xs text-gray-500">Toggle between light and dark theme for your dashboard</p>
+            <p className="font-medium text-gray-900 dark:text-white text-sm">Dark Mode</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Toggle between light and dark theme for your dashboard</p>
           </div>
           <DarkModeToggle />
         </div>

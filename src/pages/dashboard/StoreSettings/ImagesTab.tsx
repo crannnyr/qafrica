@@ -32,17 +32,17 @@ export default function ImagesTab() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-pink-100 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-pink-100 dark:bg-pink-500/10 rounded-lg flex items-center justify-center">
           <ImageIcon className="w-5 h-5 text-pink-500" />
         </div>
-        <h2 className="text-lg font-semibold text-gray-900">Store Images</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Store Images</h2>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-8">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">Store Logo</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Store Logo</label>
           <SingleImageUpload
             bucket="store-logos"
             folder={currentStore?.id || 'general'}
@@ -50,10 +50,10 @@ export default function ImagesTab() {
             onChange={url => setFormData({ ...formData, logo_url: url as string })}
             placeholder="Upload Logo"
           />
-          <p className="text-xs text-gray-500 mt-2">Recommended: 400×400px</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Recommended: 400×400px</p>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">Store Banner</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Store Banner</label>
           <SingleImageUpload
             bucket="store-banners"
             folder={currentStore?.id || 'general'}
@@ -61,7 +61,7 @@ export default function ImagesTab() {
             onChange={url => setFormData({ ...formData, banner_url: url as string })}
             placeholder="Upload Banner"
           />
-          <p className="text-xs text-gray-500 mt-2">Recommended: 1200×400px</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Recommended: 1200×400px</p>
         </div>
       </div>
 

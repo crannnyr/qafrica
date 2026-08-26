@@ -105,14 +105,14 @@ export default function LocationTab() {
       : null;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-rose-100 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-rose-100 dark:bg-rose-500/10 rounded-lg flex items-center justify-center">
           <MapPin className="w-5 h-5 text-rose-500" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Store Location</h2>
-          <p className="text-sm text-gray-500">Let customers visit your physical store via Google Maps</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Store Location</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Let customers visit your physical store via Google Maps</p>
         </div>
       </div>
 
@@ -121,11 +121,11 @@ export default function LocationTab() {
           <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
         </div>
       ) : !hasOriginalProduct ? (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+        <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
           <PackagePlus className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-amber-800">
+          <div className="text-sm text-amber-800 dark:text-amber-300">
             <p className="font-semibold">Post a product first</p>
-            <p className="text-amber-700 mt-1">
+            <p className="text-amber-700 dark:text-amber-400 mt-1">
               This feature is only available to stores with at least one original product (not dropshipped).
               It confirms you run a real, physical store before directing customers there.
             </p>
@@ -138,7 +138,7 @@ export default function LocationTab() {
         </div>
       ) : (
         <>
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-blue-800">
+          <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-800 rounded-xl p-4 text-sm text-blue-800 dark:text-blue-300">
             Most Nigerian shoppers prefer buying from a store they can visit. Make sure you're
             physically at your store when you capture your location below — customers will be
             directed here from your storefront via Google Maps.
@@ -146,7 +146,7 @@ export default function LocationTab() {
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Store Address (optional label)</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Store Address (optional label)</label>
               <input
                 type="text"
                 value={formData.location_address}
@@ -162,20 +162,20 @@ export default function LocationTab() {
                 onClick={handleUseCurrentLocation}
                 disabled={isLocating}
                 variant="outline"
-                className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                className="border-orange-500 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-500/10"
               >
                 {isLocating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Navigation className="w-4 h-4 mr-2" />}
                 Use My Current Location
               </Button>
               {formData.latitude != null && formData.longitude != null && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
                   {formData.latitude.toFixed(5)}, {formData.longitude.toFixed(5)}
                 </span>
               )}
             </div>
 
             {mapPreviewUrl && (
-              <div className="rounded-xl overflow-hidden border border-gray-200">
+              <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-600">
                 <iframe
                   title="Store location preview"
                   src={mapPreviewUrl}
@@ -188,24 +188,24 @@ export default function LocationTab() {
             )}
           </div>
 
-          <div className="border-t border-gray-100 pt-4 flex items-start justify-between gap-4">
+          <div className="border-t border-gray-100 dark:border-gray-700 pt-4 flex items-start justify-between gap-4">
             <div>
-              <p className="font-medium text-gray-900 text-sm">Show "Visit Our Store" on storefront</p>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p className="font-medium text-gray-900 dark:text-white text-sm">Show "Visit Our Store" on storefront</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 Customers see a button linking to this location on Google Maps.
               </p>
             </div>
             <button
               onClick={() => setFormData(p => ({ ...p, location_enabled: !p.location_enabled }))}
-              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${formData.location_enabled ? 'bg-orange-500' : 'bg-gray-200'}`}
+              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${formData.location_enabled ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-600'}`}
             >
               <span className={`absolute left-0.5 top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${formData.location_enabled ? 'translate-x-6' : 'translate-x-0'}`} />
             </button>
           </div>
 
-          <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex items-start gap-2">
+          <div className="bg-red-50 dark:bg-red-500/10 border border-red-100 dark:border-red-800 rounded-xl p-3 flex items-start gap-2">
             <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-red-700">
+            <p className="text-xs text-red-700 dark:text-red-400">
               Posting a fake location or claiming a store you don't operate is a violation of our
               terms and can lead to your store being blocked.
             </p>

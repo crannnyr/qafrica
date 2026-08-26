@@ -46,15 +46,15 @@ export function VariantManager({ variants, onChange, basePrice }: {
   const updateVariant = (id: string, field: keyof VariantCombination, value: any) =>
     onChange(variants.map(v => v.id === id ? { ...v, [field]: value } : v));
 
-  const inputCls = "px-2 py-1.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-xs";
+  const inputCls = "px-2 py-1.5 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 text-xs";
 
   return (
     <div className="space-y-4">
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+      <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-start gap-2">
         <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-        <div className="text-xs text-blue-800">
+        <div className="text-xs text-blue-800 dark:text-blue-300">
           <p className="font-semibold mb-1">How variants work</p>
-          <ol className="list-decimal list-inside space-y-0.5 text-blue-700">
+          <ol className="list-decimal list-inside space-y-0.5 text-blue-700 dark:text-blue-400">
             <li>Name each option (e.g. <strong>Color</strong>)</li>
             <li>Enter values separated by commas (e.g. <strong>Red, Blue</strong>)</li>
             <li>Click <strong>Generate Combinations</strong></li>
@@ -64,24 +64,24 @@ export function VariantManager({ variants, onChange, basePrice }: {
       </div>
 
       {options.map((opt, i) => (
-        <div key={i} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <div key={i} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
           <div className="flex items-center justify-between mb-2">
             <input type="text" value={opt.name} onChange={e => updateName(i, e.target.value)}
               placeholder="Option name (e.g. Color)"
-              className="text-xs font-medium bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500 w-40" />
+              className="text-xs font-medium bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-orange-500 w-40" />
             <button type="button" onClick={() => removeOption(i)}
-              className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50 transition-colors">
+              className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
               Remove
             </button>
           </div>
           <input type="text" value={opt.rawInput} onChange={e => updateRaw(i, e.target.value)}
             placeholder="e.g. Red, Blue, Green"
-            className="w-full px-2.5 py-2 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white" />
-          <p className="text-[10px] text-gray-400 mt-1">Separate each value with a comma.</p>
+            className="w-full px-2.5 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-white" />
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">Separate each value with a comma.</p>
           {hasGenerated && opt.values.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2">
               {opt.values.map((val, vi) => (
-                <span key={vi} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-[10px] font-medium border border-orange-200">{val}</span>
+                <span key={vi} className="px-2 py-0.5 bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 rounded-full text-[10px] font-medium border border-orange-200 dark:border-orange-800">{val}</span>
               ))}
             </div>
           )}
@@ -89,33 +89,33 @@ export function VariantManager({ variants, onChange, basePrice }: {
       ))}
 
       <Button type="button" variant="outline" onClick={addOption}
-        className="w-full border-dashed border-2 hover:border-orange-400 hover:bg-orange-50 text-xs h-9">
+        className="w-full border-dashed border-2 hover:border-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 text-xs h-9">
         <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Another Option
       </Button>
 
       <Button type="button" onClick={generateCombinations}
         disabled={!options.some(o => o.name.trim() && o.rawInput.trim())}
-        className="w-full bg-orange-500 hover:bg-orange-600 text-white disabled:bg-gray-200 disabled:text-gray-400 h-10 text-sm">
+        className="w-full bg-orange-500 hover:bg-orange-600 text-white disabled:bg-gray-200 dark:disabled:bg-gray-700 disabled:text-gray-400 dark:disabled:text-gray-500 h-10 text-sm">
         <RefreshCw className="w-3.5 h-3.5 mr-2" /> Generate Combinations
       </Button>
 
       {variants.length > 0 && (
-        <div className="overflow-x-auto border rounded-lg">
+        <div className="overflow-x-auto border border-gray-200 dark:border-gray-600 rounded-lg">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50 border-b">
+            <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600">
               <tr>
                 {['Variant', 'Price (₦)', 'Stock', 'SKU', ''].map(h => (
-                  <th key={h} className="px-3 py-2 text-left font-medium text-gray-600">{h}</th>
+                  <th key={h} className="px-3 py-2 text-left font-medium text-gray-600 dark:text-gray-300">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
               {variants.map(v => (
-                <tr key={v.id} className="hover:bg-gray-50">
+                <tr key={v.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                   <td className="px-3 py-2">
                     <div className="flex flex-wrap gap-1">
                       {Object.entries(v.options).map(([k, val]) => (
-                        <span key={k} className="px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded-full text-[10px] font-medium">{k}: {val}</span>
+                        <span key={k} className="px-1.5 py-0.5 bg-orange-100 dark:bg-orange-500/10 text-orange-700 dark:text-orange-400 rounded-full text-[10px] font-medium">{k}: {val}</span>
                       ))}
                     </div>
                   </td>
@@ -133,7 +133,7 @@ export function VariantManager({ variants, onChange, basePrice }: {
                   </td>
                   <td className="px-3 py-2">
                     <button type="button" onClick={() => onChange(variants.filter(vv => vv.id !== v.id))}
-                      className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50">
+                      className="text-red-400 hover:text-red-600 dark:hover:text-red-300 p-1 rounded hover:bg-red-50 dark:hover:bg-red-500/10">
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </td>
@@ -141,7 +141,7 @@ export function VariantManager({ variants, onChange, basePrice }: {
               ))}
             </tbody>
             <tfoot>
-              <tr className="bg-gray-50 border-t text-[10px] text-gray-500">
+              <tr className="bg-gray-50 dark:bg-gray-700/50 border-t border-gray-200 dark:border-gray-600 text-[10px] text-gray-500 dark:text-gray-400">
                 <td className="px-3 py-2">{variants.length} combination{variants.length !== 1 ? 's' : ''}</td>
                 <td colSpan={4} className="px-3 py-2 text-right">Total stock: {variants.reduce((s, v) => s + (v.stock || 0), 0)} units</td>
               </tr>

@@ -17,19 +17,19 @@ export default function StaffTab({ storeId, ownerId }: Props) {
   } = useStaffData(storeId, ownerId);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 space-y-6">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-violet-100 rounded-lg flex items-center justify-center">
+          <div className="w-10 h-10 bg-violet-100 dark:bg-violet-500/10 rounded-lg flex items-center justify-center">
             <Users className="w-5 h-5 text-violet-500" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Manage Staff</h2>
-            <p className="text-sm text-gray-500">Invite team members to help manage orders</p>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Manage Staff</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Invite team members to help manage orders</p>
           </div>
         </div>
         {staffLimit > 0 && (
-          <span className="text-xs font-medium bg-violet-50 text-violet-700 px-3 py-1.5 rounded-full border border-violet-100">
+          <span className="text-xs font-medium bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 px-3 py-1.5 rounded-full border border-violet-100 dark:border-violet-800">
             {activeCount} / {staffLimit} used
           </span>
         )}

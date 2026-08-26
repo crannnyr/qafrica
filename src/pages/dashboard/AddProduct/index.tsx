@@ -50,16 +50,16 @@ export default function AddProductPage() {
   return (
     <div className="max-w-3xl mx-auto pb-24">
       <div className="flex items-center gap-4 mb-8">
-        <button onClick={() => navigate('/dashboard/products')} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-          <ArrowLeft className="w-5 h-5" />
+        <button onClick={() => navigate('/dashboard/products')} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+          <ArrowLeft className="w-5 h-5 text-gray-900 dark:text-white" />
         </button>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">Add New Product</h1>
-          <p className="text-gray-500 mt-0.5 text-sm">Fill in the details across each section</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Add New Product</h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-0.5 text-sm">Fill in the details across each section</p>
         </div>
         {formData.name && (
           <button type="button" onClick={() => toast.success('Draft saved')}
-            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors">
+            className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
             <Save className="w-4 h-4" />
             <span className="hidden sm:inline">Draft saved</span>
           </button>
@@ -67,26 +67,26 @@ export default function AddProductPage() {
       </div>
 
       {hasDraft && (
-        <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-4">
+        <div className="mb-6 p-4 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Save className="w-5 h-5 text-amber-600 flex-shrink-0" />
             <div>
-              <p className="text-sm font-medium text-amber-900">Draft recovered</p>
-              <p className="text-xs text-amber-700">Continuing from where you left off.</p>
+              <p className="text-sm font-medium text-amber-900 dark:text-amber-300">Draft recovered</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400">Continuing from where you left off.</p>
             </div>
           </div>
-          <button onClick={clearDraft} className="text-xs text-amber-600 hover:text-amber-800 underline whitespace-nowrap">
+          <button onClick={clearDraft} className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 underline whitespace-nowrap">
             Start fresh
           </button>
         </div>
       )}
 
       {allowedNiches.length > 0 && (
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3">
+        <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-800 rounded-xl flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-blue-900">Plan: {currentStore?.niches?.length ? 'Active' : 'Loading...'}</p>
-            <p className="text-sm text-blue-700 mt-0.5">
+            <p className="text-sm font-medium text-blue-900 dark:text-blue-300">Plan: {currentStore?.niches?.length ? 'Active' : 'Loading...'}</p>
+            <p className="text-sm text-blue-700 dark:text-blue-400 mt-0.5">
               Niches available: {allowedNiches.map(n => CONFIG.NICHES.find((cn: any) => cn.id === n)?.name || n).join(', ')}
             </p>
           </div>
@@ -107,14 +107,14 @@ export default function AddProductPage() {
         </motion.div>
       </AnimatePresence>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-gray-200 px-4 py-4 z-40">
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm border-t border-gray-200 dark:border-gray-700 px-4 py-4 z-40">
         <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
           <button type="button" onClick={step === 1 ? () => navigate('/dashboard/products') : goBack}
-            className="flex items-center gap-2 px-5 py-3 text-gray-600 hover:text-gray-900 font-medium transition-colors hover:bg-gray-100 rounded-xl">
+            className="flex items-center gap-2 px-5 py-3 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white font-medium transition-colors hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl">
             <ArrowLeft className="w-4 h-4" />
             {step === 1 ? 'Cancel' : 'Back'}
           </button>
-          <div className="text-sm text-gray-400">{step} / {STEPS.length}</div>
+          <div className="text-sm text-gray-400 dark:text-gray-500">{step} / {STEPS.length}</div>
           {step < STEPS.length ? (
             <button type="button" onClick={goNext}
               className="flex items-center gap-2 px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-xl transition-colors">

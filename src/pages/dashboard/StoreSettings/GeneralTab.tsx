@@ -54,17 +54,17 @@ export default function GeneralTab() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-orange-100 dark:bg-orange-500/10 rounded-lg flex items-center justify-center">
           <Store className="w-5 h-5 text-orange-500" />
         </div>
-        <h2 className="text-lg font-semibold text-gray-900">General</h2>
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">General</h2>
       </div>
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Store Name</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Store Name</label>
           <input
             type="text"
             value={formData.name}
@@ -73,7 +73,7 @@ export default function GeneralTab() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Description</label>
           <textarea
             value={formData.description}
             onChange={e => setFormData({ ...formData, description: e.target.value })}

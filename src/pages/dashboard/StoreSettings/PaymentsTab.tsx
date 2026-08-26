@@ -51,47 +51,47 @@ export default function PaymentsTab() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-green-100 dark:bg-green-500/10 rounded-lg flex items-center justify-center">
           <CreditCard className="w-5 h-5 text-green-600" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Payments</h2>
-          <p className="text-sm text-gray-500">Control how customers pay in your store</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Payments</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Control how customers pay in your store</p>
         </div>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-4">
         <button
           onClick={() => setPaymentSettings(p => ({ ...p, payment_method: 'paystack', cod_enabled: false }))}
-          className={`p-4 rounded-xl border-2 text-left transition-all ${paymentSettings.payment_method === 'paystack' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}
+          className={`p-4 rounded-xl border-2 text-left transition-all ${paymentSettings.payment_method === 'paystack' ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'}`}
         >
           <div className="flex items-center gap-2 mb-1">
             <CreditCard className="w-5 h-5 text-blue-600" />
-            <span className="font-semibold text-gray-900 text-sm">Paystack (Recommended)</span>
+            <span className="font-semibold text-gray-900 dark:text-white text-sm">Paystack (Recommended)</span>
           </div>
-          <p className="text-xs text-gray-500">Card, bank transfer, USSD. Funds held in escrow — buyer protected.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Card, bank transfer, USSD. Funds held in escrow — buyer protected.</p>
         </button>
         <button
           onClick={() => setPaymentSettings(p => ({ ...p, payment_method: 'direct_transfer' }))}
-          className={`p-4 rounded-xl border-2 text-left transition-all ${paymentSettings.payment_method === 'direct_transfer' ? 'border-orange-500 bg-orange-50' : 'border-gray-200 hover:border-gray-300'}`}
+          className={`p-4 rounded-xl border-2 text-left transition-all ${paymentSettings.payment_method === 'direct_transfer' ? 'border-orange-500 bg-orange-50 dark:bg-orange-500/10' : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'}`}
         >
           <div className="flex items-center gap-2 mb-1">
             <Banknote className="w-5 h-5 text-green-600" />
-            <span className="font-semibold text-gray-900 text-sm">Direct Bank Transfer</span>
+            <span className="font-semibold text-gray-900 dark:text-white text-sm">Direct Bank Transfer</span>
           </div>
-          <p className="text-xs text-gray-500">Customers pay directly to your account. No platform escrow.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Customers pay directly to your account. No platform escrow.</p>
         </button>
       </div>
 
       {paymentSettings.payment_method === 'direct_transfer' && (
         <div className="space-y-4">
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start gap-3">
+          <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm text-amber-800 space-y-1">
+            <div className="text-sm text-amber-800 dark:text-amber-300 space-y-1">
               <p className="font-semibold">Understand the limitations:</p>
-              <ul className="space-y-1 text-amber-700 list-disc list-inside text-xs">
+              <ul className="space-y-1 text-amber-700 dark:text-amber-400 list-disc list-inside text-xs">
                 <li>Customers shopping across multiple stores may be discouraged from paying all at once</li>
                 <li>No escrow protection — disputes cannot be auto-resolved</li>
                 <li>Dropshipped items always require Paystack regardless of this setting</li>
@@ -100,9 +100,9 @@ export default function PaymentsTab() {
             </div>
           </div>
           <div className="space-y-3">
-            <p className="text-sm font-semibold text-gray-700">Your Bank Account Details</p>
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Your Bank Account Details</p>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bank Name</label>
               <input
                 type="text"
                 value={paymentSettings.direct_bank_name}
@@ -112,7 +112,7 @@ export default function PaymentsTab() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account Number</label>
               <input
                 type="text"
                 value={paymentSettings.direct_account_number}
@@ -123,7 +123,7 @@ export default function PaymentsTab() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account Name</label>
               <input
                 type="text"
                 value={paymentSettings.direct_account_name}
@@ -133,14 +133,14 @@ export default function PaymentsTab() {
               />
             </div>
           </div>
-          <div className="border-t border-gray-100 pt-4 flex items-start justify-between gap-4">
+          <div className="border-t border-gray-100 dark:border-gray-700 pt-4 flex items-start justify-between gap-4">
             <div>
-              <p className="font-medium text-gray-900 text-sm">Enable Cash on Delivery</p>
-              <p className="text-xs text-gray-500 mt-0.5">Only for direct transfer. Recommended only if you personally handle deliveries.</p>
+              <p className="font-medium text-gray-900 dark:text-white text-sm">Enable Cash on Delivery</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Only for direct transfer. Recommended only if you personally handle deliveries.</p>
             </div>
             <button
               onClick={() => setPaymentSettings(p => ({ ...p, cod_enabled: !p.cod_enabled }))}
-              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${paymentSettings.cod_enabled ? 'bg-orange-500' : 'bg-gray-200'}`}
+              className={`relative w-12 h-6 rounded-full transition-colors flex-shrink-0 ${paymentSettings.cod_enabled ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-600'}`}
             >
               <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${paymentSettings.cod_enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
             </button>

@@ -57,25 +57,25 @@ export default function SocialTab() {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-6 space-y-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6 space-y-6">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-sky-100 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-sky-100 dark:bg-sky-500/10 rounded-lg flex items-center justify-center">
           <Globe className="w-5 h-5 text-sky-500" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Social Links</h2>
-          <p className="text-sm text-gray-500">Only links you fill in will appear in your store footer</p>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Social Links</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Only links you fill in will appear in your store footer</p>
         </div>
       </div>
 
       <div className="space-y-4">
         {SOCIAL_FIELDS.map(({ key, label, icon: Icon, placeholder, color }) => (
           <div key={key} className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="w-9 h-9 bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600 rounded-lg flex items-center justify-center flex-shrink-0">
               <Icon className={`w-4 h-4 ${color}`} />
             </div>
             <div className="flex-1">
-              <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</label>
               <input
                 type="url"
                 value={socialData[key]}
@@ -88,15 +88,15 @@ export default function SocialTab() {
         ))}
       </div>
 
-      <div className="border-t border-gray-100 pt-4 space-y-3">
+      <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-gray-900">Group Chat Link</p>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">Group Chat Link</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             When dropshippers import your products, they'll see an option to join your group chat for promotional content, videos, and updates.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-800 rounded-lg flex items-center justify-center flex-shrink-0">
             <MessageCircle className="w-4 h-4 text-orange-500" />
           </div>
           <input

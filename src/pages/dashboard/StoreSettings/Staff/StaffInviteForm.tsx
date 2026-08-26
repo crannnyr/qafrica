@@ -26,7 +26,7 @@ export default function StaffInviteForm({ canInvite, staffLimit, onInvite }: Pro
 
   return (
     <>
-      <div className="flex flex-col sm:flex-row gap-3 p-4 bg-gray-50 rounded-xl border border-gray-100">
+      <div className="flex flex-col sm:flex-row gap-3 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-700">
         <input
           type="email"
           value={email}
@@ -34,7 +34,7 @@ export default function StaffInviteForm({ canInvite, staffLimit, onInvite }: Pro
           onKeyDown={e => e.key === 'Enter' && handleInvite()}
           placeholder="staff@email.com"
           disabled={!canInvite}
-          className="flex-1 min-w-0 px-4 py-2.5 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 min-w-0 px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-600 text-sm focus:ring-2 focus:ring-orange-500 outline-none bg-white dark:bg-gray-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         />
         <Button
           onClick={handleInvite}
@@ -46,7 +46,7 @@ export default function StaffInviteForm({ canInvite, staffLimit, onInvite }: Pro
       </div>
 
       {!canInvite && staffLimit > 0 && (
-        <p className="text-xs text-amber-600 bg-amber-50 px-4 py-2 rounded-lg border border-amber-100 mt-3">
+        <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-4 py-2 rounded-lg border border-amber-100 dark:border-amber-800 mt-3">
           Staff limit reached ({staffLimit}/{staffLimit}). Remove a staff member to invite someone new.
         </p>
       )}

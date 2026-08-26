@@ -3,8 +3,8 @@ import { getNicheCategories, getSubcategories } from '@/lib/nicheCategories';
 import CONFIG from '@/lib/config';
 import { useNavigate } from 'react-router-dom';
 
-const inputClass = "w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-colors text-sm";
-const labelClass = "block text-xs font-medium text-gray-600 mb-1.5";
+const inputClass = "w-full px-3 py-2.5 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-colors text-sm";
+const labelClass = "block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5";
 
 export function Step1Basics({ formData, set, allowedNiches }: {
   formData: any;
@@ -16,8 +16,8 @@ export function Step1Basics({ formData, set, allowedNiches }: {
   const subcategories   = formData.niche && formData.category ? getSubcategories(formData.niche, formData.category) : [];
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm space-y-5">
-      <h2 className="text-base font-semibold text-gray-900">Basic Information</h2>
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm space-y-5">
+      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Basic Information</h2>
 
       <div>
         <label className={labelClass}>Product Name <span className="text-orange-500">*</span></label>
@@ -44,7 +44,7 @@ export function Step1Basics({ formData, set, allowedNiches }: {
             return <option key={nicheId} value={nicheId}>{niche?.name || nicheId}</option>;
           })}
         </select>
-        <p className="text-[10px] text-gray-400 mt-1">
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
           Only your subscribed niches are shown.{' '}
           <button type="button" onClick={() => navigate('/dashboard/subscription')}
             className="text-orange-500 hover:underline">
@@ -67,7 +67,7 @@ export function Step1Basics({ formData, set, allowedNiches }: {
       {formData.category && subcategories.length > 0 && (
         <div>
           <label className={labelClass}>
-            Subcategory <span className="text-gray-400 font-normal">— Optional</span>
+            Subcategory <span className="text-gray-400 dark:text-gray-500 font-normal">— Optional</span>
           </label>
           <select value={formData.subcategory} onChange={e => set({ subcategory: e.target.value })}
             className={inputClass}>

@@ -1,7 +1,7 @@
 import { InfoTip } from '../InfoTip';
 
-const inputClass = "w-full px-3 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-colors text-sm";
-const labelClass = "block text-xs font-medium text-gray-600 mb-1.5";
+const inputClass = "w-full px-3 py-2.5 border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-colors text-sm";
+const labelClass = "block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1.5";
 
 export function Step3Pricing({ formData, set }: {
   formData: any;
@@ -12,8 +12,8 @@ export function Step3Pricing({ formData, set }: {
   const discount = cp > sp && sp > 0 ? Math.round((1 - sp / cp) * 100) : 0;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm space-y-5">
-      <h2 className="text-base font-semibold text-gray-900">Pricing</h2>
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-5 shadow-sm space-y-5">
+      <h2 className="text-base font-semibold text-gray-900 dark:text-white">Pricing</h2>
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div>
@@ -68,14 +68,14 @@ export function Step3Pricing({ formData, set }: {
       </div>
 
       {sp > 0 && (
-        <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-          <p className="text-xs font-medium text-gray-500 mb-1.5">Customer preview</p>
+        <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-700">
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Customer preview</p>
           <div className="flex items-baseline gap-2">
             <span className="text-xl font-bold text-orange-500">₦{sp.toLocaleString()}</span>
             {discount > 0 && (
               <>
-                <span className="text-sm text-gray-400 line-through">₦{cp.toLocaleString()}</span>
-                <span className="px-1.5 py-0.5 bg-red-100 text-red-700 text-[10px] font-medium rounded-full">
+                <span className="text-sm text-gray-400 dark:text-gray-500 line-through">₦{cp.toLocaleString()}</span>
+                <span className="px-1.5 py-0.5 bg-red-100 dark:bg-red-500/10 text-red-700 dark:text-red-400 text-[10px] font-medium rounded-full">
                   {discount}% OFF
                 </span>
               </>

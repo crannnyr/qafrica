@@ -82,7 +82,7 @@ export function MultiImageUpload({
     <div className="space-y-3">
       <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
         {safeValue.map((url, index) => (
-          <div key={`img-${index}`} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 group border border-gray-200">
+          <div key={`img-${index}`} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 group border border-gray-200 dark:border-gray-600">
             <img src={url} alt={`Product ${index + 1}`} className="w-full h-full object-cover" />
             <button type="button" onClick={() => removeImage(index)}
               className="absolute top-1.5 right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
@@ -97,10 +97,10 @@ export function MultiImageUpload({
         ))}
 
         {safeValue.length < maxImages && (
-          <label className="aspect-square rounded-lg border-2 border-dashed border-gray-300 hover:border-orange-500 hover:bg-orange-50 flex flex-col items-center justify-center cursor-pointer transition-colors">
+          <label className="aspect-square rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-500/10 flex flex-col items-center justify-center cursor-pointer transition-colors">
             {uploading
               ? <Loader2 className="w-6 h-6 text-orange-500 animate-spin" />
-              : <><Plus className="w-6 h-6 text-gray-400" /><span className="text-xs text-gray-400 mt-1">Add</span></>
+              : <><Plus className="w-6 h-6 text-gray-400 dark:text-gray-500" /><span className="text-xs text-gray-400 dark:text-gray-500 mt-1">Add</span></>
             }
             <input type="file" accept="image/*" multiple onChange={handleFileChange} className="hidden" disabled={uploading} />
           </label>
@@ -108,11 +108,11 @@ export function MultiImageUpload({
       </div>
 
       {compressionInfo && (
-        <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+        <p className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
           <Check className="w-3.5 h-3.5" /> {compressionInfo}
         </p>
       )}
-      <p className="text-xs text-gray-400">{safeValue.length}/{maxImages} images · First image is the main photo · Auto-compressed</p>
+      <p className="text-xs text-gray-400 dark:text-gray-500">{safeValue.length}/{maxImages} images · First image is the main photo · Auto-compressed</p>
     </div>
   );
 }
