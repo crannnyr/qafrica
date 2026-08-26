@@ -73,6 +73,9 @@ interface ImportProduct {
   price_cny_original: number;
   price_ngn: number;
   price_usd?: number;
+  cost_ngn?: number;
+  price_input_currency?: 'cny' | 'usd' | 'ngn';
+  price_input_amount?: number;
   category: string;
   is_active: boolean;
   sort_order: number;
@@ -1029,7 +1032,11 @@ function ProductsManager({ token }: { token: string }) {
   const loadProducts = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${EDGE_URL}?action=products`);
+      const res = await fetch(`${EDGE_URL}?action=admin-products`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token }),
+      });
       const data = await res.json();
       setProducts(data.products ?? []);
     } catch {
@@ -1051,9 +1058,16 @@ function ProductsManager({ token }: { token: string }) {
   const openEdit = (p: ImportProduct) => {
     setEditProduct(p);
     setName(p.name); setDesc(p.description); setCategory(p.category);
-    // Show the original (pre-markup) supplier price for editing, in CNY
-    setPriceAmount((p.price_cny_original ?? p.price_cny).toString());
-    setPriceCurrency('cny');
+    // Restore exactly what the admin originally typed — the currency they
+    // picked and the raw amount — instead of guessing. Falls back to the
+    // old CNY-only assumption only for products saved before this field existed.
+    if (p.price_input_currency && p.price_input_amount != null) {
+      setPriceAmount(p.price_input_amount.toString());
+      setPriceCurrency(p.price_input_currency);
+    } else {
+      setPriceAmount((p.price_cny_original ?? p.price_cny).toString());
+      setPriceCurrency('cny');
+    }
     setMoq((p.moq ?? 1).toString());
     setUnitsSold((p.units_sold ?? 0).toString());
     setVariantGroups(p.variants?.length ? p.variants.map(g => ({ ...g, id: g.id || genId() })) : []);
