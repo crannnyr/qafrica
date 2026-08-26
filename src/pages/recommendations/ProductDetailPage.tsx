@@ -337,7 +337,7 @@ export default function ProductDetailPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
-        <div className="max-w-lg mx-auto flex items-center justify-between">
+        <div className="max-w-lg lg:max-w-6xl mx-auto flex items-center justify-between">
           <button
             onClick={() => navigate(-1)}
             className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 font-medium"
@@ -360,12 +360,15 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      <div className="max-w-lg mx-auto pb-32">
-        {/* Image gallery */}
-        <ImageGallery images={images} name={product.name} />
+      <div className="max-w-lg lg:max-w-6xl mx-auto pb-32 lg:pb-16 lg:px-6 lg:pt-8">
+        <div className="lg:grid lg:grid-cols-2 lg:gap-12 lg:items-start">
+          {/* Image gallery — sticky on desktop so it stays visible while scrolling info */}
+          <div className="lg:sticky lg:top-20 lg:rounded-2xl lg:overflow-hidden lg:border lg:border-gray-100">
+            <ImageGallery images={images} name={product.name} />
+          </div>
 
-        {/* Product info */}
-        <div className="bg-white px-4 pt-4 pb-5 border-b border-gray-100">
+          {/* Product info */}
+          <div className="bg-white px-4 pt-4 pb-5 border-b border-gray-100 lg:border lg:border-gray-100 lg:rounded-2xl lg:p-6 lg:mt-0">
           {/* Category */}
           <div className="flex items-center gap-1 mb-2">
             <Tag className="w-3 h-3 text-gray-300" />
@@ -535,11 +538,13 @@ export default function ProductDetailPage() {
           )}
         </div>
 
+        </div>
+
         {/* You may also like */}
         {alsoLike.length > 0 && (
-          <div className="px-4 pt-6 pb-4">
+          <div className="px-4 pt-6 pb-4 lg:px-0 lg:pt-14">
             <h2 className="font-bold text-gray-900 text-sm mb-3">You may also like</h2>
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 lg:gap-4">
               {alsoLike.map(p => (
                 <button
                   key={p.id}
@@ -582,7 +587,7 @@ export default function ProductDetailPage() {
             initial={{ y: 80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
-            className="fixed bottom-6 left-4 right-4 z-20 max-w-lg mx-auto"
+            className="fixed bottom-6 left-4 right-4 z-20 max-w-lg lg:max-w-xl mx-auto"
           >
             <button
               onClick={goToCart}
