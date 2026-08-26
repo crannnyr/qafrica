@@ -18,6 +18,7 @@ import QuestionsManager from './QuestionsManager';
 import TotalOrdersView from './TotalOrdersView';
 
 import TrendingManager from './TrendingManager';
+import ConfirmedPaymentsManager from './ConfirmedPaymentsManager';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -1599,7 +1600,7 @@ function ProductsManager({ token }: { token: string }) {
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions'>('analytics');
 
   if (!token) return null;
 
@@ -1630,7 +1631,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions'] as const).map(t => (
+          {(['analytics', 'confirmed-payments', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -1640,13 +1641,15 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t}
             </button>
           ))}
         </div>
 
         {tab === 'analytics' ? (
           <ImportAdminAnalytics token={token} />
+        ) : tab === 'confirmed-payments' ? (
+          <ConfirmedPaymentsManager token={token} />
         ) : tab === 'orders' ? (
           <>
             <OrdersList token={token} />
