@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Star, ChevronRight, X, MessageCircle, Package,
   Clock, UserPlus, Loader, Plus, ListPlus, Trash2, Tag,
+  ExternalLink, ChevronDown,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
@@ -39,6 +40,14 @@ interface OrderRow {
   total_ngn: number;
   delivery_type: string;
   created_at: string;
+  items?: Array<{
+    id: string;
+    name: string;
+    image_url?: string;
+    price_ngn: number;
+    quantity: number;
+    variant_options?: Record<string, string>;
+  }>;
 }
 
 function fmt(n: number) {
@@ -82,6 +91,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
   const [bills, setBills] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setIsLoading(true);
@@ -209,12 +219,20 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
                 {orders.map(o => {
                   const needsReminder = o.payment_status === 'unpaid' && o.payment_method === 'manual';
                   const needsConfirmation = o.payment_status === 'unpaid' || o.payment_status === 'awaiting_confirmation';
+                  const isExpanded = expandedOrderId === o.id;
+                  const items = o.items ?? [];
                   return (
                     <div key={o.id} className="bg-white border border-gray-100 rounded-xl px-3.5 py-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-mono text-xs font-bold text-gray-800">{o.code}</span>
+                      <button
+                        onClick={() => setExpandedOrderId(isExpanded ? null : o.id)}
+                        className="w-full flex items-center justify-between mb-1 text-left"
+                      >
+                        <span className="font-mono text-xs font-bold text-gray-800 flex items-center gap-1.5">
+                          {o.code}
+                          <ChevronDown className={`w-3 h-3 text-gray-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                        </span>
                         <span className="font-semibold text-gray-900 text-xs">{fmt(o.total_ngn)}</span>
-                      </div>
+                      </button>
                       <div className="flex items-center justify-between">
                         <p className="text-[10px] text-gray-400 capitalize">{o.status.replace(/_/g, ' ')} · {o.payment_status}</p>
                         {needsReminder && (
@@ -227,6 +245,45 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
                           </a>
                         )}
                       </div>
+
+                      {/* Item drill-down — every line item in this order, each
+                          linking out to its live product page */}
+                      {isExpanded && (
+                        <div className="mt-2.5 pt-2.5 border-t border-gray-50 space-y-2">
+                          {items.length === 0 ? (
+                            <p className="text-[10px] text-gray-300">No item details on this order.</p>
+                          ) : (
+                            items.map((item, i) => (
+                              <a
+                                key={`${item.id}-${i}`}
+                                href={`/recommendations/${item.id}`}
+                                target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-2 group"
+                              >
+                                {item.image_url && (
+                                  <img src={item.image_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[11px] font-medium text-gray-700 group-hover:text-orange-600 transition-colors truncate flex items-center gap-1">
+                                    {item.name}
+                                    <ExternalLink className="w-2.5 h-2.5 text-gray-300 group-hover:text-orange-400 flex-shrink-0" />
+                                  </p>
+                                  {item.variant_options && Object.keys(item.variant_options).length > 0 && (
+                                    <p className="text-[10px] text-gray-400">
+                                      {Object.entries(item.variant_options).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <p className="text-[10px] text-gray-400">×{item.quantity}</p>
+                                  <p className="text-[11px] font-semibold text-gray-700">{fmt(item.price_ngn * item.quantity)}</p>
+                                </div>
+                              </a>
+                            ))
+                          )}
+                        </div>
+                      )}
+
                       {needsConfirmation && (
                         <button
                           onClick={() => confirmOrder(o.id)}
