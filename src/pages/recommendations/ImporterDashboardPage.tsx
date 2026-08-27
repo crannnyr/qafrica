@@ -1,22 +1,28 @@
 // src/pages/recommendations/ImporterDashboardPage.tsx
-// Customer-facing "My Dashboard" for the Importation section. Shows:
-//  - the customer's own orders and their consolidation/shipping status
-//  - any consolidation drop-off bills admin has issued them, with a
-//    pay-by-transfer flow (warning -> account details -> "I have paid")
+// Customer-facing "My Dashboard" for the Importation section — icon-grid
+// navigation over the order pipeline: To Pay -> Confirmed -> Billed
+// (Consolidation | Ship to Nigeria) -> To Receive -> Refund.
 // Route: /importations/dashboard (added in App.tsx)
 import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ShoppingBag, Package, Receipt, ChevronLeft, RefreshCw, Clock, Settings } from 'lucide-react';
+import {
+  ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
+  Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
+  ShoppingBag, Ship, Warehouse, ExternalLink,
+} from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
+import { fallbackAvatarColor, initialsFrom } from '@/lib/avatarFallback';
 import { fmt } from './RecommendationsPage';
 import ManualPaymentFlow from './ManualPaymentFlow';
 import ImportSettingsSheet from './ImportSettingsSheet';
 import RetryPaymentSheet from './RetryPaymentSheet';
+import AvatarSheet from './AvatarSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const REMINDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/order-reminders`;
+const REFUNDS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/refunds`;
 
 interface FailedOrder {
   id: string;
@@ -53,27 +59,23 @@ interface ConsolidationBill {
   created_at: string;
 }
 
-// Simplified pipeline: pending -> confirmed -> billed -> to_review. "Billed"
-// covers both a consolidation drop-off fee and a shipping-to-Nigeria fee —
-// which one is shown per-bill via ConsolidationBill.kind, not the order
-// status itself.
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pending',
-  confirmed: 'Confirmed',
-  billed: 'Billed — fee due',
-  to_review: 'To Review',
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-amber-50 text-amber-700',
-  confirmed: 'bg-sky-50 text-sky-700',
-  billed: 'bg-rose-50 text-rose-700',
-  to_review: 'bg-emerald-50 text-emerald-700',
-};
+interface Refund {
+  id: string;
+  code: string;
+  items: Array<{ id: string; name: string; price_ngn: number; quantity: number; image_url?: string }>;
+  total_ngn: number;
+  cancel_reason: string;
+  status: 'pending' | 'submitted' | 'paid';
+  bank_account_number: string | null;
+  bank_account_name: string | null;
+  bank_name: string | null;
+  cancelled_at: string;
+  paid_at: string | null;
+}
 
 const BILL_STATUS_LABELS: Record<string, string> = {
   pending: 'Awaiting your payment',
-  awaiting_confirmation: 'Payment reported — confirming',
+  awaiting_confirmation: 'Confirming your transfer',
   paid: 'Paid & confirmed',
   cancelled: 'Cancelled',
 };
@@ -92,6 +94,9 @@ function timeAgo(d: string) {
   return `${days}d ago`;
 }
 
+// Which pipeline tab a bank icon-grid tile is
+type PipelineTab = 'to_pay' | 'confirmed' | 'billed' | 'to_receive' | 'refund';
+
 export default function ImporterDashboardPage() {
   useImportPwaManifest();
   const navigate = useNavigate();
@@ -100,10 +105,17 @@ export default function ImporterDashboardPage() {
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
   const [bills, setBills] = useState<ConsolidationBill[]>([]);
   const [failedOrders, setFailedOrders] = useState<FailedOrder[]>([]);
+  const [refunds, setRefunds] = useState<Refund[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<PipelineTab>('to_pay');
   const [showSettings, setShowSettings] = useState(false);
+  const [showAvatar, setShowAvatar] = useState(false);
   const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
   const [payingBill, setPayingBill] = useState<ConsolidationBill | null>(null);
+  const [infoBillKind, setInfoBillKind] = useState<'consolidation' | 'shipping' | null>(null);
+  const [refundBankForm, setRefundBankForm] = useState<Refund | null>(null);
+  const [bankFormData, setBankFormData] = useState({ bank_account_number: '', bank_account_name: '', bank_name: '' });
+  const [isSubmittingBank, setIsSubmittingBank] = useState(false);
 
   // Bounce logged-out visitors back to the recommendations page rather than
   // a dead end — consistent with how checkout handles the logged-out case.
@@ -115,7 +127,7 @@ export default function ImporterDashboardPage() {
     if (!customer?.id) return;
     setIsLoading(true);
     try {
-      const [ordersRes, billsRes, failedRes] = await Promise.all([
+      const [ordersRes, billsRes, failedRes, refundsRes] = await Promise.all([
         fetch(`${EDGE_URL}?action=my-orders`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -131,13 +143,20 @@ export default function ImporterDashboardPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ customer_id: customer.id }),
         }),
+        fetch(`${REFUNDS_EDGE_URL}?action=my-refunds`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: customer.id }),
+        }),
       ]);
       const ordersData = await ordersRes.json();
       const billsData = await billsRes.json();
       const failedData = await failedRes.json();
+      const refundsData = await refundsRes.json();
       setOrders(ordersData.orders ?? []);
       setBills(billsData.bills ?? []);
       setFailedOrders(failedData.failed_orders ?? []);
+      setRefunds(refundsData.refunds ?? []);
     } catch {
       // leave lists empty; the UI already handles empty state gracefully
     } finally {
@@ -156,10 +175,50 @@ export default function ImporterDashboardPage() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'Could not record your payment. Please try again.');
-    await load(); // refresh so the bill now shows "awaiting confirmation" if they reopen
+    await load();
   };
 
-  const pendingBillsCount = bills.filter(b => b.status === 'pending').length;
+  const submitBankDetails = async () => {
+    if (!refundBankForm || !customer?.id) return;
+    if (!bankFormData.bank_account_number.trim() || !bankFormData.bank_account_name.trim() || !bankFormData.bank_name.trim()) return;
+    setIsSubmittingBank(true);
+    try {
+      const res = await fetch(`${REFUNDS_EDGE_URL}?action=submit-bank-details`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer_id: customer.id, refund_id: refundBankForm.id,
+          ...bankFormData,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      setRefundBankForm(null);
+      setBankFormData({ bank_account_number: '', bank_account_name: '', bank_name: '' });
+      await load();
+    } catch {
+      // leave the form open so they can retry
+    } finally {
+      setIsSubmittingBank(false);
+    }
+  };
+
+  // ── Derived pipeline buckets ─────────────────────────────────────────────
+  const toPay = orders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'failed');
+  const confirmedOrders = orders.filter(o => o.status === 'confirmed');
+  const billedOrders = orders.filter(o => o.status === 'billed');
+  const toReceiveOrders = orders.filter(o => o.status === 'to_review');
+  const pendingRefundsCount = refunds.filter(r => r.status === 'pending').length;
+
+  const TABS: Array<{ key: PipelineTab; label: string; icon: any; count: number }> = [
+    { key: 'to_pay', label: 'To Pay', icon: CreditCard, count: toPay.length },
+    { key: 'confirmed', label: 'Confirmed', icon: CheckCircle2, count: confirmedOrders.length },
+    { key: 'billed', label: 'Billed', icon: Receipt, count: billedOrders.length },
+    { key: 'to_receive', label: 'To Receive', icon: PackageCheck, count: toReceiveOrders.length },
+    { key: 'refund', label: 'Refund', icon: RotateCcw, count: pendingRefundsCount },
+  ];
+
+  const avatarBg = fallbackAvatarColor(customer?.id ?? 'x');
+  const initials = initialsFrom(customer?.full_name);
 
   if (!isAuthenticated) return null; // redirect effect above handles this
 
@@ -170,166 +229,305 @@ export default function ImporterDashboardPage() {
           <Link to="/recommendations" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 font-medium">
             <ChevronLeft className="w-4 h-4" /> Back to catalog
           </Link>
-          <button onClick={load} disabled={isLoading} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-            <RefreshCw className={`w-4 h-4 text-gray-400 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-          <button onClick={() => setShowSettings(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
-            <Settings className="w-4 h-4 text-gray-400" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={load} disabled={isLoading} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+              <RefreshCw className={`w-4 h-4 text-gray-400 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={() => setShowSettings(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+              <Settings className="w-4 h-4 text-gray-400" />
+            </button>
+          </div>
         </div>
       </header>
 
       <div className="max-w-3xl mx-auto px-4 py-6">
-        <h1 className="font-black text-gray-900 text-xl mb-1">My Dashboard</h1>
-        <p className="text-gray-400 text-sm mb-6">{customer?.full_name}</p>
-
-        {/* ── Consolidation bills ─────────────────────────────────────── */}
-        <section className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <Receipt className="w-4 h-4 text-gray-400" />
-            <h2 className="font-bold text-gray-800 text-sm">Consolidation billing</h2>
-            {pendingBillsCount > 0 && (
-              <span className="text-[10px] font-bold bg-red-500 text-white px-2 py-0.5 rounded-full">
-                {pendingBillsCount} awaiting payment
-              </span>
-            )}
-          </div>
-
-          {isLoading ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-20" />
-          ) : bills.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-5">
-              <p className="text-sm text-gray-300">No consolidation bills right now.</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-              {bills.map(bill => (
-                <div key={bill.id} className="px-5 py-4">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="text-sm font-semibold text-gray-800">{bill.reason}</p>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${BILL_STATUS_COLORS[bill.status]}`}>
-                      {BILL_STATUS_LABELS[bill.status]}
-                    </span>
-                  </div>
-                  <p className="text-lg font-black text-gray-900 mb-2">{fmt(bill.amount_ngn)}</p>
-                  {bill.status === 'pending' && (
-                    <button
-                      onClick={() => setPayingBill(bill)}
-                      className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg"
-                    >
-                      Pay now
-                    </button>
-                  )}
-                  {bill.status === 'awaiting_confirmation' && (
-                    <p className="text-[11px] text-amber-600 flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> We're confirming your transfer — this can take a little while.
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* ── To Pay: needs action ────────────────────────────────────── */}
-        {(() => {
-          const toPay = orders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'failed');
-          return (
-            <section className="mb-8">
-              <div className="flex items-center gap-2 mb-3">
-                <Package className="w-4 h-4 text-gray-400" />
-                <h2 className="font-bold text-gray-800 text-sm">To Pay</h2>
-                {toPay.length > 0 && (
-                  <span className="text-[10px] font-bold bg-red-500 text-white px-2 py-0.5 rounded-full">
-                    {toPay.length}
-                  </span>
-                )}
-              </div>
-
-              {isLoading ? (
-                <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
-              ) : toPay.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
-                  <Clock className="w-7 h-7 text-gray-200 mx-auto mb-2" />
-                  <p className="text-xs text-gray-300">Nothing waiting on payment right now.</p>
-                </div>
+        {/* ── Profile header ─────────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 mb-6">
+          <button onClick={() => setShowAvatar(true)} className="relative flex-shrink-0">
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center overflow-hidden border-2 border-white shadow"
+              style={{ backgroundColor: customer?.avatar_url ? undefined : avatarBg }}
+            >
+              {customer?.avatar_url ? (
+                <img src={customer.avatar_url} alt="" className="w-full h-full object-cover" />
               ) : (
-                <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-                  {toPay.map(order => (
-                    <button
-                      key={order.id}
-                      onClick={() => setRetryOrder(order)}
-                      className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-gray-50 transition-colors"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="font-bold text-gray-900 font-mono text-xs tracking-wider">{order.code}</span>
-                          {order.payment_status === 'failed' && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Payment failed</span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-gray-400">{order.items?.length ?? 0} item{order.items?.length === 1 ? '' : 's'} · Tap to complete payment</p>
-                      </div>
-                      <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
-                    </button>
-                  ))}
-                </div>
+                <span className="text-white text-lg font-bold">{initials}</span>
               )}
-            </section>
-          );
-        })()}
-
-        {/* ── Order history ───────────────────────────────────────────── */}
-        <section>
-          <div className="flex items-center gap-2 mb-3">
-            <ShoppingBag className="w-4 h-4 text-gray-400" />
-            <h2 className="font-bold text-gray-800 text-sm">Order history</h2>
+            </div>
+          </button>
+          <div>
+            <h1 className="font-black text-gray-900 text-lg leading-tight">{customer?.full_name}</h1>
+            <button onClick={() => setShowAvatar(true)} className="text-orange-500 text-xs font-semibold">
+              Edit profile picture
+            </button>
           </div>
+        </div>
 
-          {isLoading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 2 }).map((_, i) => (
-                <div key={i} className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
-              ))}
-            </div>
-          ) : orders.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-              <ShoppingBag className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-              <p className="text-sm text-gray-300 mb-3">No orders yet.</p>
-              <Link to="/recommendations" className="text-xs font-bold text-orange-600">
-                Browse products →
-              </Link>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-              {orders.map(order => (
-                <div key={order.id} className="px-5 py-4 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="font-bold text-gray-900 font-mono text-xs tracking-wider">{order.code}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status]}`}>
-                        {STATUS_LABELS[order.status]}
+        {/* ── Order pipeline icon grid ─────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
+          <div className="grid grid-cols-5 gap-1">
+            {TABS.map(t => {
+              const Icon = t.icon;
+              const isActive = activeTab === t.key;
+              return (
+                <button key={t.key} onClick={() => setActiveTab(t.key)} className="flex flex-col items-center gap-1.5 relative py-1">
+                  {t.count > 0 && (
+                    <span className="absolute -top-0.5 right-2 bg-red-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                      {t.count}
+                    </span>
+                  )}
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${isActive ? 'bg-orange-500' : 'bg-gray-50'}`}>
+                    <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+                  </div>
+                  <span className={`text-[10px] font-semibold ${isActive ? 'text-orange-600' : 'text-gray-500'}`}>{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Secondary row: address / help are real, rest are coming soon ── */}
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-8">
+          <div className="grid grid-cols-4 gap-3">
+            <button onClick={() => setShowSettings(true)} className="flex flex-col items-center gap-1.5">
+              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
+                <MapPin className="w-4 h-4 text-gray-400" />
+              </div>
+              <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Shipping<br />Address</span>
+            </button>
+            <a href="https://chat.whatsapp.com/H0e7sUP8sYV2r3dhjm4Cfa?s=cl&p=a&ilr=0" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5">
+              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
+                <Headset className="w-4 h-4 text-gray-400" />
+              </div>
+              <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Help<br />Center</span>
+            </a>
+            {['Favorites', 'Vouchers', 'Pay Later', 'PLUS'].map(label => (
+              <div key={label} className="flex flex-col items-center gap-1.5 opacity-40">
+                <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
+                  <Clock className="w-4 h-4 text-gray-300" />
+                </div>
+                <span className="text-[10px] font-medium text-gray-400 text-center leading-tight">{label}<br />Coming soon</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Active tab content ────────────────────────────────────────── */}
+        {activeTab === 'to_pay' && (
+          <section>
+            <h2 className="font-bold text-gray-800 text-sm mb-3">To Pay</h2>
+            {isLoading ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
+            ) : toPay.length === 0 ? (
+              <EmptyState icon={Clock} text="Nothing waiting on payment right now." />
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+                {toPay.map(order => (
+                  <button
+                    key={order.id}
+                    onClick={() => setRetryOrder(order)}
+                    className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="font-bold text-gray-900 font-mono text-xs tracking-wider">{order.code}</span>
+                        {order.payment_status === 'failed' && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Payment failed</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-gray-400">{order.items?.length ?? 0} item{order.items?.length === 1 ? '' : 's'} · Tap to complete payment</p>
+                    </div>
+                    <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'confirmed' && (
+          <section>
+            <h2 className="font-bold text-gray-800 text-sm mb-3">Confirmed</h2>
+            {isLoading ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
+            ) : confirmedOrders.length === 0 ? (
+              <EmptyState icon={CheckCircle2} text="No confirmed orders waiting to be billed." />
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+                {confirmedOrders.map(order => (
+                  <div key={order.id} className="px-5 py-4 flex items-center justify-between gap-3">
+                    <div>
+                      <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
+                      <p className="text-[11px] text-gray-400">Payment received — we're preparing your consolidation bill.</p>
+                    </div>
+                    <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'billed' && (
+          <section>
+            <h2 className="font-bold text-gray-800 text-sm mb-3">Billed</h2>
+            {isLoading ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-24" />
+            ) : billedOrders.length === 0 && bills.length === 0 ? (
+              <EmptyState icon={Receipt} text="No bills right now." />
+            ) : (
+              <div className="space-y-3">
+                {billedOrders.map(order => {
+                  const orderBills = bills.filter(b => b.order_id === order.id);
+                  const consolidation = orderBills.find(b => b.kind === 'consolidation');
+                  const shipping = orderBills.find(b => b.kind === 'shipping');
+                  return (
+                    <div key={order.id} className="bg-white rounded-2xl border border-gray-100 p-4">
+                      <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-3">{order.code}</span>
+
+                      {/* Consolidation | Ship to Nigeria split */}
+                      <div className="grid grid-cols-2 divide-x divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+                        <BillColumn
+                          icon={Warehouse}
+                          label="Consolidation"
+                          bill={consolidation}
+                          onInfo={() => setInfoBillKind('consolidation')}
+                          onPay={b => setPayingBill(b)}
+                        />
+                        <BillColumn
+                          icon={Ship}
+                          label="Ship to Nigeria"
+                          bill={shipping}
+                          onInfo={() => setInfoBillKind('shipping')}
+                          onPay={b => setPayingBill(b)}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Bills without a linked order still shown for completeness */}
+                {bills.filter(b => !b.order_id).map(bill => (
+                  <div key={bill.id} className="bg-white rounded-2xl border border-gray-100 p-4">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-sm font-semibold text-gray-800">{bill.reason}</p>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${BILL_STATUS_COLORS[bill.status]}`}>
+                        {BILL_STATUS_LABELS[bill.status]}
                       </span>
                     </div>
-                    <p className="text-[11px] text-gray-400">
-                      {order.delivery_type === 'to_qafrica' ? 'Consolidated to QAfrica' : 'Direct to you'}
-                      {order.payment_status === 'awaiting_confirmation' && ' · payment submitted, awaiting admin confirmation'}
-                      {order.payment_status === 'failed' && ' · payment failed'}
-                    </p>
+                    <p className="text-lg font-black text-gray-900 mb-2">{fmt(bill.amount_ngn)}</p>
+                    {bill.status === 'pending' && (
+                      <button onClick={() => setPayingBill(bill)} className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg">
+                        Pay now
+                      </button>
+                    )}
                   </div>
-                  <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'to_receive' && (
+          <section>
+            <h2 className="font-bold text-gray-800 text-sm mb-3">To Receive</h2>
+            {isLoading ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
+            ) : toReceiveOrders.length === 0 ? (
+              <EmptyState icon={PackageCheck} text="Nothing on its way to you right now." />
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+                {toReceiveOrders.map(order => (
+                  <div key={order.id} className="px-5 py-4 flex items-center justify-between gap-3">
+                    <div>
+                      <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
+                      <p className="text-[11px] text-emerald-600">Fully paid — on its way to you.</p>
+                    </div>
+                    <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'refund' && (
+          <section>
+            <h2 className="font-bold text-gray-800 text-sm mb-3">Refund</h2>
+            {isLoading ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-24" />
+            ) : refunds.length === 0 ? (
+              <EmptyState icon={RotateCcw} text="No cancelled orders — nothing here." />
+            ) : (
+              <div className="space-y-3">
+                {refunds.map(r => (
+                  <div key={r.id} className="bg-white rounded-2xl border border-gray-100 p-4">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="font-bold text-gray-900 font-mono text-xs tracking-wider">{r.code}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        r.status === 'paid' ? 'bg-emerald-50 text-emerald-700' :
+                        r.status === 'submitted' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-600'
+                      }`}>
+                        {r.status === 'paid' ? 'Refund paid' : r.status === 'submitted' ? 'Processing' : 'Cancelled'}
+                      </span>
+                    </div>
+
+                    <div className="bg-red-50 rounded-xl px-3 py-2.5 mb-3">
+                      <p className="text-xs text-red-700">{r.cancel_reason}</p>
+                    </div>
+
+                    <div className="space-y-1.5 mb-3">
+                      {(r.items ?? []).map((item, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          {item.image_url && <img src={item.image_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />}
+                          <p className="text-xs text-gray-600 flex-1 truncate">{item.name} × {item.quantity}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="text-sm font-bold text-gray-900 mb-3">Refund amount: {fmt(r.total_ngn)}</p>
+
+                    {r.status === 'pending' && (
+                      <>
+                        <button
+                          onClick={() => { setRefundBankForm(r); setBankFormData({ bank_account_number: '', bank_account_name: '', bank_name: '' }); }}
+                          className="w-full bg-gray-900 hover:bg-gray-700 text-white text-xs font-bold py-2.5 rounded-lg transition-colors"
+                        >
+                          Submit Bank Details
+                        </button>
+                        <p className="text-[11px] text-gray-400 mt-2 text-center">
+                          Refunds are usually processed within 2–4 hours of submitting your details.
+                          You can reorder anytime.
+                        </p>
+                      </>
+                    )}
+
+                    {r.status === 'submitted' && r.bank_account_number && (
+                      <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-600 space-y-0.5">
+                        <p className="font-semibold text-gray-800">{r.bank_account_name}</p>
+                        <p>{r.bank_account_number} · {r.bank_name}</p>
+                        <p className="text-amber-600 mt-1">Submitted — we're processing your refund.</p>
+                      </div>
+                    )}
+
+                    {r.status === 'paid' && (
+                      <p className="text-[11px] text-emerald-600">
+                        Paid {r.paid_at ? timeAgo(r.paid_at) : ''} · You're welcome to place a new order anytime.
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* ── Failed orders — expired unpaid orders, kept for reference ──── */}
-        {failedOrders.length > 0 && (
+        {failedOrders.length > 0 && activeTab === 'to_pay' && (
           <section className="mt-8">
             <div className="flex items-center gap-2 mb-3">
               <Clock className="w-4 h-4 text-red-300" />
-              <h2 className="font-bold text-gray-800 text-sm">Failed orders</h2>
+              <h2 className="font-bold text-gray-800 text-sm">Expired orders</h2>
             </div>
             <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
               {failedOrders.map(f => (
@@ -365,6 +563,7 @@ export default function ImporterDashboardPage() {
       )}
 
       {showSettings && <ImportSettingsSheet onClose={() => setShowSettings(false)} />}
+      {showAvatar && <AvatarSheet onClose={() => setShowAvatar(false)} />}
 
       {retryOrder && customer && (
         <RetryPaymentSheet
@@ -373,6 +572,126 @@ export default function ImporterDashboardPage() {
           onClose={() => setRetryOrder(null)}
           onPaid={() => { setRetryOrder(null); load(); }}
         />
+      )}
+
+      {/* Bill info popover — explains what Consolidation vs Ship to Nigeria fees are for */}
+      {infoBillKind && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={() => setInfoBillKind(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-xs rounded-t-3xl sm:rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-gray-900">{infoBillKind === 'consolidation' ? 'Consolidation fee' : 'Ship to Nigeria fee'}</h3>
+              <button onClick={() => setInfoBillKind(null)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {infoBillKind === 'consolidation'
+                ? "This covers getting your goods to our warehouse where all orders are combined into one shipment — this is what keeps your shipping cost so low."
+                : "This is the fee to ship your consolidated goods from our warehouse to Nigeria. Once this is paid, your order moves to \"To Receive.\""}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Refund bank details form */}
+      {refundBankForm && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={() => !isSubmittingBank && setRefundBankForm(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-900">Bank Details for Refund</h3>
+              <button onClick={() => setRefundBankForm(null)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Account Number</label>
+                <input
+                  type="text" value={bankFormData.bank_account_number}
+                  onChange={e => setBankFormData(p => ({ ...p, bank_account_number: e.target.value.replace(/\D/g, '').slice(0, 10) }))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-400 font-mono"
+                  placeholder="0123456789"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Account Name</label>
+                <input
+                  type="text" value={bankFormData.bank_account_name}
+                  onChange={e => setBankFormData(p => ({ ...p, bank_account_name: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-400"
+                  placeholder="Full name on account"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Bank Name</label>
+                <input
+                  type="text" value={bankFormData.bank_name}
+                  onChange={e => setBankFormData(p => ({ ...p, bank_name: e.target.value }))}
+                  className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-400"
+                  placeholder="e.g. GTBank"
+                />
+              </div>
+            </div>
+
+            <p className="text-[11px] text-gray-400 mb-4">
+              Refunds are usually processed within 2–4 hours of submitting your details.
+            </p>
+
+            <button
+              onClick={submitBankDetails}
+              disabled={isSubmittingBank || !bankFormData.bank_account_number || !bankFormData.bank_account_name || !bankFormData.bank_name}
+              className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-sm font-bold py-3 rounded-xl transition-colors"
+            >
+              {isSubmittingBank ? <Loader className="w-4 h-4 animate-spin" /> : null}
+              Submit
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, text }: { icon: any; text: string }) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
+      <Icon className="w-7 h-7 text-gray-200 mx-auto mb-2" />
+      <p className="text-xs text-gray-300">{text}</p>
+    </div>
+  );
+}
+
+function BillColumn({ icon: Icon, label, bill, onInfo, onPay }: {
+  icon: any;
+  label: string;
+  bill?: ConsolidationBill;
+  onInfo: () => void;
+  onPay: (bill: ConsolidationBill) => void;
+}) {
+  return (
+    <div className="p-3 text-center">
+      <div className="flex items-center justify-center gap-1 mb-1.5">
+        <Icon className="w-3.5 h-3.5 text-gray-400" />
+        <span className="text-[10px] font-bold text-gray-700">{label}</span>
+        <button onClick={onInfo} className="p-0.5">
+          <Info className="w-3 h-3 text-gray-300" />
+        </button>
+      </div>
+      {!bill ? (
+        <p className="text-[10px] text-gray-300">Not billed yet</p>
+      ) : (
+        <>
+          <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mb-1.5 ${BILL_STATUS_COLORS[bill.status]}`}>
+            {BILL_STATUS_LABELS[bill.status]}
+          </span>
+          <p className="text-xs font-black text-gray-900 mb-1.5">{fmt(bill.amount_ngn)}</p>
+          {bill.status === 'pending' && (
+            <button onClick={() => onPay(bill)} className="text-[10px] font-bold bg-gray-900 text-white px-2.5 py-1.5 rounded-lg">
+              Pay now
+            </button>
+          )}
+        </>
       )}
     </div>
   );

@@ -13,6 +13,13 @@ import {
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const REFUNDS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/refunds`;
+
+const CANCEL_REASON_TEMPLATES = [
+  { key: 'out_of_stock', label: 'Out of stock', text: 'The product in this order has gone out of stock and can no longer be sourced.' },
+  { key: 'price_change', label: 'Price changed', text: 'There was a sudden change in the supplier price for this product after your order was placed.' },
+  { key: 'software_error', label: 'Software error', text: 'A software error affected the price shown for this product at checkout.' },
+];
 const LISTS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/client-lists`;
 
 interface CustomerRow {
@@ -94,6 +101,9 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
   const [isLoading, setIsLoading] = useState(true);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [cancellingOrder, setCancellingOrder] = useState<OrderRow | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const load = useCallback(() => {
     setIsLoading(true);
@@ -137,6 +147,26 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
       await load();
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  const submitCancel = async () => {
+    if (!cancellingOrder || !cancelReason.trim()) return;
+    setIsCancelling(true);
+    try {
+      const res = await fetch(`${REFUNDS_EDGE_URL}?action=admin-cancel-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_id: cancellingOrder.id, reason: cancelReason.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      setCancellingOrder(null);
+      setCancelReason('');
+      await load();
+    } catch {
+      // leave the modal open so admin can retry
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -286,16 +316,25 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
                         </div>
                       )}
 
-                      {needsConfirmation && (
+                      <div className="mt-2 flex items-center gap-2">
+                        {needsConfirmation && (
+                          <button
+                            onClick={() => confirmOrder(o.id)}
+                            disabled={confirmingId === o.id}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold text-white bg-gray-900 hover:bg-gray-700 disabled:opacity-40 px-2.5 py-1.5 rounded-lg transition-colors"
+                          >
+                            {confirmingId === o.id ? <Loader className="w-3 h-3 animate-spin" /> : null}
+                            Confirm Order
+                          </button>
+                        )}
                         <button
-                          onClick={() => confirmOrder(o.id)}
-                          disabled={confirmingId === o.id}
-                          className="mt-2 w-full flex items-center justify-center gap-1.5 text-[11px] font-bold text-white bg-gray-900 hover:bg-gray-700 disabled:opacity-40 px-2.5 py-1.5 rounded-lg transition-colors"
+                          onClick={() => { setCancellingOrder(o); setCancelReason(''); }}
+                          className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition-colors"
                         >
-                          {confirmingId === o.id ? <Loader className="w-3 h-3 animate-spin" /> : null}
-                          Confirm Order
+                          <X className="w-3 h-3" />
+                          Cancel Order
                         </button>
-                      )}
+                      </div>
                     </div>
                   );
                 })}
@@ -355,6 +394,53 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Cancel order modal — reason templates + free text, sends refund flow */}
+      {cancellingOrder && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center" onClick={() => !isCancelling && setCancellingOrder(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6">
+            <h3 className="font-bold text-gray-900 mb-1">Cancel order {cancellingOrder.code}</h3>
+            <p className="text-xs text-gray-400 mb-4">
+              This removes the order entirely and starts a refund for the customer if it was paid.
+            </p>
+
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {CANCEL_REASON_TEMPLATES.map(t => (
+                <button key={t.key} onClick={() => setCancelReason(t.text)}
+                  className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors">
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              placeholder="Reason the customer will see…"
+              rows={4}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none resize-none mb-4"
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCancellingOrder(null)}
+                disabled={isCancelling}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Back
+              </button>
+              <button
+                onClick={submitCancel}
+                disabled={isCancelling || !cancelReason.trim()}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold text-white bg-red-500 hover:bg-red-600 disabled:opacity-40 transition-colors"
+              >
+                {isCancelling ? <Loader className="w-4 h-4 animate-spin" /> : null}
+                Cancel &amp; Send
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </motion.div>
