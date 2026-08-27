@@ -6,16 +6,34 @@ import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { X, Camera, Loader, Check } from 'lucide-react';
 import { supabase } from '@/services';
+import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
 import { fallbackAvatarColor, initialsFrom } from '@/lib/avatarFallback';
 import { AvatarImage, isPresetAvatar, PRESET_AVATARS } from '@/lib/presetAvatars';
 import { toast } from 'sonner';
 
 export default function AvatarSheet({ onClose }: { onClose: () => void }) {
-  const { customer, updateProfile } = useCustomerAuthStore();
+  const { customer, setCustomer } = useCustomerAuthStore();
   const [isUploading, setIsUploading] = useState(false);
   const [savingPresetUrl, setSavingPresetUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Goes through the china-import edge function (service role, keyed by
+  // customer_id) rather than a direct client-side Supabase update — the
+  // rest of this dashboard never depends on a live RLS-valid auth session
+  // either, and this update was the one place that did, which is what was
+  // causing "Cannot coerce the result to a single JSON object" errors.
+  const saveAvatar = async (url: string) => {
+    if (!customer) throw new Error('Not signed in');
+    const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=update-avatar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customer.id, avatar_url: url }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? 'Could not update your picture. Please try again.');
+    setCustomer(data.customer);
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,8 +57,7 @@ export default function AvatarSheet({ onClose }: { onClose: () => void }) {
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
-      const { success, error } = await updateProfile({ avatar_url: publicUrl });
-      if (!success) throw new Error(error);
+      await saveAvatar(publicUrl);
 
       toast.success('Profile picture updated');
       onClose();
@@ -55,8 +72,7 @@ export default function AvatarSheet({ onClose }: { onClose: () => void }) {
     if (!customer) return;
     setSavingPresetUrl(url);
     try {
-      const { success, error } = await updateProfile({ avatar_url: url });
-      if (!success) throw new Error(error);
+      await saveAvatar(url);
       toast.success('Profile picture updated');
       onClose();
     } catch (err: any) {
