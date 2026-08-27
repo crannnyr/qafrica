@@ -19,7 +19,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, Copy, Check, Clock as Clock3, ArrowRight, Search, Landmark } from 'lucide-react';
-import { supabase } from '@/lib/supabase'; // adjust to your actual client import path
+import { supabase } from '@/services';
 
 // The one real destination for every manual transfer in the importation
 // section. If this ever needs to change, update it here — every screen that
