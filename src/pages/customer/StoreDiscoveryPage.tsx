@@ -12,6 +12,7 @@ import type { StoreDisplay, SortBy } from './StoreDiscovery/constants';
 
 export default function StoreDiscoveryPage() {
   const [stores, setStores]                     = useState<any[]>([]);
+  const [paidOwnerIds, setPaidOwnerIds]         = useState<Set<string>>(new Set());
   const [filteredStores, setFilteredStores]     = useState<StoreDisplay[]>([]);
   const [isLoading, setIsLoading]               = useState(true);
   const [searchQuery, setSearchQuery]           = useState('');
@@ -20,7 +21,7 @@ export default function StoreDiscoveryPage() {
   const [heroCollapsed, setHeroCollapsed]       = useState(false);
 
   useEffect(() => { fetchStores(); }, []);
-  useEffect(() => { filterStores(); }, [stores, searchQuery, selectedCategory, sortBy]);
+  useEffect(() => { filterStores(); }, [stores, paidOwnerIds, searchQuery, selectedCategory, sortBy]);
 
   const fetchStores = async () => {
     try {
@@ -30,10 +31,33 @@ export default function StoreDiscoveryPage() {
         .eq('is_active', true)
         .or('is_blocked.eq.false,is_blocked.is.null')
         .order('created_at', { ascending: false });
-      setStores(!error && data ? data : []);
+      const storeList = !error && data ? data : [];
+      setStores(storeList);
+
+      // Store-section visibility requires an active PAID (non-free) plan —
+      // fetched separately since stores don't carry their own tier field.
+      const ownerIds = [...new Set(storeList.map((s: any) => s.owner_id).filter(Boolean))];
+      if (ownerIds.length > 0) {
+        const { data: subs } = await supabase
+          .from('subscriptions')
+          .select('user_id, tier, is_active, expires_at')
+          .in('user_id', ownerIds)
+          .eq('is_active', true)
+          .neq('tier', 'free');
+
+        const paidSet = new Set<string>(
+          (subs ?? [])
+            .filter((s: any) => !s.expires_at || new Date(s.expires_at) > new Date())
+            .map((s: any) => s.user_id),
+        );
+        setPaidOwnerIds(paidSet);
+      } else {
+        setPaidOwnerIds(new Set());
+      }
     } catch (err) {
       console.error('Failed to fetch stores:', err);
       setStores([]);
+      setPaidOwnerIds(new Set());
     } finally {
       setIsLoading(false);
     }
@@ -48,21 +72,31 @@ export default function StoreDiscoveryPage() {
 
   const filterStores = () => {
     if (stores.length === 0 && isLoading) return;
-    let filtered: StoreDisplay[] = stores.map((s) => ({
-      id:            s.id,
-      name:          s.name,
-      slug:          s.slug,
-      description:   s.description,
-      logo_url:      s.logo_url   || null,
-      banner_url:    s.banner_url || null,
-      primary_color: s.primary_color,
-      niches:        s.niches     || [],
-      product_count: getProductCount(s.products),
-      rating:        4.5,
-      review_count:  100,
-      is_verified:   s.is_verified,
-      created_at:    s.created_at,
-    }));
+
+    // Store-section visibility gate: must be on an active paid plan, have at
+    // least 5 product postings, and have both a logo and store banner set.
+    let filtered: StoreDisplay[] = stores
+      .filter((s) => {
+        const hasPaidPlan  = paidOwnerIds.has(s.owner_id);
+        const hasEnoughProducts = getProductCount(s.products) >= 5;
+        const hasBranding  = !!s.logo_url && !!s.banner_url;
+        return hasPaidPlan && hasEnoughProducts && hasBranding;
+      })
+      .map((s) => ({
+        id:            s.id,
+        name:          s.name,
+        slug:          s.slug,
+        description:   s.description,
+        logo_url:      s.logo_url   || null,
+        banner_url:    s.banner_url || null,
+        primary_color: s.primary_color,
+        niches:        s.niches     || [],
+        product_count: getProductCount(s.products),
+        rating:        4.5,
+        review_count:  100,
+        is_verified:   s.is_verified,
+        created_at:    s.created_at,
+      }));
 
     if (searchQuery) {
       filtered = filtered.filter((s) =>
