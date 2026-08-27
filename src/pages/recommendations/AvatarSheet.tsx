@@ -1,17 +1,20 @@
 // src/pages/recommendations/AvatarSheet.tsx
-// Full profile picture flow: preview current photo (or fallback), upload a
-// new one from device, save straight to the customer's profile.
+// Full profile picture flow: preview current photo, upload a new one from
+// device, OR pick from a set of preset avatar designs — all real, selectable
+// options, not just a single fallback.
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { X, Camera, Loader } from 'lucide-react';
+import { X, Camera, Loader, Check } from 'lucide-react';
 import { supabase } from '@/services';
 import { useCustomerAuthStore } from '@/stores';
 import { fallbackAvatarColor, initialsFrom } from '@/lib/avatarFallback';
+import { AvatarImage, isPresetAvatar, presetAvatarUrl, PRESET_AVATAR_COUNT, PresetShape } from '@/lib/presetAvatars';
 import { toast } from 'sonner';
 
 export default function AvatarSheet({ onClose }: { onClose: () => void }) {
   const { customer, updateProfile } = useCustomerAuthStore();
   const [isUploading, setIsUploading] = useState(false);
+  const [isSavingPreset, setIsSavingPreset] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,8 +51,24 @@ export default function AvatarSheet({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const choosePreset = async (index: number) => {
+    if (!customer) return;
+    setIsSavingPreset(index);
+    try {
+      const { success, error } = await updateProfile({ avatar_url: presetAvatarUrl(index) });
+      if (!success) throw new Error(error);
+      toast.success('Profile picture updated');
+      onClose();
+    } catch (err: any) {
+      toast.error(err?.message || 'Could not update your picture. Please try again.');
+    } finally {
+      setIsSavingPreset(null);
+    }
+  };
+
   const bgColor = fallbackAvatarColor(customer?.id ?? 'x');
   const initials = initialsFrom(customer?.full_name);
+  const currentPresetIndex = isPresetAvatar(customer?.avatar_url);
 
   return (
     <motion.div
@@ -61,7 +80,7 @@ export default function AvatarSheet({ onClose }: { onClose: () => void }) {
         initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }}
         transition={{ type: 'spring', damping: 28 }}
         onClick={e => e.stopPropagation()}
-        className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6"
+        className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6 max-h-[85vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between mb-6">
           <h2 className="font-bold text-gray-900 text-lg">Profile Picture</h2>
@@ -70,14 +89,14 @@ export default function AvatarSheet({ onClose }: { onClose: () => void }) {
           </button>
         </div>
 
-        <div className="flex flex-col items-center gap-4">
+        <div className="flex flex-col items-center gap-4 mb-6">
           <div className="relative">
             <div
               className="w-28 h-28 rounded-full flex items-center justify-center overflow-hidden border-4 border-white shadow-lg"
               style={{ backgroundColor: customer?.avatar_url ? undefined : bgColor }}
             >
               {customer?.avatar_url ? (
-                <img src={customer.avatar_url} alt="" className="w-full h-full object-cover" />
+                <AvatarImage avatarUrl={customer.avatar_url} className="w-full h-full object-cover" />
               ) : (
                 <span className="text-white text-3xl font-bold">{initials}</span>
               )}
@@ -107,12 +126,37 @@ export default function AvatarSheet({ onClose }: { onClose: () => void }) {
             {isUploading ? <Loader className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
             {isUploading ? 'Uploading…' : 'Upload a Photo'}
           </button>
+        </div>
 
-          {!customer?.avatar_url && (
-            <p className="text-xs text-gray-400 text-center">
-              You haven't set a photo yet — this colour badge is just a placeholder until you do.
-            </p>
-          )}
+        {/* Preset picker — real, selectable options */}
+        <div>
+          <p className="text-xs font-semibold text-gray-500 mb-3">Or choose one of these</p>
+          <div className="grid grid-cols-4 gap-3">
+            {Array.from({ length: PRESET_AVATAR_COUNT }).map((_, i) => {
+              const isSelected = currentPresetIndex === i;
+              return (
+                <button
+                  key={i}
+                  onClick={() => choosePreset(i)}
+                  disabled={isSavingPreset !== null}
+                  className="relative aspect-square rounded-full overflow-hidden border-2 transition-all disabled:opacity-50"
+                  style={{ borderColor: isSelected ? '#F97316' : 'transparent' }}
+                >
+                  <PresetShape index={i} />
+                  {isSavingPreset === i && (
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                      <Loader className="w-4 h-4 text-white animate-spin" />
+                    </div>
+                  )}
+                  {isSelected && isSavingPreset === null && (
+                    <div className="absolute top-0.5 right-0.5 bg-orange-500 rounded-full p-0.5">
+                      <Check className="w-2.5 h-2.5 text-white" />
+                    </div>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </motion.div>
     </motion.div>

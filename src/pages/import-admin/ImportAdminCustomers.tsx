@@ -11,6 +11,7 @@ import {
   ExternalLink, ChevronDown,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
+import { AvatarImage } from '@/lib/presetAvatars';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const REFUNDS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/refunds`;
@@ -197,7 +198,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-gray-100 overflow-hidden flex-shrink-0">
               {customer.avatar_url
-                ? <img src={customer.avatar_url} alt="" className="w-full h-full object-cover" />
+                ? <AvatarImage avatarUrl={customer.avatar_url} className="w-full h-full object-cover" />
                 : <div className="w-full h-full flex items-center justify-center font-bold text-gray-400">{customer.full_name?.[0] ?? '?'}</div>}
             </div>
             <div className="flex-1 min-w-0">
@@ -671,7 +672,7 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
               </button>
               <div className="w-9 h-9 rounded-full bg-gray-100 overflow-hidden flex-shrink-0">
                 {c.avatar_url
-                  ? <img src={c.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ? <AvatarImage avatarUrl={c.avatar_url} className="w-full h-full object-cover" />
                   : <div className="w-full h-full flex items-center justify-center font-bold text-gray-400 text-xs">{c.full_name?.[0] ?? '?'}</div>}
               </div>
               <div className="flex-1 min-w-0">

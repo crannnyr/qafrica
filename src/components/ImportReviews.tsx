@@ -8,6 +8,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Star, Check, ChevronDown, ChevronUp, User } from 'lucide-react';
 import { supabase } from '@/services';
+import { AvatarImage } from '@/lib/presetAvatars';
 
 interface ImportReview {
   id: string;
@@ -41,7 +42,7 @@ function ReviewCard({ review }: { review: ImportReview }) {
       <div className="flex items-center gap-2.5 mb-1.5">
         <div className="w-7 h-7 rounded-full overflow-hidden bg-gray-100 flex-shrink-0">
           {review.customer_avatar_url ? (
-            <img src={review.customer_avatar_url} alt="" className="w-full h-full object-cover" />
+            <AvatarImage avatarUrl={review.customer_avatar_url} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-400">
               <User className="w-3.5 h-3.5" />

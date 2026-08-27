@@ -14,6 +14,7 @@ import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { fallbackAvatarColor, initialsFrom } from '@/lib/avatarFallback';
+import { AvatarImage } from '@/lib/presetAvatars';
 import { fmt } from './RecommendationsPage';
 import ManualPaymentFlow from './ManualPaymentFlow';
 import ImportSettingsSheet from './ImportSettingsSheet';
@@ -249,7 +250,7 @@ export default function ImporterDashboardPage() {
               style={{ backgroundColor: customer?.avatar_url ? undefined : avatarBg }}
             >
               {customer?.avatar_url ? (
-                <img src={customer.avatar_url} alt="" className="w-full h-full object-cover" />
+                <AvatarImage avatarUrl={customer.avatar_url} className="w-full h-full object-cover" />
               ) : (
                 <span className="text-white text-lg font-bold">{initials}</span>
               )}
