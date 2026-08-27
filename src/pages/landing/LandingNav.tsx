@@ -178,7 +178,7 @@ export default function LandingNav({
 
             <Link to="/signup">
               <Button className="bg-orange-500 hover:bg-orange-600 text-white">
-                Start Free Trial
+                Start Your Store
               </Button>
             </Link>
           </div>
@@ -276,7 +276,7 @@ export default function LandingNav({
               </Link>
               <Link to="/signup" onClick={onToggleMobileMenu}>
                 <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white mt-2">
-                  Start Free Trial
+                  Start Your Store
                 </Button>
               </Link>
             </div>

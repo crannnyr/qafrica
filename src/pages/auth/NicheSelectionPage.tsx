@@ -73,8 +73,8 @@ export default function NicheSelectionPage() {
     setSelectedNiches((prev) => {
       if (prev.includes(nicheId)) return prev.filter((id) => id !== nicheId);
       if (prev.length >= 1) {
-        toast.error('Free Trial Limit', {
-          description: 'Start with 1 niche. Unlock more by upgrading later.',
+        toast.error('Starter Pack Limit', {
+          description: 'Start with 1 niche on the Starter Pack. Unlock more by upgrading later.',
           icon: <Lock className="w-4 h-4 text-orange-500" />,
         });
         return prev;
@@ -147,7 +147,7 @@ export default function NicheSelectionPage() {
             <h1 className="text-3xl font-bold text-gray-900 mb-3">Select Your Niche</h1>
             <p className="text-gray-600 max-w-2xl mx-auto">
               Choose the category that best describes your business. Start with 1 niche
-              for your trial — unlock more by upgrading later.
+              on the Starter Pack — unlock more by upgrading later.
             </p>
           </div>
 

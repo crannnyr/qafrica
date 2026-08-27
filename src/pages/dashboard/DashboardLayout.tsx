@@ -23,6 +23,12 @@ import {
 const PERMISSION_COLUMNS =
   'can_view_orders, can_update_orders, can_view_products, can_manage_products, can_manage_wallet, can_manage_settings, can_view_analytics';
 
+// Free trial was removed on this date — any store owner (non-staff, non-admin,
+// non-Jumia) who signed up on/after this date must have an active PAID
+// (non-free) subscription to reach the dashboard. Signed up before this date
+// -> grandfathered in, never gated here regardless of their plan.
+const SUBSCRIPTION_REQUIRED_SINCE = new Date('2026-08-18T00:00:00Z');
+
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -35,6 +41,22 @@ export default function DashboardLayout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu]     = useState(false);
   const [comingSoonBrand, setComingSoonBrand]     = useState<MarketplaceBrand | null>(null);
+
+  // Gate: blocks rendering the dashboard until we've confirmed this user
+  // doesn't need to be redirected to pay for the Starter Pack. Computed
+  // synchronously on first render for anyone obviously exempt (staff/admin/
+  // Jumia/signed-up-before-the-cutoff) so there's no loading flash for the
+  // vast majority — only genuinely-unpaid post-cutoff store owners see a
+  // brief check while we confirm against the subscriptions table.
+  const [planCheckPassed, setPlanCheckPassed] = useState(() => {
+    const u = useAuthStore.getState().user;
+    if (!u) return true; // ProtectedRoute already handles unauthenticated
+    if (u.role === 'admin' || u.role === 'staff') return true;
+    if (u.signup_intent === 'jumia') return true;
+    const createdAt = u.created_at ? new Date(u.created_at) : null;
+    if (!createdAt || createdAt < SUBSCRIPTION_REQUIRED_SINCE) return true;
+    return false; // needs the async subscription check below
+  });
 
   // ── Data state ─────────────────────────────────────────────────────────────
   const [stockAlerts, setStockAlerts]                     = useState<StockAlert[]>([]);
@@ -51,6 +73,38 @@ export default function DashboardLayout() {
   const [staffPermissionsLoaded, setStaffPermissionsLoaded] = useState(false);
 
   const isStaff = user?.role === 'staff';
+
+  // ── Starter Pack payment gate ─────────────────────────────────────────────
+  // Only runs for users the lazy initializer above couldn't already clear
+  // synchronously (post-cutoff store owners) — confirms they have an active
+  // paid subscription before letting them see the dashboard at all.
+  useEffect(() => {
+    if (planCheckPassed || !user?.id) return;
+    let cancelled = false;
+
+    (async () => {
+      const { data } = await supabase
+        .from('subscriptions')
+        .select('tier, is_active, expires_at')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .neq('tier', 'free')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      const hasActivePaid = !!data && (!data.expires_at || new Date(data.expires_at) > new Date());
+      if (hasActivePaid) {
+        setPlanCheckPassed(true);
+      } else {
+        navigate('/onboarding/choice', { replace: true });
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [planCheckPassed, user?.id, navigate]);
 
   // ── Init ───────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -262,6 +316,14 @@ export default function DashboardLayout() {
 
   const currentLabel =
     allNavItems.find((item) => isActive(item.path))?.label || 'Dashboard';
+
+  if (!planCheckPassed) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (

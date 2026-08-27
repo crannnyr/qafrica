@@ -78,7 +78,7 @@ export default function FooterSection({ onScrollToSection }: Props) {
                   to="/signup"
                   className="text-gray-400 hover:text-orange-500 transition-colors text-sm"
                 >
-                  Start Free Trial
+                  Start Your Store
                 </Link>
               </li>
               <li>

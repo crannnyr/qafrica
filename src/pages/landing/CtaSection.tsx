@@ -23,7 +23,7 @@ export default function CtaSection() {
             </h2>
             <p className="text-lg text-orange-100 mb-8">
               Join Nigerian entrepreneurs already growing their business on QAFRICA.
-              Start your free trial today — no credit card needed.
+              Get started for ₦5,000 — everyone starts here.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link to="/signup">
@@ -31,7 +31,7 @@ export default function CtaSection() {
                   size="lg"
                   className="bg-white text-orange-600 hover:bg-orange-50 px-8"
                 >
-                  Start Free Trial
+                  Start Your Store
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>

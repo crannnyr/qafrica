@@ -1,6 +1,6 @@
 // src/pages/auth/Pricing/PricingSummary.tsx
 
-import { ArrowRight, Loader2, Clock, MessageCircle } from 'lucide-react';
+import { ArrowRight, Loader2, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { durations } from './constants';
 
@@ -11,9 +11,7 @@ interface Props {
   currentPrice: number;
   billingType: 'monthly' | 'lifetime';
   isLoading: boolean;
-  isSkipLoading: boolean;
   onSubscribe: () => void;
-  onContinueWithFree: () => void;
   onBack: () => void;
 }
 
@@ -24,9 +22,7 @@ export default function PricingSummary({
   currentPrice,
   billingType,
   isLoading,
-  isSkipLoading,
   onSubscribe,
-  onContinueWithFree,
   onBack,
 }: Props) {
   const durationLabel = durations.find((d) => d.value === selectedDuration)?.label;
@@ -77,21 +73,7 @@ export default function PricingSummary({
             )}
           </Button>
 
-          {/* Free trial skip */}
-          <button
-            onClick={onContinueWithFree}
-            disabled={isSkipLoading}
-            className="w-full py-3 text-gray-500 hover:text-gray-700 font-medium transition-colors flex items-center justify-center gap-2 border border-dashed border-gray-200 rounded-xl hover:border-orange-300"
-          >
-            {isSkipLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <>
-                <Clock className="w-4 h-4" />
-                or Try Free for 4 Days Instead
-              </>
-            )}
-          </button>
+          {/* No free option — Starter Pack banner above covers the entry tier */}
 
           <p className="text-center text-sm text-gray-400">
             Secure payment powered by Paystack

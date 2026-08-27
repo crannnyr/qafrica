@@ -65,7 +65,7 @@ export const pricingTiers = [
     period:      '/month',
     description: 'Perfect for new sellers',
     popular:     false,
-    cta:         'Start Free Trial',
+    cta:         'Get Started',
     features: [
       '1 Niche Selection',
       'Unlimited Products',
@@ -81,7 +81,7 @@ export const pricingTiers = [
     period:      '/month',
     description: 'For expanding businesses',
     popular:     true,
-    cta:         'Start Free Trial',
+    cta:         'Get Started',
     features: [
       '3 Niche Selections',
       'Unlimited Products',
@@ -133,7 +133,7 @@ export const faqs = [
   },
   {
     q: 'Is there a free trial?',
-    a: "Yes. You can start a free trial on any plan with no credit card required. You only pay when you're ready to go live.",
+    a: "Every store starts with a ₦5,000 Starter Pack covering your first 3 months — enough time to get trained up, set up your store, and start selling before deciding on a bigger plan.",
   },
 ];
 

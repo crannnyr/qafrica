@@ -77,12 +77,12 @@ export default function HeroSection({
                   size="lg"
                   className="bg-orange-500 hover:bg-orange-600 text-white px-10 py-6 text-lg rounded-xl shadow-lg shadow-orange-500/20 hover:shadow-orange-500/30 transition-shadow"
                 >
-                  Start Your Store — Free
+                  Start Your Store
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>
               <p className="text-sm text-gray-400 pl-1 mt-2 mb-5">
-                ₦5,000/month after trial · Cancel anytime
+                ₦5,000 for 3 months to start · Upgrade anytime
               </p>
 
               <div className="flex flex-col sm:flex-row gap-2.5">

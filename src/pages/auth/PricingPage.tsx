@@ -19,7 +19,7 @@ import { monthlyPlans, lifetimePlans } from './Pricing/constants';
 
 export default function PricingPage() {
   const navigate         = useNavigate();
-  const { user, updateOnboardingStep } = useAuthStore();
+  const { user } = useAuthStore();
   const userId           = user?.id;
 
   const [selectedPlan, setSelectedPlan]         = useState<string>('three_niches');
@@ -144,8 +144,14 @@ export default function PricingPage() {
     }
   };
 
-  // ── Free plan: call complete-onboarding edge function ─────────────────────
-  const handleContinueWithFree = async () => {
+  // ── Starter Pack: flat ₦5,000 for 3 months, charged via Paystack ──────────
+  // This replaces the old free-trial skip. Same activation path as a normal
+  // paid subscription (PaymentCallbackPage), just with a fixed promotional
+  // amount/duration instead of the regular per-plan pricing formula.
+  const STARTER_PACK_AMOUNT_NGN = 5000;
+  const STARTER_PACK_DURATION_MONTHS = 3;
+
+  const handleStartStarterPack = async () => {
     if (!storeId || !selectedNiches.length) {
       toast.error('Missing store or niche data. Please go back and try again.');
       return;
@@ -153,24 +159,40 @@ export default function PricingPage() {
 
     setIsSkipLoading(true);
     try {
-      const res = await supabase.functions.invoke('complete-onboarding', {
-        body: {
-          store_id:        storeId,
-          selected_niches: selectedNiches,
-          plan:            'free',
+      await loadPaystackScript();
+
+      const reference = generateReference('STARTER');
+
+      sessionStorage.setItem('subscription_plan',     'one_niche');
+      sessionStorage.setItem('subscription_duration', STARTER_PACK_DURATION_MONTHS.toString());
+      sessionStorage.setItem('subscription_amount',   STARTER_PACK_AMOUNT_NGN.toString());
+      sessionStorage.setItem('payment_reference',     reference);
+      sessionStorage.setItem('is_lifetime',           'false');
+
+      initializePayment({
+        email:  userEmail,
+        amount: toKobo(STARTER_PACK_AMOUNT_NGN),
+        reference,
+        metadata: {
+          plan:        'one_niche',
+          duration:    STARTER_PACK_DURATION_MONTHS,
+          niches:      selectedNiches,
+          store_id:    storeId,
+          is_lifetime: false,
+          is_starter_pack: true,
+        },
+        onSuccess: (response) => {
+          toast.success('Payment successful!');
+          navigate(`/payment/callback?reference=${response.reference}`);
+        },
+        onCancel: () => {
+          setIsSkipLoading(false);
+          toast.info('Payment cancelled. You can try again.');
         },
       });
-
-      if (res.error) throw res.error;
-
-      // Update Zustand store so ProtectedRoute sees isAuthenticated: true
-      await updateOnboardingStep(4, true);
-
-      toast.success('Free plan activated! Welcome to QAFRICA.');
-      navigate('/dashboard', { replace: true });
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to activate free plan. Please try again.');
+    } catch {
       setIsSkipLoading(false);
+      toast.error('Payment initialization failed. Please try again.');
     }
   };
 
@@ -200,7 +222,7 @@ export default function PricingPage() {
         >
           <BillingToggle billingType={billingType} onToggle={setBillingType} />
 
-          <FreePlanBanner isLoading={isSkipLoading} onContinue={handleContinueWithFree} />
+          <FreePlanBanner isLoading={isSkipLoading} onContinue={handleStartStarterPack} />
 
           {billingType === 'monthly' && (
             <>
@@ -230,9 +252,7 @@ export default function PricingPage() {
             currentPrice={currentPrice}
             billingType={billingType}
             isLoading={isLoading}
-            isSkipLoading={isSkipLoading}
             onSubscribe={handleSubscribe}
-            onContinueWithFree={handleContinueWithFree}
             onBack={() => navigate('/onboarding/choice')}
           />
         </motion.div>

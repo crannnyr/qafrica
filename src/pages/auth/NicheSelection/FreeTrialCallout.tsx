@@ -10,9 +10,9 @@ export default function FreeTrialCallout() {
           <Sparkles className="w-5 h-5 text-orange-600" />
         </div>
         <div>
-          <h4 className="font-semibold text-orange-900 mb-1">Free Trial Available</h4>
+          <h4 className="font-semibold text-orange-900 mb-1">Starter Pack — ₦5,000 / 3 months</h4>
           <p className="text-sm text-orange-700">
-            Start with a 4-day free trial on the One Niche plan.
+            Every store starts with 1 niche on the Starter Pack.
             Upgrade anytime to access more niches and features.
           </p>
         </div>

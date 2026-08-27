@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ShoppingBag, Sparkles, CreditCard,
-  Loader2, CheckCircle, Clock, AlertCircle,
+  ShoppingBag, Sparkles, CheckCircle, Loader2, Users, GraduationCap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/stores';
+import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
 import { toast } from 'sonner';
 
 interface OnboardingData {
@@ -16,15 +16,22 @@ interface OnboardingData {
   store_id:        string;
 }
 
-export default function PostSignupChoice() {
-  const navigate                       = useNavigate();
-  const { user, updateOnboardingStep } = useAuthStore();
-  const userId                         = user?.id;
+// Flat promotional price for every new store — replaces the old 4-day free
+// trial. Paid the same way as any other subscription (Paystack -> the
+// existing PaymentCallbackPage activation flow), just with a fixed
+// amount/duration instead of the regular per-plan pricing formula.
+const STARTER_PACK_AMOUNT_NGN = 5000;
+const STARTER_PACK_DURATION_MONTHS = 3;
 
-  const [onboardingData, setOnboardingData]   = useState<OnboardingData | null>(null);
-  const [hasUsedFreePlan, setHasUsedFreePlan] = useState(false);
-  const [isChecking, setIsChecking]           = useState(true);
-  const [isActivating, setIsActivating]       = useState(false);
+export default function PostSignupChoice() {
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const userId    = user?.id;
+
+  const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
+  const [userEmail, setUserEmail]           = useState('');
+  const [isChecking, setIsChecking]         = useState(true);
+  const [isPaying, setIsPaying]             = useState(false);
 
   useEffect(() => {
     if (!userId) { navigate('/login'); return; }
@@ -32,23 +39,16 @@ export default function PostSignupChoice() {
 
     const load = async () => {
       try {
-        const [profileRes, subRes] = await Promise.all([
-          supabase
-            .from('profiles')
-            .select('onboarding_data')
-            .eq('id', userId)
-            .single(),
-          supabase
-            .from('subscriptions')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('tier', 'free')
-            .maybeSingle(),
-        ]);
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('onboarding_data, email')
+          .eq('id', userId)
+          .single();
 
         if (cancelled) return;
+        if (error) throw error;
 
-        const saved = profileRes.data?.onboarding_data as OnboardingData | null;
+        const saved = data?.onboarding_data as OnboardingData | null;
 
         if (!saved?.store_id || !saved?.selected_niches?.length) {
           toast.error('Please complete the previous steps first.');
@@ -57,7 +57,7 @@ export default function PostSignupChoice() {
         }
 
         setOnboardingData(saved);
-        setHasUsedFreePlan(!!subRes.data);
+        setUserEmail(data?.email ?? user?.email ?? '');
       } catch (err) {
         console.error('Failed to load onboarding state:', err);
         toast.error('Could not load your progress. Please try again.');
@@ -69,16 +69,12 @@ export default function PostSignupChoice() {
 
     load();
     return () => { cancelled = true; };
-  }, [userId, navigate]);
+  }, [userId, navigate, user?.email]);
 
-  const handleStartTrial = async () => {
-    if (!user || !onboardingData) return;
-    if (hasUsedFreePlan) {
-      toast.error('Free plan already used. Please choose a paid plan.');
-      return;
-    }
+  const handleStartStarterPack = async () => {
+    if (!onboardingData) return;
 
-    setIsActivating(true);
+    setIsPaying(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -87,41 +83,44 @@ export default function PostSignupChoice() {
         return;
       }
 
-      const res = await supabase.functions.invoke('complete-onboarding', {
-        body: {
-          store_id:        onboardingData.store_id,
-          selected_niches: onboardingData.selected_niches,
-          plan:            'free',
+      await loadPaystackScript();
+      const reference = generateReference('STARTER');
+
+      // Short-lived — read back by PaymentCallbackPage right after the
+      // Paystack redirect, same pattern as a normal subscription purchase.
+      sessionStorage.setItem('subscription_plan',     'one_niche');
+      sessionStorage.setItem('subscription_duration', STARTER_PACK_DURATION_MONTHS.toString());
+      sessionStorage.setItem('subscription_amount',   STARTER_PACK_AMOUNT_NGN.toString());
+      sessionStorage.setItem('payment_reference',     reference);
+      sessionStorage.setItem('is_lifetime',           'false');
+
+      initializePayment({
+        email:  userEmail,
+        amount: toKobo(STARTER_PACK_AMOUNT_NGN),
+        reference,
+        metadata: {
+          plan:        'one_niche',
+          duration:    STARTER_PACK_DURATION_MONTHS,
+          niches:      onboardingData.selected_niches,
+          store_id:    onboardingData.store_id,
+          is_lifetime: false,
+          is_starter_pack: true,
+        },
+        onSuccess: (response) => {
+          toast.success('Payment successful!');
+          navigate(`/payment/callback?reference=${response.reference}`);
+        },
+        onCancel: () => {
+          setIsPaying(false);
+          toast.info('Payment cancelled. You can try again.');
         },
       });
-
-      if (res.error) throw res.error;
-
-      const { error: stepError } = await updateOnboardingStep(4, true);
-      if (stepError) throw new Error(stepError);
-
-      await supabase
-        .from('profiles')
-        .update({
-          onboarding_data: { ...onboardingData, step: 4, completed: true },
-        })
-        .eq('id', user.id);
-
-      toast.success('Free plan activated! You have 4 days to explore.');
-      setTimeout(() => navigate('/dashboard'), 300);
     } catch (err: any) {
-      console.error('Trial activation error:', err);
-      toast.error(err?.message || 'Failed to activate free plan. Please try again.');
-    } finally {
-      setIsActivating(false);
+      console.error('Starter pack payment error:', err);
+      toast.error(err?.message || 'Payment initialization failed. Please try again.');
+      setIsPaying(false);
     }
   };
-
-  const handleContinueExisting = () => {
-    updateOnboardingStep(4, true).then(() => navigate('/dashboard'));
-  };
-
-  const handlePayNow = () => navigate('/pricing');
 
   if (isChecking) {
     return (
@@ -141,7 +140,7 @@ export default function PostSignupChoice() {
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-orange-300/20 rounded-full blur-3xl" />
       </div>
 
-      <div className="max-w-4xl mx-auto relative z-10">
+      <div className="max-w-lg mx-auto relative z-10">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2">
@@ -157,124 +156,69 @@ export default function PostSignupChoice() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
         >
-          <div className="text-center mb-10">
-            <h1 className="text-3xl font-bold text-gray-900 mb-3">Choose Your Path</h1>
-            <p className="text-gray-600 text-lg">
-              Start selling immediately with your free plan or subscribe now.
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Everyone starts here</h1>
+            <p className="text-gray-600">
+              A simple starter pack gets your store live and gives you three months
+              to learn the platform, build your community, and start selling.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Free Plan card */}
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className={`bg-white rounded-2xl shadow-xl border-2 p-8 relative overflow-hidden ${
-                hasUsedFreePlan ? 'border-gray-200' : 'border-orange-100'
-              }`}
+          <div className="bg-white rounded-2xl shadow-xl border-2 border-orange-100 p-8 relative overflow-hidden">
+            <div className="absolute top-0 right-0 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+              STARTER PACK
+            </div>
+
+            <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mb-6">
+              <Sparkles className="w-7 h-7 text-orange-500" />
+            </div>
+
+            <div className="flex items-baseline gap-2 mb-1">
+              <span className="text-4xl font-bold text-gray-900">₦5,000</span>
+              <span className="text-gray-500">/ 3 months</span>
+            </div>
+            <p className="text-gray-500 mb-6">
+              That's enough time to get trained up, set up your store properly, and see
+              your first real sales — before you ever think about upgrading.
+            </p>
+
+            <ul className="space-y-3 mb-8">
+              {[
+                { icon: GraduationCap, text: 'Full training on setting up and running your store' },
+                { icon: Users,         text: 'Access to the seller community for support & tips' },
+                { icon: CheckCircle,   text: '1 niche, unlimited products, all core features' },
+              ].map(({ icon: Icon, text }) => (
+                <li key={text} className="flex items-start gap-3 text-sm text-gray-700">
+                  <Icon className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                  {text}
+                </li>
+              ))}
+            </ul>
+
+            <Button
+              onClick={handleStartStarterPack}
+              disabled={isPaying}
+              className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-lg font-semibold"
             >
-              {!hasUsedFreePlan && (
-                <div className="absolute top-0 right-0 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-                  RECOMMENDED
-                </div>
-              )}
-
-              <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mb-6">
-                <Sparkles className="w-7 h-7 text-orange-500" />
-              </div>
-
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Start Free Plan</h2>
-              <div className="text-3xl font-bold text-orange-600 mb-4">₦0</div>
-              <p className="text-gray-600 mb-6">
-                Full access to start selling with 1 niche for 4 days. No credit card required.
-              </p>
-
-              <ul className="space-y-3 mb-8">
-                {[
-                  { icon: CheckCircle, color: 'text-green-500',  text: '1 Niche selection'    },
-                  { icon: CheckCircle, color: 'text-green-500',  text: 'Unlimited products'    },
-                  { icon: CheckCircle, color: 'text-green-500',  text: 'All features included' },
-                  { icon: Clock,       color: 'text-orange-500', text: '4-day trial duration'  },
-                ].map(({ icon: Icon, color, text }) => (
-                  <li key={text} className="flex items-center gap-2 text-sm text-gray-700">
-                    <Icon className={`w-5 h-5 ${color} flex-shrink-0`} />
-                    {text}
-                  </li>
-                ))}
-              </ul>
-
-              {hasUsedFreePlan ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
-                    <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                    <p className="text-sm text-amber-700">Free plan already used on this account.</p>
-                  </div>
-                  <Button
-                    onClick={handleContinueExisting}
-                    className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-lg font-semibold"
-                  >
-                    Continue to Dashboard →
-                  </Button>
-                </div>
+              {isPaying ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" /> Processing…
+                </span>
               ) : (
-                <Button
-                  onClick={handleStartTrial}
-                  disabled={isActivating}
-                  className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-lg"
-                >
-                  {isActivating ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 className="w-5 h-5 animate-spin" /> Activating…
-                    </span>
-                  ) : (
-                    'Start Free Plan'
-                  )}
-                </Button>
+                'Get Started — ₦5,000'
               )}
-            </motion.div>
+            </Button>
 
-            {/* Subscribe card */}
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              className="bg-white rounded-2xl shadow-xl border border-gray-200 p-8"
-            >
-              <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mb-6">
-                <CreditCard className="w-7 h-7 text-gray-600" />
-              </div>
-
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Subscribe Now</h2>
-              <div className="text-3xl font-bold text-gray-900 mb-4">From ₦5,000</div>
-              <p className="text-gray-600 mb-6">
-                Choose a plan that fits your business. Upgrade or downgrade anytime.
-              </p>
-
-              <ul className="space-y-3 mb-8">
-                {[
-                  '1, 3, or Unlimited niches',
-                  'Unlimited products',
-                  'Priority support',
-                  'No expiration',
-                ].map((text) => (
-                  <li key={text} className="flex items-center gap-2 text-sm text-gray-700">
-                    <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-                    {text}
-                  </li>
-                ))}
-              </ul>
-
-              <Button
-                onClick={handlePayNow}
-                variant="outline"
-                className="w-full border-2 border-gray-300 hover:border-orange-500 hover:text-orange-600 h-12 text-lg"
-              >
-                View Plans & Pricing
-              </Button>
-            </motion.div>
+            <p className="text-center text-xs text-gray-400 mt-4">
+              Secure payment powered by Paystack
+            </p>
           </div>
 
-          <p className="text-center mt-8 text-sm text-gray-500">
-            {hasUsedFreePlan
-              ? 'The free plan can only be used once per account.'
-              : 'You can upgrade anytime during or after your free plan.'}
+          <p className="text-center mt-6 text-sm text-gray-500">
+            Already outgrowing the basics?{' '}
+            <button onClick={() => navigate('/pricing')} className="text-orange-600 hover:text-orange-700 font-medium">
+              View Growth &amp; Enterprise plans
+            </button>
           </p>
         </motion.div>
       </div>

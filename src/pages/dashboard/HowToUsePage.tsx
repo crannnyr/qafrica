@@ -69,7 +69,7 @@ export default function HowToUsePage() {
             'Sign up for an account',
             'Verify your email with the 5-digit code',
             'Select your store niche(s)',
-            'Choose a pricing plan (or start free trial)',
+            'Choose a pricing plan (starts with a ₦5,000 Starter Pack)',
             'Set up your store (name, logo, theme)',
             'Add your first products',
             'Configure delivery zones',
@@ -105,9 +105,11 @@ export default function HowToUsePage() {
             <li><strong>Enterprise (₦100,000/month):</strong> Unlimited niches</li>
           </ul>
           
-          <h3 className="font-semibold text-gray-900 dark:text-white mt-6">Free Trial</h3>
+          <h3 className="font-semibold text-gray-900 dark:text-white mt-6">Starter Pack</h3>
           <p className="text-gray-600 dark:text-gray-400">
-            Not ready to commit? Start with our 3-day free trial to explore all features before choosing a plan.
+            Every new store begins with the ₦5,000 Starter Pack, covering your first 3 months —
+            plenty of time to get trained up, set up your store properly, and start selling
+            before deciding whether to upgrade to Growth or Enterprise.
           </p>
         </div>
       </AccordionSection>

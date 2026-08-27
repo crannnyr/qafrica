@@ -1,6 +1,6 @@
 // src/pages/auth/Pricing/FreePlanBanner.tsx
 
-import { Clock, Loader2, ArrowRight } from 'lucide-react';
+import { Sparkles, Loader2, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 
@@ -20,17 +20,17 @@ export default function FreePlanBanner({ isLoading, onContinue }: Props) {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Clock className="w-7 h-7 text-white" />
+            <Sparkles className="w-7 h-7 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-xl font-bold">Try Free for 4 Days</h2>
+              <h2 className="text-xl font-bold">Starter Pack — ₦5,000</h2>
               <span className="bg-white/25 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                NO CARD NEEDED
+                3 MONTHS
               </span>
             </div>
             <p className="text-orange-100">
-              Full access to all features with 1 niche. Upgrade anytime.
+              Everyone starts here — 1 niche, full training, and community access. Upgrade anytime.
             </p>
           </div>
         </div>
@@ -44,7 +44,7 @@ export default function FreePlanBanner({ isLoading, onContinue }: Props) {
             <Loader2 className="w-5 h-5 animate-spin" />
           ) : (
             <>
-              Start Free Trial
+              Get Started
               <ArrowRight className="w-5 h-5 ml-2" />
             </>
           )}
