@@ -172,6 +172,106 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 // hourly, since with only 20 slots rotating faster keeps every item visible.
 const shuffleSeed = (windowMs: number) => Math.floor(Date.now() / windowMs);
 
+// ── Mobile sliding search panel ──────────────────────────────────────────
+// Mobile only. Slides in from the left, covering roughly the left half of
+// the screen. Shows a minimal "popular" rail (older, less-seen products)
+// before typing, then live minimal results as the user types.
+function MobileSearchSheet({
+  isOpen, onClose, products, navigate,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  products: ImportProduct[];
+  navigate: ReturnType<typeof useNavigate>;
+}) {
+  const [text, setText] = useState('');
+
+  useEffect(() => { if (!isOpen) setText(''); }, [isOpen]);
+
+  // "Popular" here = the oldest-listed products — items that have been up
+  // the longest and would otherwise rarely surface, shown minimally so
+  // browsing shoppers give them a look.
+  const popular = useMemo(() => {
+    return [...products]
+      .sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime())
+      .slice(0, 16);
+  }, [products]);
+
+  const results = useMemo(() => {
+    const q = text.trim().toLowerCase();
+    if (!q) return null;
+    return products.filter(p =>
+      p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)
+    ).slice(0, 40);
+  }, [text, products]);
+
+  const goToProduct = (p: ImportProduct) => {
+    onClose();
+    navigate(`/recommendations/${p.id}`, { state: { product: p, products } });
+  };
+
+  const list = results ?? popular;
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+          />
+          <motion.div
+            initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
+            transition={{ type: 'tween', duration: 0.25 }}
+            className="fixed top-0 left-0 bottom-0 w-[78%] max-w-xs bg-white z-50 lg:hidden flex flex-col shadow-2xl"
+          >
+            <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-100">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  autoFocus
+                  type="text" value={text} onChange={e => setText(e.target.value)}
+                  placeholder="Search products…"
+                  className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 text-xs focus:border-gray-400 focus:ring-2 focus:ring-gray-100 outline-none"
+                />
+              </div>
+              <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 flex-shrink-0">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-3 py-2">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 py-2">
+                {results ? `Results (${results.length})` : 'Popular searches'}
+              </p>
+              {list.length === 0 ? (
+                <p className="text-xs text-gray-300 px-1 py-6 text-center">No products found.</p>
+              ) : (
+                <div className="space-y-1">
+                  {list.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => goToProduct(p)}
+                      className="w-full flex items-center gap-2.5 px-1 py-1.5 rounded-lg hover:bg-gray-50 text-left"
+                    >
+                      <img src={p.image_url} alt={p.name} className="w-8 h-8 rounded-md object-cover flex-shrink-0 border border-gray-100" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-gray-700 truncate leading-tight">{p.name}</p>
+                        <p className="text-[10px] text-orange-500 font-bold leading-tight">{fmt(p.price_ngn)}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 // ── Product Card ──────────────────────────────────────────────────────────────
 function ProductCard({
   product, cartQty, onAdd, onRemove, onClick, usdRate,
@@ -248,6 +348,7 @@ export default function RecommendationsPage() {
   const storeRemoveOne = useImportCartStore(s => s.removeOne);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [usdRate, setUsdRate] = useState(0);
 
   // Cart is now shared via useImportCartStore, so it stays in sync with the
@@ -404,21 +505,37 @@ export default function RecommendationsPage() {
           </div>
           <div className="mt-3 lg:mt-0 lg:w-72">
             <JumiaPromoBar />
-            <div className="relative">
-            <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search products…"
-              className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-xs lg:text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-100 outline-none"
-            />
-            {searchQuery && (
-              <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+            {/* Desktop: inline search input */}
+            <div className="relative hidden lg:block">
+              <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search products…"
+                className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-100 outline-none"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
+            {/* Mobile: tapping opens the sliding search panel */}
+            <button
+              onClick={() => setShowMobileSearch(true)}
+              className="w-full lg:hidden relative flex items-center pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs text-gray-400 text-left"
+            >
+              <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              Search products…
+            </button>
           </div>
         </div>
+
+        <MobileSearchSheet
+          isOpen={showMobileSearch}
+          onClose={() => setShowMobileSearch(false)}
+          products={products}
+          navigate={navigate}
+        />
 
         {/* Category filters */}
         {!isLoading && !searchQuery && categories.length > 2 && (

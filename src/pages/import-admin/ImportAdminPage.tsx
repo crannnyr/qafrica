@@ -946,6 +946,7 @@ function ProductsManager({ token }: { token: string }) {
   const [showForm, setShowForm]       = useState(false);
   const [editProduct, setEditProduct] = useState<ImportProduct | null>(null);
   const [rates, setRates]             = useState<Rates | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Form state
   const [name, setName]               = useState('');
@@ -1218,6 +1219,16 @@ function ProductsManager({ token }: { token: string }) {
   // How many image slots to show: always show filled + 1 empty (up to 3 max)
   const slotsToShow = Math.min(3, imagePreviews.length + 1);
 
+  const filteredProducts = (() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return products;
+    return products.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      (p.description ?? '').toLowerCase().includes(q) ||
+      (p.category ?? '').toLowerCase().includes(q)
+    );
+  })();
+
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -1225,7 +1236,7 @@ function ProductsManager({ token }: { token: string }) {
           <Package className="w-4 h-4 text-gray-400" />
           <span className="font-semibold text-gray-800 text-sm">Products</span>
           <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
-            {products.length}
+            {searchQuery ? `${filteredProducts.length}/${products.length}` : products.length}
           </span>
         </div>
         <button
@@ -1235,6 +1246,25 @@ function ProductsManager({ token }: { token: string }) {
           <Plus className="w-3 h-3" />
           Add
         </button>
+      </div>
+
+      {/* Search */}
+      <div className="px-5 py-3 border-b border-gray-100">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search products by name, category…"
+            className="w-full pl-9 pr-8 py-2 rounded-lg border border-gray-200 text-xs focus:border-gray-400 focus:ring-2 focus:ring-gray-100 outline-none"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Form */}
@@ -1539,8 +1569,12 @@ function ProductsManager({ token }: { token: string }) {
           <div className="px-5 py-12 text-center">
             <p className="text-sm text-gray-300">No products yet. Add your first one.</p>
           </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="px-5 py-12 text-center">
+            <p className="text-sm text-gray-300">No products match "{searchQuery}".</p>
+          </div>
         ) : (
-          products.map(p => (
+          filteredProducts.map(p => (
             <div key={p.id} className="px-5 py-3.5 flex items-center gap-3">
               {/* Show first image; if image_urls exists show stacked hint */}
               <div className="relative flex-shrink-0">
