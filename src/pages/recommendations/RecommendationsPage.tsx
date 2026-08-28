@@ -7,6 +7,7 @@ import {
   ChevronRight, Search, X, User, LogOut, LayoutDashboard,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
+import { formatSoldCount } from '@/lib/utils';
 import { useCustomerAuthStore } from '@/stores';
 import { useImportCartStore, buildImportCartKey } from '@/stores/importCartStore';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
@@ -307,7 +308,7 @@ function ProductCard({
           </div>
           {moq > 1 && <p className="text-[9px] text-gray-300">Min. {moq} units</p>}
           {!!product.units_sold && product.units_sold > 0 && (
-            <p className="text-[9px] text-gray-400">{product.units_sold.toLocaleString()} sold</p>
+            <p className="text-[9px] text-gray-400">{formatSoldCount(product.units_sold)} sold</p>
           )}
         </div>
 

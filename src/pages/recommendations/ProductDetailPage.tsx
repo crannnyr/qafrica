@@ -12,6 +12,7 @@ import type { ImportProduct, VariantGroup } from './RecommendationsPage';
 import { useImportCartStore } from '@/stores/importCartStore';
 import { useCustomerAuthStore } from '@/stores';
 import CONFIG from '@/lib/config';
+import { formatSoldCount } from '@/lib/utils';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import AskQuestionSheet from './AskQuestionSheet';
 import ImportAuthSheet from './ImportAuthSheet';
@@ -411,7 +412,7 @@ export default function ProductDetailPage() {
               <span className="text-[10px] text-gray-400">per unit</span>
             </div>
             {!!product.units_sold && product.units_sold > 0 && (
-              <p className="text-[11px] text-gray-400 font-medium mt-1">{product.units_sold.toLocaleString()} sold</p>
+              <p className="text-[11px] text-gray-400 font-medium mt-1">{formatSoldCount(product.units_sold)} sold</p>
             )}
           </div>
 
