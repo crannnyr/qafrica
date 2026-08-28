@@ -105,6 +105,7 @@ function genId() {
 // Mirrors the china-import edge function's getTieredMarkupNgn() — used only
 // for the live price preview shown to the admin while typing.
 function getTieredMarkupNgn(baseNgn: number): number {
+  if (baseNgn < 1_000) return 200;
   if (baseNgn < 10_000) return 1_000;
   if (baseNgn < 20_000) return 1_500;
   if (baseNgn < 50_000) return 2_000;
@@ -1333,7 +1334,7 @@ function ProductsManager({ token }: { token: string }) {
                 <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 mb-2">
                   <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />
                   <p className="text-[11px] text-blue-600 leading-relaxed">
-                    Enter the <strong>exact cost price</strong> in whatever currency you have it. A tiered platform markup (₦1,000–₦25,000 depending on price band) is added automatically before saving.
+                    Enter the <strong>exact cost price</strong> in whatever currency you have it. A tiered platform markup (₦200–₦25,000 depending on price band) is added automatically before saving.
                   </p>
                 </div>
 
