@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
   Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
-  ShoppingBag, Ship, Warehouse, ExternalLink,
+  ShoppingBag, Ship, Warehouse, ExternalLink, ChevronDown,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
@@ -117,6 +117,15 @@ export default function ImporterDashboardPage() {
   const [refundBankForm, setRefundBankForm] = useState<Refund | null>(null);
   const [bankFormData, setBankFormData] = useState({ bank_account_number: '', bank_account_name: '', bank_name: '' });
   const [isSubmittingBank, setIsSubmittingBank] = useState(false);
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
+
+  const toggleExpanded = (id: string) => {
+    setExpandedOrderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
 
   // Bounce logged-out visitors back to the recommendations page rather than
   // a dead end — consistent with how checkout handles the logged-out case.
@@ -336,22 +345,28 @@ export default function ImporterDashboardPage() {
             ) : (
               <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
                 {toPay.map(order => (
-                  <button
-                    key={order.id}
-                    onClick={() => setRetryOrder(order)}
-                    className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-gray-50 transition-colors"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="font-bold text-gray-900 font-mono text-xs tracking-wider">{order.code}</span>
-                        {order.payment_status === 'failed' && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Payment failed</span>
-                        )}
+                  <div key={order.id}>
+                    <button
+                      onClick={() => setRetryOrder(order)}
+                      className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-gray-50 transition-colors"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="font-bold text-gray-900 font-mono text-xs tracking-wider">{order.code}</span>
+                          {order.payment_status === 'failed' && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Payment failed</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-gray-400">{order.items?.length ?? 0} item{order.items?.length === 1 ? '' : 's'} · Tap to complete payment</p>
                       </div>
-                      <p className="text-[11px] text-gray-400">{order.items?.length ?? 0} item{order.items?.length === 1 ? '' : 's'} · Tap to complete payment</p>
-                    </div>
-                    <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
-                  </button>
+                      <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                    </button>
+                    <OrderItemsDropdown
+                      order={order}
+                      isExpanded={expandedOrderIds.has(order.id)}
+                      onToggle={() => toggleExpanded(order.id)}
+                    />
+                  </div>
                 ))}
               </div>
             )}
@@ -368,12 +383,19 @@ export default function ImporterDashboardPage() {
             ) : (
               <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
                 {confirmedOrders.map(order => (
-                  <div key={order.id} className="px-5 py-4 flex items-center justify-between gap-3">
-                    <div>
-                      <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
-                      <p className="text-[11px] text-gray-400">Payment received — we're preparing your consolidation bill.</p>
+                  <div key={order.id}>
+                    <div className="px-5 py-4 flex items-center justify-between gap-3">
+                      <div>
+                        <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
+                        <p className="text-[11px] text-gray-400">Payment received — we're preparing your consolidation bill.</p>
+                      </div>
+                      <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
                     </div>
-                    <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                    <OrderItemsDropdown
+                      order={order}
+                      isExpanded={expandedOrderIds.has(order.id)}
+                      onToggle={() => toggleExpanded(order.id)}
+                    />
                   </div>
                 ))}
               </div>
@@ -415,6 +437,13 @@ export default function ImporterDashboardPage() {
                           onPay={b => setPayingBill(b)}
                         />
                       </div>
+
+                      <OrderItemsDropdown
+                        order={order}
+                        isExpanded={expandedOrderIds.has(order.id)}
+                        onToggle={() => toggleExpanded(order.id)}
+                        compact
+                      />
                     </div>
                   );
                 })}
@@ -451,12 +480,19 @@ export default function ImporterDashboardPage() {
             ) : (
               <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
                 {toReceiveOrders.map(order => (
-                  <div key={order.id} className="px-5 py-4 flex items-center justify-between gap-3">
-                    <div>
-                      <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
-                      <p className="text-[11px] text-emerald-600">Fully paid — on its way to you.</p>
+                  <div key={order.id}>
+                    <div className="px-5 py-4 flex items-center justify-between gap-3">
+                      <div>
+                        <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
+                        <p className="text-[11px] text-emerald-600">Fully paid — on its way to you.</p>
+                      </div>
+                      <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
                     </div>
-                    <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                    <OrderItemsDropdown
+                      order={order}
+                      isExpanded={expandedOrderIds.has(order.id)}
+                      onToggle={() => toggleExpanded(order.id)}
+                    />
                   </div>
                 ))}
               </div>
@@ -671,6 +707,63 @@ function EmptyState({ icon: Icon, text }: { icon: any; text: string }) {
     <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
       <Icon className="w-7 h-7 text-gray-200 mx-auto mb-2" />
       <p className="text-xs text-gray-300">{text}</p>
+    </div>
+  );
+}
+
+// Expandable "what's in this order" dropdown — tap the header to reveal the
+// item list, tap any item to open its live product page in a new tab.
+function OrderItemsDropdown({ order, isExpanded, onToggle, compact = false }: {
+  order: DashboardOrder;
+  isExpanded: boolean;
+  onToggle: () => void;
+  compact?: boolean;
+}) {
+  const itemCount = order.items?.length ?? 0;
+  const padX = compact ? 'px-0' : 'px-5';
+  return (
+    <div className={compact ? 'border-t border-gray-100 mt-3 pt-3' : 'border-t border-gray-50'}>
+      <button
+        onClick={onToggle}
+        className={`w-full ${padX} ${compact ? '' : 'py-2.5'} flex items-center justify-between gap-2 text-left`}
+      >
+        <span className="text-[11px] font-semibold text-gray-500">
+          {itemCount} item{itemCount === 1 ? '' : 's'} in this order
+        </span>
+        <ChevronDown className={`w-3.5 h-3.5 text-gray-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+      </button>
+      {isExpanded && (
+        <div className={`${padX} ${compact ? 'pt-2' : 'pb-4'} space-y-2`}>
+          {(order.items ?? []).map((item, i) => (
+            <Link
+              key={`${item.id}-${i}`}
+              to={`/recommendations/${item.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2.5 bg-gray-50 rounded-xl p-2 group hover:bg-gray-100 transition-colors"
+            >
+              {item.image_url && (
+                <img src={item.image_url} alt={item.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-medium text-gray-700 truncate flex items-center gap-1">
+                  {item.name}
+                  <ExternalLink className="w-2.5 h-2.5 text-gray-300 group-hover:text-orange-400 flex-shrink-0" />
+                </p>
+                {item.variant_options && Object.keys(item.variant_options).length > 0 && (
+                  <p className="text-[10px] text-gray-400">
+                    {Object.entries(item.variant_options).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                  </p>
+                )}
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-[10px] text-gray-400">×{item.quantity}</p>
+                <p className="text-[11px] font-semibold text-gray-700">{fmt(item.price_ngn * item.quantity)}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
