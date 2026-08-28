@@ -1,5 +1,5 @@
 // src/pages/recommendations/RecommendationsPage.tsx
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -147,6 +147,31 @@ function fmtCny(n: number) {
   return `¥${n.toFixed(0)}`;
 }
 
+// ── Deterministic shuffle ────────────────────────────────────────────────
+// Same seed -> same order for everyone within that time window (so a page
+// reload mid-scroll doesn't reshuffle under the user), but the order
+// rotates once the window elapses. Mulberry32 PRNG, seeded Fisher-Yates.
+function mulberry32(seed: number) {
+  return function () {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const rand = mulberry32(seed);
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+// Main catalog reshuffles every 6h; top-20 rails (Trending/New Ins) reshuffle
+// hourly, since with only 20 slots rotating faster keeps every item visible.
+const shuffleSeed = (windowMs: number) => Math.floor(Date.now() / windowMs);
+
 // ── Product Card ──────────────────────────────────────────────────────────────
 function ProductCard({
   product, cartQty, onAdd, onRemove, onClick, usdRate,
@@ -244,32 +269,60 @@ export default function RecommendationsPage() {
 
   const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
 
-  // Trending is now admin/DB-driven (is_trending + trending_order), up to 20
-  // items, instead of a client-side pseudo-random daily pick.
+  // Trending is admin/DB-driven (is_trending + trending_order) for *which*
+  // 20 items qualify, but the display order within that top-20 reshuffles
+  // every hour so all of them get even visibility over time.
   const trending = useMemo(() => {
     if (searchQuery || activeCategory !== 'All') return null;
-    return products
+    const top20 = products
       .filter(p => p.is_trending)
       .sort((a, b) => (a.trending_order ?? 0) - (b.trending_order ?? 0))
       .slice(0, 20);
+    return seededShuffle(top20, shuffleSeed(60 * 60 * 1000));
   }, [products, searchQuery, activeCategory]);
 
-  // "New ins" — the 20 most recently added products, shown right after
-  // Trending today so shoppers see what's fresh before the main grid.
+  // "New ins" — the 20 most recently added products, reshuffled hourly for
+  // the same even-visibility reason, shown right after Trending today.
   const newIns = useMemo(() => {
     if (searchQuery || activeCategory !== 'All') return null;
-    return [...products]
+    const top20 = [...products]
       .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
       .slice(0, 20);
+    return seededShuffle(top20, shuffleSeed(60 * 60 * 1000));
   }, [products, searchQuery, activeCategory]);
 
-  const filtered = products.filter(p => {
-    if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      return p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q);
-    }
-    return activeCategory === 'All' ? true : p.category === activeCategory;
-  });
+  const filtered = useMemo(() => {
+    const base = products.filter(p => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        return p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q);
+      }
+      return activeCategory === 'All' ? true : p.category === activeCategory;
+    });
+    // Only shuffle the default "All, no search" browse view — a shuffled
+    // search result or category filter would feel broken/random to a user
+    // looking for something specific.
+    if (searchQuery.trim() || activeCategory !== 'All') return base;
+    return seededShuffle(base, shuffleSeed(6 * 60 * 60 * 1000));
+  }, [products, searchQuery, activeCategory]);
+
+  // Infinite scroll: reveal the shuffled catalog in pages as the user nears
+  // the bottom, instead of rendering (and loading every image for) the
+  // entire list at once.
+  const PAGE_SIZE = 20;
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchQuery, activeCategory, products]);
+
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        setVisibleCount(c => Math.min(c + PAGE_SIZE, filtered.length));
+      }
+    }, { rootMargin: '600px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [filtered.length]);
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
@@ -289,7 +342,8 @@ export default function RecommendationsPage() {
     setShowCheckout(true);
   };
 
-  const displayItems = filtered;
+  const displayItems = filtered.slice(0, visibleCount);
+  const hasMore = visibleCount < filtered.length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -451,17 +505,32 @@ export default function RecommendationsPage() {
             <p className="text-gray-400 text-xs font-medium">Check back soon — new items are added often.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4">
-            {displayItems.map(p => (
-              <ProductCard
-                key={p.id} product={p}
-                cartQty={cart.filter(i => i.id === p.id).reduce((s, i) => s + i.quantity, 0)}
-                onAdd={() => addToCart(p)} onRemove={() => removeFromCart(buildCartKey(p.id))}
-                onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
-                usdRate={usdRate}
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4">
+              {displayItems.map(p => (
+                <ProductCard
+                  key={p.id} product={p}
+                  cartQty={cart.filter(i => i.id === p.id).reduce((s, i) => s + i.quantity, 0)}
+                  onAdd={() => addToCart(p)} onRemove={() => removeFromCart(buildCartKey(p.id))}
+                  onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
+                  usdRate={usdRate}
+                />
+              ))}
+            </div>
+            {hasMore && (
+              <div ref={sentinelRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4 mt-2.5 lg:mt-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
+                    <div className="aspect-square bg-gray-100" />
+                    <div className="p-2.5 space-y-2">
+                      <div className="h-2.5 bg-gray-100 rounded w-3/4" />
+                      <div className="h-2.5 bg-gray-100 rounded w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
 
