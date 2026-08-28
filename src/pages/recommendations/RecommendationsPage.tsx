@@ -15,6 +15,52 @@ import ImportAuthSheet from './ImportAuthSheet';
 import ImportCheckoutSheet from './ImportCheckoutSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const JUMIA_AFFILIATE_URL = 'https://jforce.jumia.com.ng/s/C6tCHzq';
+
+// ── Jumia promo bar ──────────────────────────────────────────────────────
+// Sits above the search bar (same width). The message rotates every 4 hours —
+// the "slot" is derived from the current time so it's consistent across
+// reloads and every visitor in the same 4h window sees the same message.
+const JUMIA_PROMO_MESSAGES = [
+  'Visit our shop on Jumia →',
+  'Check out this new item on Jumia →',
+  'Shop from our Jumia store →',
+  'Buy this now from Jumia →',
+  'Great deals waiting on Jumia →',
+  'New arrivals just dropped on Jumia →',
+];
+
+function JumiaPromoBar() {
+  const getSlotIndex = () => Math.floor(Date.now() / (4 * 60 * 60 * 1000)) % JUMIA_PROMO_MESSAGES.length;
+  const [slot, setSlot] = useState(getSlotIndex());
+
+  useEffect(() => {
+    const id = setInterval(() => setSlot(getSlotIndex()), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <a
+      href={JUMIA_AFFILIATE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="relative block overflow-hidden rounded-xl bg-gradient-to-r from-orange-500 to-orange-400 px-3 py-2.5 mb-2 shadow-sm hover:brightness-105 transition-[filter]"
+    >
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={slot}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.4 }}
+          className="block text-center text-white text-[11px] lg:text-xs font-bold tracking-tight"
+        >
+          {JUMIA_PROMO_MESSAGES[slot]}
+        </motion.span>
+      </AnimatePresence>
+    </a>
+  );
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface VariantGroup {
@@ -208,13 +254,13 @@ export default function RecommendationsPage() {
       .slice(0, 20);
   }, [products, searchQuery, activeCategory]);
 
-  // "New ins" — the ~10 most recently added products, shown after the main
-  // grid so shoppers who browse the whole catalog still see what's fresh.
+  // "New ins" — the 20 most recently added products, shown right after
+  // Trending today so shoppers see what's fresh before the main grid.
   const newIns = useMemo(() => {
     if (searchQuery || activeCategory !== 'All') return null;
     return [...products]
       .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
-      .slice(0, 10);
+      .slice(0, 20);
   }, [products, searchQuery, activeCategory]);
 
   const filtered = products.filter(p => {
@@ -256,7 +302,7 @@ export default function RecommendationsPage() {
             <div className="w-5 h-5 lg:w-6 lg:h-6 bg-orange-500 rounded-md flex items-center justify-center">
               <ShoppingBag className="w-3 h-3 lg:w-3.5 lg:h-3.5 text-white" />
             </div>
-            <span className="font-bold text-gray-900 text-xs lg:text-sm">Catalog</span>
+            <span className="font-bold text-gray-900 text-xs lg:text-sm">Q Africa.shop</span>
           </Link>
 
           <div className="flex items-center gap-2">
@@ -302,7 +348,9 @@ export default function RecommendationsPage() {
               Split importation and clearance fees with hundreds of others — cutting rates by up to 90%. Join our community after your first purchase, we'd love to hear from you!
             </p>
           </div>
-          <div className="relative mt-3 lg:mt-0 lg:w-72">
+          <div className="mt-3 lg:mt-0 lg:w-72">
+            <JumiaPromoBar />
+            <div className="relative">
             <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
@@ -314,6 +362,7 @@ export default function RecommendationsPage() {
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
+            </div>
           </div>
         </div>
 
@@ -343,6 +392,33 @@ export default function RecommendationsPage() {
                 >
                   <div className="aspect-square bg-gray-50">
                     <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                  </div>
+                  <div className="p-1.5 lg:p-2">
+                    <p className="text-[10px] lg:text-xs font-medium text-gray-700 line-clamp-1">{p.name}</p>
+                    <p className="text-[11px] lg:text-sm font-bold text-orange-500">{fmt(p.price_ngn)}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* New Ins — 20 most recently added products, right after Trending */}
+        {newIns && newIns.length > 0 && (
+          <div className="mb-5">
+            <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">New ins</p>
+            <div className="flex gap-2.5 lg:gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x snap-mandatory scroll-smooth">
+              {newIns.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
+                  className="flex-shrink-0 w-28 lg:w-36 bg-white rounded-xl border border-gray-100 overflow-hidden text-left hover:shadow-sm transition-shadow snap-start relative"
+                >
+                  <div className="aspect-square bg-gray-50 relative">
+                    <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                    <span className="absolute top-1.5 left-1.5 bg-gray-900 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
+                      New
+                    </span>
                   </div>
                   <div className="p-1.5 lg:p-2">
                     <p className="text-[10px] lg:text-xs font-medium text-gray-700 line-clamp-1">{p.name}</p>
@@ -385,32 +461,6 @@ export default function RecommendationsPage() {
                 usdRate={usdRate}
               />
             ))}
-          </div>
-        )}
-        {/* New Ins — most recently added products */}
-        {newIns && newIns.length > 0 && (
-          <div className="mt-6">
-            <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">New ins</p>
-            <div className="flex gap-2.5 lg:gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x snap-mandatory scroll-smooth">
-              {newIns.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
-                  className="flex-shrink-0 w-28 lg:w-36 bg-white rounded-xl border border-gray-100 overflow-hidden text-left hover:shadow-sm transition-shadow snap-start relative"
-                >
-                  <div className="aspect-square bg-gray-50 relative">
-                    <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
-                    <span className="absolute top-1.5 left-1.5 bg-gray-900 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
-                      New
-                    </span>
-                  </div>
-                  <div className="p-1.5 lg:p-2">
-                    <p className="text-[10px] lg:text-xs font-medium text-gray-700 line-clamp-1">{p.name}</p>
-                    <p className="text-[11px] lg:text-sm font-bold text-orange-500">{fmt(p.price_ngn)}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
           </div>
         )}
       </div>
