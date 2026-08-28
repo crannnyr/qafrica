@@ -213,7 +213,13 @@ export default function ImporterDashboardPage() {
   };
 
   // ── Derived pipeline buckets ─────────────────────────────────────────────
-  const toPay = orders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'failed');
+  // "To Pay" covers both: orders that still need payment (unpaid/failed —
+  // tapping opens the retry sheet) and orders where the customer already
+  // claimed a manual transfer but admin hasn't confirmed it yet
+  // (awaiting_confirmation — tapping just shows status, not a retry sheet).
+  // Both used to be filtered out of every tab once payment_status left
+  // 'unpaid', which made awaiting_confirmation orders invisible entirely.
+  const toPay = orders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'failed' || o.payment_status === 'awaiting_confirmation');
   const confirmedOrders = orders.filter(o => o.status === 'confirmed');
   const billedOrders = orders.filter(o => o.status === 'billed');
   const toReceiveOrders = orders.filter(o => o.status === 'to_review');
@@ -344,30 +350,39 @@ export default function ImporterDashboardPage() {
               <EmptyState icon={Clock} text="Nothing waiting on payment right now." />
             ) : (
               <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-                {toPay.map(order => (
-                  <div key={order.id}>
-                    <button
-                      onClick={() => setRetryOrder(order)}
-                      className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-gray-50 transition-colors"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="font-bold text-gray-900 font-mono text-xs tracking-wider">{order.code}</span>
-                          {order.payment_status === 'failed' && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Payment failed</span>
-                          )}
+                {toPay.map(order => {
+                  const isAwaitingConfirmation = order.payment_status === 'awaiting_confirmation';
+                  return (
+                    <div key={order.id}>
+                      <button
+                        onClick={() => { if (!isAwaitingConfirmation) setRetryOrder(order); }}
+                        className={`w-full px-5 py-4 flex items-center justify-between gap-3 text-left transition-colors ${isAwaitingConfirmation ? 'cursor-default' : 'hover:bg-gray-50'}`}
+                      >
+                        <div>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="font-bold text-gray-900 font-mono text-xs tracking-wider">{order.code}</span>
+                            {order.payment_status === 'failed' && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Payment failed</span>
+                            )}
+                            {isAwaitingConfirmation && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Confirming your payment</span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-gray-400">
+                            {order.items?.length ?? 0} item{order.items?.length === 1 ? '' : 's'} ·{' '}
+                            {isAwaitingConfirmation ? "We're verifying your transfer — you'll be notified once confirmed" : 'Tap to complete payment'}
+                          </p>
                         </div>
-                        <p className="text-[11px] text-gray-400">{order.items?.length ?? 0} item{order.items?.length === 1 ? '' : 's'} · Tap to complete payment</p>
-                      </div>
-                      <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
-                    </button>
-                    <OrderItemsDropdown
-                      order={order}
-                      isExpanded={expandedOrderIds.has(order.id)}
-                      onToggle={() => toggleExpanded(order.id)}
-                    />
-                  </div>
-                ))}
+                        <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                      </button>
+                      <OrderItemsDropdown
+                        order={order}
+                        isExpanded={expandedOrderIds.has(order.id)}
+                        onToggle={() => toggleExpanded(order.id)}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
