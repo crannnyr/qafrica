@@ -6,7 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Star, Check, ChevronDown, ChevronUp, User } from 'lucide-react';
+import { Star, Check, ChevronDown, ChevronUp, User, X, Info } from 'lucide-react';
 import { supabase } from '@/services';
 import { AvatarImage } from '@/lib/presetAvatars';
 
@@ -21,6 +21,17 @@ interface ImportReview {
   created_at: string;
 }
 
+// Short, rating-derived sentiment summary shown in green under each review.
+// Purely computed from the star rating — nothing stored in the DB for this.
+function sentimentLabel(rating: number): string {
+  const r = Math.round(rating);
+  if (r >= 5) return 'Customer thinks this product is good';
+  if (r === 4) return 'Customer thinks this product is ok';
+  if (r === 3) return "Customer thinks it's ok but could be better";
+  if (r === 2) return 'Customer was not fully satisfied';
+  return 'Customer was not satisfied';
+}
+
 function Stars({ rating, size = 12 }: { rating: number; size?: number }) {
   return (
     <div className="flex gap-0.5">
@@ -33,6 +44,45 @@ function Stars({ rating, size = 12 }: { rating: number; size?: number }) {
         />
       ))}
     </div>
+  );
+}
+
+function ReviewFilterModal({ onClose }: { onClose: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 8, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 8, scale: 0.98 }}
+        transition={{ duration: 0.18 }}
+        onClick={e => e.stopPropagation()}
+        className="w-full max-w-xs bg-white rounded-2xl p-5 shadow-xl"
+      >
+        <div className="flex items-start justify-between mb-2.5">
+          <h3 className="text-sm font-bold text-gray-900">How we choose reviews</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 -mt-1 -mr-1 p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 leading-relaxed">
+          Not all product reviews are shown here — we filter for only the ones relevant to your
+          purchase. We look for reviews that mention the product itself and details that we believe
+          impact your decision when buying.
+        </p>
+        <button
+          onClick={onClose}
+          className="mt-4 w-full py-2 rounded-xl bg-gray-900 text-white text-xs font-semibold"
+        >
+          Got it
+        </button>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -65,8 +115,9 @@ function ReviewCard({ review }: { review: ImportReview }) {
         <p className="text-xs font-semibold text-gray-800 mb-0.5">{review.title}</p>
       )}
       {review.content && (
-        <p className="text-xs text-gray-500 leading-relaxed">{review.content}</p>
+        <p className="text-xs text-gray-500 leading-relaxed mb-1">{review.content}</p>
       )}
+      <p className="text-[10px] font-medium text-emerald-600">{sentimentLabel(review.rating)}</p>
     </div>
   );
 }
@@ -75,6 +126,7 @@ export default function ImportReviews({ productId }: { productId: string }) {
   const [reviews, setReviews] = useState<ImportReview[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
+  const [showFilterInfo, setShowFilterInfo] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,13 +155,25 @@ export default function ImportReviews({ productId }: { productId: string }) {
 
   return (
     <div className="px-4 py-5 lg:px-0 border-t border-gray-100">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-1.5">
         <Stars rating={average} size={13} />
         <span className="text-xs font-bold text-gray-900">{average.toFixed(1)}</span>
         <span className="text-xs text-gray-400">
           · {reviews.length} review{reviews.length !== 1 ? 's' : ''}
         </span>
       </div>
+
+      <button
+        onClick={() => setShowFilterInfo(true)}
+        className="flex items-center gap-1 mb-3 text-[10px] text-gray-400 hover:text-gray-600 animate-pulse"
+      >
+        <Info className="w-2.5 h-2.5" />
+        How are these reviews chosen?
+      </button>
+
+      <AnimatePresence>
+        {showFilterInfo && <ReviewFilterModal onClose={() => setShowFilterInfo(false)} />}
+      </AnimatePresence>
 
       <div>
         {visible.map(r => <ReviewCard key={r.id} review={r} />)}
