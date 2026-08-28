@@ -317,7 +317,7 @@ export default function ImporterDashboardPage() {
               </div>
               <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Help<br />Center</span>
             </a>
-            <a href="https://qafrica.shop" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5">
+            <a href="https://qafrica.store" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5">
               <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
                 <Ship className="w-4 h-4 text-gray-400" />
               </div>
@@ -355,8 +355,8 @@ export default function ImporterDashboardPage() {
                   return (
                     <div key={order.id}>
                       <button
-                        onClick={() => { if (!isAwaitingConfirmation) setRetryOrder(order); }}
-                        className={`w-full px-5 py-4 flex items-center justify-between gap-3 text-left transition-colors ${isAwaitingConfirmation ? 'cursor-default' : 'hover:bg-gray-50'}`}
+                        onClick={() => setRetryOrder(order)}
+                        className="w-full px-5 py-4 flex items-center justify-between gap-3 text-left hover:bg-gray-50 transition-colors"
                       >
                         <div>
                           <div className="flex items-center gap-2 mb-0.5">
@@ -365,12 +365,12 @@ export default function ImporterDashboardPage() {
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Payment failed</span>
                             )}
                             {isAwaitingConfirmation && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Confirming your payment</span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">Awaiting admin approval</span>
                             )}
                           </div>
                           <p className="text-[11px] text-gray-400">
                             {order.items?.length ?? 0} item{order.items?.length === 1 ? '' : 's'} ·{' '}
-                            {isAwaitingConfirmation ? "We're verifying your transfer — you'll be notified once confirmed" : 'Tap to complete payment'}
+                            {isAwaitingConfirmation ? 'Not yet approved — tap to retry' : 'Tap to complete payment'}
                           </p>
                         </div>
                         <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
