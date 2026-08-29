@@ -160,6 +160,9 @@ export default function BroadcastEmailManager({ token }: { token: string }) {
       const data = await res.json();
       if (data.error) { toast.error(data.error); return; }
       toast.success(`Sent to ${data.sent} of ${data.recipients} import customers${data.failed ? ` (${data.failed} failed)` : ''}`);
+      if (data.failed_emails?.length) {
+        console.warn('[broadcast] failed recipients:', data.failed_emails);
+      }
       setShowConfirm(false);
     } catch {
       toast.error('Failed to send broadcast — check your connection and try again.');
