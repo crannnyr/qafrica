@@ -38,6 +38,75 @@ const TEMPLATES: Template[] = [
   Order now →
 </a>`,
   },
+  {
+    id: 'door-delivery',
+    label: 'Door delivery',
+    subject: 'Yes, we deliver to your door — anywhere in Nigeria 📦',
+    body: `<h2 style="color:#111827;margin:0 0 8px;">We deliver to your door, anywhere in Nigeria</h2>
+<p style="color:#6B7280;margin:0 0 16px;line-height:1.6;">
+  Hi {{name}}, yes — we deliver to your door, anywhere in Nigeria.
+</p>
+<p style="color:#6B7280;margin:0 0 16px;line-height:1.6;">
+  Once your products land in Nigeria, you get to choose what works for you: come for a direct pick-up in Lagos, or have your items sent to you in any state you're in through one of our trusted logistics partners.
+</p>
+<p style="color:#6B7280;margin:0 0 20px;line-height:1.6;">
+  Wherever you are in the country, your order will reach you.
+</p>
+<a href="https://qafrica.store/recommendations" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
+  Shop now →
+</a>`,
+  },
+  {
+    id: 'why-trust-us',
+    label: 'Why trust us',
+    subject: 'Why trust us? Here\'s the honest answer 🤝',
+    body: `<h2 style="color:#111827;margin:0 0 8px;">Why trust us?</h2>
+<p style="color:#6B7280;margin:0 0 16px;line-height:1.6;">
+  Hi {{name}}, it's a fair question. There's no shortage of scams around importing from China in Nigeria, and it makes sense to be careful about who you trust with your money.
+</p>
+<p style="color:#6B7280;margin:0 0 16px;line-height:1.6;">
+  Here's the honest answer: we've been quietly building this platform for close to a year now — testing, refining, and serving customers without a single complaint. We didn't rush to launch with big promises. We waited until we were sure we had something solid before asking anyone to trust us with their orders.
+</p>
+<p style="color:#6B7280;margin:0 0 20px;line-height:1.6;">
+  We're not perfect, but we take this seriously, and every order that comes in only makes us better at what we do. If you've been on the fence, we'd genuinely love for you to give us a try.
+</p>
+<a href="https://qafrica.store/recommendations" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
+  Browse products →
+</a>`,
+  },
+  {
+    id: 'referral',
+    label: 'Tell a friend',
+    subject: 'Know someone who\'d love this? Tell them about us 💛',
+    body: `<h2 style="color:#111827;margin:0 0 8px;">Good things are better shared</h2>
+<p style="color:#6B7280;margin:0 0 16px;line-height:1.6;">
+  Hi {{name}}, if you've enjoyed shopping with us, chances are someone you know would too — a friend, a sibling, someone in your group chat always asking "where did you get this?"
+</p>
+<p style="color:#6B7280;margin:0 0 20px;line-height:1.6;">
+  Feel free to share the link below with them. The more people join a batch, the more we can keep shipping costs low for everyone — including you.
+</p>
+<a href="https://qafrica.store/recommendations" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
+  Share qafrica.store →
+</a>`,
+  },
+  {
+    id: 'payment-flexibility',
+    label: 'Payment flexibility',
+    subject: 'Pay however works for you — card or bank transfer 💳',
+    body: `<h2 style="color:#111827;margin:0 0 8px;">Pay your way</h2>
+<p style="color:#6B7280;margin:0 0 16px;line-height:1.6;">
+  Hi {{name}}, not everyone likes paying the same way — so we made sure you don't have to.
+</p>
+<p style="color:#6B7280;margin:0 0 16px;line-height:1.6;">
+  You can check out with your card through Paystack for instant confirmation, or send a direct bank transfer if that's what you're more comfortable with. Either way, your order moves forward the same way.
+</p>
+<p style="color:#6B7280;margin:0 0 20px;line-height:1.6;">
+  Whatever works for you, works for us.
+</p>
+<a href="https://qafrica.store/recommendations" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
+  Start an order →
+</a>`,
+  },
 ];
 
 function stripHtml(html: string): string {
