@@ -31,16 +31,16 @@ export default function ImportVerificationModal() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[60] bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-6"
+          className="fixed inset-0 z-[60] bg-black/70 flex items-center justify-center p-4 sm:p-6"
           onClick={close}
         >
           <motion.div
-            initial={{ y: 40, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 40, opacity: 0 }}
+            initial={{ scale: 0.94, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.94, opacity: 0 }}
             transition={{ type: 'spring', damping: 26 }}
             onClick={e => e.stopPropagation()}
-            className="relative w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl overflow-hidden bg-white max-h-[92vh] flex flex-col"
+            className="relative w-full max-w-sm sm:max-w-md rounded-2xl overflow-hidden bg-white max-h-[85vh] flex flex-col"
           >
             <button
               onClick={close}
@@ -54,24 +54,24 @@ export default function ImportVerificationModal() {
               <img
                 src={CAC_DOC_URL}
                 alt="QAFRICA CAC business registration document"
-                className="w-full object-contain bg-gray-100"
+                className="w-full max-h-[45vh] object-contain bg-gray-100"
                 draggable={false}
               />
 
-              <div className="p-5 space-y-3">
+              <div className="p-4 space-y-2.5">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-green-600 flex-shrink-0" />
-                  <h3 className="font-bold text-gray-900 text-base">
+                  <ShieldCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <h3 className="font-bold text-gray-900 text-sm">
                     We're a fully verified business
                   </h3>
                 </div>
-                <p className="text-sm text-gray-600 leading-relaxed">
+                <p className="text-xs text-gray-600 leading-relaxed">
                   QAFRICA is legally registered and authorized to operate in Nigeria,
                   helping you import items directly from China to your doorstep.
                   This is our official CAC (Corporate Affairs Commission) registration
                   document.
                 </p>
-                <p className="text-xs text-gray-500 leading-relaxed bg-gray-50 border border-gray-100 rounded-xl p-3">
+                <p className="text-[11px] text-gray-500 leading-relaxed bg-gray-50 border border-gray-100 rounded-xl p-2.5">
                   You can download our document and do your own personal verification
                   anywhere.
                 </p>
@@ -81,15 +81,15 @@ export default function ImportVerificationModal() {
                   download="QAFRICA-CAC-Certificate.webp"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full py-3 bg-gray-900 hover:bg-gray-700 text-white font-bold text-sm rounded-xl transition-colors"
+                  className="flex items-center justify-center gap-2 w-full py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-bold text-xs rounded-xl transition-colors"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-3.5 h-3.5" />
                   Download document
                 </a>
 
                 <button
                   onClick={close}
-                  className="w-full py-2 text-center text-xs text-gray-400 font-medium"
+                  className="w-full py-1.5 text-center text-[11px] text-gray-400 font-medium"
                 >
                   Continue browsing
                 </button>
