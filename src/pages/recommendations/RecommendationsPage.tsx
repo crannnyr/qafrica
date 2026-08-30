@@ -12,6 +12,7 @@ import { useCustomerAuthStore } from '@/stores';
 import { useImportCartStore, buildImportCartKey } from '@/stores/importCartStore';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import DailyPromoModal from './DailyPromoModal';
+import ImportVerificationModal from './ImportVerificationModal';
 import ImportAuthSheet from './ImportAuthSheet';
 import ImportCheckoutSheet from './ImportCheckoutSheet';
 
@@ -450,6 +451,7 @@ export default function RecommendationsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {isAuthenticated && <DailyPromoModal customerId={customer?.id} />}
+      {!isAuthenticated && <ImportVerificationModal />}
 
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">

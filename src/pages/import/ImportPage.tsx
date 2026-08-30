@@ -8,6 +8,8 @@ import {
   Shield, Globe, CheckCircle,
 } from 'lucide-react';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
+import { useCustomerAuthStore } from '@/stores';
+import ImportVerificationModal from '@/pages/recommendations/ImportVerificationModal';
 
 // -- Hero ---------------------------------------------------------------------
 function Hero() {
@@ -268,8 +270,10 @@ function WhyTrustUs() {
 // -- Main Page ----------------------------------------------------------------
 export default function ImportPage() {
   useImportPwaManifest();
+  const { isAuthenticated } = useCustomerAuthStore();
   return (
     <div className="min-h-screen bg-white">
+      {!isAuthenticated && <ImportVerificationModal />}
       {/* Single sticky nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
         <div className="max-w-2xl lg:max-w-6xl mx-auto flex items-center justify-between">
