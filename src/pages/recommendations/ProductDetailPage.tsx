@@ -5,12 +5,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, ShoppingBag, Plus, Minus,
   Package, ChevronRight, Tag, ChevronDown, ChevronUp,
-  Plane, Ship, HelpCircle, MessageCircleQuestion, Truck,
+  Plane, Ship, HelpCircle, MessageCircleQuestion, Truck, Heart,
 } from 'lucide-react';
 import { fmt, buildCartKey, computeVariantPriceNgn, variantPriceRange } from './RecommendationsPage';
 import type { ImportProduct, VariantGroup } from './RecommendationsPage';
 import { useImportCartStore } from '@/stores/importCartStore';
 import { useCustomerAuthStore } from '@/stores';
+import { useSavedItems } from './useSavedItems';
 import CONFIG from '@/lib/config';
 import { formatSoldCount } from '@/lib/utils';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
@@ -205,6 +206,7 @@ export default function ProductDetailPage() {
   const { customer, isAuthenticated } = useCustomerAuthStore();
   const [showAuth, setShowAuth] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
+  const { isSaved, toggleSave } = useSavedItems();
 
   const moq = product?.moq ?? 1;
   const [qty, setQty]   = useState(moq);
@@ -354,15 +356,32 @@ export default function ProductDetailPage() {
 
           <span className="font-bold text-gray-900 text-xs">Product</span>
 
-          {cartCount > 0 ? (
+          <div className="flex items-center gap-2">
             <button
-              onClick={goToCart}
-              className="flex items-center gap-1 bg-gray-900 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold"
+              onClick={async () => {
+                const result = await toggleSave(product.id);
+                if (result === 'needs-auth') setShowAuth(true);
+              }}
+              aria-label="Save item"
+              className={`flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
+                isSaved(product.id)
+                  ? 'bg-orange-50 border-orange-200 text-orange-500'
+                  : 'bg-white border-gray-200 text-gray-400 hover:text-gray-600'
+              }`}
             >
-              <ShoppingBag className="w-3 h-3" />
-              {cartCount}
+              <Heart className="w-3.5 h-3.5" fill={isSaved(product.id) ? 'currentColor' : 'none'} />
             </button>
-          ) : <div className="w-14" />}
+
+            {cartCount > 0 ? (
+              <button
+                onClick={goToCart}
+                className="flex items-center gap-1 bg-gray-900 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold"
+              >
+                <ShoppingBag className="w-3 h-3" />
+                {cartCount}
+              </button>
+            ) : <div className="w-8" />}
+          </div>
         </div>
       </header>
 

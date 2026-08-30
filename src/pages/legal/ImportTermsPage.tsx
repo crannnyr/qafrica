@@ -1,13 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ShoppingBag, ArrowLeft, Loader2 } from 'lucide-react';
 import SEO from '@/components/SEO';
 import { supabase } from '@/services';
 
 export default function ImportTermsPage() {
+  const navigate = useNavigate();
   const [content, setContent] = useState('');
   const [updatedAt, setUpdatedAt] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  // Remember where the visitor came from so "Back to Home" can return them
+  // to the recommendations catalog instead of the main marketing site.
+  const [cameFromRecommendations] = useState(
+    () => document.referrer.includes('/recommendations')
+  );
+
+  const goBack = () => navigate(cameFromRecommendations ? '/recommendations' : '/');
 
   useEffect(() => {
     const fetchContent = async () => {
@@ -42,16 +50,16 @@ export default function ImportTermsPage() {
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="container-custom">
           <div className="flex items-center justify-between h-16">
-            <Link to="/" className="flex items-center gap-2">
+            <button onClick={goBack} className="flex items-center gap-2">
               <div className="w-9 h-9 bg-orange-500 rounded-lg flex items-center justify-center">
                 <ShoppingBag className="w-5 h-5 text-white" />
               </div>
               <span className="text-lg font-bold text-gray-900">QAFRICA</span>
-            </Link>
-            <Link to="/" className="flex items-center gap-1 text-sm text-gray-500 hover:text-orange-600 transition-colors">
+            </button>
+            <button onClick={goBack} className="flex items-center gap-1 text-sm text-gray-500 hover:text-orange-600 transition-colors">
               <ArrowLeft className="w-4 h-4" />
-              Back to Home
-            </Link>
+              {cameFromRecommendations ? 'Back to Catalog' : 'Back to Home'}
+            </button>
           </div>
         </div>
       </header>
@@ -85,7 +93,9 @@ export default function ImportTermsPage() {
             <Link to="/privacy-policy" className="hover:text-orange-500 transition-colors">Privacy Policy</Link>
             <Link to="/terms-of-service" className="hover:text-orange-500 transition-colors">Terms of Service</Link>
             <Link to="/import-terms" className="text-orange-500">Import Terms</Link>
-            <Link to="/" className="hover:text-orange-500 transition-colors">Home</Link>
+            <button onClick={goBack} className="hover:text-orange-500 transition-colors">
+              {cameFromRecommendations ? 'Catalog' : 'Home'}
+            </button>
           </div>
         </div>
       </footer>

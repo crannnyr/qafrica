@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
   Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
-  ShoppingBag, Ship, Warehouse, ExternalLink, ChevronDown,
+  ShoppingBag, Ship, Warehouse, ExternalLink, ChevronDown, Heart,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
@@ -18,6 +18,7 @@ import { AvatarImage } from '@/lib/presetAvatars';
 import { fmt } from './RecommendationsPage';
 import ManualPaymentFlow from './ManualPaymentFlow';
 import ImportSettingsSheet from './ImportSettingsSheet';
+import SavedItemsSheet from './SavedItemsSheet';
 import RetryPaymentSheet from './RetryPaymentSheet';
 import AvatarSheet from './AvatarSheet';
 
@@ -110,6 +111,7 @@ export default function ImporterDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<PipelineTab>('to_pay');
   const [showSettings, setShowSettings] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
   const [showAvatar, setShowAvatar] = useState(false);
   const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
   const [payingBill, setPayingBill] = useState<ConsolidationBill | null>(null);
@@ -248,6 +250,9 @@ export default function ImporterDashboardPage() {
           <div className="flex items-center gap-1">
             <button onClick={load} disabled={isLoading} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
               <RefreshCw className={`w-4 h-4 text-gray-400 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={() => setShowSaved(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+              <Heart className="w-4 h-4 text-gray-400" />
             </button>
             <button onClick={() => setShowSettings(true)} className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
               <Settings className="w-4 h-4 text-gray-400" />
@@ -627,6 +632,7 @@ export default function ImporterDashboardPage() {
       )}
 
       {showSettings && <ImportSettingsSheet onClose={() => setShowSettings(false)} />}
+      {showSaved && <SavedItemsSheet onClose={() => setShowSaved(false)} />}
       {showAvatar && <AvatarSheet onClose={() => setShowAvatar(false)} />}
 
       {retryOrder && customer && (

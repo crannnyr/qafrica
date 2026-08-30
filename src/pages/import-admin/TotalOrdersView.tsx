@@ -7,6 +7,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Loader, Package, Users, Archive, CheckCircle2, FileDown } from 'lucide-react';
 import CONFIG from '@/lib/config';
+import { CustomerDetail } from './ImportAdminCustomers';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -20,6 +21,7 @@ interface OrderItem {
 interface OrderRow {
   id: string;
   code: string;
+  user_id: string | null;
   customer_name: string;
   customer_whatsapp: string;
   items: OrderItem[];
@@ -34,7 +36,7 @@ interface Group {
   image_url: string;
   variantLabel: string;
   totalQty: number;
-  buyers: Array<{ name: string; whatsapp: string; qty: number; orderCode: string }>;
+  buyers: Array<{ name: string; whatsapp: string; qty: number; orderCode: string; userId: string | null }>;
   orderIds: string[];
   stagedAt: string | null;
 }
@@ -54,7 +56,7 @@ function buildGroups(orders: OrderRow[], showClosed: boolean): Group[] {
         variantLabel, totalQty: 0, buyers: [], orderIds: [], stagedAt: isStaged ? order.staged_at : null,
       };
       existing.totalQty += item.quantity;
-      existing.buyers.push({ name: order.customer_name, whatsapp: order.customer_whatsapp, qty: item.quantity, orderCode: order.code });
+      existing.buyers.push({ name: order.customer_name, whatsapp: order.customer_whatsapp, qty: item.quantity, orderCode: order.code, userId: order.user_id ?? null });
       existing.orderIds.push(order.id);
       map.set(key, existing);
     }
@@ -62,12 +64,13 @@ function buildGroups(orders: OrderRow[], showClosed: boolean): Group[] {
   return Array.from(map.values()).sort((a, b) => b.totalQty - a.totalQty);
 }
 
-export default function TotalOrdersView({ token }: { token: string }) {
+export default function TotalOrdersView({ token, onOpenProduct }: { token: string; onOpenProduct?: (productId: string) => void }) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showClosed, setShowClosed] = useState(false);
   const [closingKey, setClosingKey] = useState<string | null>(null);
   const [closingAll, setClosingAll] = useState(false);
+  const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -210,11 +213,17 @@ export default function TotalOrdersView({ token }: { token: string }) {
           {groups.map(g => (
             <div key={g.key} className="bg-white rounded-2xl border border-gray-100 p-4">
               <div className="flex items-start gap-3 mb-3">
-                {g.image_url && <img src={g.image_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 line-clamp-1">{g.name}</p>
-                  {g.variantLabel && <p className="text-[11px] text-gray-400">{g.variantLabel}</p>}
-                </div>
+                <button
+                  onClick={() => onOpenProduct?.(g.productId)}
+                  disabled={!onOpenProduct}
+                  className="flex items-start gap-3 flex-1 min-w-0 text-left disabled:cursor-default"
+                >
+                  {g.image_url && <img src={g.image_url} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold line-clamp-1 ${onOpenProduct ? 'text-orange-600 hover:underline' : 'text-gray-800'}`}>{g.name}</p>
+                    {g.variantLabel && <p className="text-[11px] text-gray-400">{g.variantLabel}</p>}
+                  </div>
+                </button>
                 <div className="text-right flex-shrink-0">
                   <p className="font-black text-orange-500 text-lg leading-none">{g.totalQty}</p>
                   <p className="text-[10px] text-gray-400">units</p>
@@ -227,10 +236,15 @@ export default function TotalOrdersView({ token }: { token: string }) {
                 </p>
                 <div className="space-y-1">
                   {g.buyers.map((b, i) => (
-                    <div key={i} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-600">{b.name} <span className="text-gray-300 font-mono">· {b.orderCode}</span></span>
+                    <button
+                      key={i}
+                      onClick={() => b.userId && setProfileCustomerId(b.userId)}
+                      disabled={!b.userId}
+                      className={`w-full flex items-center justify-between text-xs text-left ${b.userId ? 'hover:underline' : 'cursor-default'}`}
+                    >
+                      <span className={b.userId ? 'text-orange-600' : 'text-gray-600'}>{b.name} <span className="text-gray-300 font-mono">· {b.orderCode}</span></span>
                       <span className="font-semibold text-gray-700">×{b.qty}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -253,6 +267,15 @@ export default function TotalOrdersView({ token }: { token: string }) {
             </div>
           ))}
         </div>
+      )}
+
+      {profileCustomerId && (
+        <CustomerDetail
+          token={token}
+          customerId={profileCustomerId}
+          onClose={() => setProfileCustomerId(null)}
+          onFavoriteToggled={() => {}}
+        />
       )}
     </div>
   );

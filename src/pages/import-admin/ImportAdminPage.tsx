@@ -943,7 +943,7 @@ function ImageSlot({
 }
 
 // ── Product Management ────────────────────────────────────────────────────────
-function ProductsManager({ token }: { token: string }) {
+function ProductsManager({ token, openProductId, onOpenedProduct }: { token: string; openProductId?: string | null; onOpenedProduct?: () => void }) {
   const [products, setProducts]       = useState<ImportProduct[]>([]);
   const [isLoading, setIsLoading]     = useState(true);
   const [showForm, setShowForm]       = useState(false);
@@ -1108,6 +1108,18 @@ function ProductsManager({ token }: { token: string }) {
     setSaveError('');
     setShowForm(true);
   };
+
+  // Routed in from the Total Orders tab (click a product in a batch) —
+  // once this manager's own product list has loaded, open that product's
+  // edit form automatically.
+  useEffect(() => {
+    if (!openProductId) return;
+    const match = products.find(p => p.id === openProductId);
+    if (match) {
+      openEdit(match);
+      onOpenedProduct?.();
+    }
+  }, [openProductId, products]);
 
   const handleImageAdd = async (e: React.ChangeEvent<HTMLInputElement>, slot: number) => {
     const file = e.target.files?.[0];
@@ -1639,6 +1651,10 @@ export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
   const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds'>('analytics');
+  // Lets TotalOrdersView route a product click straight into the Products
+  // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
+  // into the customer detail sheet.
+  const [pendingProductId, setPendingProductId] = useState<string | null>(null);
 
   if (!token) return null;
 
@@ -1698,9 +1714,9 @@ export default function ImportAdminPage() {
             <LoadCodePanel token={token} />
           </>
         ) : tab === 'total-orders' ? (
-          <TotalOrdersView token={token} />
+          <TotalOrdersView token={token} onOpenProduct={id => { setPendingProductId(id); setTab('products'); }} />
         ) : tab === 'products' ? (
-          <ProductsManager token={token} />
+          <ProductsManager token={token} openProductId={pendingProductId} onOpenedProduct={() => setPendingProductId(null)} />
         ) : tab === 'trending' ? (
           <TrendingManager token={token} />
         ) : tab === 'questions' ? (

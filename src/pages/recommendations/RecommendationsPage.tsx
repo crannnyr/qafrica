@@ -4,13 +4,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingBag, Plus, Minus, Package,
-  ChevronRight, Search, X, User, LogOut, LayoutDashboard,
+  ChevronRight, Search, X, User, LogOut, LayoutDashboard, Heart,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { formatSoldCount } from '@/lib/utils';
 import { useCustomerAuthStore } from '@/stores';
 import { useImportCartStore, buildImportCartKey } from '@/stores/importCartStore';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
+import { useSavedItems } from './useSavedItems';
 import DailyPromoModal from './DailyPromoModal';
 import ImportVerificationModal from './ImportVerificationModal';
 import ImportAuthSheet from './ImportAuthSheet';
@@ -276,17 +277,28 @@ function MobileSearchSheet({
 
 // ── Product Card ──────────────────────────────────────────────────────────────
 function ProductCard({
-  product, cartQty, onAdd, onRemove, onClick, usdRate,
+  product, cartQty, onAdd, onRemove, onClick, usdRate, isSaved, onToggleSave,
 }: {
   product: ImportProduct; cartQty: number; onAdd: () => void; onRemove: () => void; onClick: () => void; usdRate: number;
+  isSaved: boolean; onToggleSave: () => void;
 }) {
   const moq = product.moq ?? 1;
   const hasVariants = !!product.has_variants && (product.variants?.length ?? 0) > 0;
   const priceRange = variantPriceRange(product);
   return (
-    <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 flex flex-col hover:shadow-md transition-shadow">
+    <div className="relative bg-white rounded-2xl overflow-hidden border border-gray-100 flex flex-col hover:shadow-md transition-shadow">
       <button onClick={onClick} className="aspect-square bg-gray-50 overflow-hidden w-full relative">
         <img src={product.image_url} alt={product.name} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" loading="lazy" />
+      </button>
+
+      <button
+        onClick={e => { e.stopPropagation(); onToggleSave(); }}
+        aria-label="Save item"
+        className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur transition-colors ${
+          isSaved ? 'bg-orange-500 text-white' : 'bg-white/80 text-gray-400 hover:text-gray-600'
+        }`}
+      >
+        <Heart className="w-3.5 h-3.5" fill={isSaved ? 'currentColor' : 'none'} />
       </button>
 
       <div className="p-2.5 lg:p-3.5 flex flex-col flex-1">
@@ -339,6 +351,7 @@ export default function RecommendationsPage() {
   useImportPwaManifest();
   const navigate = useNavigate();
   const { customer, isAuthenticated, logout } = useCustomerAuthStore();
+  const { isSaved, toggleSave } = useSavedItems();
 
   const [products, setProducts] = useState<ImportProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -634,6 +647,11 @@ export default function RecommendationsPage() {
                   onAdd={() => addToCart(p)} onRemove={() => removeFromCart(buildCartKey(p.id))}
                   onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
                   usdRate={usdRate}
+                  isSaved={isSaved(p.id)}
+                  onToggleSave={async () => {
+                    const result = await toggleSave(p.id);
+                    if (result === 'needs-auth') setShowAuth(true);
+                  }}
                 />
               ))}
             </div>
