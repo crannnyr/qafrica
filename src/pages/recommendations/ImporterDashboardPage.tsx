@@ -9,6 +9,7 @@ import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
   Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
   ShoppingBag, Ship, Warehouse, ExternalLink, ChevronDown, Heart,
+  FileText, ShieldCheck,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
@@ -19,6 +20,7 @@ import { fmt } from './RecommendationsPage';
 import ManualPaymentFlow from './ManualPaymentFlow';
 import ImportSettingsSheet from './ImportSettingsSheet';
 import SavedItemsSheet from './SavedItemsSheet';
+import WhyTrustUsSheet from './WhyTrustUsSheet';
 import RetryPaymentSheet from './RetryPaymentSheet';
 import AvatarSheet from './AvatarSheet';
 
@@ -112,6 +114,7 @@ export default function ImporterDashboardPage() {
   const [activeTab, setActiveTab] = useState<PipelineTab>('to_pay');
   const [showSettings, setShowSettings] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
+  const [showWhyTrustUs, setShowWhyTrustUs] = useState(false);
   const [showAvatar, setShowAvatar] = useState(false);
   const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
   const [payingBill, setPayingBill] = useState<ConsolidationBill | null>(null);
@@ -334,14 +337,18 @@ export default function ImporterDashboardPage() {
               </div>
               <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Jumia</span>
             </a>
-            {['Pay Later', 'PLUS'].map(label => (
-              <div key={label} className="flex flex-col items-center gap-1.5 opacity-40">
-                <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
-                  <Clock className="w-4 h-4 text-gray-300" />
-                </div>
-                <span className="text-[10px] font-medium text-gray-400 text-center leading-tight">{label}<br />Coming soon</span>
+            <Link to="/import-terms" className="flex flex-col items-center gap-1.5">
+              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
+                <FileText className="w-4 h-4 text-gray-400" />
               </div>
-            ))}
+              <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Policies</span>
+            </Link>
+            <button onClick={() => setShowWhyTrustUs(true)} className="flex flex-col items-center gap-1.5">
+              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
+                <ShieldCheck className="w-4 h-4 text-gray-400" />
+              </div>
+              <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Why Trust<br />Us</span>
+            </button>
           </div>
         </div>
 
@@ -633,6 +640,7 @@ export default function ImporterDashboardPage() {
 
       {showSettings && <ImportSettingsSheet onClose={() => setShowSettings(false)} />}
       {showSaved && <SavedItemsSheet onClose={() => setShowSaved(false)} />}
+      {showWhyTrustUs && <WhyTrustUsSheet onClose={() => setShowWhyTrustUs(false)} />}
       {showAvatar && <AvatarSheet onClose={() => setShowAvatar(false)} />}
 
       {retryOrder && customer && (
