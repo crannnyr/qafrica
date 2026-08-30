@@ -1,5 +1,5 @@
 // src/pages/recommendations/ImportVerificationModal.tsx
-// Shown once per browser session to logged-out visitors on the
+// Shown once ever (per browser/device) to logged-out visitors on the
 // importation/recommendations section. Separate from DailyPromoModal
 // (which shows product photos, and only to authenticated users).
 import { useEffect, useState } from 'react';
@@ -7,13 +7,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Download, ShieldCheck } from 'lucide-react';
 
 const CAC_DOC_URL = 'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.559419878718419.webp';
-const SESSION_KEY = 'qafrica_seen_verification_modal';
+const STORAGE_KEY = 'qafrica_seen_verification_modal';
 
 export default function ImportVerificationModal() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (sessionStorage.getItem(SESSION_KEY)) return;
+    if (localStorage.getItem(STORAGE_KEY)) return;
     // Small delay so it doesn't compete with initial page paint.
     const timer = setTimeout(() => setVisible(true), 600);
     return () => clearTimeout(timer);
@@ -21,7 +21,7 @@ export default function ImportVerificationModal() {
 
   const close = () => {
     setVisible(false);
-    sessionStorage.setItem(SESSION_KEY, '1');
+    localStorage.setItem(STORAGE_KEY, '1');
   };
 
   return (
