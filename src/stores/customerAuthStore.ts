@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from '@/services';
+import CONFIG from '@/lib/config';
 import type { Customer, CustomerAddress } from '@/types';
 
 interface CustomerAuthState {
@@ -140,6 +141,14 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
               import('@/services/email').then(({ sendImportWelcomeEmail }) => {
                 sendImportWelcomeEmail(email, fullName || 'there').catch(() => {});
               });
+              // Fire-and-forget: add to the "QAFRICA Import Customers" Resend
+              // segment so weekly digest / urgency broadcasts reach them
+              // automatically, no manual list management needed.
+              fetch(`${CONFIG.SUPABASE_URL}/functions/v1/import-broadcast-automation?action=sync-contact`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, full_name: fullName }),
+              }).catch(() => {});
             }
             return { success: true };
           }
