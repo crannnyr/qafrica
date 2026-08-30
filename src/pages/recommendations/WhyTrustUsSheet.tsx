@@ -15,8 +15,8 @@ const FAQS = [
     a: 'Yes. QAFRICA is registered with the Corporate Affairs Commission (CAC) and legally authorized to operate in Nigeria. You can download our CAC document above and verify it independently at any time.',
   },
   {
-    q: 'How can shipping cost just ₦2–5 per item?',
-    a: 'We combine many customers\' orders into one consolidated shipment. The total freight cost for that batch — which could be $20–$100+ — gets divided across everyone in it, sometimes hundreds or thousands of people. That\'s what brings an individual\'s share down to just a few dollars, instead of paying full freight alone.',
+    q: 'How is shipping cost brought down so much?',
+    a: 'We combine many customers\' orders into one consolidated shipment. The total freight cost for that batch — which could be $20–$100+ — gets divided across everyone in it, sometimes hundreds or thousands of people. That brings your shipping fee down to roughly ₦800–₦5,000 depending on volume, instead of paying full freight alone.',
   },
   {
     q: 'How long does delivery take?',
@@ -119,8 +119,8 @@ export default function WhyTrustUsSheet({ onClose }: { onClose: () => void }) {
               <div className="flex items-start gap-2.5 bg-gray-50 rounded-xl p-3">
                 <TrendingDown className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-gray-600 leading-relaxed">
-                  That brings your share down to as little as ₦2–₦5 per item, instead of
-                  paying full freight alone.
+                  That brings your shipping fee down to roughly ₦800–₦5,000 depending on
+                  volume, instead of paying full freight alone.
                 </p>
               </div>
             </div>
