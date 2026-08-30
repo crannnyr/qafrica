@@ -26,7 +26,7 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const usernameCheckTimer = useRef<ReturnType<typeof setTimeout>>();
+  const usernameCheckTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (mode !== 'signup') return;
