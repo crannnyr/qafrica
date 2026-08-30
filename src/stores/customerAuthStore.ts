@@ -13,7 +13,16 @@ interface CustomerAuthState {
   // Actions
   setCustomer: (customer: Customer | null) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signup: (email: string, password: string, fullName: string, phone?: string, signupSource?: 'dropship' | 'importation') => Promise<{ success: boolean; error?: string }>;
+  signup: (
+    email: string,
+    password: string,
+    fullName: string,
+    phone?: string,
+    signupSource?: 'dropship' | 'importation',
+    username?: string,
+    termsAccepted?: boolean,
+    termsVersion?: string
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   fetchProfile: () => Promise<void>;
   updateProfile: (updates: Partial<Customer>) => Promise<{ success: boolean; error?: string }>;
@@ -99,7 +108,7 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
         }
       },
 
-      signup: async (email, password, fullName, phone, signupSource = 'dropship') => {
+      signup: async (email, password, fullName, phone, signupSource = 'dropship', username, termsAccepted, termsVersion) => {
         set({ isLoading: true, error: null });
         try {
           const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -111,6 +120,9 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
                 phone: phone || '',
                 user_type: 'customer',
                 signup_source: signupSource,
+                username: username || null,
+                terms_accepted: termsAccepted ? 'true' : 'false',
+                terms_version: termsVersion || null,
               },
             },
           });

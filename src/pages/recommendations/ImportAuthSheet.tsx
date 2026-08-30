@@ -2,33 +2,74 @@
 // Compact login/signup sheet shown inline on the recommendations page when a
 // logged-out user tries to check out. Keeps them on /recommendations instead
 // of bouncing to a separate full-page route.
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { X, Loader, Eye, EyeOff } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { X, Loader, Eye, EyeOff, Check, AlertCircle } from 'lucide-react';
 import { useCustomerAuthStore } from '@/stores';
+import { supabase } from '@/services';
 import { toast } from 'sonner';
 import ImportForgotPasswordSheet from './ImportForgotPasswordSheet';
+
+const IMPORT_TERMS_VERSION = '2026-08-30';
 
 export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const { login, signup } = useCustomerAuthStore();
   const [mode, setMode] = useState<'signup' | 'login'>('signup');
   const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const usernameCheckTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    if (mode !== 'signup') return;
+    clearTimeout(usernameCheckTimer.current);
+    const trimmed = username.trim();
+    if (!trimmed) { setUsernameStatus('idle'); return; }
+    if (!/^[a-zA-Z0-9_.]{3,20}$/.test(trimmed)) { setUsernameStatus('invalid'); return; }
+    setUsernameStatus('checking');
+    usernameCheckTimer.current = setTimeout(async () => {
+      const { data } = await supabase
+        .from('customers')
+        .select('id')
+        .ilike('username', trimmed)
+        .maybeSingle();
+      setUsernameStatus(data ? 'taken' : 'available');
+    }, 450);
+    return () => clearTimeout(usernameCheckTimer.current);
+  }, [username, mode]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password || (mode === 'signup' && !fullName)) {
+    if (!email || !password || (mode === 'signup' && (!fullName || !username))) {
       toast.error('Please fill in all required fields');
+      return;
+    }
+    if (mode === 'signup' && usernameStatus === 'taken') {
+      toast.error('That username is already taken');
+      return;
+    }
+    if (mode === 'signup' && usernameStatus === 'invalid') {
+      toast.error('Username must be 3–20 characters (letters, numbers, . or _ only)');
+      return;
+    }
+    if (mode === 'signup' && !agreedToTerms) {
+      toast.error('Please agree to the Import Terms & Conditions to continue');
       return;
     }
     setIsLoading(true);
     if (mode === 'signup') {
-      const result = await signup(email, password, fullName, phone, 'importation');
+      const result = await signup(
+        email, password, fullName, phone, 'importation',
+        username.trim(), agreedToTerms, IMPORT_TERMS_VERSION
+      );
       if (!result.success) {
         setIsLoading(false);
         toast.error(result.error || 'Sign up failed');
@@ -82,6 +123,26 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none"
             />
           )}
+          {mode === 'signup' && (
+            <div className="relative">
+              <input
+                type="text" placeholder="Username" value={username}
+                onChange={e => setUsername(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {usernameStatus === 'checking' && <Loader className="w-4 h-4 animate-spin text-gray-300" />}
+                {usernameStatus === 'available' && <Check className="w-4 h-4 text-green-500" />}
+                {(usernameStatus === 'taken' || usernameStatus === 'invalid') && <AlertCircle className="w-4 h-4 text-red-400" />}
+              </div>
+              {usernameStatus === 'taken' && (
+                <p className="text-[11px] text-red-500 mt-1 ml-1">That username is already taken</p>
+              )}
+              {usernameStatus === 'invalid' && (
+                <p className="text-[11px] text-red-500 mt-1 ml-1">3–20 characters: letters, numbers, . or _</p>
+              )}
+            </div>
+          )}
           <input
             type="email" placeholder="Email address" value={email}
             onChange={e => setEmail(e.target.value)}
@@ -115,8 +176,33 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
             </button>
           )}
 
+          {mode === 'signup' && (
+            <label className="flex items-start gap-2.5 pt-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={agreedToTerms}
+                onChange={e => setAgreedToTerms(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400 flex-shrink-0"
+              />
+              <span className="text-[11px] text-gray-500 leading-snug">
+                I agree to the{' '}
+                <Link to="/import-terms" target="_blank" className="text-orange-500 font-semibold hover:underline">
+                  Import Terms &amp; Conditions
+                </Link>
+                {' '}(shipping timelines: air 20–30 days, sea 60–90 days) and{' '}
+                <Link to="/terms-of-service" target="_blank" className="text-orange-500 font-semibold hover:underline">
+                  Terms of Service
+                </Link>
+              </span>
+            </label>
+          )}
+
           <button
-            type="submit" disabled={isLoading}
+            type="submit"
+            disabled={
+              isLoading ||
+              (mode === 'signup' && (!agreedToTerms || usernameStatus === 'taken' || usernameStatus === 'invalid'))
+            }
             className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
           >
             {isLoading && <Loader className="w-4 h-4 animate-spin" />}

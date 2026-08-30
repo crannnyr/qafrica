@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Shield, Save, Loader2, AlertCircle, CheckCircle, Mail } from 'lucide-react';
+import { FileText, Shield, Ship, Save, Loader2, AlertCircle, CheckCircle, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services';
 import { toast } from 'sonner';
 
-type DocType = 'terms' | 'privacy';
+type DocType = 'terms' | 'privacy' | 'import_terms';
 
 const DOCS: { type: DocType; label: string; icon: React.ElementType; description: string }[] = [
   {
@@ -20,12 +20,18 @@ const DOCS: { type: DocType; label: string; icon: React.ElementType; description
     icon: Shield,
     description: 'Data collection, usage, sharing, retention, and user rights',
   },
+  {
+    type: 'import_terms',
+    label: 'Import Terms',
+    icon: Ship,
+    description: 'Shipping timelines, consolidation model, importer liability — shown at import signup',
+  },
 ];
 
 export default function AdminLegal() {
   const [activeDoc, setActiveDoc] = useState<DocType>('terms');
-  const [contents, setContents] = useState<Record<DocType, string>>({ terms: '', privacy: '' });
-  const [updatedAts, setUpdatedAts] = useState<Record<DocType, string>>({ terms: '', privacy: '' });
+  const [contents, setContents] = useState<Record<DocType, string>>({ terms: '', privacy: '', import_terms: '' });
+  const [updatedAts, setUpdatedAts] = useState<Record<DocType, string>>({ terms: '', privacy: '', import_terms: '' });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [sendEmail, setSendEmail] = useState(true);
@@ -48,8 +54,8 @@ export default function AdminLegal() {
         map[d.type] = d.content;
         dates[d.type] = d.updated_at;
       });
-      setContents({ terms: map.terms || '', privacy: map.privacy || '' });
-      setUpdatedAts({ terms: dates.terms || '', privacy: dates.privacy || '' });
+      setContents({ terms: map.terms || '', privacy: map.privacy || '', import_terms: map.import_terms || '' });
+      setUpdatedAts({ terms: dates.terms || '', privacy: dates.privacy || '', import_terms: dates.import_terms || '' });
     }
     setIsLoading(false);
   };
@@ -81,20 +87,32 @@ export default function AdminLegal() {
       return;
     }
 
-    // Send notification emails to all store owners if toggled on
+    // Send notification emails if toggled on. Import Terms notify importation
+    // customers directly since they're the ones bound by that document;
+    // Terms/Privacy notify store owners as before.
     if (sendEmail) {
       try {
-        // Fetch all active store owner emails
-        const { data: profiles } = await supabase
-          .from('profiles')
-          .select('email, full_name')
-          .eq('role', 'store_owner');
+        const { data: profiles } = activeDoc === 'import_terms'
+          ? await supabase
+              .from('customers')
+              .select('email, full_name')
+              .eq('signup_source', 'importation')
+          : await supabase
+              .from('profiles')
+              .select('email, full_name')
+              .eq('role', 'store_owner');
 
         if (profiles && profiles.length > 0) {
-          const docLabel = activeDoc === 'terms' ? 'Terms of Service' : 'Privacy Policy';
+          const docLabel = activeDoc === 'terms'
+            ? 'Terms of Service'
+            : activeDoc === 'privacy'
+            ? 'Privacy Policy'
+            : 'Import Terms & Conditions';
           const docUrl = activeDoc === 'terms'
             ? 'https://qafrica.store/terms-of-service'
-            : 'https://qafrica.store/privacy-policy';
+            : activeDoc === 'privacy'
+            ? 'https://qafrica.store/privacy-policy'
+            : 'https://qafrica.store/import-terms';
 
           // Send emails in batches via send-email edge function
           const emailPromises = profiles.map((profile: any) =>
@@ -151,7 +169,8 @@ export default function AdminLegal() {
           );
 
           await Promise.allSettled(emailPromises);
-          toast.success(`Document saved and ${profiles.length} store owners notified by email`);
+          const audience = activeDoc === 'import_terms' ? 'import customers' : 'store owners';
+          toast.success(`Document saved and ${profiles.length} ${audience} notified by email`);
         } else {
           toast.success('Document saved successfully');
         }
@@ -177,12 +196,12 @@ export default function AdminLegal() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Legal Documents</h1>
         <p className="text-gray-500 mt-1">
-          Edit Terms of Service and Privacy Policy. Store owners are notified by email on save.
+          Edit Terms of Service, Privacy Policy, and Import Terms. Affected users are notified by email on save.
         </p>
       </div>
 
       {/* Doc Selector */}
-      <div className="grid sm:grid-cols-2 gap-4">
+      <div className="grid sm:grid-cols-3 gap-4">
         {DOCS.map(doc => {
           const Icon = doc.icon;
           const isActive = activeDoc === doc.type;
