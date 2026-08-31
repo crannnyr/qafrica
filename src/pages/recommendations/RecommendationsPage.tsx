@@ -175,42 +175,56 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
 // hourly, since with only 20 slots rotating faster keeps every item visible.
 const shuffleSeed = (windowMs: number) => Math.floor(Date.now() / windowMs);
 
-// ── Mobile sliding search panel ──────────────────────────────────────────
-// Mobile only. Slides in from the left, covering roughly the left half of
-// the screen. Shows a minimal "popular" rail (older, less-seen products)
-// before typing, then live minimal results as the user types.
-function MobileSearchSheet({
-  isOpen, onClose, products, navigate,
+// ── Sliding search panel ──────────────────────────────────────────────────
+// Slides in from the left at every breakpoint (mobile and desktop alike —
+// previously desktop had a separate always-visible inline input instead,
+// which lacked a results dropdown and had an invisible-text styling bug).
+// Shows a minimal "popular" rail (older, less-seen products) before typing,
+// then debounced live results from the server as the user types.
+const BROWSE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse`;
+
+function SearchSheet({
+  isOpen, onClose, navigate,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  products: ImportProduct[];
   navigate: ReturnType<typeof useNavigate>;
 }) {
   const [text, setText] = useState('');
+  const [popular, setPopular] = useState<ImportProduct[]>([]);
+  const [results, setResults] = useState<ImportProduct[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => { if (!isOpen) setText(''); }, [isOpen]);
 
-  // "Popular" here = the oldest-listed products — items that have been up
-  // the longest and would otherwise rarely surface, shown minimally so
-  // browsing shoppers give them a look.
-  const popular = useMemo(() => {
-    return [...products]
-      .sort((a, b) => new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime())
-      .slice(0, 16);
-  }, [products]);
+  // Load the "popular" (oldest-listed, otherwise rarely surfaced) rail once
+  // per time the panel opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch(`${BROWSE_URL}?action=browse-products&sort=oldest&limit=16`)
+      .then(r => r.json())
+      .then(d => setPopular(d.products ?? []))
+      .catch(() => setPopular([]));
+  }, [isOpen]);
 
-  const results = useMemo(() => {
-    const q = text.trim().toLowerCase();
-    if (!q) return null;
-    return products.filter(p =>
-      p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q)
-    ).slice(0, 40);
-  }, [text, products]);
+  // Debounced server search as the user types.
+  useEffect(() => {
+    const q = text.trim();
+    if (!q) { setResults(null); setIsSearching(false); return; }
+    setIsSearching(true);
+    const timer = setTimeout(() => {
+      fetch(`${BROWSE_URL}?action=browse-products&search=${encodeURIComponent(q)}&limit=40`)
+        .then(r => r.json())
+        .then(d => setResults(d.products ?? []))
+        .catch(() => setResults([]))
+        .finally(() => setIsSearching(false));
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [text]);
 
   const goToProduct = (p: ImportProduct) => {
     onClose();
-    navigate(`/recommendations/${p.id}`, { state: { product: p, products } });
+    navigate(`/recommendations/${p.id}`, { state: { product: p } });
   };
 
   const list = results ?? popular;
@@ -222,12 +236,12 @@ function MobileSearchSheet({
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+            className="fixed inset-0 bg-black/40 z-40"
           />
           <motion.div
             initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
             transition={{ type: 'tween', duration: 0.25 }}
-            className="fixed top-0 left-0 bottom-0 w-[78%] max-w-xs bg-white z-50 lg:hidden flex flex-col shadow-2xl"
+            className="fixed top-0 left-0 bottom-0 w-[78%] max-w-xs bg-white z-50 flex flex-col shadow-2xl"
           >
             <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-100">
               <div className="relative flex-1">
@@ -246,7 +260,7 @@ function MobileSearchSheet({
 
             <div className="flex-1 overflow-y-auto px-3 py-2">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 py-2">
-                {results ? `Results (${results.length})` : 'Popular searches'}
+                {isSearching ? 'Searching…' : results ? `Results (${results.length})` : 'Popular searches'}
               </p>
               {list.length === 0 ? (
                 <p className="text-xs text-gray-300 px-1 py-6 text-center">No products found.</p>
@@ -355,90 +369,96 @@ export default function RecommendationsPage() {
 
   const [products, setProducts] = useState<ImportProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState('All');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const PAGE_SIZE = 20;
+
+  const [categoryTree, setCategoryTree] = useState<{ parent: string; subcategories: string[] }[]>([]);
+  const [activeParent, setActiveParent] = useState('All');
+  const [activeSubcategory, setActiveSubcategory] = useState<string | null>(null);
+
+  const [trending, setTrending] = useState<ImportProduct[] | null>(null);
+  const [newIns, setNewIns] = useState<ImportProduct[] | null>(null);
+
   const cart = useImportCartStore(s => s.cart);
   const storeAddToCart = useImportCartStore(s => s.addToCart);
   const storeAddOne = useImportCartStore(s => s.addOne);
   const storeRemoveOne = useImportCartStore(s => s.removeOne);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
-  const [showMobileSearch, setShowMobileSearch] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [usdRate, setUsdRate] = useState(0);
 
   // Cart is now shared via useImportCartStore, so it stays in sync with the
   // product detail page automatically — no more passing it through router
   // state on navigation.
 
+  // Category taxonomy — fetched once. Parent groupings (Fashion,
+  // Electronics, etc) with their leaf subcategories nested inside.
   useEffect(() => {
-    fetch(`${EDGE_URL}?action=products`)
+    fetch(`${BROWSE_URL}?action=categories`)
       .then(r => r.json())
-      .then(d => setProducts(d.products ?? []))
-      .catch(() => setProducts([]))
-      .finally(() => setIsLoading(false));
+      .then(d => setCategoryTree(d.categories ?? []))
+      .catch(() => setCategoryTree([]));
+  }, []);
 
+  // Trending / New Ins — small dedicated top-20 rails, reshuffled hourly
+  // client-side (same fairness reasoning as before) since 20 items is
+  // cheap to shuffle in the browser but not worth a server round-trip for.
+  useEffect(() => {
+    fetch(`${BROWSE_URL}?action=browse-products&sort=trending&limit=20`)
+      .then(r => r.json())
+      .then(d => setTrending(seededShuffle(d.products ?? [], shuffleSeed(60 * 60 * 1000))))
+      .catch(() => setTrending([]));
+    fetch(`${BROWSE_URL}?action=browse-products&sort=new&limit=20`)
+      .then(r => r.json())
+      .then(d => setNewIns(seededShuffle(d.products ?? [], shuffleSeed(60 * 60 * 1000))))
+      .catch(() => setNewIns([]));
+  }, []);
+
+  useEffect(() => {
     fetch(`${EDGE_URL}?action=rates`)
       .then(r => r.json())
       .then(d => setUsdRate(d.rates?.usdToNgn ?? 0))
       .catch(() => {});
   }, []);
 
-  const categories = ['All', ...Array.from(new Set(products.map(p => p.category)))];
+  // Main grid — server-paginated, filtered by category/subcategory. Resets
+  // and refetches page 1 whenever the selected category changes.
+  const fetchPage = useCallback((pageOffset: number, replace: boolean) => {
+    const params = new URLSearchParams({ action: 'browse-products', limit: String(PAGE_SIZE), offset: String(pageOffset) });
+    if (activeParent !== 'All') params.set('parent', activeParent);
+    if (activeSubcategory) params.set('subcategory', activeSubcategory);
+    replace ? setIsLoading(true) : setIsLoadingMore(true);
+    fetch(`${BROWSE_URL}?${params.toString()}`)
+      .then(r => r.json())
+      .then(d => {
+        setProducts(prev => replace ? (d.products ?? []) : [...prev, ...(d.products ?? [])]);
+        setHasMore(!!d.hasMore);
+      })
+      .catch(() => { if (replace) setProducts([]); })
+      .finally(() => { setIsLoading(false); setIsLoadingMore(false); });
+  }, [activeParent, activeSubcategory]);
 
-  // Trending is admin/DB-driven (is_trending + trending_order) for *which*
-  // 20 items qualify, but the display order within that top-20 reshuffles
-  // every hour so all of them get even visibility over time.
-  const trending = useMemo(() => {
-    if (searchQuery || activeCategory !== 'All') return null;
-    const top20 = products
-      .filter(p => p.is_trending)
-      .sort((a, b) => (a.trending_order ?? 0) - (b.trending_order ?? 0))
-      .slice(0, 20);
-    return seededShuffle(top20, shuffleSeed(60 * 60 * 1000));
-  }, [products, searchQuery, activeCategory]);
-
-  // "New ins" — the 20 most recently added products, reshuffled hourly for
-  // the same even-visibility reason, shown right after Trending today.
-  const newIns = useMemo(() => {
-    if (searchQuery || activeCategory !== 'All') return null;
-    const top20 = [...products]
-      .sort((a, b) => new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime())
-      .slice(0, 20);
-    return seededShuffle(top20, shuffleSeed(60 * 60 * 1000));
-  }, [products, searchQuery, activeCategory]);
-
-  const filtered = useMemo(() => {
-    const base = products.filter(p => {
-      if (searchQuery.trim()) {
-        const q = searchQuery.trim().toLowerCase();
-        return p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q);
-      }
-      return activeCategory === 'All' ? true : p.category === activeCategory;
-    });
-    // Only shuffle the default "All, no search" browse view — a shuffled
-    // search result or category filter would feel broken/random to a user
-    // looking for something specific.
-    if (searchQuery.trim() || activeCategory !== 'All') return base;
-    return seededShuffle(base, shuffleSeed(6 * 60 * 60 * 1000));
-  }, [products, searchQuery, activeCategory]);
-
-  // Infinite scroll: reveal the shuffled catalog in pages as the user nears
-  // the bottom, instead of rendering (and loading every image for) the
-  // entire list at once.
-  const PAGE_SIZE = 20;
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [searchQuery, activeCategory, products]);
+  useEffect(() => {
+    setOffset(0);
+    fetchPage(0, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeParent, activeSubcategory]);
 
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {
     if (!node) return;
     const observer = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) {
-        setVisibleCount(c => Math.min(c + PAGE_SIZE, filtered.length));
+      if (entries[0].isIntersecting && hasMore && !isLoadingMore) {
+        const next = offset + PAGE_SIZE;
+        setOffset(next);
+        fetchPage(next, false);
       }
     }, { rootMargin: '600px' });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [filtered.length]);
+  }, [hasMore, isLoadingMore, offset, fetchPage]);
 
   const cartCount = cart.reduce((s, i) => s + i.quantity, 0);
   const cartTotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
@@ -458,8 +478,7 @@ export default function RecommendationsPage() {
     setShowCheckout(true);
   };
 
-  const displayItems = filtered.slice(0, visibleCount);
-  const hasMore = visibleCount < filtered.length;
+  const displayItems = products;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -521,24 +540,12 @@ export default function RecommendationsPage() {
           </div>
           <div className="mt-3 lg:mt-0 lg:w-72">
             <JumiaPromoBar />
-            {/* Desktop: inline search input */}
-            <div className="relative hidden lg:block">
-              <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search products…"
-                className="w-full pl-9 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-100 outline-none"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            {/* Mobile: tapping opens the sliding search panel */}
+            {/* Tapping opens the sliding search panel — same behavior on
+                mobile and desktop now, rather than a separate, more
+                limited inline input on desktop with no results dropdown. */}
             <button
-              onClick={() => setShowMobileSearch(true)}
-              className="w-full lg:hidden relative flex items-center pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs text-gray-400 text-left"
+              onClick={() => setShowSearch(true)}
+              className="w-full relative flex items-center pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs text-gray-400 text-left hover:border-gray-300 transition-colors"
             >
               <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
               Search products…
@@ -546,20 +553,21 @@ export default function RecommendationsPage() {
           </div>
         </div>
 
-        <MobileSearchSheet
-          isOpen={showMobileSearch}
-          onClose={() => setShowMobileSearch(false)}
-          products={products}
+        <SearchSheet
+          isOpen={showSearch}
+          onClose={() => setShowSearch(false)}
           navigate={navigate}
         />
 
-        {/* Category filters */}
-        {!isLoading && !searchQuery && categories.length > 2 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-3 mb-3 -mx-4 px-4">
-            {categories.map(cat => (
-              <button key={cat} onClick={() => setActiveCategory(cat)}
+        {/* Category filters — parent groupings (Fashion, Electronics, etc). */}
+        {categoryTree.length > 1 && (
+          <div className="flex gap-1.5 overflow-x-auto pb-3 mb-1 -mx-4 px-4">
+            {['All', ...categoryTree.map(c => c.parent)].map(cat => (
+              <button
+                key={cat}
+                onClick={() => { setActiveParent(cat); setActiveSubcategory(null); }}
                 className={`px-3 py-1 rounded-full text-[11px] lg:text-xs font-bold whitespace-nowrap transition-colors flex-shrink-0 ${
-                  activeCategory === cat ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-500'
+                  activeParent === cat ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-500'
                 }`}>
                 {cat}
               </button>
@@ -567,7 +575,29 @@ export default function RecommendationsPage() {
           </div>
         )}
 
-        {trending && trending.length > 0 && (
+        {/* Subcategory filters — only within a selected parent, not "All". */}
+        {activeParent !== 'All' && (() => {
+          const subs = categoryTree.find(c => c.parent === activeParent)?.subcategories ?? [];
+          if (subs.length < 2) return null;
+          return (
+            <div className="flex gap-1.5 overflow-x-auto pb-3 mb-3 -mx-4 px-4">
+              {['All', ...subs].map(sub => (
+                <button
+                  key={sub}
+                  onClick={() => setActiveSubcategory(sub === 'All' ? null : sub)}
+                  className={`px-2.5 py-1 rounded-full text-[10px] lg:text-[11px] font-semibold whitespace-nowrap transition-colors flex-shrink-0 border ${
+                    (sub === 'All' ? !activeSubcategory : activeSubcategory === sub)
+                      ? 'bg-orange-50 border-orange-200 text-orange-600'
+                      : 'bg-white border-gray-200 text-gray-400'
+                  }`}>
+                  {sub}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
+
+        {activeParent === 'All' && trending && trending.length > 0 && (
           <div className="mb-5">
             <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">Trending today</p>
             <div className="flex gap-2.5 lg:gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x snap-mandatory scroll-smooth">
@@ -591,7 +621,7 @@ export default function RecommendationsPage() {
         )}
 
         {/* New Ins — 20 most recently added products, right after Trending */}
-        {newIns && newIns.length > 0 && (
+        {activeParent === 'All' && newIns && newIns.length > 0 && (
           <div className="mb-5">
             <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">New ins</p>
             <div className="flex gap-2.5 lg:gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x snap-mandatory scroll-smooth">
