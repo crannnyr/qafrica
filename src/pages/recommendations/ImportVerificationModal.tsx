@@ -1,13 +1,12 @@
 // src/pages/recommendations/ImportVerificationModal.tsx
 // Shown once ever (per browser/device) to logged-out visitors on the
-// importation/recommendations section. Separate from DailyPromoModal
-// (which shows product photos, and only to authenticated users).
+// importation/recommendations section. Lets former OpticsView.store
+// visitors know the business has moved fully under QAFRICA.shop.
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Download, ShieldCheck } from 'lucide-react';
+import { X, Heart } from 'lucide-react';
 
-const CAC_DOC_URL = 'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.559419878718419.webp';
-const STORAGE_KEY = 'qafrica_seen_verification_modal';
+const STORAGE_KEY = 'qafrica_seen_opticsview_notice_v2';
 
 export default function ImportVerificationModal() {
   const [visible, setVisible] = useState(false);
@@ -40,58 +39,46 @@ export default function ImportVerificationModal() {
             exit={{ scale: 0.94, opacity: 0 }}
             transition={{ type: 'spring', damping: 26 }}
             onClick={e => e.stopPropagation()}
-            className="relative w-full max-w-sm sm:max-w-md aspect-[3/4] rounded-2xl overflow-hidden bg-black"
+            className="relative w-full max-w-sm sm:max-w-md rounded-2xl overflow-hidden bg-white"
           >
             <button
               onClick={close}
               aria-label="Close"
-              className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-black/50 backdrop-blur flex items-center justify-center text-white hover:bg-black/70 transition-colors"
+              className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <img
-              src={CAC_DOC_URL}
-              alt="QAFRICA CAC business registration document"
-              className="absolute inset-0 w-full h-full object-cover select-none"
-              draggable={false}
-            />
-
-            {/* Text overlay — covers the bottom ~50% of the card */}
-            <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-black via-black/80 to-transparent flex flex-col justify-end p-4 space-y-2">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-green-400 flex-shrink-0" />
-                <h3 className="font-bold text-white text-sm">
-                  We're a fully verified business
-                </h3>
+            <div className="p-6 pt-8 space-y-3">
+              <div className="w-11 h-11 rounded-full bg-orange-50 flex items-center justify-center mb-1">
+                <Heart className="w-5 h-5 text-orange-500" fill="currentColor" />
               </div>
-              <p className="text-xs text-white/85 leading-relaxed">
-                QAFRICA is legally registered and authorized to operate in Nigeria,
-                helping you import items directly from China to your doorstep.
-                This is our official CAC (Corporate Affairs Commission) registration
-                document.
-              </p>
-              <p className="text-[11px] text-white/70 leading-relaxed bg-white/10 border border-white/15 rounded-xl p-2.5">
-                You can download our document and do your own personal verification
-                anywhere.
+
+              <h3 className="font-bold text-gray-900 text-lg leading-snug">
+                We've moved — and we're excited about it!
+              </h3>
+
+              <p className="text-sm text-gray-600 leading-relaxed">
+                OpticsView.store has now moved to our parent website,{' '}
+                <span className="font-semibold text-gray-800">QAFRICA.shop</span>, as
+                we're fully focused on importation these days.
               </p>
 
-              <a
-                href={CAC_DOC_URL}
-                download="QAFRICA-CAC-Certificate.webp"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full py-2.5 bg-white hover:bg-gray-100 text-gray-900 font-bold text-xs rounded-xl transition-colors"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Download document
-              </a>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                If you have a pending deal with us on OpticsView, don't worry — one of
+                our agents will reach out to you soon to make sure it's taken care of.
+              </p>
+
+              <p className="text-sm text-gray-500 leading-relaxed">
+                Thank you for being with us. We can't wait for you to see what we've
+                built here. 💛
+              </p>
 
               <button
                 onClick={close}
-                className="w-full py-1 text-center text-[11px] text-white/60 font-medium"
+                className="w-full mt-2 py-2.5 bg-gray-900 hover:bg-gray-700 text-white font-bold text-sm rounded-xl transition-colors"
               >
-                Continue browsing
+                Continue to QAFRICA
               </button>
             </div>
           </motion.div>
