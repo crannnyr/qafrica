@@ -195,6 +195,13 @@ function useImportAuth() {
   const manager = managerRaw ? JSON.parse(managerRaw) : null;
 
   const logout = () => {
+    if (token) {
+      fetch(`${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=admin-logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token }),
+      }).catch(() => {});
+    }
     sessionStorage.removeItem('import_manager_token');
     sessionStorage.removeItem('import_manager');
     navigate('/importations/admin/login');
