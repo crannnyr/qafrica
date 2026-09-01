@@ -532,15 +532,9 @@ export default function RecommendationsPage() {
 
       <div className="max-w-7xl mx-auto px-4 pt-5 pb-28 lg:pb-16">
         <AnnouncementBanner />
-        {/* Heading + search */}
-        <div className="mb-4 lg:flex lg:items-end lg:justify-between lg:gap-6">
-          <div>
-            <h1 className="font-black text-gray-900 text-lg lg:text-2xl">Recommended items</h1>
-            <p className="text-gray-400 text-xs lg:text-sm mt-1 leading-relaxed max-w-lg">
-              Split importation and clearance fees with hundreds of others — cutting rates by up to 90%. Join our community after your first purchase, we'd love to hear from you!
-            </p>
-          </div>
-          <div className="mt-3 lg:mt-0 lg:w-72">
+        {/* Search + Jumia promo */}
+        <div className="mb-4 lg:flex lg:justify-end">
+          <div className="lg:w-72">
             <JumiaPromoBar />
             {/* Tapping opens the sliding search panel — same behavior on
                 mobile and desktop now, rather than a separate, more
