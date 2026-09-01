@@ -12,6 +12,7 @@ import { useCustomerAuthStore } from '@/stores';
 import { useImportCartStore, buildImportCartKey } from '@/stores/importCartStore';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { useSavedItems } from './useSavedItems';
+import AnnouncementBanner from './AnnouncementBanner';
 import DailyPromoModal from './DailyPromoModal';
 import ImportVerificationModal from './ImportVerificationModal';
 import ImportAuthSheet from './ImportAuthSheet';
@@ -530,6 +531,7 @@ export default function RecommendationsPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 pt-5 pb-28 lg:pb-16">
+        <AnnouncementBanner />
         {/* Heading + search */}
         <div className="mb-4 lg:flex lg:items-end lg:justify-between lg:gap-6">
           <div>

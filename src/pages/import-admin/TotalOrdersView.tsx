@@ -8,6 +8,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Loader, Package, Users, Archive, CheckCircle2, FileDown } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { CustomerDetail } from './ImportAdminCustomers';
+import ClosedBatchDetail from './ClosedBatchDetail';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -41,6 +42,40 @@ interface Group {
   stagedAt: string | null;
 }
 
+// A "batch" is every order sharing one staged_at timestamp (i.e. everything
+// closed together in one action) — the unit the new billing/drill-down
+// workflow (spec Section 2) actually operates on, as opposed to the
+// per-product Group above which only covers Active-tab grouping.
+interface ClosedBatch {
+  batchKey: string;
+  stagedAt: string;
+  orderCount: number;
+  productCount: number;
+  buyerCount: number;
+  totalUnits: number;
+}
+
+function buildClosedBatches(orders: OrderRow[]): ClosedBatch[] {
+  const map = new Map<string, { orders: Set<string>; products: Set<string>; buyers: Set<string>; units: number }>();
+  for (const order of orders) {
+    if (!order.staged_at) continue;
+    const entry = map.get(order.staged_at) ?? { orders: new Set(), products: new Set(), buyers: new Set(), units: 0 };
+    entry.orders.add(order.id);
+    entry.buyers.add(order.user_id ?? order.code);
+    for (const item of order.items ?? []) {
+      entry.products.add(item.id);
+      entry.units += item.quantity;
+    }
+    map.set(order.staged_at, entry);
+  }
+  return Array.from(map.entries())
+    .map(([stagedAt, v]) => ({
+      batchKey: stagedAt, stagedAt,
+      orderCount: v.orders.size, productCount: v.products.size, buyerCount: v.buyers.size, totalUnits: v.units,
+    }))
+    .sort((a, b) => new Date(b.stagedAt).getTime() - new Date(a.stagedAt).getTime());
+}
+
 function buildGroups(orders: OrderRow[], showClosed: boolean): Group[] {
   const map = new Map<string, Group>();
   for (const order of orders) {
@@ -71,6 +106,7 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
   const [closingKey, setClosingKey] = useState<string | null>(null);
   const [closingAll, setClosingAll] = useState(false);
   const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
+  const [selectedBatchKey, setSelectedBatchKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -90,6 +126,7 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
   useEffect(() => { load(); }, [load]);
 
   const groups = buildGroups(orders, showClosed);
+  const closedBatches = buildClosedBatches(orders);
 
   const closeGroup = async (group: Group) => {
     setClosingKey(group.key);
@@ -201,11 +238,39 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
         <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
           <Loader className="w-5 h-5 animate-spin text-gray-300 mx-auto" />
         </div>
+      ) : showClosed ? (
+        closedBatches.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+            <Package className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+            <p className="text-sm text-gray-300">No closed batches yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {closedBatches.map(b => (
+              <button
+                key={b.batchKey}
+                onClick={() => setSelectedBatchKey(b.batchKey)}
+                className="w-full bg-white rounded-2xl border border-gray-100 p-4 text-left hover:border-gray-200 transition-colors flex items-center justify-between gap-3"
+              >
+                <div>
+                  <p className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    Closed {new Date(b.stagedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {b.orderCount} orders · {b.productCount} products · {b.buyerCount} buyers · {b.totalUnits} units
+                  </p>
+                </div>
+                <span className="text-[11px] font-bold text-orange-500 flex-shrink-0">View →</span>
+              </button>
+            ))}
+          </div>
+        )
       ) : groups.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
           <Package className="w-8 h-8 text-gray-200 mx-auto mb-2" />
           <p className="text-sm text-gray-300">
-            {showClosed ? 'No closed batches yet.' : 'Nothing to group right now — paid orders will show up here.'}
+            Nothing to group right now — paid orders will show up here.
           </p>
         </div>
       ) : (
@@ -275,6 +340,16 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
           customerId={profileCustomerId}
           onClose={() => setProfileCustomerId(null)}
           onFavoriteToggled={() => {}}
+        />
+      )}
+
+      {selectedBatchKey && (
+        <ClosedBatchDetail
+          token={token}
+          batchKey={selectedBatchKey}
+          orders={orders.filter(o => o.staged_at === selectedBatchKey)}
+          onClose={() => setSelectedBatchKey(null)}
+          onOpenProduct={onOpenProduct}
         />
       )}
     </div>

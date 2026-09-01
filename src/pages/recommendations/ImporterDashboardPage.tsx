@@ -60,6 +60,7 @@ interface ConsolidationBill {
   bank_name: string;
   bank_account_name: string;
   status: 'pending' | 'awaiting_confirmation' | 'paid' | 'cancelled';
+  line_items?: { label: string; amount_ngn: number }[];
   created_at: string;
 }
 
@@ -804,6 +805,9 @@ function BillColumn({ icon: Icon, label, bill, onInfo, onPay }: {
   onInfo: () => void;
   onPay: (bill: ConsolidationBill) => void;
 }) {
+  const [showItems, setShowItems] = useState(false);
+  const hasLineItems = bill?.line_items && bill.line_items.length > 1;
+
   return (
     <div className="p-3 text-center">
       <div className="flex items-center justify-center gap-1 mb-1.5">
@@ -820,7 +824,24 @@ function BillColumn({ icon: Icon, label, bill, onInfo, onPay }: {
           <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mb-1.5 ${BILL_STATUS_COLORS[bill.status]}`}>
             {BILL_STATUS_LABELS[bill.status]}
           </span>
-          <p className="text-xs font-black text-gray-900 mb-1.5">{fmt(bill.amount_ngn)}</p>
+          <button
+            onClick={() => hasLineItems && setShowItems(v => !v)}
+            className="block w-full text-xs font-black text-gray-900 mb-1.5"
+            disabled={!hasLineItems}
+          >
+            {fmt(bill.amount_ngn)}
+            {hasLineItems && <span className="text-[9px] font-semibold text-orange-500 ml-1">{showItems ? '▲' : '▼'}</span>}
+          </button>
+          {hasLineItems && showItems && (
+            <div className="text-left bg-gray-50 rounded-lg p-2 mb-2 space-y-0.5">
+              {bill.line_items!.map((li, i) => (
+                <div key={i} className="flex items-center justify-between text-[9px] text-gray-600 gap-1">
+                  <span className="truncate">{li.label}</span>
+                  <span className="font-semibold flex-shrink-0">{fmt(li.amount_ngn)}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {bill.status === 'pending' && (
             <button onClick={() => onPay(bill)} className="text-[10px] font-bold bg-gray-900 text-white px-2.5 py-1.5 rounded-lg">
               Pay now

@@ -103,6 +103,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
   const [cancellingOrder, setCancellingOrder] = useState<OrderRow | null>(null);
+  const [cancellingItem, setCancellingItem] = useState<{ order: OrderRow; itemIndex: number; itemName: string } | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -162,6 +163,34 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
       });
       if (!res.ok) throw new Error();
       setCancellingOrder(null);
+      setCancelReason('');
+      await load();
+    } catch {
+      // leave the modal open so admin can retry
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
+  const submitCancelItem = async () => {
+    if (!cancellingItem || !cancelReason.trim()) return;
+    setIsCancelling(true);
+    try {
+      const res = await fetch(`${REFUNDS_EDGE_URL}?action=admin-cancel-item`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_token: token,
+          order_id: cancellingItem.order.id,
+          item_index: cancellingItem.itemIndex,
+          reason: cancelReason.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to cancel item');
+      }
+      setCancellingItem(null);
       setCancelReason('');
       await load();
     } catch {
@@ -287,31 +316,39 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
                             <p className="text-[10px] text-gray-300">No item details on this order.</p>
                           ) : (
                             items.map((item, i) => (
-                              <a
-                                key={`${item.id}-${i}`}
-                                href={`/recommendations/${item.id}`}
-                                target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-2 group"
-                              >
-                                {item.image_url && (
-                                  <img src={item.image_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-[11px] font-medium text-gray-700 group-hover:text-orange-600 transition-colors truncate flex items-center gap-1">
-                                    {item.name}
-                                    <ExternalLink className="w-2.5 h-2.5 text-gray-300 group-hover:text-orange-400 flex-shrink-0" />
-                                  </p>
-                                  {item.variant_options && Object.keys(item.variant_options).length > 0 && (
-                                    <p className="text-[10px] text-gray-400">
-                                      {Object.entries(item.variant_options).map(([k, v]) => `${k}: ${v}`).join(', ')}
-                                    </p>
+                              <div key={`${item.id}-${i}`} className="flex items-center gap-2 group">
+                                <a
+                                  href={`/recommendations/${item.id}`}
+                                  target="_blank" rel="noopener noreferrer"
+                                  className="flex items-center gap-2 flex-1 min-w-0"
+                                >
+                                  {item.image_url && (
+                                    <img src={item.image_url} alt="" className="w-8 h-8 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
                                   )}
-                                </div>
-                                <div className="text-right flex-shrink-0">
-                                  <p className="text-[10px] text-gray-400">×{item.quantity}</p>
-                                  <p className="text-[11px] font-semibold text-gray-700">{fmt(item.price_ngn * item.quantity)}</p>
-                                </div>
-                              </a>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[11px] font-medium text-gray-700 group-hover:text-orange-600 transition-colors truncate flex items-center gap-1">
+                                      {item.name}
+                                      <ExternalLink className="w-2.5 h-2.5 text-gray-300 group-hover:text-orange-400 flex-shrink-0" />
+                                    </p>
+                                    {item.variant_options && Object.keys(item.variant_options).length > 0 && (
+                                      <p className="text-[10px] text-gray-400">
+                                        {Object.entries(item.variant_options).map(([k, v]) => `${k}: ${v}`).join(', ')}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="text-right flex-shrink-0">
+                                    <p className="text-[10px] text-gray-400">×{item.quantity}</p>
+                                    <p className="text-[11px] font-semibold text-gray-700">{fmt(item.price_ngn * item.quantity)}</p>
+                                  </div>
+                                </a>
+                                <button
+                                  onClick={() => { setCancellingItem({ order: o, itemIndex: i, itemName: item.name }); setCancelReason(''); }}
+                                  title="Cancel just this item"
+                                  className="p-1 text-gray-300 hover:text-red-500 flex-shrink-0"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             ))
                           )}
                         </div>
@@ -439,6 +476,53 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
               >
                 {isCancelling ? <Loader className="w-4 h-4 animate-spin" /> : null}
                 Cancel &amp; Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel single item modal — rest of the order stays intact */}
+      {cancellingItem && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center" onClick={() => !isCancelling && setCancellingItem(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6">
+            <h3 className="font-bold text-gray-900 mb-1">Cancel "{cancellingItem.itemName}"</h3>
+            <p className="text-xs text-gray-400 mb-4">
+              Only this item is removed from order {cancellingItem.order.code} — the rest of the order stays intact and continues as normal.
+            </p>
+
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {CANCEL_REASON_TEMPLATES.map(t => (
+                <button key={t.key} onClick={() => setCancelReason(t.text)}
+                  className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors">
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              placeholder="Reason the customer will see…"
+              rows={4}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-red-400 focus:ring-2 focus:ring-red-100 outline-none resize-none mb-4"
+            />
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCancellingItem(null)}
+                disabled={isCancelling}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Back
+              </button>
+              <button
+                onClick={submitCancelItem}
+                disabled={isCancelling || !cancelReason.trim()}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-sm font-bold text-white bg-red-500 hover:bg-red-600 disabled:opacity-40 transition-colors"
+              >
+                {isCancelling ? <Loader className="w-4 h-4 animate-spin" /> : null}
+                Cancel item &amp; refund
               </button>
             </div>
           </div>
