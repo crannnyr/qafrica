@@ -1,5 +1,5 @@
 // src/pages/recommendations/ProductDetailPage.tsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -17,10 +17,12 @@ import { formatSoldCount } from '@/lib/utils';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import AskQuestionSheet from './AskQuestionSheet';
 import ImportAuthSheet from './ImportAuthSheet';
+import PriceBandRow from './PriceBandRow';
 import ImportCheckoutSheet from './ImportCheckoutSheet';
 import ImportReviews from '@/components/ImportReviews';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const BROWSE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse`;
 const DESC_PREVIEW_LENGTH = 80;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -304,13 +306,65 @@ export default function ProductDetailPage() {
     setShowCheckout(true);
   };
 
-  // "You may also like"
-  const suggested = product
-    ? allProducts.filter(p => p.id !== product.id && p.category === product.category).slice(0, 4)
-    : [];
-  const alsoLike = suggested.length > 0
-    ? suggested
-    : allProducts.filter(p => p.id !== product?.id).slice(0, 4);
+  // "You may also like" — was previously capped at 4 static items derived
+  // from the full-catalog fetch. Now genuinely paginated (spec Section
+  // 7.2): same subcategory first, then falls back to any category once
+  // that's exhausted, continuing indefinitely via infinite scroll. Price-
+  // banded rows are mixed in periodically, same as the main grid.
+  const [alsoLikeItems, setAlsoLikeItems] = useState<ImportProduct[]>([]);
+  const [alsoLikeOffset, setAlsoLikeOffset] = useState(0);
+  const [alsoLikeHasMore, setAlsoLikeHasMore] = useState(true);
+  const [alsoLikeMode, setAlsoLikeMode] = useState<'category' | 'any'>('category');
+  const [alsoLikeLoading, setAlsoLikeLoading] = useState(false);
+  const ALSO_LIKE_PAGE = 12;
+
+  const fetchAlsoLike = useCallback((offset: number, mode: 'category' | 'any', replace: boolean) => {
+    if (!product) return;
+    setAlsoLikeLoading(true);
+    const params = new URLSearchParams({ action: 'browse-products', limit: String(ALSO_LIKE_PAGE), offset: String(offset), exclude_id: product.id });
+    if (mode === 'category') params.set('subcategory', product.category);
+    fetch(`${BROWSE_URL}?${params.toString()}`)
+      .then(r => r.json())
+      .then(d => {
+        const fetched = d.products ?? [];
+        if (fetched.length === 0 && mode === 'category') {
+          // Same subcategory exhausted — fall back to any category.
+          setAlsoLikeMode('any');
+          setAlsoLikeOffset(0);
+          fetchAlsoLike(0, 'any', false);
+          return;
+        }
+        setAlsoLikeItems(prev => replace ? fetched : [...prev, ...fetched]);
+        setAlsoLikeHasMore(!!d.hasMore || mode === 'category');
+      })
+      .catch(() => {})
+      .finally(() => setAlsoLikeLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id, product?.category]);
+
+  useEffect(() => {
+    if (!product) return;
+    setAlsoLikeItems([]);
+    setAlsoLikeOffset(0);
+    setAlsoLikeMode('category');
+    fetchAlsoLike(0, 'category', true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product?.id]);
+
+  const alsoLikeSentinelRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && alsoLikeHasMore && !alsoLikeLoading) {
+        const next = alsoLikeOffset + ALSO_LIKE_PAGE;
+        setAlsoLikeOffset(next);
+        fetchAlsoLike(next, alsoLikeMode, false);
+      }
+    }, { rootMargin: '600px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [alsoLikeHasMore, alsoLikeLoading, alsoLikeOffset, alsoLikeMode, fetchAlsoLike]);
+
+  const alsoLike = alsoLikeItems;
 
   // Build image list from image_urls if available, fallback to image_url
   const images: string[] = product
@@ -580,7 +634,8 @@ export default function ProductDetailPage() {
         {/* Reviews */}
         {product && <ImportReviews productId={product.id} />}
 
-        {/* You may also like */}
+        {/* You may also like — infinite scroll: same subcategory first,
+            falls back to any category, with price-banded rows mixed in */}
         {alsoLike.length > 0 && (
           <div className="px-4 pt-6 pb-4 lg:px-0 lg:pt-14">
             <h2 className="font-bold text-gray-900 text-sm mb-3">You may also like</h2>
@@ -588,7 +643,7 @@ export default function ProductDetailPage() {
               {alsoLike.map(p => (
                 <button
                   key={p.id}
-                  onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products: allProducts } })}
+                  onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p } })}
                   className="bg-white rounded-2xl overflow-hidden border border-gray-100 text-left"
                 >
                   <div className="aspect-square bg-gray-50 overflow-hidden">
@@ -616,6 +671,27 @@ export default function ProductDetailPage() {
                 </button>
               ))}
             </div>
+
+            {/* Price-banded row every ~12 also-like items */}
+            {alsoLike.length >= ALSO_LIKE_PAGE && (
+              <div className="mt-4">
+                <PriceBandRow bandIndex={Math.floor(alsoLike.length / ALSO_LIKE_PAGE)} />
+              </div>
+            )}
+
+            {alsoLikeHasMore && (
+              <div ref={alsoLikeSentinelRef} className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 lg:gap-4 mt-2.5">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
+                    <div className="aspect-square bg-gray-100" />
+                    <div className="p-2.5 space-y-2">
+                      <div className="h-2.5 bg-gray-100 rounded w-3/4" />
+                      <div className="h-2.5 bg-gray-100 rounded w-1/2" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

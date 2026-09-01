@@ -13,6 +13,7 @@ import { useImportCartStore, buildImportCartKey } from '@/stores/importCartStore
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { useSavedItems } from './useSavedItems';
 import AnnouncementBanner from './AnnouncementBanner';
+import PriceBandRow from './PriceBandRow';
 import DailyPromoModal from './DailyPromoModal';
 import ImportVerificationModal from './ImportVerificationModal';
 import ImportAuthSheet from './ImportAuthSheet';
@@ -665,22 +666,38 @@ export default function RecommendationsPage() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4">
-              {displayItems.map(p => (
-                <ProductCard
-                  key={p.id} product={p}
-                  cartQty={cart.filter(i => i.id === p.id).reduce((s, i) => s + i.quantity, 0)}
-                  onAdd={() => addToCart(p)} onRemove={() => removeFromCart(buildCartKey(p.id))}
-                  onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
-                  usdRate={usdRate}
-                  isSaved={isSaved(p.id)}
-                  onToggleSave={async () => {
-                    const result = await toggleSave(p.id);
-                    if (result === 'needs-auth') setShowAuth(true);
-                  }}
-                />
-              ))}
-            </div>
+            {(() => {
+              const CHUNK_SIZE = 6; // ~3 rows of 2 on mobile
+              const chunks: typeof displayItems[] = [];
+              for (let i = 0; i < displayItems.length; i += CHUNK_SIZE) {
+                chunks.push(displayItems.slice(i, i + CHUNK_SIZE));
+              }
+              return chunks.map((chunk, ci) => (
+                <div key={ci}>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4">
+                    {chunk.map(p => (
+                      <ProductCard
+                        key={p.id} product={p}
+                        cartQty={cart.filter(i => i.id === p.id).reduce((s, i) => s + i.quantity, 0)}
+                        onAdd={() => addToCart(p)} onRemove={() => removeFromCart(buildCartKey(p.id))}
+                        onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
+                        usdRate={usdRate}
+                        isSaved={isSaved(p.id)}
+                        onToggleSave={async () => {
+                          const result = await toggleSave(p.id);
+                          if (result === 'needs-auth') setShowAuth(true);
+                        }}
+                      />
+                    ))}
+                  </div>
+                  {/* Price-banded discovery row, injected after every chunk
+                      (spec Section 7.1) — cycles through the three bands. */}
+                  <div className="mt-4">
+                    <PriceBandRow bandIndex={ci} />
+                  </div>
+                </div>
+              ));
+            })()}
             {hasMore && (
               <div ref={sentinelRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4 mt-2.5 lg:mt-4">
                 {Array.from({ length: 5 }).map((_, i) => (

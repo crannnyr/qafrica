@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Send, Loader, Truck, Clock3, PackageCheck, Users, CheckCircle2, AlertCircle } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { toast } from 'sonner';
+import MessageTemplatesEditor from './MessageTemplatesEditor';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -47,6 +48,7 @@ function buildClosedBatches(orders: OrderRow[]): ClosedBatch[] {
 }
 
 export default function ConfirmedOrderMessagingManager({ token }: { token: string }) {
+  const [subTab, setSubTab] = useState<'send' | 'templates'>('send');
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [openCount, setOpenCount] = useState(0);
@@ -115,6 +117,25 @@ export default function ConfirmedOrderMessagingManager({ token }: { token: strin
 
   return (
     <div className="space-y-4">
+      <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1">
+        <button
+          onClick={() => setSubTab('send')}
+          className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${subTab === 'send' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'}`}
+        >
+          Send
+        </button>
+        <button
+          onClick={() => setSubTab('templates')}
+          className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${subTab === 'templates' ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'}`}
+        >
+          Edit Templates
+        </button>
+      </div>
+
+      {subTab === 'templates' ? (
+        <MessageTemplatesEditor token={token} />
+      ) : (
+      <>
       {/* Consolidation / last-call templates — target the current open batch */}
       <div className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center gap-2 mb-1">
@@ -225,6 +246,8 @@ export default function ConfirmedOrderMessagingManager({ token }: { token: strin
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
