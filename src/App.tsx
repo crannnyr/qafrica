@@ -1,6 +1,6 @@
 // src/App.tsx
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useEffect } from 'react';
+import { useEffect, lazy, Suspense } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { useAuthStore } from '@/stores';
 import { useDeveloperAuthStore } from '@/stores/developerAuthStore';
@@ -9,140 +9,140 @@ import { useDeveloperAuthStore } from '@/stores/developerAuthStore';
 import ScrollToTop from '@/components/ScrollToTop';
 
 // Pages
-import LandingPage from '@/pages/landing/LandingPage';
-import StoreOwnersPage from '@/pages/landing/StoreOwnersPage';
-import LoginPage from '@/pages/auth/LoginPage';
-import SignupPage from '@/pages/auth/SignupPage';
-import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage';
-import ResetPasswordPage from '@/pages/auth/ResetPasswordPage';
-import NicheSelectionPage from '@/pages/auth/NicheSelectionPage';
-import OnboardingStoreSetup from '@/pages/auth/OnboardingStoreSetup';
-import PostSignupChoice from '@/pages/auth/PostSignupChoice';
-import PricingPage from '@/pages/auth/PricingPage';
-import PaymentCallbackPage from '@/pages/auth/PaymentCallbackPage';
-import AcceptStaffInvitePage from '@/pages/auth/AcceptStaffInvitePage';
-import JumiaSignupPage from '@/pages/auth/JumiaSignupPage';
+const LandingPage = lazy(() => import('@/pages/landing/LandingPage'));
+const StoreOwnersPage = lazy(() => import('@/pages/landing/StoreOwnersPage'));
+const LoginPage = lazy(() => import('@/pages/auth/LoginPage'));
+const SignupPage = lazy(() => import('@/pages/auth/SignupPage'));
+const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'));
+const NicheSelectionPage = lazy(() => import('@/pages/auth/NicheSelectionPage'));
+const OnboardingStoreSetup = lazy(() => import('@/pages/auth/OnboardingStoreSetup'));
+const PostSignupChoice = lazy(() => import('@/pages/auth/PostSignupChoice'));
+const PricingPage = lazy(() => import('@/pages/auth/PricingPage'));
+const PaymentCallbackPage = lazy(() => import('@/pages/auth/PaymentCallbackPage'));
+const AcceptStaffInvitePage = lazy(() => import('@/pages/auth/AcceptStaffInvitePage'));
+const JumiaSignupPage = lazy(() => import('@/pages/auth/JumiaSignupPage'));
 
 // Legal Pages
-import PrivacyPolicyPage from '@/pages/legal/PrivacyPolicyPage';
-import TermsOfServicePage from '@/pages/legal/TermsOfServicePage';
-import ImportTermsPage from '@/pages/legal/ImportTermsPage';
-import ImportTrackingPage from '@/pages/recommendations/ImportTrackingPage';
+const PrivacyPolicyPage = lazy(() => import('@/pages/legal/PrivacyPolicyPage'));
+const TermsOfServicePage = lazy(() => import('@/pages/legal/TermsOfServicePage'));
+const ImportTermsPage = lazy(() => import('@/pages/legal/ImportTermsPage'));
+const ImportTrackingPage = lazy(() => import('@/pages/recommendations/ImportTrackingPage'));
 
 // Blog Pages
-import BlogIndexPage from '@/pages/blog/BlogIndexPage';
-import BlogPostPage from '@/pages/blog/BlogPostPage';
+const BlogIndexPage = lazy(() => import('@/pages/blog/BlogIndexPage'));
+const BlogPostPage = lazy(() => import('@/pages/blog/BlogPostPage'));
 
 // China Import / Recommendations Pages
-import ImportPage from '@/pages/import/ImportPage';
-import ImportAdminLogin from '@/pages/import-admin/ImportAdminLogin';
-import ImportAdminPage from '@/pages/import-admin/ImportAdminPage';
-import ImporterDashboardPage from '@/pages/recommendations/ImporterDashboardPage';
-import RecommendationsPage from '@/pages/recommendations/RecommendationsPage';
-import RecommendationsProductDetailPage from '@/pages/recommendations/ProductDetailPage';
-import LogisticsBlogPage from '@/pages/recommendations/LogisticsBlogPage';
+const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
+const ImportAdminLogin = lazy(() => import('@/pages/import-admin/ImportAdminLogin'));
+const ImportAdminPage = lazy(() => import('@/pages/import-admin/ImportAdminPage'));
+const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
+const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
+const RecommendationsProductDetailPage = lazy(() => import('@/pages/recommendations/ProductDetailPage'));
+const LogisticsBlogPage = lazy(() => import('@/pages/recommendations/LogisticsBlogPage'));
 
 // Marketplace Pages
-import MarketplacePage from '@/pages/MarketplacePage';
+const MarketplacePage = lazy(() => import('@/pages/MarketplacePage'));
 
 // Dashboard Pages
-import DashboardLayout from '@/pages/dashboard/DashboardLayout';
-import DashboardHome from '@/pages/dashboard/DashboardHome';
-import StoreSetup from '@/pages/dashboard/StoreSetup';
-import ProductsPage from '@/pages/dashboard/ProductsPage';
-import AddProductPage from '@/pages/dashboard/AddProduct';
-import EditProductPage from '@/pages/dashboard/EditProduct';
-import ImportCatalogPage from '@/pages/dashboard/ImportCatalogPage';
-import OrdersPage from '@/pages/dashboard/OrdersPage';
-import ManualSalesPage from '@/pages/dashboard/ManualSalesPage';
-import OrderManagementPage from '@/pages/dashboard/OrderManagementPage';
-import OrderDetailPage from '@/pages/dashboard/OrderDetailPage';
-import DropshipOrdersPage from '@/pages/dashboard/DropshipOrdersPage';
-import DropshipOrderDetailPage from '@/pages/dashboard/DropshipOrderDetailPage';
-import WalletPage from '@/pages/dashboard/WalletPage';
-import DeliveryZonesPage from '@/pages/dashboard/DeliveryZones';
-import DomainPage from '@/pages/dashboard/DomainPage';
-import AnalyticsPage from '@/pages/dashboard/AnalyticsPage';
-import TaxExpensesPage from '@/pages/dashboard/TaxExpensesPage';
-import StoreSettingsPage from '@/pages/dashboard/StoreSettingsPage';
-import SubscriptionPage from '@/pages/dashboard/SubscriptionPage';
-import HowToUsePage from '@/pages/dashboard/HowToUsePage';
-import ReviewsPage from '@/pages/dashboard/ReviewsPage';
-import BulkImportPage from '@/pages/dashboard/BulkImportPage';
-import CouponsPage from '@/pages/dashboard/CouponsPage';
-import StoreTemplatesPage from '@/pages/dashboard/StoreTemplatesPage';
-import NicheCustomizationPage from '@/pages/dashboard/NicheCustomizationPage';
+const DashboardLayout = lazy(() => import('@/pages/dashboard/DashboardLayout'));
+const DashboardHome = lazy(() => import('@/pages/dashboard/DashboardHome'));
+const StoreSetup = lazy(() => import('@/pages/dashboard/StoreSetup'));
+const ProductsPage = lazy(() => import('@/pages/dashboard/ProductsPage'));
+const AddProductPage = lazy(() => import('@/pages/dashboard/AddProduct'));
+const EditProductPage = lazy(() => import('@/pages/dashboard/EditProduct'));
+const ImportCatalogPage = lazy(() => import('@/pages/dashboard/ImportCatalogPage'));
+const OrdersPage = lazy(() => import('@/pages/dashboard/OrdersPage'));
+const ManualSalesPage = lazy(() => import('@/pages/dashboard/ManualSalesPage'));
+const OrderManagementPage = lazy(() => import('@/pages/dashboard/OrderManagementPage'));
+const OrderDetailPage = lazy(() => import('@/pages/dashboard/OrderDetailPage'));
+const DropshipOrdersPage = lazy(() => import('@/pages/dashboard/DropshipOrdersPage'));
+const DropshipOrderDetailPage = lazy(() => import('@/pages/dashboard/DropshipOrderDetailPage'));
+const WalletPage = lazy(() => import('@/pages/dashboard/WalletPage'));
+const DeliveryZonesPage = lazy(() => import('@/pages/dashboard/DeliveryZones'));
+const DomainPage = lazy(() => import('@/pages/dashboard/DomainPage'));
+const AnalyticsPage = lazy(() => import('@/pages/dashboard/AnalyticsPage'));
+const TaxExpensesPage = lazy(() => import('@/pages/dashboard/TaxExpensesPage'));
+const StoreSettingsPage = lazy(() => import('@/pages/dashboard/StoreSettingsPage'));
+const SubscriptionPage = lazy(() => import('@/pages/dashboard/SubscriptionPage'));
+const HowToUsePage = lazy(() => import('@/pages/dashboard/HowToUsePage'));
+const ReviewsPage = lazy(() => import('@/pages/dashboard/ReviewsPage'));
+const BulkImportPage = lazy(() => import('@/pages/dashboard/BulkImportPage'));
+const CouponsPage = lazy(() => import('@/pages/dashboard/CouponsPage'));
+const StoreTemplatesPage = lazy(() => import('@/pages/dashboard/StoreTemplatesPage'));
+const NicheCustomizationPage = lazy(() => import('@/pages/dashboard/NicheCustomizationPage'));
 
 // Marketplace Dashboard Pages
-import JumiaPage from '@/pages/dashboard/JumiaPage';
-import JumiaAddItemPage from '@/pages/dashboard/JumiaAddItemPage';
-import JumiaDropOffLocationsPage from '@/pages/dashboard/JumiaDropOffLocationsPage';
-import JumiaWalletPage from '@/pages/dashboard/JumiaWalletPage';
-import JumiaHowToScalePage from '@/pages/dashboard/JumiaHowToScalePage';
-import JumiaItemDetailPage from '@/pages/dashboard/Jumia/JumiaItemDetailPage';
-import KongaPage from '@/pages/dashboard/KongaPage';
-import JijiPage from '@/pages/dashboard/JijiPage';
+const JumiaPage = lazy(() => import('@/pages/dashboard/JumiaPage'));
+const JumiaAddItemPage = lazy(() => import('@/pages/dashboard/JumiaAddItemPage'));
+const JumiaDropOffLocationsPage = lazy(() => import('@/pages/dashboard/JumiaDropOffLocationsPage'));
+const JumiaWalletPage = lazy(() => import('@/pages/dashboard/JumiaWalletPage'));
+const JumiaHowToScalePage = lazy(() => import('@/pages/dashboard/JumiaHowToScalePage'));
+const JumiaItemDetailPage = lazy(() => import('@/pages/dashboard/Jumia/JumiaItemDetailPage'));
+const KongaPage = lazy(() => import('@/pages/dashboard/KongaPage'));
+const JijiPage = lazy(() => import('@/pages/dashboard/JijiPage'));
 
 // Standalone Jumia-only dashboard (signup_intent === 'jumia')
-import JumiaDashboardLayout from '@/pages/dashboard/JumiaDashboardLayout';
+const JumiaDashboardLayout = lazy(() => import('@/pages/dashboard/JumiaDashboardLayout'));
 
 // Store Pages
-import StorePage from '@/pages/store/StorePage';
-import ProductDetailPage from '@/pages/store/ProductDetailPage';
-import CheckoutPage from '@/pages/store/CheckoutPage';
-import StoreClosedPage from '@/pages/store/StoreClosedPage';
-import StoreNotFoundPage from '@/pages/store/StoreNotFoundPage';
+const StorePage = lazy(() => import('@/pages/store/StorePage'));
+const ProductDetailPage = lazy(() => import('@/pages/store/ProductDetailPage'));
+const CheckoutPage = lazy(() => import('@/pages/store/CheckoutPage'));
+const StoreClosedPage = lazy(() => import('@/pages/store/StoreClosedPage'));
+const StoreNotFoundPage = lazy(() => import('@/pages/store/StoreNotFoundPage'));
 
 // Customer Pages
-import CustomerLoginPage from '@/pages/customer/CustomerLoginPage';
-import CustomerSignupPage from '@/pages/customer/CustomerSignupPage';
-import CustomerDashboard from '@/pages/customer/CustomerDashboard/index';
-import CustomerOrderDetailPage from '@/pages/customer/CustomerOrderDetailPage';
-import StoreDiscoveryPage from '@/pages/customer/StoreDiscoveryPage';
-import UniversalCartPage from '@/pages/customer/UniversalCartPage';
-import UniversalCheckoutPage from '@/pages/customer/UniversalCheckoutPage';
+const CustomerLoginPage = lazy(() => import('@/pages/customer/CustomerLoginPage'));
+const CustomerSignupPage = lazy(() => import('@/pages/customer/CustomerSignupPage'));
+const CustomerDashboard = lazy(() => import('@/pages/customer/CustomerDashboard/index'));
+const CustomerOrderDetailPage = lazy(() => import('@/pages/customer/CustomerOrderDetailPage'));
+const StoreDiscoveryPage = lazy(() => import('@/pages/customer/StoreDiscoveryPage'));
+const UniversalCartPage = lazy(() => import('@/pages/customer/UniversalCartPage'));
+const UniversalCheckoutPage = lazy(() => import('@/pages/customer/UniversalCheckoutPage'));
 
 // Admin Pages
-import AdminLayout from '@/pages/admin/AdminLayout';
-import AdminDashboard from '@/pages/admin/AdminDashboard';
-import AdminUsers from '@/pages/admin/AdminUsers';
-import AdminStores from '@/pages/admin/AdminStores';
-import AdminProducts from '@/pages/admin/AdminProducts';
-import AdminOrders from '@/pages/admin/AdminOrders';
-import AdminWithdrawals from '@/pages/admin/AdminWithdrawals';
-import AdminFailures from '@/pages/admin/AdminFailures';
-import AdminSubscriptions from '@/pages/admin/AdminSubscriptions';
-import AdminDomainRequests from '@/pages/admin/AdminDomainRequests';
-import AdminEmailControls from '@/pages/admin/AdminEmailControls';
-import AdminNotifications from '@/pages/admin/AdminNotifications';
-import AdminLegal from '@/pages/admin/AdminLegal';
-import AdminShipbubblePage from '@/pages/admin/AdminShipbubble';
-import AdminJumia from '@/pages/admin/AdminJumia';
-import AdminJumiaSubmissionDetail from '@/pages/admin/AdminJumiaSubmissionDetail';
-import AdminJumiaWithdrawals from '@/pages/admin/AdminJumiaWithdrawals';
-import AdminJumiaSettings from '@/pages/admin/AdminJumiaSettings';
+const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'));
+const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'));
+const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
+const AdminStores = lazy(() => import('@/pages/admin/AdminStores'));
+const AdminProducts = lazy(() => import('@/pages/admin/AdminProducts'));
+const AdminOrders = lazy(() => import('@/pages/admin/AdminOrders'));
+const AdminWithdrawals = lazy(() => import('@/pages/admin/AdminWithdrawals'));
+const AdminFailures = lazy(() => import('@/pages/admin/AdminFailures'));
+const AdminSubscriptions = lazy(() => import('@/pages/admin/AdminSubscriptions'));
+const AdminDomainRequests = lazy(() => import('@/pages/admin/AdminDomainRequests'));
+const AdminEmailControls = lazy(() => import('@/pages/admin/AdminEmailControls'));
+const AdminNotifications = lazy(() => import('@/pages/admin/AdminNotifications'));
+const AdminLegal = lazy(() => import('@/pages/admin/AdminLegal'));
+const AdminShipbubblePage = lazy(() => import('@/pages/admin/AdminShipbubble'));
+const AdminJumia = lazy(() => import('@/pages/admin/AdminJumia'));
+const AdminJumiaSubmissionDetail = lazy(() => import('@/pages/admin/AdminJumiaSubmissionDetail'));
+const AdminJumiaWithdrawals = lazy(() => import('@/pages/admin/AdminJumiaWithdrawals'));
+const AdminJumiaSettings = lazy(() => import('@/pages/admin/AdminJumiaSettings'));
 
 // Developer Pages
-import DeveloperLayout from '@/pages/developer/dashboard/DeveloperLayout';
-import DeveloperDashboardHome from '@/pages/developer/dashboard/DeveloperDashboardHome';
-import DeveloperSignupPage from '@/pages/developer/auth/DeveloperSignupPage';
-import DeveloperLoginPage from '@/pages/developer/auth/DeveloperLoginPage';
-import DeveloperVerifyEmailPage from '@/pages/developer/auth/DeveloperVerifyEmailPage';
-import DeveloperForgotPasswordPage from '@/pages/developer/auth/DeveloperForgotPasswordPage';
-import DeveloperResetPasswordPage from '@/pages/developer/auth/DeveloperResetPasswordPage';
-import DeveloperOnboardingPage from '@/pages/developer/onboarding/DeveloperOnboardingPage';
-import PaystackConnectCallbackPage from '@/pages/developer/onboarding/PaystackConnectCallbackPage';
-import DeveloperApiKeysPage from '@/pages/developer/dashboard/DeveloperApiKeysPage';
-import DeveloperCatalogPage from '@/pages/developer/dashboard/DeveloperCatalogPage';
-import DeveloperImportsPage from '@/pages/developer/dashboard/DeveloperImportsPage';
-import DeveloperProductsPage from '@/pages/developer/dashboard/DeveloperProductsPage';
-import DeveloperOrdersPage from '@/pages/developer/dashboard/DeveloperOrdersPage';
-import DeveloperOrderDetailPage from '@/pages/developer/dashboard/DeveloperOrderDetailPage';
-import DeveloperWebhooksPage from '@/pages/developer/dashboard/DeveloperWebhooksPage';
-import DeveloperWalletPage from '@/pages/developer/dashboard/DeveloperWalletPage';
-import DeveloperSubscriptionPage from '@/pages/developer/dashboard/DeveloperSubscriptionPage';
-import DeveloperSettingsPage from '@/pages/developer/dashboard/DeveloperSettingsPage';
-import DeveloperDocsPage from '@/pages/developer/dashboard/DeveloperDocsPage';
+const DeveloperLayout = lazy(() => import('@/pages/developer/dashboard/DeveloperLayout'));
+const DeveloperDashboardHome = lazy(() => import('@/pages/developer/dashboard/DeveloperDashboardHome'));
+const DeveloperSignupPage = lazy(() => import('@/pages/developer/auth/DeveloperSignupPage'));
+const DeveloperLoginPage = lazy(() => import('@/pages/developer/auth/DeveloperLoginPage'));
+const DeveloperVerifyEmailPage = lazy(() => import('@/pages/developer/auth/DeveloperVerifyEmailPage'));
+const DeveloperForgotPasswordPage = lazy(() => import('@/pages/developer/auth/DeveloperForgotPasswordPage'));
+const DeveloperResetPasswordPage = lazy(() => import('@/pages/developer/auth/DeveloperResetPasswordPage'));
+const DeveloperOnboardingPage = lazy(() => import('@/pages/developer/onboarding/DeveloperOnboardingPage'));
+const PaystackConnectCallbackPage = lazy(() => import('@/pages/developer/onboarding/PaystackConnectCallbackPage'));
+const DeveloperApiKeysPage = lazy(() => import('@/pages/developer/dashboard/DeveloperApiKeysPage'));
+const DeveloperCatalogPage = lazy(() => import('@/pages/developer/dashboard/DeveloperCatalogPage'));
+const DeveloperImportsPage = lazy(() => import('@/pages/developer/dashboard/DeveloperImportsPage'));
+const DeveloperProductsPage = lazy(() => import('@/pages/developer/dashboard/DeveloperProductsPage'));
+const DeveloperOrdersPage = lazy(() => import('@/pages/developer/dashboard/DeveloperOrdersPage'));
+const DeveloperOrderDetailPage = lazy(() => import('@/pages/developer/dashboard/DeveloperOrderDetailPage'));
+const DeveloperWebhooksPage = lazy(() => import('@/pages/developer/dashboard/DeveloperWebhooksPage'));
+const DeveloperWalletPage = lazy(() => import('@/pages/developer/dashboard/DeveloperWalletPage'));
+const DeveloperSubscriptionPage = lazy(() => import('@/pages/developer/dashboard/DeveloperSubscriptionPage'));
+const DeveloperSettingsPage = lazy(() => import('@/pages/developer/dashboard/DeveloperSettingsPage'));
+const DeveloperDocsPage = lazy(() => import('@/pages/developer/dashboard/DeveloperDocsPage'));
 
 // Guards
 import StaffGuard from '@/components/StaffGuard';
@@ -254,6 +254,18 @@ const PublicRoute = ({ children }: { children: React.ReactNode }) => {
   return <Navigate to="/dashboard" replace />;
 };
 
+// Shown briefly while a route's code is being fetched (lazy-loaded chunks).
+// Kept minimal and fast — this appears on every navigation to a
+// not-yet-loaded page, so it needs to render instantly with zero
+// additional network requests of its own.
+function PageLoader() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="w-8 h-8 border-2 border-gray-200 border-t-orange-500 rounded-full animate-spin" />
+    </div>
+  );
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 function App() {
@@ -286,6 +298,7 @@ function App() {
         {/* Resets scroll to top on every route change — must be inside the router */}
         <ScrollToTop />
 
+        <Suspense fallback={<PageLoader />}>
         <Routes>
           {/* ── Public Routes ── */}
           <Route path="/" element={<LandingPage />} />
@@ -460,6 +473,7 @@ function App() {
           {/* ── Catch-all ── */}
           <Route path="*" element={<StoreNotFoundPage />} />
         </Routes>
+        </Suspense>
       </CustomDomainRouter>
     </>
   );
