@@ -27,6 +27,7 @@ import JumiaSignupPage from '@/pages/auth/JumiaSignupPage';
 import PrivacyPolicyPage from '@/pages/legal/PrivacyPolicyPage';
 import TermsOfServicePage from '@/pages/legal/TermsOfServicePage';
 import ImportTermsPage from '@/pages/legal/ImportTermsPage';
+import ImportTrackingPage from '@/pages/recommendations/ImportTrackingPage';
 
 // Blog Pages
 import BlogIndexPage from '@/pages/blog/BlogIndexPage';
@@ -299,6 +300,7 @@ function App() {
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
           <Route path="/import-terms" element={<ImportTermsPage />} />
+          <Route path="/track" element={<ImportTrackingPage />} />
 
           {/* ── Blog ── */}
           <Route path="/blog" element={<BlogIndexPage />} />
