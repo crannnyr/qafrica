@@ -29,6 +29,9 @@ interface OrderRow {
   payment_status: string;
   staged_at: string | null;
   created_at: string;
+  status?: string;
+  shipped_at?: string | null;
+  shipping_method?: 'flight' | 'sea_freight' | null;
 }
 interface Group {
   key: string;
@@ -124,6 +127,21 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
   }, [token]);
 
   useEffect(() => { load(); }, [load]);
+
+  // A batch is selected — take over the whole content area with a real
+  // full page (no modal chrome) instead of layering a dialog over the list.
+  if (selectedBatchKey) {
+    return (
+      <ClosedBatchDetail
+        token={token}
+        batchKey={selectedBatchKey}
+        orders={orders.filter(o => o.staged_at === selectedBatchKey)}
+        onClose={() => setSelectedBatchKey(null)}
+        onOpenProduct={onOpenProduct}
+        onReload={load}
+      />
+    );
+  }
 
   const groups = buildGroups(orders, showClosed);
   const closedBatches = buildClosedBatches(orders);
@@ -340,16 +358,6 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
           customerId={profileCustomerId}
           onClose={() => setProfileCustomerId(null)}
           onFavoriteToggled={() => {}}
-        />
-      )}
-
-      {selectedBatchKey && (
-        <ClosedBatchDetail
-          token={token}
-          batchKey={selectedBatchKey}
-          orders={orders.filter(o => o.staged_at === selectedBatchKey)}
-          onClose={() => setSelectedBatchKey(null)}
-          onOpenProduct={onOpenProduct}
         />
       )}
     </div>
