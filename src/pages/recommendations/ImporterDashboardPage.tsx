@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
   Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
-  ShoppingBag, Ship, Warehouse, ExternalLink, ChevronDown, Heart,
+  ShoppingBag, Ship, ExternalLink, ChevronDown, Heart,
   FileText, ShieldCheck, Navigation,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
@@ -17,7 +17,7 @@ import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { fallbackAvatarColor, initialsFrom } from '@/lib/avatarFallback';
 import { AvatarImage } from '@/lib/presetAvatars';
 import { fmt } from './RecommendationsPage';
-import ManualPaymentFlow from './ManualPaymentFlow';
+import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
 import ImportSettingsSheet from './ImportSettingsSheet';
 import SavedItemsSheet from './SavedItemsSheet';
 import WhyTrustUsSheet from './WhyTrustUsSheet';
@@ -56,7 +56,7 @@ interface ConsolidationBill {
   order_id: string | null;
   amount_ngn: number;
   reason: string;
-  kind: 'consolidation' | 'shipping';
+  kind: 'consolidation_shipping' | 'clearance';
   bank_account_number: string;
   bank_name: string;
   bank_account_name: string;
@@ -121,7 +121,8 @@ export default function ImporterDashboardPage() {
   const [showAvatar, setShowAvatar] = useState(false);
   const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
   const [payingBill, setPayingBill] = useState<ConsolidationBill | null>(null);
-  const [infoBillKind, setInfoBillKind] = useState<'consolidation' | 'shipping' | null>(null);
+  const [isPayingBill, setIsPayingBill] = useState(false);
+  const [infoBillKind, setInfoBillKind] = useState<'consolidation_shipping' | 'clearance' | null>(null);
   const [refundBankForm, setRefundBankForm] = useState<Refund | null>(null);
   const [bankFormData, setBankFormData] = useState({ bank_account_number: '', bank_account_name: '', bank_name: '' });
   const [isSubmittingBank, setIsSubmittingBank] = useState(false);
@@ -184,21 +185,42 @@ export default function ImporterDashboardPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleBillPaid = async (sender: { senderName: string; senderBankName: string }) => {
-    if (!payingBill || !customer?.id) return;
-    const res = await fetch(`${EDGE_URL}?action=bill-mark-paid`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        customer_id: customer.id,
-        bill_id: payingBill.id,
-        sender_name: sender.senderName,
-        sender_bank_name: sender.senderBankName,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? 'Could not record your payment. Please try again.');
-    await load();
+  // Bills (consolidation & shipping, clearance) are Paystack-only — no
+  // manual bank transfer option for these, unlike the original order
+  // checkout which still offers both.
+  const payBillWithPaystack = async (bill: ConsolidationBill) => {
+    if (!customer?.id || !customer.email) return;
+    setIsPayingBill(true);
+    try {
+      await loadPaystackScript();
+      const reference = generateReference('QAFBILL');
+      initializePayment({
+        email: customer.email,
+        amount: toKobo(bill.amount_ngn),
+        reference,
+        metadata: { bill_id: bill.id, kind: bill.kind },
+        onSuccess: async () => {
+          try {
+            const res = await fetch(`${EDGE_URL}?action=bill-pay-verify`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ customer_id: customer.id, bill_id: bill.id, reference }),
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error ?? 'Payment could not be verified.');
+            setPayingBill(null);
+            await load();
+          } catch (e: any) {
+            alert(e?.message ?? 'Payment verification failed. If you were charged, contact support.');
+          } finally {
+            setIsPayingBill(false);
+          }
+        },
+        onCancel: () => setIsPayingBill(false),
+      });
+    } catch {
+      setIsPayingBill(false);
+    }
   };
 
   const submitBankDetails = async () => {
@@ -234,14 +256,14 @@ export default function ImporterDashboardPage() {
   // 'unpaid', which made awaiting_confirmation orders invisible entirely.
   const toPay = orders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'failed' || o.payment_status === 'awaiting_confirmation');
   const confirmedOrders = orders.filter(o => o.status === 'confirmed');
-  const billedOrders = orders.filter(o => o.status === 'billed');
+  const unpaidBillsCount = bills.filter(b => b.status !== 'paid' && b.status !== 'cancelled').length;
   const toReceiveOrders = orders.filter(o => o.status === 'to_review');
   const pendingRefundsCount = refunds.filter(r => r.status === 'pending').length;
 
   const TABS: Array<{ key: PipelineTab; label: string; icon: any; count: number }> = [
     { key: 'to_pay', label: 'To Pay', icon: CreditCard, count: toPay.length },
     { key: 'confirmed', label: 'Confirmed', icon: CheckCircle2, count: confirmedOrders.length },
-    { key: 'billed', label: 'Billed', icon: Receipt, count: billedOrders.length },
+    { key: 'billed', label: 'Billed', icon: Receipt, count: unpaidBillsCount },
     { key: 'to_receive', label: 'To Receive', icon: PackageCheck, count: toReceiveOrders.length },
     { key: 'refund', label: 'Refund', icon: RotateCcw, count: pendingRefundsCount },
   ];
@@ -449,62 +471,17 @@ export default function ImporterDashboardPage() {
             <h2 className="font-bold text-gray-800 text-sm mb-3">Billed</h2>
             {isLoading ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-24" />
-            ) : billedOrders.length === 0 && bills.length === 0 ? (
+            ) : bills.length === 0 ? (
               <EmptyState icon={Receipt} text="No bills right now." />
             ) : (
               <div className="space-y-3">
-                {billedOrders.map(order => {
-                  const orderBills = bills.filter(b => b.order_id === order.id);
-                  const consolidation = orderBills.find(b => b.kind === 'consolidation');
-                  const shipping = orderBills.find(b => b.kind === 'shipping');
-                  return (
-                    <div key={order.id} className="bg-white rounded-2xl border border-gray-100 p-4">
-                      <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-3">{order.code}</span>
-
-                      {/* Consolidation | Ship to Nigeria split */}
-                      <div className="grid grid-cols-2 divide-x divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
-                        <BillColumn
-                          icon={Warehouse}
-                          label="Consolidation"
-                          bill={consolidation}
-                          onInfo={() => setInfoBillKind('consolidation')}
-                          onPay={b => setPayingBill(b)}
-                        />
-                        <BillColumn
-                          icon={Ship}
-                          label="Ship to Nigeria"
-                          bill={shipping}
-                          onInfo={() => setInfoBillKind('shipping')}
-                          onPay={b => setPayingBill(b)}
-                        />
-                      </div>
-
-                      <OrderItemsDropdown
-                        order={order}
-                        isExpanded={expandedOrderIds.has(order.id)}
-                        onToggle={() => toggleExpanded(order.id)}
-                        compact
-                      />
-                    </div>
-                  );
-                })}
-
-                {/* Bills without a linked order still shown for completeness */}
-                {bills.filter(b => !b.order_id).map(bill => (
-                  <div key={bill.id} className="bg-white rounded-2xl border border-gray-100 p-4">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <p className="text-sm font-semibold text-gray-800">{bill.reason}</p>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${BILL_STATUS_COLORS[bill.status]}`}>
-                        {BILL_STATUS_LABELS[bill.status]}
-                      </span>
-                    </div>
-                    <p className="text-lg font-black text-gray-900 mb-2">{fmt(bill.amount_ngn)}</p>
-                    {bill.status === 'pending' && (
-                      <button onClick={() => setPayingBill(bill)} className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg">
-                        Pay now
-                      </button>
-                    )}
-                  </div>
+                {bills.map(bill => (
+                  <BillCard
+                    key={bill.id}
+                    bill={bill}
+                    onInfo={() => setInfoBillKind(bill.kind)}
+                    onPay={() => setPayingBill(bill)}
+                  />
                 ))}
               </div>
             )}
@@ -640,16 +617,23 @@ export default function ImporterDashboardPage() {
       </div>
 
       {payingBill && (
-        <ManualPaymentFlow
-          amountLabel={fmt(payingBill.amount_ngn)}
-          bank={{
-            bank_account_number: payingBill.bank_account_number,
-            bank_account_name: payingBill.bank_account_name,
-            bank_name: payingBill.bank_name,
-          }}
-          onConfirmPaid={handleBillPaid}
-          onClose={() => setPayingBill(null)}
-        />
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center sm:p-4" onClick={() => !isPayingBill && setPayingBill(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6">
+            <h3 className="font-bold text-gray-900 text-lg mb-1">{payingBill.reason}</h3>
+            <p className="text-2xl font-black text-gray-900 mb-4">{fmt(payingBill.amount_ngn)}</p>
+            <p className="text-xs text-gray-400 mb-5">Paid securely by card, bank transfer, or USSD through Paystack.</p>
+            <button
+              onClick={() => payBillWithPaystack(payingBill)}
+              disabled={isPayingBill}
+              className="w-full py-3.5 bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2 mb-2"
+            >
+              {isPayingBill ? <Loader className="w-4 h-4 animate-spin" /> : 'Pay with Paystack'}
+            </button>
+            <button onClick={() => setPayingBill(null)} disabled={isPayingBill} className="w-full py-2 text-xs text-gray-400 font-medium">
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {showSettings && <ImportSettingsSheet onClose={() => setShowSettings(false)} />}
@@ -667,20 +651,20 @@ export default function ImporterDashboardPage() {
         />
       )}
 
-      {/* Bill info popover — explains what Consolidation vs Ship to Nigeria fees are for */}
+      {/* Bill info popover — explains what each fee is for */}
       {infoBillKind && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={() => setInfoBillKind(null)}>
           <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-xs rounded-t-3xl sm:rounded-2xl p-6">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-bold text-gray-900">{infoBillKind === 'consolidation' ? 'Consolidation fee' : 'Ship to Nigeria fee'}</h3>
+              <h3 className="font-bold text-gray-900">{infoBillKind === 'consolidation_shipping' ? 'Consolidation & shipping fee' : 'Clearance fee'}</h3>
               <button onClick={() => setInfoBillKind(null)} className="p-1 hover:bg-gray-100 rounded-lg">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
             <p className="text-sm text-gray-600 leading-relaxed">
-              {infoBillKind === 'consolidation'
-                ? "This covers getting your goods to our warehouse where all orders are combined into one shipment — this is what keeps your shipping cost so low."
-                : "This is the fee to ship your consolidated goods from our warehouse to Nigeria. Once this is paid, your order moves to \"To Receive.\""}
+              {infoBillKind === 'consolidation_shipping'
+                ? "This covers getting your goods to our warehouse, combining everyone's orders into one shipment, and shipping that consolidated batch to Nigeria — this is what keeps costs so low."
+                : "This covers customs clearance for your batch once it arrives in Nigeria. Once paid and your item passes clearance, it moves to \"To Receive.\""}
             </p>
           </div>
         </div>
@@ -812,56 +796,55 @@ function OrderItemsDropdown({ order, isExpanded, onToggle, compact = false }: {
   );
 }
 
-function BillColumn({ icon: Icon, label, bill, onInfo, onPay }: {
-  icon: any;
-  label: string;
-  bill?: ConsolidationBill;
+function BillCard({ bill, onInfo, onPay }: {
+  bill: ConsolidationBill;
   onInfo: () => void;
-  onPay: (bill: ConsolidationBill) => void;
+  onPay: () => void;
 }) {
   const [showItems, setShowItems] = useState(false);
-  const hasLineItems = bill?.line_items && bill.line_items.length > 1;
+  const hasLineItems = bill.line_items && bill.line_items.length > 1;
+  const Icon = bill.kind === 'clearance' ? ShieldCheck : Ship;
+  const label = bill.kind === 'clearance' ? 'Clearance' : 'Consolidation & shipping';
 
   return (
-    <div className="p-3 text-center">
-      <div className="flex items-center justify-center gap-1 mb-1.5">
-        <Icon className="w-3.5 h-3.5 text-gray-400" />
-        <span className="text-[10px] font-bold text-gray-700">{label}</span>
-        <button onClick={onInfo} className="p-0.5">
-          <Info className="w-3 h-3 text-gray-300" />
-        </button>
-      </div>
-      {!bill ? (
-        <p className="text-[10px] text-gray-300">Not billed yet</p>
-      ) : (
-        <>
-          <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mb-1.5 ${BILL_STATUS_COLORS[bill.status]}`}>
-            {BILL_STATUS_LABELS[bill.status]}
-          </span>
-          <button
-            onClick={() => hasLineItems && setShowItems(v => !v)}
-            className="block w-full text-xs font-black text-gray-900 mb-1.5"
-            disabled={!hasLineItems}
-          >
-            {fmt(bill.amount_ngn)}
-            {hasLineItems && <span className="text-[9px] font-semibold text-orange-500 ml-1">{showItems ? '▲' : '▼'}</span>}
+    <div className="bg-white rounded-2xl border border-gray-100 p-4">
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <div className="flex items-center gap-1.5">
+          <Icon className="w-4 h-4 text-gray-400" />
+          <span className="text-sm font-semibold text-gray-800">{label}</span>
+          <button onClick={onInfo} className="p-0.5">
+            <Info className="w-3.5 h-3.5 text-gray-300" />
           </button>
-          {hasLineItems && showItems && (
-            <div className="text-left bg-gray-50 rounded-lg p-2 mb-2 space-y-0.5">
-              {bill.line_items!.map((li, i) => (
-                <div key={i} className="flex items-center justify-between text-[9px] text-gray-600 gap-1">
-                  <span className="truncate">{li.label}</span>
-                  <span className="font-semibold flex-shrink-0">{fmt(li.amount_ngn)}</span>
-                </div>
-              ))}
+        </div>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${BILL_STATUS_COLORS[bill.status]}`}>
+          {BILL_STATUS_LABELS[bill.status]}
+        </span>
+      </div>
+
+      <button
+        onClick={() => hasLineItems && setShowItems(v => !v)}
+        className="block text-lg font-black text-gray-900 mb-2"
+        disabled={!hasLineItems}
+      >
+        {fmt(bill.amount_ngn)}
+        {hasLineItems && <span className="text-[10px] font-semibold text-orange-500 ml-1.5">{showItems ? '▲ hide items' : '▼ show items'}</span>}
+      </button>
+
+      {hasLineItems && showItems && (
+        <div className="bg-gray-50 rounded-lg p-2.5 mb-3 space-y-1">
+          {bill.line_items!.map((li, i) => (
+            <div key={i} className="flex items-center justify-between text-[11px] text-gray-600 gap-2">
+              <span className="truncate">{li.label}</span>
+              <span className="font-semibold flex-shrink-0">{fmt(li.amount_ngn)}</span>
             </div>
-          )}
-          {bill.status === 'pending' && (
-            <button onClick={() => onPay(bill)} className="text-[10px] font-bold bg-gray-900 text-white px-2.5 py-1.5 rounded-lg">
-              Pay now
-            </button>
-          )}
-        </>
+          ))}
+        </div>
+      )}
+
+      {bill.status === 'pending' && (
+        <button onClick={onPay} className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg">
+          Pay with Paystack
+        </button>
       )}
     </div>
   );

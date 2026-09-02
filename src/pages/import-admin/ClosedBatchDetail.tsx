@@ -18,7 +18,7 @@ import { CustomerDetail } from './ImportAdminCustomers';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
-interface OrderItem { id: string; name: string; image_url: string; quantity: number; variant_options?: Record<string, string>; }
+interface OrderItem { id: string; name: string; image_url: string; quantity: number; price_ngn?: number; variant_options?: Record<string, string>; }
 interface OrderRow {
   id: string; code: string; user_id: string | null; customer_name: string;
   items: OrderItem[]; created_at: string;
@@ -135,6 +135,27 @@ export default function ClosedBatchDetail({
     }
     return Array.from(map.values()).sort((a, b) => new Date(a.oldestAt).getTime() - new Date(b.oldestAt).getTime());
   }, [filteredBreakdown]);
+
+  // Actual sales revenue per product — what customers paid at checkout
+  // (item.price_ngn × quantity), not the consolidation/clearance fee. This
+  // is "how much am I actually selling", independent of billing stage.
+  const revenueByProduct = useMemo(() => {
+    const map = new Map<string, number>();
+    let source = orders;
+    if (shippingFilter) source = orders.filter(o => o.shipping_method === shippingFilter);
+    for (const o of source) {
+      for (const item of (o.items ?? [])) {
+        const line = Number(item.price_ngn ?? 0) * Number(item.quantity ?? 0);
+        map.set(item.id, (map.get(item.id) ?? 0) + line);
+      }
+    }
+    return map;
+  }, [orders, shippingFilter]);
+
+  const totalBatchRevenue = useMemo(
+    () => Array.from(revenueByProduct.values()).reduce((s, v) => s + v, 0),
+    [revenueByProduct]
+  );
 
   const priceFor = (productId: string) => {
     const draft = priceDrafts[`${productId}:${activeKind}`];
@@ -288,6 +309,13 @@ export default function ClosedBatchDetail({
                 </span>
               </div>
 
+              {totalBatchRevenue > 0 && (
+                <div className="bg-emerald-50 rounded-xl p-3 mb-3 flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-emerald-600">Actually selling right now</p>
+                  <p className="text-sm font-black text-emerald-700">{fmt(totalBatchRevenue)}</p>
+                </div>
+              )}
+
               {isLocked && (
                 <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-100 rounded-xl p-3 mb-3">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
@@ -300,19 +328,24 @@ export default function ClosedBatchDetail({
               <div className="space-y-2">
                 {products.map(p => (
                   <div key={p.id} className="flex items-center gap-2.5 bg-gray-50 rounded-xl p-2.5">
-                    {p.image ? (
-                      <img src={p.image} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                        <Package className="w-4 h-4 text-gray-300" />
-                      </div>
-                    )}
                     <button
                       onClick={() => onOpenProduct?.(p.id)}
-                      className={`flex-1 min-w-0 text-left ${onOpenProduct ? 'hover:underline' : ''}`}
+                      className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
                     >
-                      <p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p>
-                      <p className="text-[10px] text-orange-500 font-bold">{p.totalQty} units</p>
+                      {p.image ? (
+                        <img src={p.image} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          <Package className="w-4 h-4 text-gray-300" />
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className={`text-xs font-semibold truncate ${onOpenProduct ? 'text-orange-600 hover:underline' : 'text-gray-800'}`}>{p.name}</p>
+                        <p className="text-[10px] text-orange-500 font-bold">{p.totalQty} units</p>
+                        {revenueByProduct.get(p.id) ? (
+                          <p className="text-[10px] text-emerald-600 font-semibold">{fmt(revenueByProduct.get(p.id)!)} sold</p>
+                        ) : null}
+                      </div>
                     </button>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <span className="text-xs text-gray-400">₦</span>
@@ -440,13 +473,25 @@ export default function ClosedBatchDetail({
                   const isExpanded = expandedProducts.has(p.id);
                   return (
                     <div key={p.id} className="bg-white rounded-2xl border border-gray-100 p-3">
-                      <button onClick={() => toggleExpanded(p.id)} className="w-full flex items-center justify-between">
-                        <span className="text-sm font-semibold text-gray-800">{p.name}</span>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-orange-500">{p.totalQty} units</span>
+                      <div className="flex items-center gap-2.5">
+                        <button
+                          onClick={() => onOpenProduct?.(p.id)}
+                          className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
+                        >
+                          {p.image ? (
+                            <img src={p.image} alt="" className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                              <Package className="w-3.5 h-3.5 text-gray-300" />
+                            </div>
+                          )}
+                          <span className={`text-sm font-semibold truncate ${onOpenProduct ? 'text-orange-600 hover:underline' : 'text-gray-800'}`}>{p.name}</span>
+                        </button>
+                        <span className="text-xs font-bold text-orange-500 flex-shrink-0">{p.totalQty} units</span>
+                        <button onClick={() => toggleExpanded(p.id)} className="p-1 flex-shrink-0">
                           <ChevronDown className={`w-4 h-4 text-gray-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                        </div>
-                      </button>
+                        </button>
+                      </div>
                       {isExpanded && (
                         <div className="space-y-1 mt-2 pt-2 border-t border-gray-50">
                           {buyersForProduct.map((r, i) => (
