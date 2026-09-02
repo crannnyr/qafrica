@@ -57,6 +57,8 @@ interface ImportOrder {
   status: 'pending' | 'confirmed' | 'billed' | 'to_review';
   payment_status: 'unpaid' | 'awaiting_confirmation' | 'paid' | 'failed';
   payment_method: 'paystack' | 'manual' | null;
+  manual_sender_name?: string | null;
+  manual_sender_bank?: string | null;
   admin_note: string | null;
   created_at: string;
   user_id: string | null;
@@ -397,6 +399,15 @@ function LoadCodePanel({ token }: { token: string }) {
                 <div className="bg-amber-50 border border-amber-100 rounded-xl px-3.5 py-3">
                   <p className="text-xs text-amber-800 font-semibold mb-0.5">Customer says they've paid by bank transfer</p>
                   <p className="text-[11px] text-amber-600 mb-2.5">Check your bank statement before confirming — this is a self-report, not a verified payment.</p>
+                  {(order.manual_sender_name || order.manual_sender_bank) && (
+                    <div className="bg-white border border-amber-200 rounded-lg px-3 py-2 mb-2.5">
+                      <p className="text-[10px] text-amber-500 font-semibold uppercase tracking-wide mb-0.5">Sender declared</p>
+                      <p className="text-xs text-gray-800 font-semibold">{order.manual_sender_name || 'Not provided'}</p>
+                      {order.manual_sender_bank && (
+                        <p className="text-[11px] text-gray-500 mt-0.5">from {order.manual_sender_bank}</p>
+                      )}
+                    </div>
+                  )}
                   <div className="flex gap-2">
                     <button
                       onClick={confirmPayment}

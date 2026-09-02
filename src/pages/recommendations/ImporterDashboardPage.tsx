@@ -184,12 +184,17 @@ export default function ImporterDashboardPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleBillPaid = async () => {
+  const handleBillPaid = async (sender: { senderName: string; senderBankName: string }) => {
     if (!payingBill || !customer?.id) return;
     const res = await fetch(`${EDGE_URL}?action=bill-mark-paid`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customer_id: customer.id, bill_id: payingBill.id }),
+      body: JSON.stringify({
+        customer_id: customer.id,
+        bill_id: payingBill.id,
+        sender_name: sender.senderName,
+        sender_bank_name: sender.senderBankName,
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error ?? 'Could not record your payment. Please try again.');

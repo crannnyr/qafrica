@@ -211,11 +211,16 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       <ManualPaymentFlow
         amountLabel={fmt(total)}
         bank={result.bank}
-        onConfirmPaid={async () => {
+        onConfirmPaid={async (sender) => {
           const res = await fetch(`${EDGE_URL}?action=checkout-mark-paid-claim`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ customer_id: customer.id, order_id: result.order_id }),
+            body: JSON.stringify({
+              customer_id: customer.id,
+              order_id: result.order_id,
+              sender_name: sender.senderName,
+              sender_bank_name: sender.senderBankName,
+            }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error ?? 'Could not submit payment confirmation. Please try again.');
