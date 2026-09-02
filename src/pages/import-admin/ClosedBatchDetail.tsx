@@ -328,8 +328,10 @@ export default function ClosedBatchDetail({
               <div className="space-y-2">
                 {products.map(p => (
                   <div key={p.id} className="flex items-center gap-2.5 bg-gray-50 rounded-xl p-2.5">
-                    <button
-                      onClick={() => onOpenProduct?.(p.id)}
+                    <a
+                      href={`/recommendations/${p.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
                     >
                       {p.image ? (
@@ -340,13 +342,13 @@ export default function ClosedBatchDetail({
                         </div>
                       )}
                       <div className="min-w-0">
-                        <p className={`text-xs font-semibold truncate ${onOpenProduct ? 'text-orange-600 hover:underline' : 'text-gray-800'}`}>{p.name}</p>
+                        <p className="text-xs font-semibold text-orange-600 hover:underline truncate">{p.name}</p>
                         <p className="text-[10px] text-orange-500 font-bold">{p.totalQty} units</p>
                         {revenueByProduct.get(p.id) ? (
                           <p className="text-[10px] text-emerald-600 font-semibold">{fmt(revenueByProduct.get(p.id)!)} sold</p>
                         ) : null}
                       </div>
-                    </button>
+                    </a>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <span className="text-xs text-gray-400">₦</span>
                       <input
@@ -474,8 +476,10 @@ export default function ClosedBatchDetail({
                   return (
                     <div key={p.id} className="bg-white rounded-2xl border border-gray-100 p-3">
                       <div className="flex items-center gap-2.5">
-                        <button
-                          onClick={() => onOpenProduct?.(p.id)}
+                        <a
+                          href={`/recommendations/${p.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
                         >
                           {p.image ? (
@@ -485,8 +489,8 @@ export default function ClosedBatchDetail({
                               <Package className="w-3.5 h-3.5 text-gray-300" />
                             </div>
                           )}
-                          <span className={`text-sm font-semibold truncate ${onOpenProduct ? 'text-orange-600 hover:underline' : 'text-gray-800'}`}>{p.name}</span>
-                        </button>
+                          <span className="text-sm font-semibold text-orange-600 hover:underline truncate">{p.name}</span>
+                        </a>
                         <span className="text-xs font-bold text-orange-500 flex-shrink-0">{p.totalQty} units</span>
                         <button onClick={() => toggleExpanded(p.id)} className="p-1 flex-shrink-0">
                           <ChevronDown className={`w-4 h-4 text-gray-300 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />

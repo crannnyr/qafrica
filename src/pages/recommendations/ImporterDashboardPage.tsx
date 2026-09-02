@@ -42,7 +42,7 @@ interface FailedOrder {
 interface DashboardOrder {
   id: string;
   code: string;
-  status: 'pending' | 'confirmed' | 'billed' | 'to_review';
+  status: 'pending' | 'confirmed' | 'ordered' | 'ordered_and_closed' | 'shipped_and_closed' | 'clearance_and_closed' | 'received';
   payment_status: 'unpaid' | 'awaiting_confirmation' | 'paid' | 'failed';
   payment_method: 'paystack' | 'manual' | null;
   total_ngn: number;
@@ -101,7 +101,7 @@ function timeAgo(d: string) {
 }
 
 // Which pipeline tab a bank icon-grid tile is
-type PipelineTab = 'to_pay' | 'confirmed' | 'billed' | 'to_receive' | 'refund';
+type PipelineTab = 'to_pay' | 'confirmed' | 'billed' | 'shipped' | 'to_receive' | 'refund';
 
 export default function ImporterDashboardPage() {
   useImportPwaManifest();
@@ -255,15 +255,17 @@ export default function ImporterDashboardPage() {
   // Both used to be filtered out of every tab once payment_status left
   // 'unpaid', which made awaiting_confirmation orders invisible entirely.
   const toPay = orders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'failed' || o.payment_status === 'awaiting_confirmation');
-  const confirmedOrders = orders.filter(o => o.status === 'confirmed');
+  const confirmedOrders = orders.filter(o => o.status === 'confirmed' || o.status === 'ordered');
   const unpaidBillsCount = bills.filter(b => b.status !== 'paid' && b.status !== 'cancelled').length;
-  const toReceiveOrders = orders.filter(o => o.status === 'to_review');
+  const shippedOrders = orders.filter(o => o.status === 'shipped_and_closed' || o.status === 'clearance_and_closed');
+  const toReceiveOrders = orders.filter(o => o.status === 'received');
   const pendingRefundsCount = refunds.filter(r => r.status === 'pending').length;
 
   const TABS: Array<{ key: PipelineTab; label: string; icon: any; count: number }> = [
     { key: 'to_pay', label: 'To Pay', icon: CreditCard, count: toPay.length },
     { key: 'confirmed', label: 'Confirmed', icon: CheckCircle2, count: confirmedOrders.length },
     { key: 'billed', label: 'Billed', icon: Receipt, count: unpaidBillsCount },
+    { key: 'shipped', label: 'Shipped', icon: Ship, count: shippedOrders.length },
     { key: 'to_receive', label: 'To Receive', icon: PackageCheck, count: toReceiveOrders.length },
     { key: 'refund', label: 'Refund', icon: RotateCcw, count: pendingRefundsCount },
   ];
@@ -319,7 +321,7 @@ export default function ImporterDashboardPage() {
 
         {/* ── Order pipeline icon grid ─────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
-          <div className="grid grid-cols-5 gap-1">
+          <div className="grid grid-cols-6 gap-1">
             {TABS.map(t => {
               const Icon = t.icon;
               const isActive = activeTab === t.key;
@@ -450,7 +452,11 @@ export default function ImporterDashboardPage() {
                     <div className="px-5 py-4 flex items-center justify-between gap-3">
                       <div>
                         <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
-                        <p className="text-[11px] text-gray-400">Payment received — we're preparing your consolidation bill.</p>
+                        <p className="text-[11px] text-gray-400">
+                          {order.status === 'ordered'
+                            ? "Being sourced — we're getting your items together."
+                            : "Payment received — we're getting this ready to source."}
+                        </p>
                       </div>
                       <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
                     </div>
@@ -488,13 +494,68 @@ export default function ImporterDashboardPage() {
           </section>
         )}
 
+        {activeTab === 'shipped' && (
+          <section>
+            <h2 className="font-bold text-gray-800 text-sm mb-3">Shipped</h2>
+            {isLoading ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
+            ) : shippedOrders.length === 0 ? (
+              <EmptyState icon={Ship} text="Nothing shipped right now." />
+            ) : (
+              <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
+                {shippedOrders.map(order => {
+                  const unpaidShippingBill = bills.find(b => b.kind === 'consolidation_shipping' && b.status !== 'paid');
+                  const unpaidClearanceBill = order.status === 'clearance_and_closed'
+                    ? bills.find(b => b.kind === 'clearance' && b.status !== 'paid')
+                    : undefined;
+                  const held = unpaidShippingBill ?? unpaidClearanceBill;
+                  return (
+                    <div key={order.id}>
+                      <div className="px-5 py-4 flex items-center justify-between gap-3">
+                        <div>
+                          <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
+                          {held ? (
+                            <p className="text-[11px] text-amber-600">
+                              On its way, but held — pay your {held.kind === 'clearance' ? 'clearance' : 'consolidation & shipping'} fee to release it.
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-emerald-600">
+                              {order.status === 'clearance_and_closed' ? 'Clearing customs — fully paid.' : 'On its way — fully paid.'}
+                            </p>
+                          )}
+                        </div>
+                        <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                      </div>
+                      {held && (
+                        <div className="px-5 pb-4">
+                          <button
+                            onClick={() => setPayingBill(held)}
+                            className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg"
+                          >
+                            Pay now to release
+                          </button>
+                        </div>
+                      )}
+                      <OrderItemsDropdown
+                        order={order}
+                        isExpanded={expandedOrderIds.has(order.id)}
+                        onToggle={() => toggleExpanded(order.id)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
         {activeTab === 'to_receive' && (
           <section>
             <h2 className="font-bold text-gray-800 text-sm mb-3">To Receive</h2>
             {isLoading ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
             ) : toReceiveOrders.length === 0 ? (
-              <EmptyState icon={PackageCheck} text="Nothing on its way to you right now." />
+              <EmptyState icon={PackageCheck} text="Nothing ready for pickup or delivery yet." />
             ) : (
               <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
                 {toReceiveOrders.map(order => (
@@ -502,7 +563,7 @@ export default function ImporterDashboardPage() {
                     <div className="px-5 py-4 flex items-center justify-between gap-3">
                       <div>
                         <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
-                        <p className="text-[11px] text-emerald-600">Fully paid — on its way to you.</p>
+                        <p className="text-[11px] text-emerald-600">Cleared and ready — reach out to arrange pickup or delivery.</p>
                       </div>
                       <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
                     </div>
