@@ -42,10 +42,23 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [showWhyQafrica, setShowWhyQafrica] = useState(false);
   const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'manual'>('paystack');
+  const [manualTransferEnabled, setManualTransferEnabled] = useState(true);
   const [whatsapp, setWhatsapp] = useState(customer.phone ?? '');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ code: string; bank?: any; order_id?: string } | null>(null);
+
+  useEffect(() => {
+    fetch(`${EDGE_URL}?action=admin-settings`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.settings && typeof data.settings.manual_transfer_enabled === 'boolean') {
+          setManualTransferEnabled(data.settings.manual_transfer_enabled);
+          if (!data.settings.manual_transfer_enabled) setPaymentMethod('paystack');
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Delivery address — only required when delivery === 'to_me'
   const [address, setAddress] = useState<DeliveryAddress>({
@@ -436,12 +449,28 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                 <p className="text-[11px] text-gray-400">Instant confirmation via Paystack</p>
               </div>
             </button>
-            <button onClick={() => setPaymentMethod('manual')}
-              className={`w-full flex items-center gap-3 text-left p-3 rounded-xl border-2 transition-colors ${paymentMethod === 'manual' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
+            <button
+              onClick={() => manualTransferEnabled && setPaymentMethod('manual')}
+              disabled={!manualTransferEnabled}
+              className={`w-full flex items-center gap-3 text-left p-3 rounded-xl border-2 transition-colors ${
+                !manualTransferEnabled
+                  ? 'border-gray-100 opacity-50 cursor-not-allowed'
+                  : paymentMethod === 'manual' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'
+              }`}
+            >
               <Building2 className="w-4 h-4 text-gray-700 flex-shrink-0" />
-              <div>
-                <p className="font-semibold text-gray-900 text-xs">Manual bank transfer</p>
-                <p className="text-[11px] text-gray-400">We confirm once received</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-semibold text-gray-900 text-xs">Manual bank transfer</p>
+                  {!manualTransferEnabled && (
+                    <span className="text-[9px] font-bold uppercase tracking-wide bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">
+                      Currently inactive
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  {manualTransferEnabled ? 'We confirm once received' : 'Please pay with card for now'}
+                </p>
               </div>
             </button>
           </div>
