@@ -387,7 +387,7 @@ export default function ImporterDashboardPage() {
               </div>
               <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Shipping<br />Address</span>
             </button>
-            <a href="https://chat.whatsapp.com/H0e7sUP8sYV2r3dhjm4Cfa?s=cl&p=a&ilr=0" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5">
+            <a href="https://chat.whatsapp.com/DggRK0IeD94F0vyszfhfPW" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5">
               <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
                 <Headset className="w-4 h-4 text-gray-400" />
               </div>

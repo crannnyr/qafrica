@@ -24,7 +24,7 @@ import { supabase } from '@/services';
 // The one real destination for every manual transfer in the importation
 // section. If this ever needs to change, update it here — every screen that
 // shows bank details for a manual payment pulls from this component.
-export const COMMUNITY_LINK = 'https://chat.whatsapp.com/H0e7sUP8sYV2r3dhjm4Cfa?s=cl&p=a&ilr=0';
+export const COMMUNITY_LINK = 'https://chat.whatsapp.com/DggRK0IeD94F0vyszfhfPW';
 
 interface BankDetails {
   bank_account_number: string;
