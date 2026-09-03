@@ -122,6 +122,10 @@ export default function ImporterDashboardPage() {
   const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
   const [payingBill, setPayingBill] = useState<ConsolidationBill | null>(null);
   const [isPayingBill, setIsPayingBill] = useState(false);
+  // True only during the gap after Paystack has confirmed the charge but
+  // before our server has confirmed it back — same reasoning as the order
+  // checkout flow. Gets its own blocking screen + beforeunload warning.
+  const [isVerifyingBill, setIsVerifyingBill] = useState(false);
   const [infoBillKind, setInfoBillKind] = useState<'consolidation_shipping' | 'clearance' | null>(null);
   const [refundBankForm, setRefundBankForm] = useState<Refund | null>(null);
   const [bankFormData, setBankFormData] = useState({ bank_account_number: '', bank_account_name: '', bank_name: '' });
@@ -185,6 +189,16 @@ export default function ImporterDashboardPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (!isVerifyingBill) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isVerifyingBill]);
+
   // Bills (consolidation & shipping, clearance) are Paystack-only — no
   // manual bank transfer option for these, unlike the original order
   // checkout which still offers both.
@@ -200,21 +214,31 @@ export default function ImporterDashboardPage() {
         reference,
         metadata: { bill_id: bill.id, kind: bill.kind },
         onSuccess: async () => {
-          try {
-            const res = await fetch(`${EDGE_URL}?action=bill-pay-verify`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ customer_id: customer.id, bill_id: bill.id, reference }),
-            });
-            const data = await res.json();
-            if (!data.success) throw new Error(data.error ?? 'Payment could not be verified.');
+          setIsVerifyingBill(true);
+          let data: any = null;
+          let lastError: string | null = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const res = await fetch(`${EDGE_URL}?action=bill-pay-verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customer_id: customer.id, bill_id: bill.id, reference }),
+              });
+              data = await res.json();
+              break;
+            } catch {
+              lastError = 'Payment verification failed. If you were charged, contact support.';
+              if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+            }
+          }
+          if (data?.success) {
             setPayingBill(null);
             await load();
-          } catch (e: any) {
-            alert(e?.message ?? 'Payment verification failed. If you were charged, contact support.');
-          } finally {
-            setIsPayingBill(false);
+          } else {
+            alert(data?.error ?? lastError ?? 'Payment could not be verified. If you were charged, contact support.');
           }
+          setIsVerifyingBill(false);
+          setIsPayingBill(false);
         },
         onCancel: () => setIsPayingBill(false),
       });
@@ -274,6 +298,18 @@ export default function ImporterDashboardPage() {
   const initials = initialsFrom(customer?.full_name);
 
   if (!isAuthenticated) return null; // redirect effect above handles this
+
+  if (isVerifyingBill) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center px-8 text-center">
+        <Loader className="w-10 h-10 text-orange-500 animate-spin mb-6" />
+        <h2 className="text-lg font-bold text-gray-900 mb-2">Confirming your payment…</h2>
+        <p className="text-sm text-gray-500 max-w-xs">
+          Your payment already went through — we're just confirming it on our end. Please don't close this page or go back until this finishes, it only takes a few seconds.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

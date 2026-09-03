@@ -45,8 +45,25 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [manualTransferEnabled, setManualTransferEnabled] = useState(true);
   const [whatsapp, setWhatsapp] = useState(customer.phone ?? '');
   const [isProcessing, setIsProcessing] = useState(false);
+  // Separate from isProcessing: true only during the narrow window after
+  // Paystack itself has already taken the customer's money and closed its
+  // popup, but before our server has confirmed that back to us. This is the
+  // window where closing the tab/app causes the "paid but stuck unconfirmed"
+  // cases — so it gets its own full-screen blocking state and a
+  // beforeunload warning, rather than just the normal button spinner.
+  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<{ code: string; bank?: any; order_id?: string } | null>(null);
+
+  useEffect(() => {
+    if (!isVerifying) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isVerifying]);
 
   useEffect(() => {
     fetch(`${EDGE_URL}?action=admin-settings`)
@@ -192,20 +209,29 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         reference,
         metadata: { order_id: data.order_id, code: data.code },
         onSuccess: async () => {
-          try {
-            const verifyRes = await fetch(`${EDGE_URL}?action=checkout-verify`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ order_id: data.order_id, reference }),
-            });
-            const verifyData = await verifyRes.json();
-            if (verifyData.success) setResult({ code: data.code });
-            else setError('Payment could not be verified. If you were charged, contact support with your order code: ' + data.code);
-          } catch {
-            setError('Payment verification failed. Contact support with your order code: ' + data.code);
-          } finally {
-            setIsProcessing(false);
+          setIsVerifying(true);
+          // Paystack has already charged the customer at this point — this
+          // call is just us catching up. Retry a few times before giving up,
+          // since a flaky connection right here is exactly what causes a
+          // real payment to end up stuck unconfirmed.
+          let verifyData: any = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const verifyRes = await fetch(`${EDGE_URL}?action=checkout-verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_id: data.order_id, reference }),
+              });
+              verifyData = await verifyRes.json();
+              break;
+            } catch {
+              if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
+            }
           }
+          if (verifyData?.success) setResult({ code: data.code });
+          else setError('Payment could not be verified. If you were charged, contact support with your order code: ' + data.code);
+          setIsVerifying(false);
+          setIsProcessing(false);
         },
         onCancel: () => setIsProcessing(false),
       });
@@ -214,6 +240,24 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       setIsProcessing(false);
     }
   };
+
+  // ── Verifying screen ────────────────────────────────────────────────────
+  // Shown only in the gap between Paystack confirming the charge and our
+  // own server confirming it back to us. Deliberately blocks the whole
+  // screen (no close button, no back gesture affordance) with an explicit
+  // "don't close this" instruction, since closing here is exactly what
+  // causes a real payment to end up stuck unconfirmed.
+  if (isVerifying) {
+    return (
+      <div className="fixed inset-0 z-50 bg-white flex flex-col items-center justify-center px-8 text-center">
+        <Loader className="w-10 h-10 text-orange-500 animate-spin mb-6" />
+        <h2 className="text-lg font-bold text-gray-900 mb-2">Confirming your payment…</h2>
+        <p className="text-sm text-gray-500 max-w-xs">
+          Your payment already went through — we're just confirming it on our end. Please don't close this page or go back until this finishes, it only takes a few seconds.
+        </p>
+      </div>
+    );
+  }
 
   // ── Success screen ──────────────────────────────────────────────────────
   // Manual bank transfer goes through the shared warning -> details -> "I have
