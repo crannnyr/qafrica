@@ -18,6 +18,9 @@ import ManualPaymentFlow, { COMMUNITY_LINK } from './ManualPaymentFlow';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const SHIPPING_BLOG_SLUG = 'why-shipping-costs-so-much-and-how-we-fix-it';
+// Orders over this amount can't go through Paystack — manual bank transfer
+// only. Mirrors the same cap enforced server-side in checkout-init.
+const PAYSTACK_MAX_NGN = 50_000;
 
 interface DeliveryAddress {
   name: string;
@@ -141,6 +144,14 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
   const jumiaFee = delivery === 'to_qafrica' ? cart.reduce((s, i) => s + 200 * i.quantity, 0) : 0;
   const total = subtotal + jumiaFee;
+  const paystackAllowed = total <= PAYSTACK_MAX_NGN;
+
+  // Orders over the Paystack cap must go manual — force the switch (and
+  // back, if the cart shrinks below the cap again) rather than leaving the
+  // customer stuck on a now-disabled option.
+  useEffect(() => {
+    if (!paystackAllowed && paymentMethod === 'paystack') setPaymentMethod('manual');
+  }, [paystackAllowed, paymentMethod]);
 
   // "Deliver to QAFRICA" (Jumia consolidation) only makes sense in bulk — it's
   // gated behind a 20-unit cart minimum.
@@ -485,12 +496,21 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         <div>
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Payment method</p>
           <div className="space-y-2">
-            <button onClick={() => setPaymentMethod('paystack')}
-              className={`w-full flex items-center gap-3 text-left p-3 rounded-xl border-2 transition-colors ${paymentMethod === 'paystack' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
+            <button
+              onClick={() => paystackAllowed && setPaymentMethod('paystack')}
+              disabled={!paystackAllowed}
+              className={`w-full flex items-center gap-3 text-left p-3 rounded-xl border-2 transition-colors ${
+                !paystackAllowed
+                  ? 'border-gray-100 opacity-50 cursor-not-allowed'
+                  : paymentMethod === 'paystack' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'
+              }`}
+            >
               <CreditCard className="w-4 h-4 text-gray-700 flex-shrink-0" />
               <div>
                 <p className="font-semibold text-gray-900 text-xs">Pay with card — fastest</p>
-                <p className="text-[11px] text-gray-400">Instant confirmation via Paystack</p>
+                <p className="text-[11px] text-gray-400">
+                  {paystackAllowed ? 'Instant confirmation via Paystack' : `For orders under ${fmt(PAYSTACK_MAX_NGN)} only`}
+                </p>
               </div>
             </button>
             <button
@@ -509,6 +529,11 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                   {!manualTransferEnabled && (
                     <span className="text-[9px] font-bold uppercase tracking-wide bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded-full">
                       Currently inactive
+                    </span>
+                  )}
+                  {!paystackAllowed && manualTransferEnabled && (
+                    <span className="text-[9px] font-bold uppercase tracking-wide bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">
+                      Required for this amount
                     </span>
                   )}
                 </div>

@@ -200,6 +200,9 @@ export default function ManualPaymentFlow({
                 <p className="text-[10px] text-gray-400 mt-1">
                   This must match the name on the account you're transferring from.
                 </p>
+                <p className="text-[10px] text-amber-600 mt-1 font-medium">
+                  ⚠️ An incorrect or false sender name may delay verification by our team.
+                </p>
               </div>
 
               <button
@@ -243,7 +246,8 @@ export default function ManualPaymentFlow({
                   Transfers from any bank other than the one you selected will be rejected and are not
                   refundable. Initiating a fake or false transaction claim — saying you've paid when you
                   haven't — can also lead to serious action against your account with us, including
-                  suspension. Only tap "I have paid" once the transfer has actually gone through.
+                  suspension. Only tap "I have paid" once the transfer has actually gone through. An
+                  incorrect or false sender name will delay our team verifying your payment.
                 </p>
               </div>
               <button
