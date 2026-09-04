@@ -5,7 +5,7 @@ export const emailTemplates = {
 // Distinct welcome email for the Importation section — separate from the
 // regular dropship-store welcome, since the pitch and mental model are different.
 importWelcome: (name: string, appUrl?: string) => ({
-    subject: '📦 Welcome to QAFRICA Import — Here\'s how ₦5,000 shipping works',
+    subject: '📦 Welcome to QAFRICA Import — Here\'s how ₦500 shipping works',
     body: `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -47,7 +47,7 @@ importWelcome: (name: string, appUrl?: string) => ({
               <div style="height:2px;background:linear-gradient(to right,#F97316,#FED7AA);border-radius:2px;margin-bottom:28px;"></div>
 
               <p style="margin:0 0 12px;font-size:18px;font-weight:700;color:#111827;">
-                Why your shipping can land around ₦5,000
+                Why your shipping can land around ₦500
               </p>
               <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.7;">
                 Importing on your own usually means paying for clearance and freight
