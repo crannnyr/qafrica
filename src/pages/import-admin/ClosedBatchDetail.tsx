@@ -28,12 +28,20 @@ interface BreakdownRow {
   product_id: string; product_name: string; product_image: string | null;
   customer_id: string; customer_name: string; qty: number;
   order_id: string; order_code: string; order_created_at: string;
+  variant_options: Record<string, string> | null;
 }
 interface ItemBill { id: string; product_id: string; product_name: string; unit_amount_ngn: number; kind: 'consolidation_shipping' | 'clearance'; audit_status: boolean; }
 interface BatchStatus { batch_key: string; kind: 'consolidation_shipping' | 'clearance'; status: 'draft' | 'sent'; recipients_count: number | null; }
 interface Bill { id: string; user_id: string; kind: string; status: string; amount_ngn: number; }
 
 function fmt(n: number) { return `₦${Math.round(n).toLocaleString()}`; }
+
+// e.g. {Color: "Pink", Size: "L"} -> "Pink, L". Empty/null means the item
+// had no variant selection (single-variant or no-variant product).
+function variantLabel(v: Record<string, string> | null | undefined): string {
+  if (!v || Object.keys(v).length === 0) return '';
+  return Object.values(v).join(', ');
+}
 
 async function call(action: string, body: Record<string, unknown>) {
   const res = await fetch(`${EDGE_URL}?action=${action}`, {
@@ -134,6 +142,23 @@ export default function ClosedBatchDetail({
       }
     }
     return Array.from(map.values()).sort((a, b) => new Date(a.oldestAt).getTime() - new Date(b.oldestAt).getTime());
+  }, [filteredBreakdown]);
+
+  // Per-product variant breakdown for sourcing -- e.g. "Pink: 3, Black: 1"
+  // instead of one merged "4 units" line that hides which variant is which.
+  const variantsByProduct = useMemo(() => {
+    const map = new Map<string, Map<string, number>>();
+    for (const row of filteredBreakdown) {
+      const label = variantLabel(row.variant_options) || 'No variant selected';
+      const inner = map.get(row.product_id) ?? new Map<string, number>();
+      inner.set(label, (inner.get(label) ?? 0) + row.qty);
+      map.set(row.product_id, inner);
+    }
+    const out = new Map<string, { label: string; qty: number }[]>();
+    for (const [productId, inner] of map.entries()) {
+      out.set(productId, Array.from(inner.entries()).map(([label, qty]) => ({ label, qty })).sort((a, b) => b.qty - a.qty));
+    }
+    return out;
   }, [filteredBreakdown]);
 
   // Actual sales revenue per product — what customers paid at checkout
@@ -344,6 +369,15 @@ export default function ClosedBatchDetail({
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-orange-600 hover:underline truncate">{p.name}</p>
                         <p className="text-[10px] text-orange-500 font-bold">{p.totalQty} units</p>
+                        {(() => {
+                          const variants = variantsByProduct.get(p.id) ?? [];
+                          const showVariants = variants.length > 1 || (variants.length === 1 && variants[0].label !== 'No variant selected');
+                          return showVariants ? (
+                            <p className="text-[9px] text-gray-500 truncate">
+                              {variants.map(v => `${v.label}: ${v.qty}`).join(' · ')}
+                            </p>
+                          ) : null;
+                        })()}
                         {revenueByProduct.get(p.id) ? (
                           <p className="text-[10px] text-emerald-600 font-semibold">{fmt(revenueByProduct.get(p.id)!)} sold</p>
                         ) : null}
@@ -498,16 +532,22 @@ export default function ClosedBatchDetail({
                       </div>
                       {isExpanded && (
                         <div className="space-y-1 mt-2 pt-2 border-t border-gray-50">
-                          {buyersForProduct.map((r, i) => (
-                            <button
-                              key={i}
-                              onClick={() => r.customer_id && setProfileCustomerId(r.customer_id)}
-                              className="w-full flex items-center justify-between text-xs text-left hover:underline"
-                            >
-                              <span className="text-gray-600">{r.customer_name} <span className="text-gray-300 font-mono">· {r.order_code}</span></span>
-                              <span className="font-semibold text-gray-700">×{r.qty}</span>
-                            </button>
-                          ))}
+                          {buyersForProduct.map((r, i) => {
+                            const label = variantLabel(r.variant_options);
+                            return (
+                              <button
+                                key={i}
+                                onClick={() => r.customer_id && setProfileCustomerId(r.customer_id)}
+                                className="w-full flex items-center justify-between text-xs text-left hover:underline"
+                              >
+                                <span className="text-gray-600">
+                                  {r.customer_name} <span className="text-gray-300 font-mono">· {r.order_code}</span>
+                                  {label && <span className="text-gray-400"> · {label}</span>}
+                                </span>
+                                <span className="font-semibold text-gray-700">×{r.qty}</span>
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
