@@ -9,7 +9,7 @@ import CONFIG from '@/lib/config';
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
 const PROMO_IMAGES = [
-  'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.2928853494085587.webp',
+  'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.19689509870634492.webp',
   'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.47853263406407076.webp',
 ];
 
