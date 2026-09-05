@@ -27,6 +27,9 @@ export interface ImportProduct {
   has_variants?: boolean;
   variants?: VariantGroup[];
   units_sold?: number;
+  /** Sea freight only. Carried into the cart so checkout can force the
+   *  shipping method without re-fetching the product. */
+  ship_only?: boolean;
 }
 
 export interface ImportCartItem extends ImportProduct {

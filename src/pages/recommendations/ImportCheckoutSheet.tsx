@@ -44,6 +44,12 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [delivery, setDelivery] = useState<'to_qafrica' | 'to_me'>('to_me');
   const [showWhyQafrica, setShowWhyQafrica] = useState(false);
   const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
+
+  // Some products cannot travel by air. If any is in the cart, sea freight
+  // is the only valid choice — so it is selected for the customer rather
+  // than letting them pick Flight and be rejected at submit.
+  const seaOnlyItems = cart.filter(i => i.ship_only);
+  const forcedSeaFreight = seaOnlyItems.length > 0;
   const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'manual'>('paystack');
   const [manualTransferEnabled, setManualTransferEnabled] = useState(true);
   const [whatsapp, setWhatsapp] = useState(customer.phone ?? '');
@@ -170,6 +176,10 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     address.name.trim() && address.phone.trim() && address.address_line1.trim() &&
     address.city.trim() && address.state.trim()
   );
+  useEffect(() => {
+    if (forcedSeaFreight && shippingMethod !== 'sea_freight') setShippingMethod('sea_freight');
+  }, [forcedSeaFreight, shippingMethod]);
+
   const canSubmit = whatsapp.trim() && cart.length > 0 && !!shippingMethod && addressComplete;
 
   const handleCheckout = async () => {
@@ -423,7 +433,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button onClick={() => setShippingMethod('flight')}
-              className={`text-left p-3 rounded-xl border-2 transition-colors ${shippingMethod === 'flight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
+              disabled={forcedSeaFreight}
+              title={forcedSeaFreight ? 'Not available for sea-freight-only items in your cart' : undefined}
+              className={`text-left p-3 rounded-xl border-2 transition-colors ${forcedSeaFreight ? 'border-gray-100 opacity-40 cursor-not-allowed' : shippingMethod === 'flight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
               <Plane className="w-4 h-4 text-gray-700 mb-1.5" />
               <p className="font-semibold text-gray-900 text-xs">Flight</p>
               <p className="text-[10px] text-gray-400 mt-0.5">Faster, consolidated air freight</p>
@@ -435,6 +447,15 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
               <p className="text-[10px] text-gray-400 mt-0.5">Slower, lowest cost per kg</p>
             </button>
           </div>
+          {forcedSeaFreight && (
+            <p className="text-[11px] text-gray-500 mt-2 flex items-start gap-1.5">
+              <Ship className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-px" />
+              <span>
+                {seaOnlyItems.map(i => i.name).join(', ')} {seaOnlyItems.length > 1 ? 'ship' : 'ships'} by sea only,
+                so this order goes by sea freight.
+              </span>
+            </p>
+          )}
         </div>
 
         {/* Delivery address — only required when shipping directly to the customer */}

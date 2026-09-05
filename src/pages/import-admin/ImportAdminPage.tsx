@@ -92,6 +92,9 @@ interface ImportProduct {
   has_variants?: boolean;
   variants?: VariantGroup[];
   units_sold?: number;
+  /** Admin-only 1688 sourcing link. Never returned by the public products endpoint. */
+  source_url?: string | null;
+  ship_only?: boolean;
 }
 
 // Quick-add presets for the variant builder
@@ -976,6 +979,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [priceAmount, setPriceAmount] = useState(''); // raw price as entered by admin
   const [priceCurrency, setPriceCurrency] = useState<'cny' | 'usd' | 'ngn'>('cny');
   const [moq, setMoq]                 = useState('1');
+  const [sourceUrl, setSourceUrl]     = useState('');
+  const [shipOnly, setShipOnly]       = useState(false);
   const [unitsSold, setUnitsSold]     = useState('');
   const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
   const [expandedVariantGroups, setExpandedVariantGroups] = useState<Set<string>>(new Set());
@@ -1095,6 +1100,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setEditProduct(null);
     setName(''); setDesc(''); setCategory('General');
     setPriceAmount(''); setPriceCurrency('cny'); setMoq('1'); setUnitsSold('');
+    setSourceUrl(''); setShipOnly(false);
     setVariantGroups([]); setCustomGroupName(''); setCustomOptionDrafts({}); setExpandedVariantGroups(new Set());
     setImagePreviews([]); setImageFiles([null, null, null]);
     setSaveError('');
@@ -1115,6 +1121,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
       setPriceCurrency('cny');
     }
     setMoq((p.moq ?? 1).toString());
+    setSourceUrl(p.source_url ?? '');
+    setShipOnly(p.ship_only === true);
     setUnitsSold((p.units_sold ?? 0).toString());
     setVariantGroups(p.variants?.length ? p.variants.map(g => ({ ...g, id: g.id || genId() })) : []);
     setExpandedVariantGroups(new Set());
@@ -1213,6 +1221,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
         variants:        variantGroups,
         image_url:       resolvedUrls[0] ?? '',
         image_urls:      resolvedUrls,
+        source_url:      sourceUrl.trim(),
+        ship_only:       shipOnly,
         manager_token:   token,
         ...(unitsSold.trim() !== '' ? { units_sold: parseInt(unitsSold, 10) } : {}),
       };
@@ -1414,6 +1424,41 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                 <input type="number" min={1} value={moq} onChange={e => setMoq(e.target.value)}
                   placeholder="1"
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+              </div>
+
+              {/* Sourcing link — admin only. Never returned by the public
+                  products endpoint, since it exposes the supplier and the
+                  true landed cost. */}
+              <div>
+                <Label>1688 product link <span className="font-normal text-gray-400">(optional)</span></Label>
+                <input
+                  type="url"
+                  inputMode="url"
+                  value={sourceUrl}
+                  onChange={e => setSourceUrl(e.target.value)}
+                  placeholder="https://detail.1688.com/offer/..."
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
+                />
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Only you see this. It powers the "Open on 1688" button when you're sourcing a batch.
+                </p>
+              </div>
+
+              <div>
+                <label className="flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={shipOnly}
+                    onChange={e => setShipOnly(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-orange-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-gray-900">Sea freight only</span>
+                    <span className="block text-[11px] text-gray-400">
+                      Customers can't pick air for this product, and checkout will block a flight order containing it.
+                    </span>
+                  </span>
+                </label>
               </div>
 
               <div>

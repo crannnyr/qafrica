@@ -493,15 +493,26 @@ export default function ProductDetailPage() {
             Sourced from verified manufacturers in China
           </p>
 
-          <div className="flex items-center gap-3 mb-4">
-            <span className="flex items-center gap-1 text-[11px] text-gray-400">
-              <Plane className="w-3 h-3" /> Flight 20–30 days
-            </span>
-            <span className="text-gray-200">·</span>
-            <span className="flex items-center gap-1 text-[11px] text-gray-400">
-              <Ship className="w-3 h-3" /> Sea 60–90 days
-            </span>
-          </div>
+          {/* A sea-only product should not advertise a flight option it
+              cannot actually use — checkout would reject it. */}
+          {product.ship_only ? (
+            <div className="flex items-center gap-2 mb-4">
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-100 rounded-full px-2.5 py-1">
+                <Ship className="w-3 h-3" /> Sea freight only
+              </span>
+              <span className="text-[11px] text-gray-400">60–90 days</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 mb-4">
+              <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                <Plane className="w-3 h-3" /> Flight 20–30 days
+              </span>
+              <span className="text-gray-200">·</span>
+              <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                <Ship className="w-3 h-3" /> Sea 60–90 days
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center justify-between gap-3 mb-5">
             <motion.button

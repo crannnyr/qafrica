@@ -89,6 +89,9 @@ export interface ImportProduct {
   has_variants?: boolean;
   variants?: VariantGroup[];
   units_sold?: number;
+  /** Sea freight only. No source_url here on purpose: the public products
+   *  endpoint never returns the supplier link. */
+  ship_only?: boolean;
   is_trending?: boolean;
   trending_order?: number;
   created_at?: string;
