@@ -399,16 +399,29 @@ welcome: (name: string, appUrl?: string) => ({
   }),
 };
 
-// Send email using Supabase Edge Function (when implemented)
-// For now, we'll use a mock implementation
+// Send email using the send-email Edge Function.
+//
+// emailType and priority are passed explicitly wherever the caller knows them.
+// Without emailType, send-email falls back to guessing from the subject line
+// (detectEmailType), which is fine for one-offs but wrong to rely on for
+// high-volume mail: a misclassified type lands in the "generic" bucket and is
+// rate-limited against the wrong budget.
+//
+// priority drives the queue lane. 1 = transactional (the customer is waiting:
+// password resets, bills, order confirmations) and is never dropped for
+// budget. Higher numbers yield to it.
 export const sendEmail = async ({
   to,
   subject,
   html,
+  emailType,
+  priority,
 }: {
   to: string;
   subject: string;
   html: string;
+  emailType?: string;
+  priority?: number;
 }): Promise<{ success: boolean; error?: string }> => {
   try {
     // In production, this would call a Supabase Edge Function
@@ -421,7 +434,11 @@ export const sendEmail = async ({
     
     // Call Supabase Edge Function when available
     const { error } = await supabase.functions.invoke('send-email', {
-      body: { to, subject, html },
+      body: {
+        to, subject, html,
+        ...(emailType ? { email_type: emailType } : {}),
+        ...(priority != null ? { priority } : {}),
+      },
     });
     
     if (error) {
@@ -438,16 +455,21 @@ export const sendEmail = async ({
   }
 };
 
-// Send welcome email
+// Send welcome email.
+// Priority 6 (below transactional): on 1 Sep there were 2,986 signups in a
+// day against a baseline of ~50-250, and ~5,000 welcome emails hit Gmail in
+// 48 hours. Welcome mail is not urgent -- a new customer does not notice it
+// arriving ten minutes later -- so it yields to bills and password resets and
+// drains against the domain cap instead of detonating.
 export const sendWelcomeEmail = async (email: string, name: string) => {
   const template = emailTemplates.welcome(name);
-  return sendEmail({ to: email, subject: template.subject, html: template.body });
+  return sendEmail({ to: email, subject: template.subject, html: template.body, emailType: 'welcome', priority: 6 });
 };
 
 // Send the distinct Importation-section welcome email
 export const sendImportWelcomeEmail = async (email: string, name: string) => {
   const template = emailTemplates.importWelcome(name);
-  return sendEmail({ to: email, subject: template.subject, html: template.body });
+  return sendEmail({ to: email, subject: template.subject, html: template.body, emailType: 'welcome', priority: 6 });
 };
 
 // Send order confirmation to customer
