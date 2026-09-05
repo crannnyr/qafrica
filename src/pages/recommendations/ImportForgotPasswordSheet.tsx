@@ -31,10 +31,51 @@ export default function ImportForgotPasswordSheet({ onClose, onSuccess }: { onCl
     if (!email.trim()) return;
     setIsLoading(true);
     setError('');
-    // Fire the OTP request but always show the same generic result — this is
-    // what stops the flow being used to check which emails have an account.
-    await supabase.auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: false } }).catch(() => {});
+
+    const { error: otpError } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { shouldCreateUser: false },
+    });
+
     setIsLoading(false);
+
+    // Enumeration protection still applies: "no account with that email" must
+    // look identical to success, or this form becomes a way to test which
+    // addresses are registered.
+    //
+    // But the previous version swallowed EVERY error with .catch(() => {}),
+    // including rate limits and outright send failures. That told people
+    // "check your email" when nothing had been sent, and is a large part of
+    // why password reset felt unreliable. Real infrastructure failures are
+    // now surfaced; only the account-existence signal stays hidden.
+    if (otpError) {
+      const message = otpError.message?.toLowerCase() ?? '';
+      const isRateLimited =
+        otpError.status === 429 ||
+        message.includes('rate limit') ||
+        message.includes('only request this after') ||
+        message.includes('too many');
+
+      if (isRateLimited) {
+        setError('Too many code requests. Please wait a minute and try again.');
+        return;
+      }
+
+      // Anything that is clearly a delivery/infrastructure fault, as opposed
+      // to "that user does not exist", is worth telling the person about —
+      // otherwise they sit waiting for a code that is never coming.
+      const isSendFailure =
+        message.includes('error sending') ||
+        message.includes('smtp') ||
+        (otpError.status ?? 0) >= 500;
+
+      if (isSendFailure) {
+        setError('We could not send the code right now. Please try again shortly.');
+        return;
+      }
+      // Otherwise fall through silently — same screen as success.
+    }
+
     setStep('code');
   };
 
@@ -55,9 +96,23 @@ export default function ImportForgotPasswordSheet({ onClose, onSuccess }: { onCl
     setStep('newPassword');
   };
 
+  // NIST SP 800-63B guidance is length-first: long passphrases beat short
+  // passwords with forced composition rules, and complexity mandates mostly
+  // push people toward predictable substitutions. So the bar is 10 characters
+  // rather than 8-plus-a-digit, and we reject the obvious reused passwords.
+  // Server-side breach checking (HaveIBeenPwned) is a separate Supabase Auth
+  // setting and is the real backstop.
+  const COMMON_PASSWORDS = [
+    'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
+    'qwerty123', 'qwertyuiop', 'iloveyou', 'admin123', 'letmein1', 'welcome1',
+    'football1', 'monkey123', 'abc12345', 'passw0rd', 'sunshine1', 'princess1',
+  ];
+  const normalised = password.trim().toLowerCase();
+  const isCommon = COMMON_PASSWORDS.includes(normalised);
+
   const passwordRequirements = [
-    { label: 'At least 8 characters', met: password.length >= 8 },
-    { label: 'Contains a number', met: /[0-9]/.test(password) },
+    { label: 'At least 10 characters', met: password.length >= 10 },
+    { label: 'Not a commonly used password', met: password.length > 0 && !isCommon },
   ];
   const allRequirementsMet = passwordRequirements.every(r => r.met);
 
@@ -71,6 +126,14 @@ export default function ImportForgotPasswordSheet({ onClose, onSuccess }: { onCl
     const { error: updateError } = await supabase.auth.updateUser({ password });
     if (updateError) {
       setIsLoading(false);
+      // Once leaked-password protection is enabled in Supabase Auth, a
+      // password found in the HaveIBeenPwned corpus is rejected here. The raw
+      // message is not something a customer can act on, so translate it.
+      const raw = updateError.message?.toLowerCase() ?? '';
+      if (raw.includes('pwned') || raw.includes('compromised') || raw.includes('data breach')) {
+        setError('That password has appeared in a known data breach. Please choose a different one.');
+        return;
+      }
       setError(updateError.message || 'Could not update your password. Please try again.');
       return;
     }

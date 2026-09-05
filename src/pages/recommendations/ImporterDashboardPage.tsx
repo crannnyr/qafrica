@@ -9,7 +9,7 @@ import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
   Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
   ShoppingBag, Ship, ExternalLink, ChevronDown, Heart,
-  FileText, ShieldCheck, Navigation,
+  FileText, ShieldCheck, Navigation, MailWarning,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
@@ -24,6 +24,7 @@ import WhyTrustUsSheet from './WhyTrustUsSheet';
 import TrackOrderModal from './TrackOrderModal';
 import RetryPaymentSheet from './RetryPaymentSheet';
 import AvatarSheet from './AvatarSheet';
+import ConfirmEmailSheet from './ConfirmEmailSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const REMINDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/order-reminders`;
@@ -119,6 +120,7 @@ export default function ImporterDashboardPage() {
   const [showWhyTrustUs, setShowWhyTrustUs] = useState(false);
   const [showTrackOrder, setShowTrackOrder] = useState(false);
   const [showAvatar, setShowAvatar] = useState(false);
+  const [showConfirmEmail, setShowConfirmEmail] = useState(false);
   const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
   const [payingBill, setPayingBill] = useState<ConsolidationBill | null>(null);
   const [isPayingBill, setIsPayingBill] = useState(false);
@@ -354,6 +356,27 @@ export default function ImporterDashboardPage() {
             </button>
           </div>
         </div>
+
+        {/* ── Unconfirmed email chip ───────────────────────────────────────────
+            Deliberately a prompt, not a gate: nothing below is blocked by it.
+            Confirming lets us keep bulk mail to reachable addresses, and is
+            the only way a customer can fix an address they mistyped at
+            signup. */}
+        {customer && customer.is_verified === false && (
+          <button
+            onClick={() => setShowConfirmEmail(true)}
+            className="w-full flex items-center gap-2.5 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 mb-4 text-left"
+          >
+            <MailWarning className="w-5 h-5 text-amber-600 shrink-0" />
+            <span className="flex-1 min-w-0">
+              <span className="block text-xs font-bold text-amber-900">Email not confirmed</span>
+              <span className="block text-[11px] text-amber-700 truncate">
+                Confirm {customer.email} so we can reach you about bills
+              </span>
+            </span>
+            <span className="text-[11px] font-bold text-amber-900 shrink-0">Confirm</span>
+          </button>
+        )}
 
         {/* ── Order pipeline icon grid ─────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
@@ -738,6 +761,7 @@ export default function ImporterDashboardPage() {
       {showWhyTrustUs && <WhyTrustUsSheet onClose={() => setShowWhyTrustUs(false)} />}
       {showTrackOrder && <TrackOrderModal onClose={() => setShowTrackOrder(false)} />}
       {showAvatar && <AvatarSheet onClose={() => setShowAvatar(false)} />}
+      {showConfirmEmail && <ConfirmEmailSheet onClose={() => setShowConfirmEmail(false)} />}
 
       {retryOrder && customer && (
         <RetryPaymentSheet
