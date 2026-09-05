@@ -1,8 +1,8 @@
 // src/pages/recommendations/ImportForgotPasswordSheet.tsx
 // Forgot-password flow for importation customers: email -> 6-digit code ->
-// new password. Uses Supabase's own OTP mechanism (signInWithOtp + verifyOtp)
-// rather than a custom code table — same underlying pattern already used for
-// signup verification elsewhere in the app, just repurposed for recovery.
+// new password. Runs entirely through our own Resend-backed password-reset
+// function; Supabase Auth's mailer is not involved, so nothing here depends on
+// the contents of a dashboard email template.
 //
 // Deliberately never reveals whether an email is registered: the same
 // generic "check your email" message shows regardless, since confirming
@@ -10,13 +10,16 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Loader, Eye, EyeOff, Mail, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { supabase } from '@/services';
-import { useCustomerAuthStore } from '@/stores';
+import CONFIG from '@/lib/config';
+
+// Reset runs entirely through our own Resend-backed endpoint. Supabase Auth's
+// mailer is not involved, so nothing here depends on the state of a dashboard
+// email template.
+const RESET_URL = `${CONFIG.SUPABASE_URL}/functions/v1/password-reset`;
 
 type Step = 'email' | 'code' | 'newPassword' | 'done';
 
 export default function ImportForgotPasswordSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const { fetchProfile } = useCustomerAuthStore();
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -26,73 +29,77 @@ export default function ImportForgotPasswordSheet({ onClose, onSuccess }: { onCl
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const call = async (action: string, payload: Record<string, unknown>) => {
+    const res = await fetch(`${RESET_URL}?action=${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return { status: res.status, payload: await res.json().catch(() => ({})) };
+  };
+
   const requestCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
     setIsLoading(true);
     setError('');
 
-    const { error: otpError } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { shouldCreateUser: false },
-    });
-
+    const { payload } = await call('request-code', { email: email.trim() });
     setIsLoading(false);
 
-    // Enumeration protection still applies: "no account with that email" must
-    // look identical to success, or this form becomes a way to test which
-    // addresses are registered.
-    //
-    // But the previous version swallowed EVERY error with .catch(() => {}),
-    // including rate limits and outright send failures. That told people
-    // "check your email" when nothing had been sent, and is a large part of
-    // why password reset felt unreliable. Real infrastructure failures are
-    // now surfaced; only the account-existence signal stays hidden.
-    if (otpError) {
-      const message = otpError.message?.toLowerCase() ?? '';
-      const isRateLimited =
-        otpError.status === 429 ||
-        message.includes('rate limit') ||
-        message.includes('only request this after') ||
-        message.includes('too many');
-
-      if (isRateLimited) {
-        setError('Too many code requests. Please wait a minute and try again.');
-        return;
-      }
-
-      // Anything that is clearly a delivery/infrastructure fault, as opposed
-      // to "that user does not exist", is worth telling the person about —
-      // otherwise they sit waiting for a code that is never coming.
-      const isSendFailure =
-        message.includes('error sending') ||
-        message.includes('smtp') ||
-        (otpError.status ?? 0) >= 500;
-
-      if (isSendFailure) {
-        setError('We could not send the code right now. Please try again shortly.');
-        return;
-      }
-      // Otherwise fall through silently — same screen as success.
+    // The server returns the same generic success whether or not the address
+    // has an account, so this form cannot be used to test which customer
+    // emails are registered. Only genuine faults — rate limits and delivery
+    // failures — surface as errors.
+    if (payload?.ok !== true) {
+      setError(payload?.error || 'We could not send the code right now. Please try again shortly.');
+      return;
     }
 
     setStep('code');
   };
 
-  const verifyCode = async (e: React.FormEvent) => {
+  // Verification and the password change happen in a single server call. The
+  // old flow verified the code, which SIGNED THE USER IN, and only then set
+  // the password — so abandoning the page midway left a stranger holding a
+  // logged-in session on someone else's account. Nothing is granted here
+  // until the new password is actually set.
+  const submitNewPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (code.trim().length < 6) {
+    if (!allRequirementsMet) { setError('Please meet all password requirements.'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+
+    setIsLoading(true);
+    setError('');
+
+    const { payload } = await call('verify-and-reset', {
+      email: email.trim(), code: code.trim(), password,
+    });
+
+    setIsLoading(false);
+
+    if (payload?.ok !== true) {
+      const remaining = payload?.attempts_remaining;
+      const message = typeof remaining === 'number' && remaining > 0
+        ? `${payload.error} ${remaining} attempt${remaining === 1 ? '' : 's'} left.`
+        : (payload?.error || 'We could not reset your password. Please try again.');
+      setError(message);
+      // A bad or expired code sends them back to the code step; a rejected
+      // password keeps them here so they can simply pick another one.
+      if (/code/i.test(payload?.error ?? '')) setStep('code');
+      return;
+    }
+
+    setStep('done');
+  };
+
+  const goToPasswordStep = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (code.trim().length !== 6) {
       setError('Enter the 6-digit code from your email.');
       return;
     }
-    setIsLoading(true);
     setError('');
-    const { error: otpError } = await supabase.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: 'email' });
-    setIsLoading(false);
-    if (otpError) {
-      setError('That code is invalid or has expired. Please try again.');
-      return;
-    }
     setStep('newPassword');
   };
 
@@ -115,60 +122,6 @@ export default function ImportForgotPasswordSheet({ onClose, onSuccess }: { onCl
     { label: 'Not a commonly used password', met: password.length > 0 && !isCommon },
   ];
   const allRequirementsMet = passwordRequirements.every(r => r.met);
-
-  const setNewPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!allRequirementsMet) { setError('Please meet all password requirements.'); return; }
-    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
-
-    setIsLoading(true);
-    setError('');
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    if (updateError) {
-      setIsLoading(false);
-      // Once leaked-password protection is enabled in Supabase Auth, a
-      // password found in the HaveIBeenPwned corpus is rejected here. The raw
-      // message is not something a customer can act on, so translate it.
-      const raw = updateError.message?.toLowerCase() ?? '';
-      if (raw.includes('pwned') || raw.includes('compromised') || raw.includes('data breach')) {
-        setError('That password has appeared in a known data breach. Please choose a different one.');
-        return;
-      }
-      setError(updateError.message || 'Could not update your password. Please try again.');
-      return;
-    }
-
-    // Branded confirmation email — same nice-touch pattern used across the app.
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user?.email) {
-      supabase.functions.invoke('send-email', {
-        body: {
-          to: user.email,
-          subject: 'Your QAFRICA password was reset',
-          html: `
-            <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-              <div style="background:#F97316;border-radius:12px;padding:16px 20px;margin-bottom:24px;display:inline-block;">
-                <span style="color:#fff;font-size:20px;font-weight:800;">QAFRICA</span>
-              </div>
-              <h2 style="color:#111827;margin:0 0 8px;">Password Reset Successful</h2>
-              <p style="color:#6B7280;margin:0 0 20px;">
-                Your QAFRICA Import account password was just reset. You can now sign in with your new password.
-              </p>
-              <div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 10px 10px 0;padding:16px 20px;">
-                <p style="margin:0;font-size:14px;color:#374151;">
-                  <strong>If you did not request this reset</strong>, please contact support immediately.
-                </p>
-              </div>
-            </div>
-          `,
-        },
-      }).catch(() => {});
-    }
-
-    await fetchProfile();
-    setIsLoading(false);
-    setStep('done');
-  };
 
   return (
     <motion.div
@@ -221,7 +174,7 @@ export default function ImportForgotPasswordSheet({ onClose, onSuccess }: { onCl
             <p className="text-gray-400 text-xs mb-5">
               If <span className="text-gray-600 font-medium">{email}</span> has a QAFRICA account, a 6-digit code is on its way. It can take a minute — check spam too.
             </p>
-            <form onSubmit={verifyCode} className="space-y-3">
+            <form onSubmit={goToPasswordStep} className="space-y-3">
               <input
                 type="text" inputMode="numeric" maxLength={6} placeholder="6-digit code" value={code} autoFocus
                 onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
@@ -243,7 +196,7 @@ export default function ImportForgotPasswordSheet({ onClose, onSuccess }: { onCl
         {step === 'newPassword' && (
           <>
             <p className="text-gray-400 text-xs mb-5">Choose a new password for your account.</p>
-            <form onSubmit={setNewPassword} className="space-y-3">
+            <form onSubmit={submitNewPassword} className="space-y-3">
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'} placeholder="New password" value={password} autoFocus

@@ -9,6 +9,7 @@ import {
   Plus, Trash2, Star, CheckCircle2, ChevronLeft,
 } from 'lucide-react';
 import { supabase } from '@/services';
+import ConfirmEmailSheet from './ConfirmEmailSheet';
 import { useCustomerAuthStore } from '@/stores';
 import type { CustomerAddress } from '@/types';
 import { toast } from 'sonner';
@@ -126,61 +127,114 @@ function MenuRow({ icon: Icon, label, sub, onClick }: { icon: any; label: string
 // ── Account & Security ───────────────────────────────────────────────────
 function SecurityPanel() {
   const { customer, fetchProfile } = useCustomerAuthStore();
-  const [email, setEmail] = useState(customer?.email ?? '');
-  const [isEmailSaving, setIsEmailSaving] = useState(false);
 
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isPasswordSaving, setIsPasswordSaving] = useState(false);
 
-  const saveEmail = async () => {
-    if (!email.trim() || email === customer?.email) return;
-    setIsEmailSaving(true);
-    const { error } = await supabase.auth.updateUser({ email: email.trim() });
-    setIsEmailSaving(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Check your new email to confirm the change.');
-  };
+  // Email changes go through the same Resend-backed code flow as email
+  // confirmation, rather than supabase.auth.updateUser({ email }).
+  //
+  // That call sent Supabase's "Email Change" template — a clickable link from
+  // noreply@mail.app.supabase.io, which is where the magic links customers
+  // received were coming from. It also left customers.email untouched, so the
+  // auth record and the customer record could silently disagree, and it gave
+  // the app two different ways to change an address.
+  const [showConfirmEmail, setShowConfirmEmail] = useState(false);
 
+  // Same length-first rules as the reset flow. These previously disagreed:
+  // 8-plus-a-digit here, 10 characters there, so the strength demanded of a
+  // password depended on which screen you happened to change it from.
+  const COMMON_PASSWORDS = [
+    'password', 'password1', 'password123', '12345678', '123456789', '1234567890',
+    'qwerty123', 'qwertyuiop', 'iloveyou', 'admin123', 'letmein1', 'welcome1',
+    'football1', 'monkey123', 'abc12345', 'passw0rd', 'sunshine1', 'princess1',
+  ];
   const passwordRequirements = [
-    { label: 'At least 8 characters', met: newPassword.length >= 8 },
-    { label: 'Contains a number', met: /[0-9]/.test(newPassword) },
+    { label: 'At least 10 characters', met: newPassword.length >= 10 },
+    { label: 'Not a commonly used password',
+      met: newPassword.length > 0 && !COMMON_PASSWORDS.includes(newPassword.trim().toLowerCase()) },
   ];
   const allMet = passwordRequirements.every(r => r.met);
 
+  // Changing a password now requires the current one. Without re-authentication
+  // anyone who reached an unlocked phone or a borrowed laptop with a live
+  // session could take the account over silently — no email, no current
+  // password, nothing. This is the standard bar for a signed-in password
+  // change.
   const savePassword = async () => {
+    if (!currentPassword) { toast.error('Enter your current password'); return; }
     if (!allMet) { toast.error('Password does not meet requirements'); return; }
     if (newPassword !== confirmPassword) { toast.error('Passwords do not match'); return; }
+    if (newPassword === currentPassword) { toast.error('Choose a password different from your current one'); return; }
+    if (!customer?.email) { toast.error('Could not verify your account. Please sign in again.'); return; }
+
     setIsPasswordSaving(true);
+
+    const { error: reauthError } = await supabase.auth.signInWithPassword({
+      email: customer.email,
+      password: currentPassword,
+    });
+    if (reauthError) {
+      setIsPasswordSaving(false);
+      toast.error('That current password is not correct');
+      return;
+    }
+
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     setIsPasswordSaving(false);
-    if (error) { toast.error(error.message); return; }
-    setNewPassword(''); setConfirmPassword('');
+    if (error) {
+      const raw = error.message?.toLowerCase() ?? '';
+      if (raw.includes('pwned') || raw.includes('compromised') || raw.includes('breach')) {
+        toast.error('That password has appeared in a known data breach. Please choose another.');
+        return;
+      }
+      toast.error(error.message);
+      return;
+    }
+    setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
     toast.success('Password updated');
     fetchProfile();
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
+      {showConfirmEmail && <ConfirmEmailSheet onClose={() => setShowConfirmEmail(false)} />}
       <div>
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Email</p>
-        <div className="flex gap-2">
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-            className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none" />
-          <button onClick={saveEmail} disabled={isEmailSaving || email === customer?.email}
-            className="px-4 py-3 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5">
-            {isEmailSaving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : 'Save'}
-          </button>
+        <div className="flex items-center justify-between gap-2 px-4 py-3 rounded-xl bg-gray-50 border border-gray-100">
+          <span className="text-sm text-gray-900 truncate">{customer?.email}</span>
+          <span className="flex items-center gap-2 flex-shrink-0">
+            {customer?.is_verified ? (
+              <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 rounded-full px-2 py-0.5">Confirmed</span>
+            ) : (
+              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 rounded-full px-2 py-0.5">Unconfirmed</span>
+            )}
+          </span>
         </div>
-        <p className="text-[11px] text-gray-400 mt-1.5">Changing your email requires confirming the new address before it takes effect.</p>
+        <button
+          onClick={() => setShowConfirmEmail(true)}
+          className="mt-2 w-full py-2.5 rounded-xl border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          {customer?.is_verified ? 'Change email' : 'Confirm or change email'}
+        </button>
+        <p className="text-[11px] text-gray-400 mt-1.5">We'll send a 6-digit code to the new address to confirm it's yours.</p>
       </div>
 
       <div>
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Change password</p>
         <div className="space-y-2">
+          {/* Re-authentication. A signed-in session alone is not enough to
+              take over an account. */}
+          <input type="password" placeholder="Current password" value={currentPassword}
+            autoComplete="current-password"
+            onChange={e => setCurrentPassword(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none" />
           <div className="relative">
             <input type={showPassword ? 'text' : 'password'} placeholder="New password" value={newPassword}
+              autoComplete="new-password"
               onChange={e => setNewPassword(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none" />
             <button type="button" onClick={() => setShowPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
@@ -199,7 +253,7 @@ function SecurityPanel() {
               ))}
             </div>
           )}
-          <button onClick={savePassword} disabled={isPasswordSaving || !newPassword}
+          <button onClick={savePassword} disabled={isPasswordSaving || !newPassword || !currentPassword}
             className="w-full py-3 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2">
             {isPasswordSaving && <Loader className="w-4 h-4 animate-spin" />}
             Update password
