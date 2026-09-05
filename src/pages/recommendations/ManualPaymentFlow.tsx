@@ -213,13 +213,22 @@ export default function ManualPaymentFlow({
                 Continue <ArrowRight className="w-4 h-4" />
               </button>
 
-              {onUsePaystackInstead && (
+              {onUsePaystackInstead ? (
                 <button
                   onClick={onUsePaystackInstead}
                   className="w-full py-2 text-xs text-orange-600 font-semibold mb-1"
                 >
                   Don't see your bank? Pay with Paystack instead
                 </button>
+              ) : (
+                // Bills are direct transfer only, so there is no Paystack
+                // escape hatch here. Without a note this screen would be a
+                // dead end for anyone banking with an MFB or fintech.
+                <p className="text-[11px] text-gray-400 text-center mb-1 px-2 leading-relaxed">
+                  Don't see your bank? Transfers for this payment must come from a
+                  licensed commercial bank account. Send from one of the banks listed
+                  above, or message support and we'll help.
+                </p>
               )}
               <button onClick={onClose} className="w-full py-2 text-xs text-gray-400 font-medium">Cancel</button>
             </motion.div>

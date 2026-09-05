@@ -7,7 +7,7 @@
 // billing stage right there — no need to dig into a separate billing tab for
 // the common case. Flight/Sea KPI cards are clickable filters that narrow
 // both drill-down tabs to just that shipping method.
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Loader, Users, Plane, Ship, ShieldCheck, Send, AlertTriangle,
   ChevronRight, Package, CheckCircle2, Truck, PackageCheck, ExternalLink, Layers,
@@ -47,6 +47,8 @@ interface CustomerLine {
   qty: number; unit_price_ngn: number;
   others_in_batch: number; customers_in_open_batch: number;
 }
+interface Adjustment { id: string; batch_key: string; customer_id: string; kind: 'consolidation_shipping' | 'clearance'; label: string; amount_ngn: number; }
+interface LedgerRow { customer_id: string; bill_id: string; amount_ngn: number; status: string; reminder_count: number; customer_marked_paid_at: string | null; manual_sender_name: string | null; }
 interface ItemBill { id: string; product_id: string; product_name: string; unit_amount_ngn: number; kind: 'consolidation_shipping' | 'clearance'; audit_status: boolean; }
 interface BatchStatus { batch_key: string; kind: 'consolidation_shipping' | 'clearance'; status: 'draft' | 'sent'; recipients_count: number | null; }
 interface Bill { id: string; user_id: string; kind: string; status: string; amount_ngn: number; }
@@ -91,6 +93,15 @@ export default function ClosedBatchDetail({
 }) {
   const [breakdown, setBreakdown] = useState<BreakdownRow[]>([]);
   const [customerLines, setCustomerLines] = useState<CustomerLine[]>([]);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [ledger, setLedger] = useState<LedgerRow[]>([]);
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid' | 'awaiting'>('all');
+  const [adjLabel, setAdjLabel] = useState('');
+  const [adjAmount, setAdjAmount] = useState('');
+  const [savingAdj, setSavingAdj] = useState(false);
+  // load() is defined before activeKind is derived, so it reads the current
+  // billing kind through a ref that each render refreshes.
+  const activeKindRef = useRef<'consolidation_shipping' | 'clearance'>('consolidation_shipping');
   const [kpi, setKpi] = useState({ flight: 0, sea_freight: 0 });
   const [itemBills, setItemBills] = useState<ItemBill[]>([]);
   const [statuses, setStatuses] = useState<BatchStatus[]>([]);
@@ -111,9 +122,11 @@ export default function ClosedBatchDetail({
         call('admin-batch-breakdown', { manager_token: token, batch_key: batchKey }),
         call('admin-batch-item-bills', { manager_token: token, batch_key: batchKey }),
         call('admin-all-bills', { manager_token: token }),
-        batchViewCall('customer-breakdown', { manager_token: token, batch_key: batchKey }),
+        batchViewCall('customer-breakdown', { manager_token: token, batch_key: batchKey, kind: activeKindRef.current }),
       ]);
       setCustomerLines(linesRes.rows ?? []);
+      setAdjustments(linesRes.adjustments ?? []);
+      setLedger(linesRes.ledger ?? []);
       setBreakdown(breakdownRes.rows ?? []);
       setKpi(breakdownRes.shipping_kpi ?? { flight: 0, sea_freight: 0 });
       setItemBills(itemBillsRes.items ?? []);
@@ -138,6 +151,7 @@ export default function ClosedBatchDetail({
   // The bill "kind" admin should be pricing right now, based on stage.
   const activeKind: 'consolidation_shipping' | 'clearance' = stage === 'shipped_and_closed' || stage === 'clearance_and_closed'
     ? 'clearance' : 'consolidation_shipping';
+  activeKindRef.current = activeKind;
   const activeStatus = statuses.find(s => s.kind === activeKind);
   const isLocked = activeStatus?.status === 'sent';
 
@@ -273,28 +287,97 @@ export default function ClosedBatchDetail({
     return totals;
   }, [breakdown, itemBills, activeKind]);
 
+  // Bill status now comes from the batch ledger (scoped to this batch and
+  // billing kind) rather than scanning every bill the customer has ever had.
+  const ledgerByCustomer = useMemo(
+    () => new Map(ledger.map(l => [l.customer_id, l])),
+    [ledger]
+  );
+
   const billStatusForCustomer = (customerId: string | null) => {
     if (!customerId) return null;
+    const row = ledgerByCustomer.get(customerId);
+    if (row) return row.status;
     const match = bills.filter(b => b.user_id === customerId && b.kind === activeKind);
     if (match.length === 0) return null;
     return match.some(b => b.status === 'paid') ? 'paid' : match[0].status;
+  };
+
+  // Adjustment lines for the billing kind currently being priced.
+  const adjustmentsByCustomer = useMemo(() => {
+    const map = new Map<string, Adjustment[]>();
+    for (const a of adjustments) {
+      if (a.kind !== activeKind) continue;
+      const list = map.get(a.customer_id) ?? [];
+      list.push(a);
+      map.set(a.customer_id, list);
+    }
+    return map;
+  }, [adjustments, activeKind]);
+
+  // What a single customer will be billed: priced items plus adjustments.
+  const customerBillTotal = useCallback((customerId: string, lines: CustomerLine[]) => {
+    const priceMap = new Map(itemBills.filter(b => b.kind === activeKind).map(b => [b.product_id, b.unit_amount_ngn]));
+    for (const [key, value] of Object.entries(priceDrafts)) {
+      const [productId, kind] = key.split(':');
+      if (kind === activeKind && value !== '') priceMap.set(productId, Number(value));
+    }
+    let total = 0;
+    for (const line of lines) {
+      const price = priceMap.get(line.product_id);
+      if (price != null) total += price * line.qty;
+    }
+    for (const a of (adjustmentsByCustomer.get(customerId) ?? [])) total += Number(a.amount_ngn);
+    return total;
+  }, [itemBills, priceDrafts, activeKind, adjustmentsByCustomer]);
+
+  const addAdjustment = async (customerId: string) => {
+    const amount = Number(adjAmount);
+    if (!adjLabel.trim() || !Number.isFinite(amount) || amount === 0) {
+      toast.error('Enter a label and a non-zero amount. Use a negative number for a discount.');
+      return;
+    }
+    setSavingAdj(true);
+    try {
+      const result = await batchViewCall('add-adjustment', {
+        manager_token: token, batch_key: batchKey, kind: activeKind,
+        customer_id: customerId, label: adjLabel.trim(), amount_ngn: amount,
+      });
+      if (result.error) { toast.error(result.error); return; }
+      setAdjLabel(''); setAdjAmount('');
+      await load();
+    } finally {
+      setSavingAdj(false);
+    }
+  };
+
+  const removeAdjustment = async (id: string) => {
+    const result = await batchViewCall('delete-adjustment', { manager_token: token, id });
+    if (result.error) { toast.error(result.error); return; }
+    await load();
   };
 
   const runAction = async () => {
     setIsActing(true);
     try {
       if (confirmAction === 'close_ordered') {
-        const result = await call('admin-batch-close-ordered', { manager_token: token, batch_key: batchKey });
+        const result = await batchViewCall('close-billing', { manager_token: token, batch_key: batchKey, kind: 'consolidation_shipping' });
         if (result.error) { toast.error(result.error); return; }
         toast.success(`Billed ${result.customers_billed} customer${result.customers_billed !== 1 ? 's' : ''} — consolidation & shipping locked.`);
+        if (result.skipped?.length) {
+          toast.warning(`${result.skipped.length} customer${result.skipped.length !== 1 ? 's were' : ' was'} not billed — adjustments cancelled out their total: ${result.skipped.map((x: { name: string }) => x.name).join(', ')}`);
+        }
       } else if (confirmAction === 'mark_shipped') {
         const result = await call('admin-batch-mark-shipped', { manager_token: token, batch_key: batchKey, shipping_method_final: shippingMethodFinal });
         if (result.error) { toast.error(result.error); return; }
         toast.success(`Marked shipped — ${result.paid_notified} notified as shipped, ${result.held_unpaid_notified} notified their item is held until they pay.`);
       } else if (confirmAction === 'close_clearance') {
-        const result = await call('admin-batch-close-clearance', { manager_token: token, batch_key: batchKey });
+        const result = await batchViewCall('close-billing', { manager_token: token, batch_key: batchKey, kind: 'clearance' });
         if (result.error) { toast.error(result.error); return; }
         toast.success(`Billed ${result.customers_billed} customer${result.customers_billed !== 1 ? 's' : ''} — clearance locked.`);
+        if (result.skipped?.length) {
+          toast.warning(`${result.skipped.length} customer${result.skipped.length !== 1 ? 's were' : ' was'} not billed — adjustments cancelled out their total: ${result.skipped.map((x: { name: string }) => x.name).join(', ')}`);
+        }
       }
       setConfirmAction(null);
       await load();
@@ -348,6 +431,29 @@ export default function ClosedBatchDetail({
     return Array.from(byCustomer.values())
       .sort((a, b) => new Date(a.firstOrderAt).getTime() - new Date(b.firstOrderAt).getTime());
   }, [customerLines, shippingFilter]);
+
+  // Who has paid and who has not — the record the admin needs once bills
+  // are out. Driven by the batch ledger, so it reflects this batch only.
+  const visibleCustomers = useMemo(() => {
+    if (paymentFilter === 'all') return customersForList;
+    return customersForList.filter(c => {
+      const status = ledgerByCustomer.get(c.customerId)?.status;
+      if (paymentFilter === 'paid') return status === 'paid';
+      if (paymentFilter === 'awaiting') return status === 'awaiting_confirmation';
+      return status !== 'paid' && status !== 'awaiting_confirmation';
+    });
+  }, [customersForList, paymentFilter, ledgerByCustomer]);
+
+  const ledgerTotals = useMemo(() => {
+    let paid = 0, awaiting = 0, unpaid = 0, outstanding = 0;
+    for (const c of customersForList) {
+      const row = ledgerByCustomer.get(c.customerId);
+      if (row?.status === 'paid') paid++;
+      else if (row?.status === 'awaiting_confirmation') { awaiting++; outstanding += Number(row.amount_ngn ?? 0); }
+      else { unpaid++; outstanding += Number(row?.amount_ngn ?? 0); }
+    }
+    return { paid, awaiting, unpaid, outstanding };
+  }, [customersForList, ledgerByCustomer]);
 
   const [selectedCustomerForDrilldown, setSelectedCustomerForDrilldown] = useState<string | null>(null);
   const selectedCustomer = customersForList.find(c => c.customerId === selectedCustomerForDrilldown);
@@ -672,6 +778,70 @@ export default function ClosedBatchDetail({
                   ))}
                 </div>
 
+                {/* Bill for this customer: priced items plus adjustments.
+                    Adjustments are how a one-off charge or discount reaches a
+                    single customer without changing the product's unit price
+                    for everyone else — the price stays reconcilable against a
+                    single 1688 purchase. */}
+                <div className="bg-white rounded-2xl border border-gray-100 p-3 mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold text-gray-800">
+                      {activeKind === 'clearance' ? 'Clearance bill' : 'Consolidation & shipping bill'}
+                    </p>
+                    <p className="text-sm font-black text-gray-900">
+                      {fmt(customerBillTotal(selectedCustomer.customerId, selectedCustomer.lines))}
+                    </p>
+                  </div>
+
+                  {(adjustmentsByCustomer.get(selectedCustomer.customerId) ?? []).map(a => (
+                    <div key={a.id} className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5 mb-1.5">
+                      <span className="text-[11px] text-gray-600 truncate">{a.label}</span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className={`text-[11px] font-bold ${Number(a.amount_ngn) < 0 ? 'text-emerald-600' : 'text-gray-800'}`}>
+                          {Number(a.amount_ngn) < 0 ? '−' : '+'}{fmt(Math.abs(Number(a.amount_ngn)))}
+                        </span>
+                        {!isLocked && (
+                          <button onClick={() => removeAdjustment(a.id)} className="text-[11px] text-gray-300 hover:text-red-500 font-bold">×</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {isLocked ? (
+                    <p className="text-[11px] text-gray-400">
+                      This bill has been sent, so charges are locked. Handle any correction directly with the customer.
+                    </p>
+                  ) : (
+                    <div className="flex gap-1.5 mt-2">
+                      <input
+                        value={adjLabel}
+                        onChange={e => setAdjLabel(e.target.value)}
+                        placeholder="Add a charge or discount"
+                        className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px]"
+                      />
+                      <input
+                        type="number" inputMode="decimal"
+                        value={adjAmount}
+                        onChange={e => setAdjAmount(e.target.value)}
+                        placeholder="₦"
+                        className="w-20 px-2 py-1.5 rounded-lg border border-gray-200 text-[11px] text-right"
+                      />
+                      <button
+                        onClick={() => addAdjustment(selectedCustomer.customerId)}
+                        disabled={savingAdj}
+                        className="px-2.5 py-1.5 bg-gray-900 disabled:opacity-40 text-white text-[11px] font-bold rounded-lg flex-shrink-0"
+                      >
+                        {savingAdj ? '…' : 'Add'}
+                      </button>
+                    </div>
+                  )}
+                  {!isLocked && (
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      Use a negative amount for a discount. It appears as its own line on the customer's bill.
+                    </p>
+                  )}
+                </div>
+
                 {/* Per-order actions still belong to the order, not the line. */}
                 {stage === 'clearance_and_closed' && (
                   <div className="mt-3 space-y-2">
@@ -713,13 +883,42 @@ export default function ClosedBatchDetail({
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Oldest buyer first</span>
                 </div>
 
+                {/* Paid / unpaid ledger. Only meaningful once bills exist, so
+                    it stays hidden until then rather than showing four empty
+                    buckets. */}
+                {ledger.length > 0 && (
+                  <div className="mb-2">
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {([
+                        ['all', `All ${customersForList.length}`],
+                        ['unpaid', `Unpaid ${ledgerTotals.unpaid}`],
+                        ['awaiting', `Awaiting ${ledgerTotals.awaiting}`],
+                        ['paid', `Paid ${ledgerTotals.paid}`],
+                      ] as const).map(([value, label]) => (
+                        <button
+                          key={value}
+                          onClick={() => setPaymentFilter(value)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${paymentFilter === value ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {ledgerTotals.outstanding > 0 && (
+                      <p className="text-[11px] text-amber-600 font-semibold mt-1">
+                        {fmt(ledgerTotals.outstanding)} still outstanding
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
-                  {customersForList.length === 0 ? (
+                  {visibleCustomers.length === 0 ? (
                     <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
                       <Users className="w-5 h-5 text-gray-300 mx-auto mb-2" />
                       <p className="text-xs text-gray-400">No customers match this filter.</p>
                     </div>
-                  ) : customersForList.map(c => {
+                  ) : visibleCustomers.map(c => {
                     const billStatus = billStatusForCustomer(c.customerId);
                     return (
                       <button
