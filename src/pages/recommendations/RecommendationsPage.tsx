@@ -176,9 +176,45 @@ function seededShuffle<T>(arr: T[], seed: number): T[] {
   }
   return out;
 }
-// Main catalog reshuffles every 6h; top-20 rails (Trending/New Ins) reshuffle
-// hourly, since with only 20 slots rotating faster keeps every item visible.
 const shuffleSeed = (windowMs: number) => Math.floor(Date.now() / windowMs);
+
+// Everything rotates on the same 4-hour clock so the whole page turns over
+// together rather than the rails drifting out of step with the grid.
+const ROTATION_MS = 4 * 60 * 60 * 1000;
+
+// Spreads categories apart by always taking from whichever category has the
+// most items left, never twice in a row while an alternative exists. Mirrors
+// spreadCategories() in the china-import-browse function so the rails and the
+// main grid behave identically.
+function spreadCategories<T extends { category?: string | null }>(items: T[]): T[] {
+  const buckets = new Map<string, T[]>();
+  for (const item of items) {
+    const key = item.category ?? 'Uncategorised';
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key)!.push(item);
+  }
+  if (buckets.size <= 1) return items;
+
+  const out: T[] = [];
+  let last: string | null = null;
+  while (out.length < items.length) {
+    let pick: string | null = null;
+    for (const [key, arr] of buckets) {
+      if (arr.length === 0 || key === last) continue;
+      if (pick === null || arr.length > buckets.get(pick)!.length) pick = key;
+    }
+    if (pick === null) {
+      for (const [key, arr] of buckets) { if (arr.length) { pick = key; break; } }
+    }
+    if (pick === null) break;
+    out.push(buckets.get(pick)!.shift()!);
+    last = pick;
+  }
+  return out;
+}
+
+const rotate = <T extends { category?: string | null }>(items: T[]) =>
+  spreadCategories(seededShuffle(items, shuffleSeed(ROTATION_MS)));
 
 // ── Sliding search panel ──────────────────────────────────────────────────
 // Slides in from the left at every breakpoint (mobile and desktop alike —
@@ -414,11 +450,11 @@ export default function RecommendationsPage() {
   useEffect(() => {
     fetch(`${BROWSE_URL}?action=browse-products&sort=trending&limit=20`)
       .then(r => r.json())
-      .then(d => setTrending(seededShuffle(d.products ?? [], shuffleSeed(60 * 60 * 1000))))
+      .then(d => setTrending(rotate(d.products ?? [])))
       .catch(() => setTrending([]));
     fetch(`${BROWSE_URL}?action=browse-products&sort=new&limit=20`)
       .then(r => r.json())
-      .then(d => setNewIns(seededShuffle(d.products ?? [], shuffleSeed(60 * 60 * 1000))))
+      .then(d => setNewIns(rotate(d.products ?? [])))
       .catch(() => setNewIns([]));
   }, []);
 
@@ -431,8 +467,19 @@ export default function RecommendationsPage() {
 
   // Main grid — server-paginated, filtered by category/subcategory. Resets
   // and refetches page 1 whenever the selected category changes.
+  // The rotation seed is pinned for the life of the page. Without it, a
+  // customer still scrolling when the 4-hour window rolls over would get
+  // page 5 from a different ordering than page 1 — some products repeated,
+  // others skipped entirely.
+  const [rotationSeed] = useState(() => shuffleSeed(ROTATION_MS));
+
   const fetchPage = useCallback((pageOffset: number, replace: boolean) => {
-    const params = new URLSearchParams({ action: 'browse-products', limit: String(PAGE_SIZE), offset: String(pageOffset) });
+    const params = new URLSearchParams({
+      action: 'browse-products',
+      limit: String(PAGE_SIZE),
+      offset: String(pageOffset),
+      seed: String(rotationSeed),
+    });
     if (activeParent !== 'All') params.set('parent', activeParent);
     if (activeSubcategory) params.set('subcategory', activeSubcategory);
     replace ? setIsLoading(true) : setIsLoadingMore(true);
@@ -444,7 +491,7 @@ export default function RecommendationsPage() {
       })
       .catch(() => { if (replace) setProducts([]); })
       .finally(() => { setIsLoading(false); setIsLoadingMore(false); });
-  }, [activeParent, activeSubcategory]);
+  }, [activeParent, activeSubcategory, rotationSeed]);
 
   useEffect(() => {
     setOffset(0);

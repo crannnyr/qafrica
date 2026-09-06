@@ -126,12 +126,22 @@ serve(async (req) => {
       return json({ ok: false, reason: 'invalid_email', message: 'That email address does not look right.' }, 400)
     }
 
-    // Do not let someone move their account onto an address that is already
-    // taken by a different customer.
+    // Availability check covers auth.users AND customers.
+    //
+    // This previously checked only the customers table, which misses auth
+    // users that have no customer record. On 5 Sep that gap let a customer
+    // "confirm" an address already held by an older auth account: the
+    // customer row was rewritten, the auth update was rejected with a
+    // duplicate-key error, and the UI still reported success.
     if (target !== String(customer.email).toLowerCase()) {
-      const { data: clash } = await admin
-        .from('customers').select('id').ilike('email', target).neq('id', caller.id).maybeSingle()
-      if (clash) {
+      const { data: available, error: availErr } = await admin.rpc('email_available_for_user', {
+        p_email: target, p_user_id: caller.id,
+      })
+      if (availErr) {
+        console.error('[account-verification] availability check failed:', availErr.message)
+        return json({ ok: false, reason: 'server_error' }, 500)
+      }
+      if (available !== true) {
         return json({ ok: false, reason: 'email_in_use', message: 'That email is already registered to another account.' }, 409)
       }
     }
@@ -211,13 +221,39 @@ serve(async (req) => {
       }, 400)
     }
 
-    // Keep the auth record in step when the address was corrected, so the
-    // customer signs in with the address they just confirmed.
-    if (result.email && result.email !== caller.email) {
+    // Auth record FIRST, customer record only once auth has accepted it.
+    //
+    // The original order was the other way round and the auth failure was
+    // merely logged, so a rejected change left customers.email pointing at an
+    // address the customer could not actually sign in with -- and a later
+    // password reset resolved that address to somebody else's account.
+    if (result.email && result.email.toLowerCase() !== caller.email.toLowerCase()) {
       const { error: authErr } = await admin.auth.admin.updateUserById(caller.id, {
         email: result.email, email_confirm: true,
       })
-      if (authErr) console.error('[account-verification] auth email sync failed:', authErr.message)
+      if (authErr) {
+        console.error('[account-verification] auth email update rejected:', authErr.message)
+        const raw = authErr.message?.toLowerCase() ?? ''
+        const inUse = raw.includes('duplicate') || raw.includes('already') || raw.includes('registered')
+        return json({
+          ok: false,
+          reason: inUse ? 'email_in_use' : 'auth_update_failed',
+          message: inUse
+            ? 'That email is already registered to another account, so we could not move your account to it. Nothing has changed — please use a different address.'
+            : 'We could not update your email right now. Nothing has changed — please try again shortly.',
+        }, inUse ? 409 : 502)
+      }
+    }
+
+    // Only now is it safe to write the customer record.
+    const { error: custErr } = await admin
+      .from('customers')
+      .update({ email: result.email, is_verified: true, updated_at: new Date().toISOString() })
+      .eq('id', caller.id)
+
+    if (custErr) {
+      console.error('[account-verification] customer record update failed:', custErr.message)
+      return json({ ok: false, reason: 'server_error', message: 'Your email was confirmed but we could not finish updating your profile. Please contact support.' }, 500)
     }
 
     return json({ ok: true, email: result.email })
