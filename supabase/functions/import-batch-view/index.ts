@@ -46,6 +46,17 @@ function renderTemplate(template: string, tokens: Record<string, string>): strin
   return out.replace(/\{\{[a-z_]+\}\}/g, '')
 }
 
+async function queueTemplated(supabase: any, key: string, to: string, tokens: Record<string, string>): Promise<boolean> {
+  const { data: tpl } = await supabase.from('import_message_templates').select('subject, body_html').eq('key', key).maybeSingle()
+  if (!tpl) return false
+  const { error } = await supabase.from('import_notification_queue').insert({
+    to_email: to,
+    subject: renderTemplate(tpl.subject, tokens),
+    html: emailShell(renderTemplate(tpl.body_html, tokens)),
+  })
+  return !error
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -73,11 +84,16 @@ serve(async (req: Request) => {
   if (action === 'customer-breakdown') {
     if (!batchKey || typeof batchKey !== 'string') return json({ error: 'Missing batch_key' }, 400)
 
-    const [linesRes, adjRes, ledgerRes] = await Promise.all([
+    const [linesRes, adjRes, ledgerRes, overridesRes, statusRes] = await Promise.all([
       supabase.rpc('get_batch_customer_breakdown', { p_batch_key: batchKey }),
       supabase.from('import_batch_customer_adjustments')
         .select('*').eq('batch_key', batchKey).order('created_at'),
       supabase.rpc('get_batch_bill_ledger', { p_batch_key: batchKey, p_kind: kind }),
+      supabase.from('import_batch_customer_item_prices')
+        .select('*').eq('batch_key', batchKey).eq('kind', kind),
+      // Per-customer status for this kind: sent/draft + the internal note.
+      supabase.from('import_batch_bill_status')
+        .select('customer_id, status, sent_at, admin_note').eq('batch_key', batchKey).eq('kind', kind),
     ])
 
     if (linesRes.error) {
@@ -88,7 +104,152 @@ serve(async (req: Request) => {
       rows: linesRes.data ?? [],
       adjustments: adjRes.data ?? [],
       ledger: ledgerRes.data ?? [],
+      price_overrides: overridesRes.data ?? [],
+      customer_status: statusRes.data ?? [],
     })
+  }
+
+  // Per-customer price override, sitting on top of the batch default in
+  // import_batch_item_bills. Deleting a row here just reverts that one
+  // customer back to the batch default -- it does not touch anyone else.
+  if (action === 'set-customer-price') {
+    const { customer_id, product_id, product_name, unit_amount_ngn } = body
+    if (!batchKey || !customer_id || !product_id || typeof unit_amount_ngn !== 'number') {
+      return json({ error: 'Missing batch_key, customer_id, product_id, or unit_amount_ngn' }, 400)
+    }
+    const { error } = await supabase
+      .from('import_batch_customer_item_prices')
+      .upsert(
+        { batch_key: batchKey, customer_id, product_id, kind, unit_amount_ngn, updated_at: new Date().toISOString() },
+        { onConflict: 'batch_key,customer_id,product_id,kind' },
+      )
+    // The database trigger refuses writes once this customer's bill has been sent.
+    if (error) return json({ error: error.message }, /locked/i.test(error.message) ? 409 : 500)
+    return json({ success: true })
+  }
+
+  if (action === 'delete-customer-price') {
+    const { customer_id, product_id } = body
+    if (!batchKey || !customer_id || !product_id) return json({ error: 'Missing batch_key, customer_id, or product_id' }, 400)
+    const { error } = await supabase
+      .from('import_batch_customer_item_prices')
+      .delete()
+      .eq('batch_key', batchKey).eq('customer_id', customer_id).eq('product_id', product_id).eq('kind', kind)
+    if (error) return json({ error: error.message }, /locked/i.test(error.message) ? 409 : 500)
+    return json({ success: true })
+  }
+
+  // Internal-only note against a customer's bill for this batch & kind.
+  // Never sent to the customer. Settable before billing (creates a draft
+  // row) or after (just updates the note -- never touches status, so it
+  // can't accidentally unlock or relock a sent bill).
+  if (action === 'set-admin-note') {
+    const { customer_id, admin_note } = body
+    if (!batchKey || !customer_id) return json({ error: 'Missing batch_key or customer_id' }, 400)
+
+    const { data: existing } = await supabase
+      .from('import_batch_bill_status')
+      .select('status')
+      .eq('batch_key', batchKey).eq('kind', kind).eq('customer_id', customer_id)
+      .maybeSingle()
+
+    if (existing) {
+      const { error } = await supabase
+        .from('import_batch_bill_status')
+        .update({ admin_note: admin_note ?? null })
+        .eq('batch_key', batchKey).eq('kind', kind).eq('customer_id', customer_id)
+      if (error) return json({ error: error.message }, 500)
+    } else {
+      const { error } = await supabase
+        .from('import_batch_bill_status')
+        .insert({ batch_key: batchKey, kind, customer_id, status: 'draft', admin_note: admin_note ?? null })
+      if (error) return json({ error: error.message }, 500)
+    }
+    return json({ success: true })
+  }
+
+  // One row per product, quantities summed across every customer -- for
+  // placing the actual 1688 order. No prices, no customer names.
+  if (action === 'sourcing-totals') {
+    if (!batchKey) return json({ error: 'Missing batch_key' }, 400)
+    const { data, error } = await supabase.rpc('get_batch_sourcing_totals', { p_batch_key: batchKey })
+    if (error) return json({ error: error.message }, 500)
+    return json({ rows: data ?? [] })
+  }
+
+  // Ship one customer, or every eligible (billed, not-yet-shipped) customer
+  // in the batch. Gated on that customer's consolidation bill being sent --
+  // not paid. Same underlying function either way; bulk just leaves
+  // customer_id out, so it naturally skips anyone already shipped
+  // individually.
+  if (action === 'ship') {
+    if (!batchKey) return json({ error: 'Missing batch_key' }, 400)
+    const customerId = body.customer_id ?? null
+
+    const { data: result, error } = await supabase.rpc('ship_batch_customers', {
+      p_batch_key: batchKey,
+      p_customer_id: customerId,
+      p_shipping_method_final: body.shipping_method_final ?? null,
+    })
+    if (error) return json({ error: error.message }, 500)
+    if (result?.error) return json({ error: result.error }, result.status ?? 400)
+
+    const methodLabel = body.shipping_method_final === 'flight' ? ' by air'
+      : body.shipping_method_final === 'sea_freight' ? ' by sea' : ''
+
+    let paidQueued = 0, unpaidQueued = 0
+    for (const recip of (result?.paid_recipients ?? [])) {
+      const ok = await queueTemplated(supabase, 'shipped_paid', recip.email, { customer_name: recip.name, shipping_method_label: methodLabel })
+      if (ok) paidQueued++
+    }
+    for (const recip of (result?.unpaid_recipients ?? [])) {
+      const ok = await queueTemplated(supabase, 'shipped_held_unpaid', recip.email, { customer_name: recip.name, shipping_method_label: methodLabel })
+      if (ok) unpaidQueued++
+    }
+
+    return json({
+      success: true,
+      shipped_count: result?.shipped_count ?? 0,
+      paid_notified: paidQueued,
+      held_unpaid_notified: unpaidQueued,
+    })
+  }
+
+  // Mark one customer, or every eligible customer, received. Gated on that
+  // customer's clearance bill being paid -- the actual release gate.
+  if (action === 'mark-received') {
+    if (!batchKey) return json({ error: 'Missing batch_key' }, 400)
+    const customerId = body.customer_id ?? null
+
+    const { data: result, error } = await supabase.rpc('mark_batch_customers_received', {
+      p_batch_key: batchKey,
+      p_customer_id: customerId,
+    })
+    if (error) return json({ error: error.message }, 500)
+    if (result?.error) return json({ error: result.error }, result.status ?? 400)
+
+    let queued = 0
+    for (const recip of (result?.recipients ?? [])) {
+      if (!recip.email) continue
+      const ok = await queueTemplated(supabase, 'order_received', recip.email, { customer_name: recip.name })
+      if (ok) queued++
+    }
+
+    return json({ success: true, received_count: result?.received_count ?? 0, queued })
+  }
+
+  // Cancel a sent-but-unpaid bill so it can be corrected and resent.
+  // Refuses if that bill has already been confirmed paid.
+  if (action === 'cancel-bill') {
+    const { customer_id } = body
+    if (!batchKey || !customer_id) return json({ error: 'Missing batch_key or customer_id' }, 400)
+
+    const { data: result, error } = await supabase.rpc('cancel_batch_customer_bill', {
+      p_batch_key: batchKey, p_kind: kind, p_customer_id: customer_id,
+    })
+    if (error) return json({ error: error.message }, 500)
+    if (result?.error) return json({ error: result.error }, result.status ?? 400)
+    return json({ success: true })
   }
 
   // Per-customer adjustment lines.
@@ -127,6 +288,7 @@ serve(async (req: Request) => {
   // the batch unlocked -- and rerunning would double-bill them.
   if (action === 'close-billing') {
     if (!batchKey) return json({ error: 'Missing batch_key' }, 400)
+    const customerId = body.customer_id ?? null // null = bulk: everyone priced & not yet billed
 
     const orderStatusTarget = kind === 'clearance' ? 'clearance_and_closed' : 'ordered_and_closed'
     const timestampColumn   = kind === 'clearance' ? 'clearance_closed_at' : 'ordered_closed_at'
@@ -136,6 +298,7 @@ serve(async (req: Request) => {
       p_kind: kind,
       p_order_status_target: orderStatusTarget,
       p_batch_timestamp_column: timestampColumn,
+      p_customer_id: customerId,
     })
     if (error) {
       console.error('[import-batch-view] close failed:', error.message)
