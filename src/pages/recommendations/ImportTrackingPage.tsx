@@ -4,26 +4,55 @@
 // progress tracker with a countdown once shipped. CSS-only animations
 // (no heavy libraries) since the spec explicitly flags animation weight
 // on slow mobile connections as a bottleneck risk.
-import { useState, useEffect, useMemo } from 'react';
+//
+// Batch 3: layout refresh, itemized per-item shipping/delivery estimates,
+// explicit Sea 60–90 / Air 20–30 day windows, and distinct milestone colors
+// per stage instead of a single orange throughout.
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Search, Loader, CheckCircle2, Warehouse, PlaneTakeoff, AlertCircle } from 'lucide-react';
+import {
+  ShoppingBag, Search, Loader, CheckCircle2, Warehouse, PlaneTakeoff,
+  AlertCircle, Plane, Ship, Store, Home, MapPin,
+} from 'lucide-react';
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
-interface TrackedOrder { code: string; status: string; shipping_method: 'flight' | 'sea_freight' | null; shipped_at: string | null; created_at: string; }
+interface TrackedItem {
+  id: string; name: string; quantity: number; image_url?: string;
+  shipping_method?: 'flight' | 'sea_freight';
+  variant_options?: Record<string, string>;
+}
+interface TrackedOrder {
+  code: string; status: string;
+  shipping_method: 'flight' | 'sea_freight' | 'mixed' | null;
+  shipped_at: string | null; created_at: string;
+  items?: TrackedItem[];
+  delivery_mode?: 'home' | 'pickup_station';
+  pickup_station_name?: string | null;
+  pickup_station_address?: string | null;
+}
+
+// Each stage carries its own color so the milestone bar reads as distinct
+// steps rather than one continuous fill — spec asks for "distinct color
+// coding across different progress stages along the timeline".
+const STAGES = [
+  { key: 'received', label: 'Order Received / Processing', icon: CheckCircle2, color: 'sky' },
+  { key: 'consolidation', label: 'At Consolidation Warehouse', icon: Warehouse, color: 'amber' },
+  { key: 'transit', label: 'In Transit to Nigeria', icon: PlaneTakeoff, color: 'emerald' },
+] as const;
+
+const STAGE_CLASSES: Record<string, { dot: string; ring: string; line: string; text: string }> = {
+  sky: { dot: 'bg-sky-500 border-sky-500', ring: 'ring-sky-100', line: 'bg-sky-500', text: 'text-sky-600' },
+  amber: { dot: 'bg-amber-500 border-amber-500', ring: 'ring-amber-100', line: 'bg-amber-500', text: 'text-amber-600' },
+  emerald: { dot: 'bg-emerald-500 border-emerald-500', ring: 'ring-emerald-100', line: 'bg-emerald-500', text: 'text-emerald-600' },
+};
 
 // Maps the real backend pipeline to the customer-facing tracking labels
 // (spec 6.1). "billed" covers both consolidation and shipping bill stages
 // internally (see Section 3 clarification) — both map to the same visible
 // "At Consolidation Warehouse" stage until shipped_at is set, at which
 // point status flips to to_review and the stage becomes "In Transit".
-const STAGES = [
-  { key: 'received', label: 'Order Received / Processing', icon: CheckCircle2 },
-  { key: 'consolidation', label: 'At Consolidation Warehouse', icon: Warehouse },
-  { key: 'transit', label: 'In Transit to Nigeria', icon: PlaneTakeoff },
-];
-
 function stageIndexFor(order: TrackedOrder): number {
   if (order.status === 'to_review' || order.shipped_at) return 2;
   if (order.status === 'billed') return 1;
@@ -34,11 +63,28 @@ function daysSince(dateStr: string) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
 }
 
-function CountdownWindow({ shippedAt, method }: { shippedAt: string; method: 'flight' | 'sea_freight' }) {
+// Sea: 60–90 days. Air: 20–30 days. Countdown only ever renders once
+// shipped_at is set (the trigger for the whole countdown), never before —
+// callers gate on that, this just does the math.
+const WINDOWS: Record<'flight' | 'sea_freight', { min: number; max: number; fastestSeen: number }> = {
+  flight: { min: 20, max: 30, fastestSeen: 10 },
+  sea_freight: { min: 60, max: 90, fastestSeen: 45 },
+};
+
+function CountdownWindow({ shippedAt, method, compact }: { shippedAt: string; method: 'flight' | 'sea_freight'; compact?: boolean }) {
   const elapsed = daysSince(shippedAt);
-  const [minDays, maxDays, fastest] = method === 'flight' ? [20, 30, 10] : [60, 70, 50];
-  const remainingLow = Math.max(minDays - elapsed, 0);
-  const remainingHigh = Math.max(maxDays - elapsed, 0);
+  const { min, max, fastestSeen } = WINDOWS[method];
+  const remainingLow = Math.max(min - elapsed, 0);
+  const remainingHigh = Math.max(max - elapsed, 0);
+
+  if (compact) {
+    return (
+      <p className="text-[11px] text-gray-500">
+        {remainingHigh === 0 ? 'Any day now' : `Est. ${remainingLow}–${remainingHigh} days left`}
+        <span className="text-gray-300"> · {min}–{max} day window</span>
+      </p>
+    );
+  }
 
   return (
     <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 text-center">
@@ -47,7 +93,8 @@ function CountdownWindow({ shippedAt, method }: { shippedAt: string; method: 'fl
         {remainingHigh === 0 ? 'Any day now' : `${remainingLow}–${remainingHigh} days`}
       </p>
       <p className="text-[11px] text-gray-400 mt-1.5 leading-relaxed">
-        This is an estimated window, not a fixed promise — some shipments have arrived in as little as ~{fastest} days.
+        {method === 'flight' ? 'Air freight' : 'Sea freight'} runs a {min}–{max} day window from ship date —
+        not a fixed promise, some shipments have arrived in as little as ~{fastestSeen} days.
       </p>
     </div>
   );
@@ -79,6 +126,33 @@ function TransportAnimation({ method, active }: { method: 'flight' | 'sea_freigh
   );
 }
 
+// One line per item: name/qty, its own shipping method badge, and (once
+// shipped) its own remaining-days estimate. Falls back to the order-level
+// shipping_method for items placed before per-item shipping existed.
+function ItemRow({ item, fallbackMethod, shippedAt }: { item: TrackedItem; fallbackMethod: 'flight' | 'sea_freight' | null; shippedAt: string | null }) {
+  const method = item.shipping_method ?? fallbackMethod;
+  return (
+    <div className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-b-0">
+      {item.image_url && (
+        <img src={item.image_url} alt={item.name} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
+      )}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-gray-800 truncate">{item.name} × {item.quantity}</p>
+        {item.variant_options && Object.keys(item.variant_options).length > 0 && (
+          <p className="text-[10px] text-gray-400 truncate">{Object.values(item.variant_options).join(', ')}</p>
+        )}
+        {shippedAt && method && <CountdownWindow shippedAt={shippedAt} method={method} compact />}
+      </div>
+      {method && (
+        <span className={`flex items-center gap-1 flex-shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${method === 'flight' ? 'bg-sky-50 text-sky-600' : 'bg-indigo-50 text-indigo-600'}`}>
+          {method === 'flight' ? <Plane className="w-3 h-3" /> : <Ship className="w-3 h-3" />}
+          {method === 'flight' ? 'Air' : 'Sea'}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function ImportTrackingPage() {
   const [code, setCode] = useState('');
   const [order, setOrder] = useState<TrackedOrder | null>(null);
@@ -86,6 +160,8 @@ export default function ImportTrackingPage() {
   const [error, setError] = useState('');
 
   const stageIdx = order ? stageIndexFor(order) : -1;
+  const isMixed = order?.shipping_method === 'mixed';
+  const singleMethod = order && !isMixed ? (order.shipping_method as 'flight' | 'sea_freight' | null) : null;
 
   const lookup = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -151,36 +227,69 @@ export default function ImportTrackingPage() {
         )}
 
         {order && (
-          <div className="space-y-5">
+          <div className="space-y-4">
+            {/* Order header + milestone tracker */}
             <div className="bg-white rounded-2xl border border-gray-100 p-5">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Order</p>
-              <p className="font-mono font-black text-lg text-gray-900 tracking-wider mb-4">{order.code}</p>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Order</p>
+                  <p className="font-mono font-black text-lg text-gray-900 tracking-wider">{order.code}</p>
+                </div>
+                {order.delivery_mode && (
+                  <div className="flex items-center gap-1.5 bg-gray-50 rounded-full px-2.5 py-1.5 text-[10px] font-bold text-gray-500">
+                    {order.delivery_mode === 'pickup_station' ? <Store className="w-3 h-3" /> : <Home className="w-3 h-3" />}
+                    {order.delivery_mode === 'pickup_station' ? 'Pickup station' : 'Home delivery'}
+                  </div>
+                )}
+              </div>
 
-              {/* Vertical progress tracker */}
+              {order.delivery_mode === 'pickup_station' && order.pickup_station_name && (
+                <div className="flex items-start gap-2 bg-gray-50 rounded-xl px-3 py-2.5 mb-4">
+                  <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-gray-800">{order.pickup_station_name}</p>
+                    {order.pickup_station_address && <p className="text-[11px] text-gray-400 truncate">{order.pickup_station_address}</p>}
+                  </div>
+                </div>
+              )}
+
+              {/* Vertical milestone tracker — each segment colored to its own stage */}
               <div className="relative pl-8">
                 <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-gray-100" />
-                <div
-                  className="absolute left-[11px] top-2 w-0.5 bg-orange-500 transition-all duration-700"
-                  style={{ height: `${(stageIdx / (STAGES.length - 1)) * 100}%` }}
-                />
+                {STAGES.slice(1).map((stage, gapI) => {
+                  const segDone = gapI < stageIdx; // gap i sits between stage i and i+1
+                  const classes = STAGE_CLASSES[stage.color];
+                  const segCount = STAGES.length - 1;
+                  return (
+                    <div
+                      key={stage.key}
+                      className={`absolute left-[11px] w-0.5 transition-all duration-700 ${segDone ? classes.line : ''}`}
+                      style={{
+                        top: `calc(0.5rem + ${(gapI / segCount) * 100}%)`,
+                        height: segDone ? `${(1 / segCount) * 100}%` : 0,
+                      }}
+                    />
+                  );
+                })}
                 <div className="space-y-6">
                   {STAGES.map((stage, i) => {
                     const isDone = i < stageIdx;
                     const isCurrent = i === stageIdx;
                     const Icon = stage.icon;
+                    const classes = STAGE_CLASSES[stage.color];
                     return (
                       <div key={stage.key} className="relative">
                         <div
                           className={`absolute -left-8 w-6 h-6 rounded-full flex items-center justify-center border-2 ${
-                            isDone || isCurrent ? 'bg-orange-500 border-orange-500' : 'bg-white border-gray-200'
-                          } ${isCurrent ? 'animate-pulse ring-4 ring-orange-100' : ''}`}
+                            isDone || isCurrent ? classes.dot : 'bg-white border-gray-200'
+                          } ${isCurrent ? `animate-pulse ring-4 ${classes.ring}` : ''}`}
                         >
                           <Icon className={`w-3 h-3 ${isDone || isCurrent ? 'text-white' : 'text-gray-300'}`} />
                         </div>
                         <p className={`text-sm font-semibold ${isCurrent ? 'text-gray-900' : isDone ? 'text-gray-600' : 'text-gray-300'}`}>
                           {stage.label}
                         </p>
-                        {isCurrent && <p className="text-[10px] text-orange-500 font-medium mt-0.5">Current status</p>}
+                        {isCurrent && <p className={`text-[10px] font-medium mt-0.5 ${classes.text}`}>Current status</p>}
                       </div>
                     );
                   })}
@@ -188,14 +297,32 @@ export default function ImportTrackingPage() {
               </div>
             </div>
 
-            {order.shipping_method && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-4">
-                <TransportAnimation method={order.shipping_method} active={stageIdx === 2} />
+            {/* Itemized shipping details — always shown so a mixed-method
+                order (some items flying, some by sea) is legible per item,
+                not just as one ambiguous order-level badge. */}
+            {order.items && order.items.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                  Items {isMixed && <span className="text-gray-300 font-normal normal-case">· mixed shipping</span>}
+                </p>
+                <div>
+                  {order.items.map((item, i) => (
+                    <ItemRow key={item.id ?? i} item={item} fallbackMethod={singleMethod} shippedAt={order.shipped_at} />
+                  ))}
+                </div>
               </div>
             )}
 
-            {order.shipped_at && order.shipping_method && (
-              <CountdownWindow shippedAt={order.shipped_at} method={order.shipping_method} />
+            {singleMethod && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-4">
+                <TransportAnimation method={singleMethod} active={stageIdx === 2} />
+              </div>
+            )}
+
+            {/* Countdown only ever appears once the item has actually shipped
+                (shipped_at set) — this is the trigger, never before. */}
+            {order.shipped_at && singleMethod && (
+              <CountdownWindow shippedAt={order.shipped_at} method={singleMethod} />
             )}
           </div>
         )}
