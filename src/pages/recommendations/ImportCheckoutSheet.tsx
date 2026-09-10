@@ -69,7 +69,8 @@ interface Props {
 export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove }: Props) {
   const [delivery, setDelivery] = useState<'to_qafrica' | 'to_me'>('to_me');
   const [showWhyQafrica, setShowWhyQafrica] = useState(false);
-  const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
+  // Flight is the default shipping choice — customer can switch to sea freight.
+  const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>('flight');
 
   // Some products cannot travel by air. With a single item in the cart this
   // still forces the whole (single) shipping choice to sea, same as before.
@@ -162,12 +163,30 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   }, [selectedAddressId, savedAddresses]);
 
   // ── Delivery mode: home address vs Jumia pickup station ─────────────────
-  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('home');
+  // Defaults to Jumia pickup — fastest/cheapest — unless the customer has
+  // saved a different preference in Settings, which always wins once loaded.
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('pickup_station');
   const [stations, setStations] = useState<PickupStation[]>([]);
   const [stationsLoading, setStationsLoading] = useState(false);
   const [stationSearch, setStationSearch] = useState('');
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [showStationPicker, setShowStationPicker] = useState(false);
+
+  useEffect(() => {
+    fetch(`${EDGE_URL}?action=my-delivery-prefs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customer.id }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.default_delivery_mode) setDeliveryMode(data.default_delivery_mode);
+        if (data.default_pickup_station) {
+          setSelectedStationId(data.default_pickup_station.id);
+          setStations(prev => prev.some(s => s.id === data.default_pickup_station.id) ? prev : [...prev, data.default_pickup_station]);
+        }
+      })
+      .catch(() => {});
+  }, [customer.id]);
 
   useEffect(() => {
     if (deliveryMode !== 'pickup_station' || stations.length > 0 || stationsLoading) return;
@@ -293,15 +312,19 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     if (forcedSeaFreight && shippingMethod !== 'sea_freight') setShippingMethod('sea_freight');
   }, [forcedSeaFreight, shippingMethod]);
 
-  // Sea-only items lock their own row in the per-item picker, independent
-  // of whatever the customer chooses for the rest of the cart.
+  // Every item defaults to Flight, except sea-only items which lock to Sea —
+  // customer can still switch any non-locked item to Sea afterward.
   useEffect(() => {
     if (cart.length <= 1) return;
     setItemShipping(prev => {
       const next = { ...prev };
       let changed = false;
       for (const item of cart) {
-        if (item.ship_only && next[item.cart_key] !== 'sea_freight') { next[item.cart_key] = 'sea_freight'; changed = true; }
+        if (item.ship_only) {
+          if (next[item.cart_key] !== 'sea_freight') { next[item.cart_key] = 'sea_freight'; changed = true; }
+        } else if (!next[item.cart_key]) {
+          next[item.cart_key] = 'flight'; changed = true;
+        }
       }
       return changed ? next : prev;
     });
@@ -624,15 +647,17 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                         onClick={() => !locked && setItemShippingMethod(item.cart_key, 'flight')}
                         disabled={locked}
                         title={locked ? 'Ships by sea only' : undefined}
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors ${locked ? 'border-gray-100 opacity-30 cursor-not-allowed' : chosen === 'flight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}
+                        className={`flex flex-col items-center justify-center gap-0.5 w-9 h-9 rounded-lg border-2 transition-colors ${locked ? 'border-gray-100 opacity-30 cursor-not-allowed' : chosen === 'flight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}
                       >
-                        <Plane className="w-3.5 h-3.5 text-gray-700" />
+                        <Plane className="w-3 h-3 text-gray-700" />
+                        <span className="text-[8px] font-bold text-gray-500 leading-none">Air</span>
                       </button>
                       <button
                         onClick={() => setItemShippingMethod(item.cart_key, 'sea_freight')}
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center border-2 transition-colors ${chosen === 'sea_freight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}
+                        className={`flex flex-col items-center justify-center gap-0.5 w-9 h-9 rounded-lg border-2 transition-colors ${chosen === 'sea_freight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}
                       >
-                        <Ship className="w-3.5 h-3.5 text-gray-700" />
+                        <Ship className="w-3 h-3 text-gray-700" />
+                        <span className="text-[8px] font-bold text-gray-500 leading-none">Sea</span>
                       </button>
                     </div>
                   </div>

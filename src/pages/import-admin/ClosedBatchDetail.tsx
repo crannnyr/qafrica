@@ -289,6 +289,22 @@ export default function ClosedBatchDetail({
     await load();
   };
 
+  // Per-item shipping override — only allowed before the consolidation_shipping
+  // bill is locked (enforced server-side too; the toggle is simply hidden
+  // client-side once billed, see CustomerCard). Notifies the customer by email.
+  const setItemShipping = async (line: CustomerLine, method: 'flight' | 'sea_freight') => {
+    const result = await call('admin-set-item-shipping-method', {
+      manager_token: token, order_id: line.order_id, product_id: line.product_id,
+      variant_options: line.variant_options, new_method: method,
+    });
+    if (result.error) { toast.error(result.error); return; }
+    toast.success(`Shipping updated to ${method === 'flight' ? 'air' : 'sea'} — customer notified`);
+    setCustomerLines(prev => prev.map(l =>
+      l.order_id === line.order_id && l.product_id === line.product_id && JSON.stringify(l.variant_options) === JSON.stringify(line.variant_options)
+        ? { ...l, shipping_method: method } : l
+    ));
+  };
+
   // ── Per-customer stage, from the ground truth ────────────────────────────
   // Bill state comes from statusByKind, not order.status: cancelling a bill
   // resets the lock but doesn't roll order.status back, so order.status
@@ -768,6 +784,7 @@ export default function ClosedBatchDetail({
                   saveNote={saveNote}
                   runIndividual={runIndividual}
                   individualActing={individualActing}
+                  onSetItemShipping={setItemShipping}
                 />
               ) : (
                 <>
@@ -897,6 +914,7 @@ function CustomerCard({
   adjustments, adjLabel, setAdjLabel, adjAmount, setAdjAmount, savingAdj, addAdjustment, removeAdjustment,
   isBilled, statusRow, ledgerRow, isShippedC, isReceivedC,
   noteDrafts, setNoteDrafts, saveNote, runIndividual, individualActing,
+  onSetItemShipping,
 }: {
   customer: { customerId: string; name: string; firstOrderAt: string; orderCount: number; lines: CustomerLine[] };
   billKind: BillKind; setBillKind: (k: BillKind) => void; onBack: () => void;
@@ -918,6 +936,7 @@ function CustomerCard({
   saveNote: (customerId: string, kind: BillKind, note: string) => Promise<void>;
   runIndividual: (type: 'bill' | 'clearance_bill' | 'ship' | 'receive' | 'cancel', customerId: string, kind?: BillKind) => Promise<void>;
   individualActing: string | null;
+  onSetItemShipping: (line: CustomerLine, method: 'flight' | 'sea_freight') => Promise<void>;
 }) {
   const id = customer.customerId;
   const billed = isBilled(id, billKind);
@@ -1004,6 +1023,33 @@ function CustomerCard({
                       <span className="inline-flex items-center gap-1 text-[9px] font-bold text-blue-700 bg-blue-50 rounded-full px-1.5 py-0.5">
                         <Ship className="w-2.5 h-2.5" /> Sea only
                       </span>
+                    )}
+                  </div>
+                  {/* Shipping method for this item — visible always, editable only before
+                      the consolidation_shipping bill is locked (isBilled checks that kind
+                      specifically, independent of whichever bill tab is currently open). */}
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className="text-[10px] text-gray-400">Shipping:</span>
+                    {isBilled(id, 'consolidation_shipping') || line.ship_only ? (
+                      <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${line.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                        {line.shipping_method === 'flight' ? <Plane className="w-2.5 h-2.5" /> : <Ship className="w-2.5 h-2.5" />}
+                        {line.shipping_method === 'flight' ? 'Air' : 'Sea'}
+                      </span>
+                    ) : (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => onSetItemShipping(line, 'flight')}
+                          className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors ${line.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                        >
+                          <Plane className="w-2.5 h-2.5" /> Air
+                        </button>
+                        <button
+                          onClick={() => onSetItemShipping(line, 'sea_freight')}
+                          className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors ${line.shipping_method === 'sea_freight' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                        >
+                          <Ship className="w-2.5 h-2.5" /> Sea
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 mt-2">

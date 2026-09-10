@@ -1272,7 +1272,7 @@ serve(async (req: Request) => {
 
       const { data, error } = await supabase
         .from('china_import_orders')
-        .select('id, code, status, payment_status, payment_method, total_ngn, delivery_type, items, created_at, delivery_mode, pickup_station_name, pickup_station_address')
+        .select('id, code, status, payment_status, payment_method, total_ngn, delivery_type, items, created_at, delivery_mode, pickup_station_id, pickup_station_name, pickup_station_address, shipping_method, delivery_address, restored_at')
         .eq('user_id', customer_id)
         .order('created_at', { ascending: false })
         .limit(200)
@@ -1930,6 +1930,303 @@ serve(async (req: Request) => {
       return json({ order: updated })
     }
 
+    // Admin per-item shipping override. Only allowed before the batch's
+    // consolidation_shipping bill is locked ('sent') — after that, shipping
+    // is already priced/committed and changing it would silently break the
+    // bill the customer already saw. Matches an item by product_id (+
+    // variant_options when present) inside the order's items array.
+    if (req.method === 'POST' && action === 'admin-set-item-shipping-method') {
+      const { manager_token, order_id, product_id, variant_options, new_method } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+      if (!order_id || !product_id) return json({ error: 'Missing order_id or product_id' }, 400)
+      if (!['flight', 'sea_freight'].includes(new_method)) return json({ error: 'Invalid new_method' }, 400)
+
+      const { data: order, error: orderErr } = await supabase
+        .from('china_import_orders').select('*').eq('id', order_id).single()
+      if (orderErr || !order) return json({ error: 'Order not found' }, 404)
+
+      if (order.staged_at) {
+        const { data: billStatus } = await supabase
+          .from('import_batch_bill_status').select('status')
+          .eq('batch_key', order.staged_at).eq('kind', 'consolidation_shipping').maybeSingle()
+        if (billStatus?.status === 'sent') {
+          return json({ error: 'This batch has already been billed — shipping method can no longer be changed here.' }, 409)
+        }
+      }
+
+      const { data: product } = await supabase
+        .from('china_import_products').select('name, ship_only').eq('id', product_id).maybeSingle()
+      if (product?.ship_only && new_method === 'flight') {
+        return json({ error: 'This item can only ship by sea freight.' }, 400)
+      }
+
+      const items = Array.isArray(order.items) ? order.items : []
+      const variantMatch = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+      let matched = false
+      const updatedItems = items.map((i: any) => {
+        if (i.id === product_id && (variant_options === undefined || variantMatch(i.variant_options, variant_options))) {
+          matched = true
+          return { ...i, shipping_method: new_method }
+        }
+        return i
+      })
+      if (!matched) return json({ error: 'Could not find that item on this order' }, 404)
+
+      const methods = new Set(updatedItems.map((i: any) => i.shipping_method).filter(Boolean))
+      const summary = methods.size === 1 ? [...methods][0] : methods.size > 1 ? 'mixed' : order.shipping_method
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('china_import_orders')
+        .update({ items: updatedItems, shipping_method: summary, updated_at: new Date().toISOString() })
+        .eq('id', order_id).select().single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+
+      if (order.user_id) {
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', order.user_id).single()
+        if (customer?.email) {
+          await queueTemplatedEmail(supabase, 'item_shipping_reassigned', customer.email, {
+            customer_name: customer.full_name ?? order.customer_name ?? 'there',
+            order_code: order.code,
+            item_name: product?.name ?? 'your item',
+            new_method_label: new_method === 'flight' ? 'air freight' : 'sea freight',
+            arrival_window: new_method === 'flight' ? '20–30 days' : '60–90 days',
+          })
+        }
+      }
+
+      return json({ order: updated })
+    }
+
+    // Admin per-item variant override — some customers ask for a size/color
+    // change after paying. Same "not billed" gate as shipping method, since
+    // a variant change can also change price_ngn (price_deltas), which would
+    // silently disagree with an already-sent bill otherwise.
+    if (req.method === 'POST' && action === 'admin-set-item-variant') {
+      const { manager_token, order_id, product_id, old_variant_options, new_variant_options } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+      if (!order_id || !product_id || !new_variant_options) return json({ error: 'Missing order_id, product_id, or new_variant_options' }, 400)
+
+      const { data: order, error: orderErr } = await supabase
+        .from('china_import_orders').select('*').eq('id', order_id).single()
+      if (orderErr || !order) return json({ error: 'Order not found' }, 404)
+
+      if (order.staged_at) {
+        const { data: billStatus } = await supabase
+          .from('import_batch_bill_status').select('status')
+          .eq('batch_key', order.staged_at).eq('kind', 'consolidation_shipping').maybeSingle()
+        if (billStatus?.status === 'sent') {
+          return json({ error: 'This batch has already been billed — variants can no longer be changed here.' }, 409)
+        }
+      }
+
+      const { data: product } = await supabase
+        .from('china_import_products').select('name, price_ngn, variants, has_variants').eq('id', product_id).maybeSingle()
+      if (!product?.has_variants) return json({ error: 'This product has no variants to change.' }, 400)
+
+      const items = Array.isArray(order.items) ? order.items : []
+      const variantMatch = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+      let matched = false
+      let oldVariantOptions: Record<string, string> | null = null
+      const newPrice = computeItemPriceNgn(product, new_variant_options)
+      const updatedItems = items.map((i: any) => {
+        if (i.id === product_id && (old_variant_options === undefined || variantMatch(i.variant_options, old_variant_options))) {
+          matched = true
+          oldVariantOptions = i.variant_options ?? null
+          return { ...i, variant_options: new_variant_options, price_ngn: newPrice }
+        }
+        return i
+      })
+      if (!matched) return json({ error: 'Could not find that item on this order' }, 404)
+
+      const subtotalNgn = updatedItems.reduce((s: number, i: any) => s + Number(i.price_ngn ?? 0) * Number(i.quantity ?? 0), 0)
+      const jumiaFeeNgn = order.delivery_type === 'to_qafrica' ? updatedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
+      const totalNgn = subtotalNgn + jumiaFeeNgn
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('china_import_orders')
+        .update({ items: updatedItems, subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn, total_ngn: totalNgn, updated_at: new Date().toISOString() })
+        .eq('id', order_id).select().single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+
+      if (order.user_id) {
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', order.user_id).single()
+        if (customer?.email) {
+          const fmtVariant = (v: Record<string, string> | null) => v && Object.keys(v).length ? Object.values(v).join(', ') : 'no variant selected'
+          await queueTemplatedEmail(supabase, 'item_variant_changed', customer.email, {
+            customer_name: customer.full_name ?? order.customer_name ?? 'there',
+            order_code: order.code,
+            item_name: product?.name ?? 'your item',
+            old_variant: fmtVariant(oldVariantOptions),
+            new_variant: fmtVariant(new_variant_options),
+            new_price: `₦${Math.round(newPrice).toLocaleString()}`,
+          })
+        }
+      }
+
+      return json({ order: updated })
+    }
+
+    // ── Timed Out Orders (admin) ────────────────────────────────────────────
+    // china_import_failed_orders is populated by order-reminders' 24h expiry
+    // sweep, which DELETES the original china_import_orders row — only the
+    // fields it explicitly copies survive (code, customer_name, user_id,
+    // items, total_ngn, delivery_type, payment_method, order_created_at).
+    // shipping_method, delivery_address, customer_whatsapp are NOT preserved,
+    // which is why a restored order always needs the customer to re-supply
+    // shipping info (see 'complete-order-shipping' below and the
+    // run-shipping-info-reminders / run-shipping-info-evening-reminders
+    // actions in order-reminders).
+    if (req.method === 'POST' && action === 'admin-failed-orders') {
+      const { manager_token, search } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+
+      let query = supabase
+        .from('china_import_failed_orders')
+        .select('*, customers(email, phone)')
+        .is('restored_at', null)
+        .order('failed_at', { ascending: false })
+        .limit(500)
+      if (search && typeof search === 'string' && search.trim()) {
+        const s = search.trim()
+        query = query.or(`code.ilike.%${s}%,customer_name.ilike.%${s}%`)
+      }
+      const { data, error } = await query
+      if (error) return json({ error: error.message }, 500)
+      return json({
+        failed_orders: (data ?? []).map((o: any) => ({ ...o, customer_email: o.customers?.email ?? null, customer_phone: o.customers?.phone ?? null, customers: undefined })),
+      })
+    }
+
+    if (req.method === 'POST' && action === 'admin-restore-failed-order') {
+      const { manager_token, failed_order_id } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+      if (!failed_order_id) return json({ error: 'Missing failed_order_id' }, 400)
+
+      const { data: failed, error: findErr } = await supabase
+        .from('china_import_failed_orders').select('*').eq('id', failed_order_id).maybeSingle()
+      if (findErr || !failed) return json({ error: 'Timed-out order not found' }, 404)
+      if (failed.restored_at) return json({ error: 'This order has already been restored.' }, 409)
+
+      const items = Array.isArray(failed.items) ? failed.items : []
+      const subtotalNgn = items.reduce((s: number, i: any) => s + Number(i.price_ngn ?? 0) * Number(i.quantity ?? 0), 0)
+      const jumiaFeeNgn = failed.delivery_type === 'to_qafrica' ? items.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
+
+      // china_import_orders.customer_whatsapp is NOT NULL, but the failed
+      // snapshot never carried it — fall back to the customer's profile
+      // phone if they have one, and to a clear placeholder otherwise. The
+      // apology email tells them to fill in their delivery details anyway.
+      let fallbackWhatsapp = 'Not provided — please update from your dashboard'
+      if (failed.user_id) {
+        const { data: c } = await supabase.from('customers').select('phone').eq('id', failed.user_id).single()
+        if (c?.phone) fallbackWhatsapp = c.phone
+      }
+
+      const now = new Date().toISOString()
+      const { data: restored, error: insertErr } = await supabase.from('china_import_orders').insert({
+        code: failed.code, customer_name: failed.customer_name, customer_whatsapp: fallbackWhatsapp,
+        items, delivery_type: failed.delivery_type,
+        subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn, total_ngn: failed.total_ngn,
+        status: 'confirmed', user_id: failed.user_id,
+        payment_method: failed.payment_method, payment_status: 'paid', paid_at: now,
+        delivery_mode: 'home',
+        restored_at: now, restored_from_failed_order_id: failed.id,
+        admin_note: `Restored from a timed-out order (originally placed ${failed.order_created_at}). Shipping method and delivery details were lost when it expired — customer has been asked to set them again.`,
+      }).select().single()
+      if (insertErr) return json({ error: insertErr.message }, 500)
+
+      await supabase.from('china_import_failed_orders')
+        .update({ restored_at: now, restored_order_id: restored.id }).eq('id', failed.id)
+
+      await incrementUnitsSold(supabase, items)
+
+      if (failed.user_id) {
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', failed.user_id).single()
+        if (customer?.email) {
+          await sendTemplatedEmail(supabase, 'order_restored_apology', customer.email, {
+            customer_name: customer.full_name ?? failed.customer_name ?? 'there',
+            order_code: restored.code,
+            dashboard_link: DASHBOARD_BILLS_URL,
+          })
+        }
+      }
+
+      return json({ order: restored })
+    }
+
+    // Customer sets shipping method (+ delivery address or pickup station)
+    // on an order that's missing it — the only route into this today is a
+    // restored order, but it's written generically against "any order
+    // missing shipping info" rather than gated on restored_at, in case that
+    // ever becomes true for another reason.
+    if (req.method === 'POST' && action === 'complete-order-shipping') {
+      const body = await req.json()
+      const { customer_id, order_id, shipping_method, delivery_mode, pickup_station_id, delivery_address, address_id } = body
+      if (!customer_id || !order_id) return json({ error: 'Missing customer_id or order_id' }, 400)
+      if (!shipping_method || !['flight', 'sea_freight'].includes(shipping_method)) return json({ error: 'Invalid shipping_method' }, 400)
+
+      const { data: order, error: findErr } = await supabase
+        .from('china_import_orders').select('*').eq('id', order_id).eq('user_id', customer_id).maybeSingle()
+      if (findErr || !order) return json({ error: 'Order not found' }, 404)
+
+      const resolvedDeliveryMode: 'home' | 'pickup_station' = delivery_mode === 'pickup_station' ? 'pickup_station' : 'home'
+      let cleanAddress: Record<string, string> | null = null
+      let resolvedAddressId: string | null = null
+      let pickupStationSnapshot: { id: string; name: string; address: string } | null = null
+
+      if (order.delivery_type === 'to_me') {
+        if (resolvedDeliveryMode === 'pickup_station') {
+          if (!pickup_station_id) return json({ error: 'Missing pickup_station_id' }, 400)
+          const { data: station } = await supabase
+            .from('pickup_stations').select('id, name, address, is_active').eq('id', pickup_station_id).maybeSingle()
+          if (!station || !station.is_active) return json({ error: 'That pickup station is no longer available. Please pick another.' }, 400)
+          pickupStationSnapshot = { id: station.id, name: station.name, address: station.address }
+          const a = delivery_address ?? {}
+          if (!a.name?.trim() || !a.phone?.trim()) return json({ error: 'Missing delivery address field: name or phone' }, 400)
+          cleanAddress = { name: a.name.trim(), phone: a.phone.trim() }
+        } else if (address_id) {
+          const { data: saved, error: savedErr } = await supabase
+            .from('import_customer_addresses').select('*').eq('id', address_id).eq('customer_id', customer_id).maybeSingle()
+          if (savedErr || !saved) return json({ error: 'Saved address not found' }, 404)
+          resolvedAddressId = saved.id
+          cleanAddress = {
+            name: saved.name, phone: saved.phone, address_line1: saved.address_line1,
+            address_line2: saved.address_line2 ?? '', city: saved.city, state: saved.state,
+            landmark: saved.landmark ?? '',
+          }
+        } else {
+          const a = delivery_address ?? {}
+          const required = ['name', 'phone', 'address_line1', 'city', 'state']
+          for (const field of required) {
+            if (!a[field] || typeof a[field] !== 'string' || !a[field].trim()) {
+              return json({ error: `Missing delivery address field: ${field}` }, 400)
+            }
+          }
+          cleanAddress = {
+            name: a.name.trim(), phone: a.phone.trim(),
+            address_line1: a.address_line1.trim(), address_line2: (a.address_line2 ?? '').trim(),
+            city: a.city.trim(), state: a.state.trim(), landmark: (a.landmark ?? '').trim(),
+          }
+        }
+      }
+
+      const updatedItems = (Array.isArray(order.items) ? order.items : []).map((i: any) => ({ ...i, shipping_method: i.shipping_method ?? shipping_method }))
+
+      const { data: updated, error: updateErr } = await supabase.from('china_import_orders').update({
+        shipping_method, items: updatedItems,
+        delivery_mode: order.delivery_type === 'to_me' ? resolvedDeliveryMode : 'home',
+        delivery_address: cleanAddress ?? order.delivery_address,
+        address_id: resolvedAddressId,
+        pickup_station_id: pickupStationSnapshot?.id ?? null,
+        pickup_station_name: pickupStationSnapshot?.name ?? null,
+        pickup_station_address: pickupStationSnapshot?.address ?? null,
+        last_shipping_info_reminder_at: null, // stops further reminders — the completeness check below will exclude it
+        updated_at: new Date().toISOString(),
+      }).eq('id', order_id).select().single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+
+      return json({ order: updated })
+    }
+
     if (req.method === 'POST' && action === 'bill-pay-verify') {
       const { customer_id, bill_id, reference } = await req.json()
       if (!customer_id || !bill_id || !reference) return json({ error: 'Missing customer_id, bill_id, or reference' }, 400)
@@ -2024,6 +2321,39 @@ serve(async (req: Request) => {
       if (!customer_id || !id) return json({ error: 'Missing customer_id or id' }, 400)
       const { error } = await supabase
         .from('import_customer_addresses').delete().eq('id', id).eq('customer_id', customer_id)
+      if (error) return json({ error: error.message }, 500)
+      return json({ success: true })
+    }
+
+    // ── Delivery preference (default mode + default pickup station) ────────
+    if (req.method === 'POST' && action === 'my-delivery-prefs') {
+      const { customer_id } = await req.json()
+      if (!customer_id) return json({ error: 'Login required' }, 401)
+      const { data, error } = await supabase
+        .from('customers')
+        .select('import_default_delivery_mode, import_default_pickup_station_id, pickup_stations:import_default_pickup_station_id(id, name, address, state)')
+        .eq('id', customer_id).single()
+      if (error) return json({ error: error.message }, 500)
+      return json({
+        default_delivery_mode: data.import_default_delivery_mode,
+        default_pickup_station: data.pickup_stations ?? null,
+      })
+    }
+
+    if (req.method === 'POST' && action === 'save-delivery-prefs') {
+      const { customer_id, default_delivery_mode, default_pickup_station_id } = await req.json()
+      if (!customer_id) return json({ error: 'Login required' }, 401)
+      if (!['home', 'pickup_station'].includes(default_delivery_mode)) return json({ error: 'Invalid default_delivery_mode' }, 400)
+      if (default_delivery_mode === 'pickup_station' && !default_pickup_station_id) {
+        return json({ error: 'Pick a default station first' }, 400)
+      }
+      const { error } = await supabase
+        .from('customers')
+        .update({
+          import_default_delivery_mode: default_delivery_mode,
+          import_default_pickup_station_id: default_delivery_mode === 'pickup_station' ? default_pickup_station_id : null,
+        })
+        .eq('id', customer_id)
       if (error) return json({ error: error.message }, 500)
       return json({ success: true })
     }

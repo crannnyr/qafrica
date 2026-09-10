@@ -40,6 +40,7 @@ interface ImportOrder {
     quantity: number;
     image_url: string;
     variant_options?: Record<string, string>;
+    shipping_method?: 'flight' | 'sea_freight';
   }>;
   delivery_type: 'to_qafrica' | 'to_me';
   shipping_method?: 'flight' | 'sea_freight' | null;
@@ -306,6 +307,30 @@ function LoadCodePanel({ token }: { token: string }) {
   const confirmPayment = () => { setIsConfirmingPayment(true); updateOrder({ payment_status: 'paid' }).finally(() => setIsConfirmingPayment(false)); };
   const rejectPayment = () => { setIsConfirmingPayment(true); updateOrder({ payment_status: 'failed' }).finally(() => setIsConfirmingPayment(false)); };
 
+  // Per-item shipping override — server rejects with an error if the batch
+  // is already billed, which is surfaced via the same error banner used for
+  // order lookup rather than a separate toast system (this file has none).
+  const [shippingActingKey, setShippingActingKey] = useState<string | null>(null);
+  const setItemShippingMethod = async (item: ImportOrder['items'][number], method: 'flight' | 'sea_freight') => {
+    if (!order) return;
+    const key = `${item.id}:${JSON.stringify(item.variant_options ?? null)}`;
+    setShippingActingKey(key);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-set-item-shipping-method`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_id: order.id, product_id: item.id, variant_options: item.variant_options, new_method: method }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? 'Could not update shipping method'); return; }
+      setOrder(data.order);
+    } catch {
+      setError('Connection error');
+    } finally {
+      setShippingActingKey(null);
+    }
+  };
+
   const shippingNgn = parseFloat(shipping) || 0;
   const shippingCny = rates ? shippingNgn / rates.cnyToNgn : null;
   const shippingUsd = rates ? shippingNgn / rates.usdToNgn : null;
@@ -460,19 +485,41 @@ function LoadCodePanel({ token }: { token: string }) {
 
               {/* Items */}
               <div className="space-y-2">
-                {order.items.map((item, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <img src={item.image_url} alt={item.name}
-                      className="w-10 h-10 rounded-lg object-cover border border-gray-100 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                      <p className="text-[11px] text-gray-400">{fmtCny(item.price_cny)} · qty {item.quantity}</p>
+                {order.items.map((item, i) => {
+                  const key = `${item.id}:${JSON.stringify(item.variant_options ?? null)}`;
+                  const acting = shippingActingKey === key;
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <img src={item.image_url} alt={item.name}
+                        className="w-10 h-10 rounded-lg object-cover border border-gray-100 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
+                        <p className="text-[11px] text-gray-400">{fmtCny(item.price_cny)} · qty {item.quantity}</p>
+                      </div>
+                      {/* Shipping method for this specific item — admin can toggle it
+                          (server rejects once the batch this order is in has been billed). */}
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => setItemShippingMethod(item, 'flight')}
+                          disabled={acting}
+                          className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-1 rounded-full border transition-colors disabled:opacity-40 ${item.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                        >
+                          Air
+                        </button>
+                        <button
+                          onClick={() => setItemShippingMethod(item, 'sea_freight')}
+                          disabled={acting}
+                          className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-1 rounded-full border transition-colors disabled:opacity-40 ${item.shipping_method === 'sea_freight' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                        >
+                          Sea
+                        </button>
+                      </div>
+                      <p className="text-sm font-semibold text-gray-800 flex-shrink-0">
+                        {fmt(item.price_ngn * item.quantity)}
+                      </p>
                     </div>
-                    <p className="text-sm font-semibold text-gray-800 flex-shrink-0">
-                      {fmt(item.price_ngn * item.quantity)}
-                    </p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <Divider />

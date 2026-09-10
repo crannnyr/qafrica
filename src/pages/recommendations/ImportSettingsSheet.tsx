@@ -1,32 +1,108 @@
 // src/pages/recommendations/ImportSettingsSheet.tsx
 // Settings menu for the importation dashboard: Account & Security (email +
-// password), Address Management (full CRUD — the store already had this
-// wired up, this is just the first UI for it), and Log Out.
-import { useState, useEffect } from 'react';
+// password), Delivery Preference (default Home vs Jumia pickup + default
+// station), Addresses (full CRUD), and Log Out.
+//
+// IMPORTANT: Addresses here use the import-specific import_customer_addresses
+// table via the china-import edge function (my-addresses/save-address/
+// delete-address/set-default-address) — NOT useCustomerAuthStore's
+// addresses, which point at the marketplace's customer_addresses table and
+// are invisible to the import checkout. This file used to call the store by
+// mistake; an address saved from here silently never showed up at checkout.
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Loader, Eye, EyeOff, LogOut, MapPin, ShieldCheck,
-  Plus, Trash2, Star, CheckCircle2, ChevronLeft,
+  Plus, Trash2, Star, CheckCircle2, ChevronLeft, Home, Store, Zap, Search, Pencil, Tag,
 } from 'lucide-react';
 import { supabase } from '@/services';
+import CONFIG from '@/lib/config';
 import ConfirmEmailSheet from './ConfirmEmailSheet';
 import { useCustomerAuthStore } from '@/stores';
-import type { CustomerAddress } from '@/types';
 import { toast } from 'sonner';
 
-type Panel = 'menu' | 'security' | 'addresses' | 'addressForm';
+const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const STATIONS_REST_URL = `${CONFIG.SUPABASE_URL}/rest/v1/pickup_stations`;
+
+type Panel = 'menu' | 'security' | 'delivery' | 'addresses' | 'addressForm';
+
+interface ImportAddress {
+  id: string;
+  label: string | null;
+  name: string;
+  phone: string;
+  address_line1: string;
+  address_line2: string | null;
+  city: string;
+  state: string;
+  landmark: string | null;
+  is_default: boolean;
+}
+
+interface PickupStation {
+  id: string; name: string; state: string; address: string; landmark: string | null;
+}
 
 const emptyAddressDraft = {
   label: 'Home', name: '', phone: '',
-  address_line1: '', address_line2: '', city: '', state: '', country: 'Nigeria', postal_code: '',
+  address_line1: '', address_line2: '', city: '', state: '', landmark: '',
   is_default: false,
 };
 
 export default function ImportSettingsSheet({ onClose }: { onClose: () => void }) {
-  const { customer, addresses, logout, fetchAddresses, addAddress, deleteAddress, setDefaultAddress } = useCustomerAuthStore();
+  const { customer, logout } = useCustomerAuthStore();
   const [panel, setPanel] = useState<Panel>('menu');
 
-  useEffect(() => { fetchAddresses(); }, [fetchAddresses]);
+  const [addresses, setAddresses] = useState<ImportAddress[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(true);
+  const [editingAddress, setEditingAddress] = useState<ImportAddress | null>(null);
+
+  const fetchAddresses = async () => {
+    setAddressesLoading(true);
+    try {
+      const res = await fetch(`${EDGE_URL}?action=my-addresses`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customer?.id }),
+      });
+      const data = await res.json();
+      setAddresses(data.addresses ?? []);
+    } finally {
+      setAddressesLoading(false);
+    }
+  };
+
+  useEffect(() => { if (customer?.id) fetchAddresses(); }, [customer?.id]);
+
+  const saveAddress = async (draft: typeof emptyAddressDraft, id?: string) => {
+    const res = await fetch(`${EDGE_URL}?action=save-address`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customer?.id, id, ...draft }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { success: false, error: data.error as string };
+    await fetchAddresses();
+    return { success: true };
+  };
+
+  const deleteAddress = async (id: string) => {
+    const res = await fetch(`${EDGE_URL}?action=delete-address`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customer?.id, id }),
+    });
+    if (!res.ok) { toast.error('Could not remove address'); return; }
+    toast.success('Address removed');
+    fetchAddresses();
+  };
+
+  const setDefaultAddress = async (id: string) => {
+    const res = await fetch(`${EDGE_URL}?action=set-default-address`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customer?.id, id }),
+    });
+    if (!res.ok) { toast.error('Could not update'); return; }
+    toast.success('Default address updated');
+    fetchAddresses();
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -56,8 +132,9 @@ export default function ImportSettingsSheet({ onClose }: { onClose: () => void }
             <h2 className="font-bold text-gray-900 text-lg">
               {panel === 'menu' && 'Settings'}
               {panel === 'security' && 'Account & Security'}
+              {panel === 'delivery' && 'Delivery preference'}
               {panel === 'addresses' && 'Addresses'}
-              {panel === 'addressForm' && 'Add address'}
+              {panel === 'addressForm' && (editingAddress ? 'Edit address' : 'Add address')}
             </h2>
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
@@ -70,7 +147,8 @@ export default function ImportSettingsSheet({ onClose }: { onClose: () => void }
             <motion.div key="menu" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-2">
               <p className="text-xs text-gray-400 px-1 mb-3">{customer?.email}</p>
               <MenuRow icon={ShieldCheck} label="Account & Security" sub="Email and password" onClick={() => setPanel('security')} />
-              <MenuRow icon={MapPin} label="Addresses" sub={`${addresses.length} saved`} onClick={() => setPanel('addresses')} />
+              <MenuRow icon={Zap} label="Delivery preference" sub="Default delivery method" onClick={() => setPanel('delivery')} />
+              <MenuRow icon={MapPin} label="Addresses" sub={addressesLoading ? 'Loading…' : `${addresses.length} saved`} onClick={() => setPanel('addresses')} />
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border border-red-100 bg-red-50 hover:bg-red-100 transition-colors mt-4"
@@ -83,27 +161,26 @@ export default function ImportSettingsSheet({ onClose }: { onClose: () => void }
 
           {panel === 'security' && <SecurityPanel key="security" />}
 
+          {panel === 'delivery' && <DeliveryPrefsPanel key="delivery" customerId={customer?.id} />}
+
           {panel === 'addresses' && (
             <AddressesPanel
               key="addresses"
               addresses={addresses}
-              onAdd={() => setPanel('addressForm')}
-              onDelete={async (id) => {
-                const res = await deleteAddress(id);
-                if (res.success) toast.success('Address removed'); else toast.error(res.error ?? 'Could not remove address');
-              }}
-              onSetDefault={async (id) => {
-                const res = await setDefaultAddress(id);
-                if (res.success) toast.success('Default address updated'); else toast.error(res.error ?? 'Could not update');
-              }}
+              loading={addressesLoading}
+              onAdd={() => { setEditingAddress(null); setPanel('addressForm'); }}
+              onEdit={(a) => { setEditingAddress(a); setPanel('addressForm'); }}
+              onDelete={deleteAddress}
+              onSetDefault={setDefaultAddress}
             />
           )}
 
           {panel === 'addressForm' && (
             <AddressForm
               key="addressForm"
+              editing={editingAddress}
               onSaved={() => setPanel('addresses')}
-              onSubmit={addAddress}
+              onSubmit={saveAddress}
             />
           )}
         </AnimatePresence>
@@ -264,13 +341,152 @@ function SecurityPanel() {
   );
 }
 
+// ── Delivery preference ──────────────────────────────────────────────────
+// Which delivery mode opens by default at checkout, and (if Jumia) which
+// station is pre-selected. Backed by customers.import_default_delivery_mode
+// / import_default_pickup_station_id via my-delivery-prefs / save-delivery-prefs.
+function DeliveryPrefsPanel({ customerId }: { customerId?: string }) {
+  const [mode, setMode] = useState<'home' | 'pickup_station'>('pickup_station');
+  const [station, setStation] = useState<PickupStation | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [stations, setStations] = useState<PickupStation[]>([]);
+  const [search, setSearch] = useState('');
+  const [showPicker, setShowPicker] = useState(false);
+
+  useEffect(() => {
+    if (!customerId) return;
+    fetch(`${EDGE_URL}?action=my-delivery-prefs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customerId }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        setMode(data.default_delivery_mode ?? 'pickup_station');
+        setStation(data.default_pickup_station ?? null);
+      })
+      .finally(() => setIsLoading(false));
+  }, [customerId]);
+
+  useEffect(() => {
+    if (mode !== 'pickup_station' || stations.length > 0) return;
+    fetch(`${STATIONS_REST_URL}?select=id,name,state,address,landmark&is_active=eq.true&order=state.asc`, {
+      headers: { apikey: CONFIG.SUPABASE_ANON_KEY, Authorization: `Bearer ${CONFIG.SUPABASE_ANON_KEY}` },
+    })
+      .then(res => res.json())
+      .then(data => setStations(Array.isArray(data) ? data : []))
+      .catch(() => setStations([]));
+  }, [mode, stations.length]);
+
+  const matches = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return [];
+    return stations.filter(s => `${s.name} ${s.address} ${s.landmark ?? ''} ${s.state}`.toLowerCase().includes(q)).slice(0, 25);
+  }, [search, stations]);
+
+  const save = async () => {
+    if (mode === 'pickup_station' && !station) { toast.error('Pick a default station first'); return; }
+    setIsSaving(true);
+    const res = await fetch(`${EDGE_URL}?action=save-delivery-prefs`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customerId, default_delivery_mode: mode, default_pickup_station_id: station?.id }),
+    });
+    setIsSaving(false);
+    if (res.ok) toast.success('Delivery preference saved');
+    else toast.error('Could not save preference');
+  };
+
+  if (isLoading) {
+    return <div className="flex justify-center py-10"><Loader className="w-5 h-5 animate-spin text-gray-300" /></div>;
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
+      <div className="flex items-start gap-2 bg-orange-50 border border-orange-100 rounded-xl px-3 py-2.5">
+        <Zap className="w-3.5 h-3.5 text-orange-500 flex-shrink-0 mt-0.5" />
+        <p className="text-[11px] text-orange-700 leading-relaxed">
+          Jumia pickup stations are the fastest and cheapest way to get your orders — this is what your checkout opens with by default.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button onClick={() => setMode('home')}
+          className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors ${mode === 'home' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
+          <Home className="w-4 h-4 text-gray-700 flex-shrink-0" />
+          <p className="font-semibold text-gray-900 text-xs">Home address</p>
+        </button>
+        <button onClick={() => setMode('pickup_station')}
+          className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors ${mode === 'pickup_station' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
+          <Store className="w-4 h-4 text-gray-700 flex-shrink-0" />
+          <p className="font-semibold text-gray-900 text-xs">Jumia pickup</p>
+        </button>
+      </div>
+
+      {mode === 'pickup_station' && (
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Default station</p>
+          {station && !showPicker ? (
+            <button onClick={() => setShowPicker(true)}
+              className="w-full text-left p-3 rounded-xl border-2 border-gray-900 bg-gray-50 flex items-center gap-2.5">
+              <Store className="w-4 h-4 text-gray-700 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-gray-900 truncate">{station.name}</p>
+                <p className="text-[11px] text-gray-500 truncate">{station.address}</p>
+              </div>
+              <Pencil className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            </button>
+          ) : (
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+                <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                <input type="text" placeholder="Search stations by name or area…" value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  className="flex-1 min-w-0 text-sm outline-none" />
+              </div>
+              <div className="max-h-52 overflow-y-auto">
+                {matches.length === 0 ? (
+                  <p className="text-[11px] text-gray-400 text-center py-6 px-4">
+                    {search.trim() ? 'No stations match yet — try a different search term.' : 'Start typing a city or area to see stations.'}
+                  </p>
+                ) : (
+                  matches.map(s => (
+                    <button key={s.id} onClick={() => { setStation(s); setShowPicker(false); setSearch(''); }}
+                      className="w-full text-left px-3 py-2.5 border-b border-gray-50 last:border-b-0 hover:bg-gray-50 flex items-center gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-gray-800 truncate">{s.name}</p>
+                        <p className="text-[10px] text-gray-400 truncate">{s.address} · {s.state}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <button onClick={save} disabled={isSaving}
+        className="w-full py-3 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2">
+        {isSaving && <Loader className="w-4 h-4 animate-spin" />}
+        Save preference
+      </button>
+    </motion.div>
+  );
+}
+
 // ── Addresses ─────────────────────────────────────────────────────────────
-function AddressesPanel({ addresses, onAdd, onDelete, onSetDefault }: {
-  addresses: CustomerAddress[];
+function AddressesPanel({ addresses, loading, onAdd, onEdit, onDelete, onSetDefault }: {
+  addresses: ImportAddress[];
+  loading: boolean;
   onAdd: () => void;
+  onEdit: (a: ImportAddress) => void;
   onDelete: (id: string) => void;
   onSetDefault: (id: string) => void;
 }) {
+  if (loading) {
+    return <div className="flex justify-center py-10"><Loader className="w-5 h-5 animate-spin text-gray-300" /></div>;
+  }
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
       {addresses.length === 0 ? (
@@ -283,12 +499,20 @@ function AddressesPanel({ addresses, onAdd, onDelete, onSetDefault }: {
         addresses.map(a => (
           <div key={a.id} className="p-3.5 rounded-xl border border-gray-100">
             <div className="flex items-start justify-between gap-2 mb-1">
-              <p className="font-semibold text-sm text-gray-800">{a.label || 'Address'} {a.is_default && (
-                <span className="ml-1.5 text-[10px] font-bold bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded-full align-middle">Default</span>
-              )}</p>
-              <button onClick={() => onDelete(a.id)} className="text-gray-300 hover:text-red-400 flex-shrink-0">
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
+              <p className="font-semibold text-sm text-gray-800 flex items-center gap-1.5">
+                <Tag className="w-3 h-3 text-gray-300" />
+                {a.label || 'Address'} {a.is_default && (
+                  <span className="text-[10px] font-bold bg-orange-50 text-orange-500 px-1.5 py-0.5 rounded-full align-middle">Default</span>
+                )}
+              </p>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button onClick={() => onEdit(a)} className="text-gray-300 hover:text-gray-600">
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => onDelete(a.id)} className="text-gray-300 hover:text-red-400">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
             <p className="text-xs text-gray-500 leading-relaxed">
               {a.address_line1}{a.address_line2 ? `, ${a.address_line2}` : ''}<br />
@@ -310,11 +534,17 @@ function AddressesPanel({ addresses, onAdd, onDelete, onSetDefault }: {
   );
 }
 
-function AddressForm({ onSubmit, onSaved }: {
-  onSubmit: (a: typeof emptyAddressDraft) => Promise<{ success: boolean; error?: string }>;
+function AddressForm({ onSubmit, onSaved, editing }: {
+  onSubmit: (a: typeof emptyAddressDraft, id?: string) => Promise<{ success: boolean; error?: string }>;
   onSaved: () => void;
+  editing: ImportAddress | null;
 }) {
-  const [draft, setDraft] = useState(emptyAddressDraft);
+  const [draft, setDraft] = useState(() => editing ? {
+    label: editing.label ?? '', name: editing.name, phone: editing.phone,
+    address_line1: editing.address_line1, address_line2: editing.address_line2 ?? '',
+    city: editing.city, state: editing.state, landmark: editing.landmark ?? '',
+    is_default: editing.is_default,
+  } : emptyAddressDraft);
   const [isSaving, setIsSaving] = useState(false);
 
   const set = (field: keyof typeof emptyAddressDraft) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -325,9 +555,9 @@ function AddressForm({ onSubmit, onSaved }: {
   const save = async () => {
     if (!canSave) return;
     setIsSaving(true);
-    const res = await onSubmit(draft);
+    const res = await onSubmit(draft, editing?.id);
     setIsSaving(false);
-    if (res.success) { toast.success('Address saved'); onSaved(); }
+    if (res.success) { toast.success(editing ? 'Address updated' : 'Address saved'); onSaved(); }
     else toast.error(res.error ?? 'Could not save address');
   };
 
@@ -351,10 +581,17 @@ function AddressForm({ onSubmit, onSaved }: {
         <input placeholder="State" value={draft.state} onChange={set('state')}
           className="px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-400" />
       </div>
+      <input placeholder="Nearby landmark (optional)" value={draft.landmark} onChange={set('landmark')}
+        className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-400" />
+      <label className="flex items-center gap-2 px-1 py-1">
+        <input type="checkbox" checked={draft.is_default} onChange={e => setDraft(prev => ({ ...prev, is_default: e.target.checked }))}
+          className="w-3.5 h-3.5 rounded border-gray-300" />
+        <span className="text-[11px] text-gray-500">Make this my default address</span>
+      </label>
       <button onClick={save} disabled={isSaving || !canSave}
         className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2 mt-1">
         {isSaving && <Loader className="w-4 h-4 animate-spin" />}
-        Save address
+        {editing ? 'Save changes' : 'Save address'}
       </button>
     </motion.div>
   );
