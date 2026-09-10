@@ -21,6 +21,7 @@ import ImportSettingsSheet from './ImportSettingsSheet';
 import ManualPaymentFlow from './ManualPaymentFlow';
 import SavedItemsSheet from './SavedItemsSheet';
 import WhyTrustUsSheet from './WhyTrustUsSheet';
+import HelpCenterSheet from './HelpCenterSheet';
 import TrackOrderModal from './TrackOrderModal';
 import RetryPaymentSheet from './RetryPaymentSheet';
 import AvatarSheet from './AvatarSheet';
@@ -118,6 +119,7 @@ export default function ImporterDashboardPage() {
   const [showSettings, setShowSettings] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
   const [showWhyTrustUs, setShowWhyTrustUs] = useState(false);
+  const [showHelpCenter, setShowHelpCenter] = useState(false);
   const [showTrackOrder, setShowTrackOrder] = useState(false);
   const [showAvatar, setShowAvatar] = useState(false);
   const [showConfirmEmail, setShowConfirmEmail] = useState(false);
@@ -362,12 +364,12 @@ export default function ImporterDashboardPage() {
               </div>
               <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Shipping<br />Address</span>
             </button>
-            <a href="https://chat.whatsapp.com/DggRK0IeD94F0vyszfhfPW" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5">
+            <button onClick={() => setShowHelpCenter(true)} className="flex flex-col items-center gap-1.5">
               <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
                 <Headset className="w-4 h-4 text-gray-400" />
               </div>
               <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Help<br />Center</span>
-            </a>
+            </button>
             <a href="https://qafrica.store" target="_blank" rel="noopener noreferrer" className="flex flex-col items-center gap-1.5">
               <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
                 <Ship className="w-4 h-4 text-gray-400" />
@@ -707,6 +709,7 @@ export default function ImporterDashboardPage() {
       {showSettings && <ImportSettingsSheet onClose={() => setShowSettings(false)} />}
       {showSaved && <SavedItemsSheet onClose={() => setShowSaved(false)} />}
       {showWhyTrustUs && <WhyTrustUsSheet onClose={() => setShowWhyTrustUs(false)} />}
+      {showHelpCenter && <HelpCenterSheet onClose={() => setShowHelpCenter(false)} />}
       {showTrackOrder && <TrackOrderModal onClose={() => setShowTrackOrder(false)} />}
       {showAvatar && <AvatarSheet onClose={() => setShowAvatar(false)} />}
       {showConfirmEmail && <ConfirmEmailSheet onClose={() => setShowConfirmEmail(false)} />}

@@ -17,7 +17,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, Loader, Users, Plane, Ship, ShieldCheck, Send, AlertTriangle,
   ChevronRight, Package, CheckCircle2, Truck, PackageCheck, ExternalLink, Layers,
-  StickyNote, RotateCcw, Boxes,
+  StickyNote, RotateCcw, Boxes, Pencil,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { toast } from 'sonner';
@@ -30,6 +30,7 @@ const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const BATCH_VIEW_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-batch-view`;
 
 interface OrderItem { id: string; name: string; image_url: string; quantity: number; price_ngn?: number; variant_options?: Record<string, string>; }
+interface VariantGroup { id: string; name: string; options: string[]; price_deltas?: Record<string, number>; }
 interface OrderRow {
   id: string; code: string; user_id: string | null; customer_name: string;
   items: OrderItem[]; created_at: string;
@@ -74,6 +75,62 @@ function fmt(n: number) { return `₦${Math.round(n).toLocaleString()}`; }
 function variantLabel(v: Record<string, string> | null | undefined): string {
   if (!v || Object.keys(v).length === 0) return '';
   return Object.values(v).join(', ');
+}
+
+// Inline "change this customer's variant" affordance — collapsed to a small
+// "Edit variant" link by default, expands into one <select> per variant
+// group. Manages its own draft/open state since each line needs its own.
+function VariantEditRow({ line, groups, onSave }: {
+  line: CustomerLine;
+  groups: VariantGroup[];
+  onSave: (newOptions: Record<string, string>) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>(line.variant_options ?? {});
+  const [saving, setSaving] = useState(false);
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => { setDraft(line.variant_options ?? {}); setEditing(true); }}
+        className="flex items-center gap-1 text-[10px] font-semibold text-gray-400 hover:text-orange-500 mt-0.5"
+      >
+        <Pencil className="w-2.5 h-2.5" /> Edit variant
+      </button>
+    );
+  }
+
+  const canSave = groups.every(g => !!draft[g.name]);
+
+  return (
+    <div className="mt-1.5 space-y-1.5 bg-gray-50 rounded-xl p-2">
+      {groups.map(g => (
+        <div key={g.id} className="flex items-center gap-1.5">
+          <span className="text-[10px] text-gray-400 w-14 flex-shrink-0 truncate">{g.name}</span>
+          <select
+            value={draft[g.name] ?? ''}
+            onChange={e => setDraft(prev => ({ ...prev, [g.name]: e.target.value }))}
+            className="text-[10px] border border-gray-200 rounded-lg px-1.5 py-1 flex-1 bg-white"
+          >
+            <option value="">Select…</option>
+            {g.options.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+      ))}
+      <div className="flex gap-1.5 pt-0.5">
+        <button
+          disabled={!canSave || saving}
+          onClick={async () => { setSaving(true); await onSave(draft); setSaving(false); setEditing(false); }}
+          className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-gray-900 text-white disabled:opacity-40 flex items-center gap-1"
+        >
+          {saving && <Loader className="w-2.5 h-2.5 animate-spin" />} Save
+        </button>
+        <button onClick={() => setEditing(false)} className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 }
 
 async function call(action: string, body: Record<string, unknown>) {
@@ -160,6 +217,19 @@ export default function ClosedBatchDetail({
   }, [token, batchKey]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Variant group definitions per product, for the variant-edit UI below.
+  // Fetched once (not per-batch) since it's the full catalog, not batch-scoped.
+  const [productVariants, setProductVariants] = useState<Record<string, VariantGroup[]>>({});
+  useEffect(() => {
+    call('admin-products', { manager_token: token }).then(res => {
+      const map: Record<string, VariantGroup[]> = {};
+      for (const p of (res.products ?? [])) {
+        if (p.has_variants && Array.isArray(p.variants) && p.variants.length > 0) map[p.id] = p.variants;
+      }
+      setProductVariants(map);
+    }).catch(() => {});
+  }, [token]);
 
   const orderShippingMethod = useMemo(() => {
     const map = new Map<string, 'flight' | 'sea_freight' | null>();
@@ -289,7 +359,21 @@ export default function ClosedBatchDetail({
     await load();
   };
 
-  // Per-item shipping override — only allowed before the consolidation_shipping
+  // Per-item variant override. Unlike shipping (patched locally), a variant
+  // change can also change price_ngn/subtotal/total, so the simplest correct
+  // thing is to just reload the batch data rather than try to reconcile
+  // totals client-side.
+  const setItemVariant = async (line: CustomerLine, newVariantOptions: Record<string, string>) => {
+    const result = await call('admin-set-item-variant', {
+      manager_token: token, order_id: line.order_id, product_id: line.product_id,
+      old_variant_options: line.variant_options, new_variant_options: newVariantOptions,
+    });
+    if (result.error) { toast.error(result.error); return; }
+    toast.success('Variant updated — customer notified');
+    await load();
+  };
+
+
   // bill is locked (enforced server-side too; the toggle is simply hidden
   // client-side once billed, see CustomerCard). Notifies the customer by email.
   const setItemShipping = async (line: CustomerLine, method: 'flight' | 'sea_freight') => {
@@ -785,6 +869,8 @@ export default function ClosedBatchDetail({
                   runIndividual={runIndividual}
                   individualActing={individualActing}
                   onSetItemShipping={setItemShipping}
+                  productVariants={productVariants}
+                  onSetItemVariant={setItemVariant}
                 />
               ) : (
                 <>
@@ -914,7 +1000,7 @@ function CustomerCard({
   adjustments, adjLabel, setAdjLabel, adjAmount, setAdjAmount, savingAdj, addAdjustment, removeAdjustment,
   isBilled, statusRow, ledgerRow, isShippedC, isReceivedC,
   noteDrafts, setNoteDrafts, saveNote, runIndividual, individualActing,
-  onSetItemShipping,
+  onSetItemShipping, productVariants, onSetItemVariant,
 }: {
   customer: { customerId: string; name: string; firstOrderAt: string; orderCount: number; lines: CustomerLine[] };
   billKind: BillKind; setBillKind: (k: BillKind) => void; onBack: () => void;
@@ -937,6 +1023,8 @@ function CustomerCard({
   runIndividual: (type: 'bill' | 'clearance_bill' | 'ship' | 'receive' | 'cancel', customerId: string, kind?: BillKind) => Promise<void>;
   individualActing: string | null;
   onSetItemShipping: (line: CustomerLine, method: 'flight' | 'sea_freight') => Promise<void>;
+  productVariants: Record<string, VariantGroup[]>;
+  onSetItemVariant: (line: CustomerLine, newVariantOptions: Record<string, string>) => Promise<void>;
 }) {
   const id = customer.customerId;
   const billed = isBilled(id, billKind);
@@ -1015,6 +1103,16 @@ function CustomerCard({
                   <p className="text-xs font-semibold text-gray-900 leading-snug">{line.product_name}</p>
                   {variantLabel(line.variant_options) && (
                     <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(line.variant_options)}</p>
+                  )}
+                  {/* Variant change — only for products that have variants defined,
+                      and only before the batch is billed (some customers ask for a
+                      size/color swap after paying). */}
+                  {productVariants[line.product_id] && !isBilled(id, 'consolidation_shipping') && (
+                    <VariantEditRow
+                      line={line}
+                      groups={productVariants[line.product_id]}
+                      onSave={(newOptions) => onSetItemVariant(line, newOptions)}
+                    />
                   )}
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="text-[10px] text-gray-400">{line.qty} × sold {fmt(line.unit_price_ngn)}</span>

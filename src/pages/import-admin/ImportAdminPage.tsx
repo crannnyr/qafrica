@@ -9,6 +9,7 @@ import {
   Info, CheckCircle2,
 } from 'lucide-react';
 import { compressImage } from '@/lib/imageCompression';
+import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import ImportAdminAnalytics from './ImportAdminAnalytics';
@@ -1757,10 +1758,135 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
 }
 
 // ── Main Admin Page ───────────────────────────────────────────────────────────
+// ── Timed Out Orders ─────────────────────────────────────────────────────
+// Orders that expired (order-reminders' 24h sweep) before admin confirmed
+// payment — e.g. a manual transfer the customer claimed but nobody
+// confirmed in time. Restoring puts the order straight to paid and sends
+// an apology email; shipping method/address were lost on expiry (the
+// failed-orders snapshot doesn't carry them), so the customer gets asked
+// to set those again via hourly-then-daily reminders (order-reminders).
+interface FailedOrder {
+  id: string;
+  code: string;
+  customer_name: string;
+  customer_email: string | null;
+  customer_phone: string | null;
+  total_ngn: number;
+  delivery_type: 'to_qafrica' | 'to_me';
+  payment_method: 'paystack' | 'manual' | null;
+  failed_at: string;
+  order_created_at: string;
+}
+
+function TimedOutOrdersManager({ token }: { token: string }) {
+  const [orders, setOrders] = useState<FailedOrder[]>([]);
+  const [search, setSearch] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-failed-orders`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, search: search.trim() || undefined }),
+      });
+      const data = await res.json();
+      setOrders(data.failed_orders ?? []);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token, search]);
+
+  useEffect(() => {
+    const t = setTimeout(load, 250); // debounce search
+    return () => clearTimeout(t);
+  }, [load]);
+
+  const restore = async (order: FailedOrder) => {
+    setRestoringId(order.id);
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-restore-failed-order`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, failed_order_id: order.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Could not restore this order'); return; }
+      toast.success(`Order ${order.code} restored and marked paid — apology email sent`);
+      setOrders(prev => prev.filter(o => o.id !== order.id));
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-amber-50 border border-amber-100 rounded-xl px-3.5 py-3">
+        <p className="text-xs text-amber-800 leading-relaxed">
+          These orders timed out 24h after checkout because payment wasn't confirmed in time — often a manual transfer that was missed.
+          Restoring sets the order to <strong>paid</strong> immediately. Shipping method and delivery address were lost when the order expired,
+          so the customer will be prompted (hourly, then daily) to set those again from their dashboard.
+        </p>
+      </div>
+
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search by order code or customer name…"
+        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
+      />
+
+      {isLoading ? (
+        <div className="flex justify-center py-10"><Loader className="w-5 h-5 animate-spin text-gray-300" /></div>
+      ) : orders.length === 0 ? (
+        <div className="text-center py-10">
+          <CheckCircle2 className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+          <p className="text-sm text-gray-400">No timed-out orders right now.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {orders.map(o => (
+            <div key={o.id} className="bg-white rounded-2xl border border-gray-100 p-3.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-mono font-bold text-sm text-gray-900">{o.code}</p>
+                  <p className="text-xs text-gray-600 mt-0.5">{o.customer_name}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    {o.customer_email ?? 'no email'}{o.customer_phone ? ` · ${o.customer_phone}` : ''}
+                  </p>
+                </div>
+                <span className="text-sm font-bold text-gray-900 flex-shrink-0">{fmt(o.total_ngn)}</span>
+              </div>
+              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                  {o.payment_method === 'manual' ? 'Manual transfer' : o.payment_method === 'paystack' ? 'Paystack' : 'Unknown method'}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                  {o.delivery_type === 'to_qafrica' ? 'To QAFRICA / Jumia' : 'To Customer'}
+                </span>
+                <span className="text-[10px] text-gray-300">timed out {timeSince(o.failed_at)}</span>
+              </div>
+              <button
+                onClick={() => restore(o)}
+                disabled={restoringId === o.id}
+                className="w-full mt-3 py-2 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+              >
+                {restoringId === o.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                Restore & mark paid
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'timed-out'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -1795,7 +1921,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds'] as const).map(t => (
+          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'timed-out'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -1805,7 +1931,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t}
             </button>
           ))}
         </div>
@@ -1833,6 +1959,8 @@ export default function ImportAdminPage() {
           <QuestionsManager token={token} />
         ) : tab === 'refunds' ? (
           <RefundsManager token={token} />
+        ) : tab === 'timed-out' ? (
+          <TimedOutOrdersManager token={token} />
         ) : (
           <ImportAdminCustomers token={token} />
         )}
