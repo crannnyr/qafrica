@@ -397,7 +397,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         email: customer.email,
         amount: toKobo(data.total_ngn),
         reference,
-        metadata: { order_id: data.order_id, code: data.code },
+        metadata: { type: 'china_import_order', order_id: data.order_id, code: data.code },
         onSuccess: async () => {
           setIsVerifying(true);
           // Paystack has already charged the customer at this point — this
