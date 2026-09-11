@@ -18,7 +18,6 @@ import { fallbackAvatarColor, initialsFrom } from '@/lib/avatarFallback';
 import { AvatarImage } from '@/lib/presetAvatars';
 import { fmt } from './RecommendationsPage';
 import ImportSettingsSheet from './ImportSettingsSheet';
-import ManualPaymentFlow from './ManualPaymentFlow';
 import SavedItemsSheet from './SavedItemsSheet';
 import WhyTrustUsSheet from './WhyTrustUsSheet';
 import HelpCenterSheet from './HelpCenterSheet';
@@ -26,6 +25,7 @@ import TrackOrderModal from './TrackOrderModal';
 import RetryPaymentSheet from './RetryPaymentSheet';
 import AvatarSheet from './AvatarSheet';
 import ConfirmEmailSheet from './ConfirmEmailSheet';
+import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const REMINDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/order-reminders`;
@@ -124,7 +124,6 @@ export default function ImporterDashboardPage() {
   const [showAvatar, setShowAvatar] = useState(false);
   const [showConfirmEmail, setShowConfirmEmail] = useState(false);
   const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
-  const [payingBill, setPayingBill] = useState<ConsolidationBill | null>(null);
   const [isPayingBill, setIsPayingBill] = useState(false);
   const [infoBillKind, setInfoBillKind] = useState<'consolidation_shipping' | 'clearance' | null>(null);
   const [refundBankForm, setRefundBankForm] = useState<Refund | null>(null);
@@ -189,28 +188,46 @@ export default function ImporterDashboardPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Bills are DIRECT BANK TRANSFER ONLY. Paystack was removed from this flow:
-  // the customer transfers to the account shown, then declares it here, and
-  // admin confirms against the actual incoming payment. Order checkout is
-  // unaffected and still offers Paystack under its threshold.
-  const markBillPaid = async (bill: ConsolidationBill, sender: { senderName: string; senderBankName: string }) => {
+  // Bills are paid via Paystack, verified server-side against the actual
+  // charge (see bill-pay-verify in the edge function) — no manual admin
+  // confirmation step needed anymore.
+  const [billPayError, setBillPayError] = useState('');
+
+  const payBillWithPaystack = async (bill: ConsolidationBill) => {
     if (!customer?.id) return;
     setIsPayingBill(true);
+    setBillPayError('');
     try {
-      const res = await fetch(`${EDGE_URL}?action=bill-mark-paid`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_id: customer.id,
-          bill_id: bill.id,
-          sender_name: sender.senderName,
-          sender_bank_name: sender.senderBankName,
-        }),
+      await loadPaystackScript();
+      const reference = generateReference('QAFBILL');
+      initializePayment({
+        email: customer.email,
+        amount: toKobo(bill.amount_ngn),
+        reference,
+        metadata: { bill_id: bill.id, kind: bill.kind },
+        onSuccess: async () => {
+          try {
+            const res = await fetch(`${EDGE_URL}?action=bill-pay-verify`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ customer_id: customer.id, bill_id: bill.id, reference }),
+            });
+            const data = await res.json();
+            if (data?.success) {
+              await load();
+            } else {
+              setBillPayError('Payment could not be verified. If you were charged, contact support.');
+            }
+          } catch {
+            setBillPayError('Payment verification failed. Contact support.');
+          } finally {
+            setIsPayingBill(false);
+          }
+        },
+        onCancel: () => setIsPayingBill(false),
       });
-      const data = await res.json();
-      if (data?.error) throw new Error(data.error);
-      await load();
-    } finally {
+    } catch (e: any) {
+      setBillPayError(e?.message ?? 'Could not start payment');
       setIsPayingBill(false);
     }
   };
@@ -488,6 +505,7 @@ export default function ImporterDashboardPage() {
         {activeTab === 'billed' && (
           <section>
             <h2 className="font-bold text-gray-800 text-sm mb-3">Billed</h2>
+            {billPayError && <p className="text-red-500 text-xs mb-3">{billPayError}</p>}
             {isLoading ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-24" />
             ) : bills.length === 0 ? (
@@ -499,7 +517,8 @@ export default function ImporterDashboardPage() {
                     key={bill.id}
                     bill={bill}
                     onInfo={() => setInfoBillKind(bill.kind)}
-                    onPay={() => setPayingBill(bill)}
+                    onPay={() => payBillWithPaystack(bill)}
+                    disabled={isPayingBill}
                   />
                 ))}
               </div>
@@ -542,7 +561,8 @@ export default function ImporterDashboardPage() {
                       {held && (
                         <div className="px-5 pb-4">
                           <button
-                            onClick={() => setPayingBill(held)}
+                            onClick={() => payBillWithPaystack(held)}
+                            disabled={isPayingBill}
                             className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg"
                           >
                             Pay now to release
@@ -689,22 +709,6 @@ export default function ImporterDashboardPage() {
           </section>
         )}
       </div>
-
-      {/* Bill payment: direct bank transfer only. Reuses the same flow as
-          manual order checkout, including the commercial-bank restriction and
-          the sender-name capture admin needs to reconcile the transfer. */}
-      {payingBill && (
-        <ManualPaymentFlow
-          amountLabel={fmt(payingBill.amount_ngn)}
-          bank={{
-            bank_account_number: payingBill.bank_account_number ?? '',
-            bank_account_name: payingBill.bank_account_name ?? '',
-            bank_name: payingBill.bank_name ?? '',
-          }}
-          onConfirmPaid={async sender => { await markBillPaid(payingBill, sender); }}
-          onClose={() => { if (!isPayingBill) setPayingBill(null); }}
-        />
-      )}
 
       {showSettings && <ImportSettingsSheet onClose={() => setShowSettings(false)} />}
       {showSaved && <SavedItemsSheet onClose={() => setShowSaved(false)} />}
@@ -868,10 +872,11 @@ function OrderItemsDropdown({ order, isExpanded, onToggle, compact = false }: {
   );
 }
 
-function BillCard({ bill, onInfo, onPay }: {
+function BillCard({ bill, onInfo, onPay, disabled }: {
   bill: ConsolidationBill;
   onInfo: () => void;
   onPay: () => void;
+  disabled?: boolean;
 }) {
   const [showItems, setShowItems] = useState(false);
   const hasLineItems = bill.line_items && bill.line_items.length > 1;
@@ -914,7 +919,11 @@ function BillCard({ bill, onInfo, onPay }: {
       )}
 
       {bill.status === 'pending' && (
-        <button onClick={onPay} className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg">
+        <button
+          onClick={onPay}
+          disabled={disabled}
+          className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg disabled:opacity-40"
+        >
           Pay with Paystack
         </button>
       )}
