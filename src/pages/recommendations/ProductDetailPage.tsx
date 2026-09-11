@@ -759,6 +759,10 @@ export default function ProductDetailPage() {
               const item = cart.find(i => i.cart_key === cart_key);
               storeRemoveOne(cart_key, item?.moq ?? 1);
             }}
+            onSetQuantity={(cart_key, n) => {
+              const item = cart.find(i => i.cart_key === cart_key);
+              storeSetQuantity(cart_key, n, item?.moq ?? 1);
+            }}
           />
         )}
       </AnimatePresence>
