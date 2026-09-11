@@ -14,7 +14,7 @@ const CORS = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const DASHBOARD_BILLS_URL = 'https://qafrica.store/dashboard?tab=bills'
+const DASHBOARD_BILLS_URL = 'https://qafrica.store/importations/dashboard'
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
