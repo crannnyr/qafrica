@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ShoppingBag, Plus, Minus, Package,
+  ShoppingBag, Plus, Package,
   ChevronRight, Search, X, User, LogOut, LayoutDashboard, Heart,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
@@ -15,57 +15,11 @@ import { useSavedItems } from './useSavedItems';
 import AnnouncementBanner from './AnnouncementBanner';
 import PriceBandRow from './PriceBandRow';
 import DailyPromoModal from './DailyPromoModal';
-import ImportVerificationModal from './ImportVerificationModal';
 import ImportAuthSheet from './ImportAuthSheet';
 import ImportCheckoutSheet from './ImportCheckoutSheet';
+import ImportQtyControl from '@/components/ImportQtyControl';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
-const JUMIA_AFFILIATE_URL = 'https://jforce.jumia.com.ng/s/C6tCHzq';
-
-// ── Jumia promo bar ──────────────────────────────────────────────────────
-// Sits above the search bar (same width). The message rotates every 4 hours —
-// the "slot" is derived from the current time so it's consistent across
-// reloads and every visitor in the same 4h window sees the same message.
-const JUMIA_PROMO_MESSAGES = [
-  'Visit our shop on Jumia →',
-  'Check out this new item on Jumia →',
-  'Shop from our Jumia store →',
-  'Buy this now from Jumia →',
-  'Great deals waiting on Jumia →',
-  'New arrivals just dropped on Jumia →',
-];
-
-function JumiaPromoBar() {
-  const getSlotIndex = () => Math.floor(Date.now() / (4 * 60 * 60 * 1000)) % JUMIA_PROMO_MESSAGES.length;
-  const [slot, setSlot] = useState(getSlotIndex());
-
-  useEffect(() => {
-    const id = setInterval(() => setSlot(getSlotIndex()), 60 * 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <a
-      href={JUMIA_AFFILIATE_URL}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="relative block overflow-hidden rounded-xl bg-gradient-to-r from-orange-500 to-orange-400 px-3 py-2.5 mb-2 shadow-sm hover:brightness-105 transition-[filter]"
-    >
-      <AnimatePresence mode="wait">
-        <motion.span
-          key={slot}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.4 }}
-          className="block text-center text-white text-[11px] lg:text-xs font-bold tracking-tight"
-        >
-          {JUMIA_PROMO_MESSAGES[slot]}
-        </motion.span>
-      </AnimatePresence>
-    </a>
-  );
-}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface VariantGroup {
@@ -332,9 +286,10 @@ function SearchSheet({
 
 // ── Product Card ──────────────────────────────────────────────────────────────
 function ProductCard({
-  product, cartQty, onAdd, onRemove, onClick, usdRate, isSaved, onToggleSave,
+  product, cartQty, onAdd, onRemove, onSetQuantity, onClick, usdRate, isSaved, onToggleSave,
 }: {
-  product: ImportProduct; cartQty: number; onAdd: () => void; onRemove: () => void; onClick: () => void; usdRate: number;
+  product: ImportProduct; cartQty: number; onAdd: () => void; onRemove: () => void;
+  onSetQuantity: (n: number) => void; onClick: () => void; usdRate: number;
   isSaved: boolean; onToggleSave: () => void;
 }) {
   const moq = product.moq ?? 1;
@@ -390,10 +345,14 @@ function ProductCard({
             <Plus className="w-2.5 h-2.5" /> Add
           </button>
         ) : (
-          <div className="flex items-center justify-between bg-gray-50 rounded-lg px-2 py-1">
-            <button onClick={onRemove} className="w-5 h-5 flex items-center justify-center text-gray-500"><Minus className="w-3 h-3" /></button>
-            <span className="font-bold text-gray-900 text-xs">{cartQty}</span>
-            <button onClick={onAdd} className="w-5 h-5 flex items-center justify-center text-gray-500"><Plus className="w-3 h-3" /></button>
+          <div className="flex items-center justify-center bg-gray-50 rounded-lg px-1 py-1">
+            <ImportQtyControl
+              size="xs"
+              quantity={cartQty}
+              onDecrement={onRemove}
+              onIncrement={onAdd}
+              onSetQuantity={onSetQuantity}
+            />
           </div>
         )}
       </div>
@@ -426,6 +385,7 @@ export default function RecommendationsPage() {
   const storeAddToCart = useImportCartStore(s => s.addToCart);
   const storeAddOne = useImportCartStore(s => s.addOne);
   const storeRemoveOne = useImportCartStore(s => s.removeOne);
+  const storeSetQuantity = useImportCartStore(s => s.setQuantity);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -525,6 +485,11 @@ export default function RecommendationsPage() {
     storeRemoveOne(cart_key, item?.moq ?? 1);
   };
 
+  const setCartQuantity = (cart_key: string, n: number) => {
+    const item = cart.find(i => i.cart_key === cart_key);
+    storeSetQuantity(cart_key, n, item?.moq ?? 1);
+  };
+
   const handleCheckoutClick = () => {
     if (!isAuthenticated) { setShowAuth(true); return; }
     setShowCheckout(true);
@@ -535,7 +500,6 @@ export default function RecommendationsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {isAuthenticated && <DailyPromoModal customerId={customer?.id} />}
-      {!isAuthenticated && <ImportVerificationModal />}
 
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
@@ -583,10 +547,9 @@ export default function RecommendationsPage() {
 
       <div className="max-w-7xl mx-auto px-4 pt-5 pb-28 lg:pb-16">
         <AnnouncementBanner />
-        {/* Search + Jumia promo */}
+        {/* Search */}
         <div className="mb-4 lg:flex lg:justify-end">
           <div className="lg:w-72">
-            <JumiaPromoBar />
             {/* Tapping opens the sliding search panel — same behavior on
                 mobile and desktop now, rather than a separate, more
                 limited inline input on desktop with no results dropdown. */}
@@ -730,6 +693,7 @@ export default function RecommendationsPage() {
                         key={p.id} product={p}
                         cartQty={cart.filter(i => i.id === p.id).reduce((s, i) => s + i.quantity, 0)}
                         onAdd={() => addToCart(p)} onRemove={() => removeFromCart(buildCartKey(p.id))}
+                        onSetQuantity={n => setCartQuantity(buildCartKey(p.id), n)}
                         onClick={() => navigate(`/recommendations/${p.id}`, { state: { product: p, products } })}
                         usdRate={usdRate}
                         isSaved={isSaved(p.id)}
@@ -795,6 +759,7 @@ export default function RecommendationsPage() {
             onClose={() => setShowCheckout(false)}
             onAdd={cart_key => storeAddOne(cart_key)}
             onRemove={removeFromCart}
+            onSetQuantity={setCartQuantity}
           />
         )}
       </AnimatePresence>

@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
-  X, Minus, Plus, Loader, CreditCard, Building2, CheckCircle2,
+  X, Loader, CreditCard, Building2, CheckCircle2,
   Plane, Ship, BookOpen, MapPin, Navigation, AlertCircle, Search,
   Tag, Home, Store, Zap, Pencil,
 } from 'lucide-react';
@@ -16,6 +16,7 @@ import { loadPaystackScript, initializePayment, generateReference, toKobo } from
 import type { CartItem } from './RecommendationsPage';
 import { fmt } from './RecommendationsPage';
 import ManualPaymentFlow, { COMMUNITY_LINK } from './ManualPaymentFlow';
+import ImportQtyControl from '@/components/ImportQtyControl';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const STATIONS_REST_URL = `${CONFIG.SUPABASE_URL}/rest/v1/pickup_stations`;
@@ -64,9 +65,10 @@ interface Props {
   onClose: () => void;
   onAdd: (cart_key: string) => void;
   onRemove: (cart_key: string) => void;
+  onSetQuantity: (cart_key: string, quantity: number) => void;
 }
 
-export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove }: Props) {
+export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove, onSetQuantity }: Props) {
   const [delivery, setDelivery] = useState<'to_qafrica' | 'to_me'>('to_me');
   const [showWhyQafrica, setShowWhyQafrica] = useState(false);
   // Flight is the default shipping choice — customer can switch to sea freight.
@@ -538,9 +540,13 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                 <p className="text-[11px] text-gray-400 mt-0.5">{fmt(item.price_ngn)}</p>
               </div>
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                <button onClick={() => onRemove(item.cart_key)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Minus className="w-2.5 h-2.5" /></button>
-                <span className="font-bold text-sm w-7 text-center">{item.quantity}</span>
-                <button onClick={() => onAdd(item.cart_key)} className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center"><Plus className="w-2.5 h-2.5" /></button>
+                <ImportQtyControl
+                  size="sm"
+                  quantity={item.quantity}
+                  onDecrement={() => onRemove(item.cart_key)}
+                  onIncrement={() => onAdd(item.cart_key)}
+                  onSetQuantity={n => onSetQuantity(item.cart_key, n)}
+                />
               </div>
             </div>
           ))}

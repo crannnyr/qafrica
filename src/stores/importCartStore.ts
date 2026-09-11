@@ -49,6 +49,9 @@ interface ImportCartState {
   addToCart: (product: ImportProduct, quantity: number, priceNgn: number, variantSelection?: Record<string, string>) => void;
   addOne: (cartKey: string) => void;
   removeOne: (cartKey: string, moq: number) => void;
+  /** Typed quantity, not a +/- nudge. 0 or a non-finite value removes the
+   *  item; anything else clamps up to at least the product's MOQ. */
+  setQuantity: (cartKey: string, quantity: number, moq: number) => void;
   removeItem: (cartKey: string) => void;
   clearCart: () => void;
 }
@@ -93,6 +96,18 @@ export const useImportCartStore = create<ImportCartState>()(
           }
           return {
             cart: state.cart.map(i => i.cart_key === cartKey ? { ...i, quantity: i.quantity - 1 } : i),
+          };
+        });
+      },
+
+      setQuantity: (cartKey, quantity, moq) => {
+        set(state => {
+          if (!Number.isFinite(quantity) || quantity <= 0) {
+            return { cart: state.cart.filter(i => i.cart_key !== cartKey) };
+          }
+          const clamped = Math.max(moq, Math.floor(quantity));
+          return {
+            cart: state.cart.map(i => i.cart_key === cartKey ? { ...i, quantity: clamped } : i),
           };
         });
       },

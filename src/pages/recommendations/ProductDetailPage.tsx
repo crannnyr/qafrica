@@ -3,13 +3,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ArrowLeft, ShoppingBag, Plus, Minus,
+  ArrowLeft, ShoppingBag, Plus,
   Package, ChevronRight, Tag, ChevronDown, ChevronUp,
   Plane, Ship, HelpCircle, MessageCircleQuestion, Truck, Heart,
 } from 'lucide-react';
 import { fmt, buildCartKey, computeVariantPriceNgn, variantPriceRange } from './RecommendationsPage';
 import type { ImportProduct, VariantGroup } from './RecommendationsPage';
 import { useImportCartStore } from '@/stores/importCartStore';
+import ImportQtyControl from '@/components/ImportQtyControl';
 import { useCustomerAuthStore } from '@/stores';
 import { useSavedItems } from './useSavedItems';
 import CONFIG from '@/lib/config';
@@ -205,6 +206,7 @@ export default function ProductDetailPage() {
   const storeAddToCart = useImportCartStore(s => s.addToCart);
   const storeAddOne = useImportCartStore(s => s.addOne);
   const storeRemoveOne = useImportCartStore(s => s.removeOne);
+  const storeSetQuantity = useImportCartStore(s => s.setQuantity);
   const { customer, isAuthenticated } = useCustomerAuthStore();
   const [showAuth, setShowAuth] = useState(false);
   const [showCheckout, setShowCheckout] = useState(false);
@@ -563,20 +565,14 @@ export default function ProductDetailPage() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-gray-700">Quantity</p>
-                <div className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2">
-                  <button
-                    onClick={() => setQty(q => Math.max(moq, q - 1))}
-                    className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-900"
-                  >
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="font-bold text-gray-900 w-8 text-center text-sm">{qty}</span>
-                  <button
-                    onClick={() => setQty(q => q + 1)}
-                    className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-gray-900"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                <div className="bg-gray-50 rounded-xl px-2 py-1.5">
+                  <ImportQtyControl
+                    size="md"
+                    quantity={qty}
+                    onDecrement={() => setQty(q => Math.max(moq, q - 1))}
+                    onIncrement={() => setQty(q => q + 1)}
+                    onSetQuantity={n => setQty(n <= 0 ? moq : Math.max(moq, n))}
+                  />
                 </div>
               </div>
 
@@ -616,13 +612,16 @@ export default function ProductDetailPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={removeOne} className="w-6 h-6 flex items-center justify-center text-orange-400">
-                    <Minus className="w-3.5 h-3.5" />
-                  </button>
-                  <span className="font-black text-orange-600 w-8 text-center text-sm">{itemInCart.quantity}</span>
-                  <button onClick={addOne} className="w-6 h-6 flex items-center justify-center text-orange-400">
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                  <ImportQtyControl
+                    size="md"
+                    quantity={itemInCart.quantity}
+                    onDecrement={removeOne}
+                    onIncrement={addOne}
+                    onSetQuantity={n => storeSetQuantity(cartKey, n, moq)}
+                    textClassName="text-orange-600"
+                    iconClassName="text-orange-400"
+                    buttonClassName="bg-transparent hover:bg-orange-100"
+                  />
                 </div>
               </div>
               <div className="flex items-center justify-between px-1">
