@@ -44,14 +44,19 @@ export default function AnnouncementBanner() {
         .qa-message-track { position:relative; flex:1; height:100%; overflow:hidden; min-width:0; }
         .qa-msg {
           position:absolute; inset:0; display:flex; align-items:center;
-          color:var(--cream); font-size:13px; font-weight:500; letter-spacing:0.1px; line-height:1.35;
-          /* Long messages wrap to a second line instead of being clipped.
-             The line-clamp is just a safety net for anything unexpectedly
-             long -- normal messages fit in one or two lines already. */
-          display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
           opacity:0; transform:translateY(14px);
         }
-        .qa-msg strong { color:var(--amber); font-weight:700; }
+        .qa-msg-text {
+          color:var(--cream); font-size:12px; font-weight:500; letter-spacing:0.1px; line-height:1.4;
+          /* Long messages wrap to a second line instead of being clipped.
+             The line-clamp is just a safety net for anything unexpectedly
+             long -- normal messages fit in one or two lines already. This
+             has to live on its own element: -webkit-box (needed for the
+             clamp) and flex (needed to center .qa-msg vertically) can't
+             both be the display value of the same element. */
+          display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+        }
+        .qa-msg-text strong { color:var(--amber); font-weight:700; }
         .qa-msg.show { animation:qa-cycle 35s infinite; }
         .qa-msg:nth-child(1).show { animation-delay:0s; }
         .qa-msg:nth-child(2).show { animation-delay:5s; }
@@ -93,13 +98,13 @@ export default function AnnouncementBanner() {
           </div>
 
           <div className="qa-message-track">
-            <p className="qa-msg show"><strong>QAFRICA</strong> — Nigeria's fastest growing import marketplace</p>
-            <p className="qa-msg show">Pre-order now — split shipping fees across hundreds of orders</p>
-            <p className="qa-msg show">Shipping fees from as low as <strong>₦800</strong></p>
-            <p className="qa-msg show">China importation made <strong>easy</strong> — no agents, no wahala</p>
-            <p className="qa-msg show">Shop for as little as <strong>₦500</strong> — no order is too small</p>
-            <p className="qa-msg show">Trusted by <strong>hundreds</strong> of business owners across Nigeria</p>
-            <p className="qa-msg show">Perfect for <strong>new businesses and startups</strong> getting off the ground</p>
+            <p className="qa-msg show"><span className="qa-msg-text"><strong>QAFRICA</strong> — Nigeria's fastest growing import marketplace</span></p>
+            <p className="qa-msg show"><span className="qa-msg-text">Pre-order now — split shipping fees across hundreds of orders</span></p>
+            <p className="qa-msg show"><span className="qa-msg-text">Shipping fees from as low as <strong>₦800</strong></span></p>
+            <p className="qa-msg show"><span className="qa-msg-text">China importation made <strong>easy</strong> — no agents, no wahala</span></p>
+            <p className="qa-msg show"><span className="qa-msg-text">Shop for as little as <strong>₦500</strong> — no order is too small</span></p>
+            <p className="qa-msg show"><span className="qa-msg-text">Trusted by <strong>hundreds</strong> of business owners across Nigeria</span></p>
+            <p className="qa-msg show"><span className="qa-msg-text">Perfect for <strong>new businesses and startups</strong> getting off the ground</span></p>
           </div>
 
           <div className="qa-trust">Built for Nigeria</div>
