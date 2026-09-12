@@ -420,6 +420,37 @@ export default function ClosedBatchDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerPriceDrafts, overrideMapByKind, defaultPriceMapByKind, adjustmentsByCustomer]);
 
+  // Computes X% off the customer's line-item subtotal (before any existing
+  // manual adjustments), then records it as a normal negative adjustment —
+  // reuses the same backend action and ledger as a manual discount, so it
+  // shows up in the adjustments list and can be removed like any other line.
+  const applyPercentDiscount = async (customerId: string, lines: CustomerLine[], percent: number, kind: BillKind) => {
+    if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+      toast.error('Enter a percentage between 1 and 100.');
+      return;
+    }
+    const subtotal = lines.reduce((s, l) => {
+      const priceStr = customerPriceFor(customerId, l.product_id, kind);
+      return priceStr !== '' ? s + Number(priceStr) * l.qty : s;
+    }, 0);
+    if (subtotal <= 0) {
+      toast.error('No priced items to discount yet.');
+      return;
+    }
+    const discountAmount = Math.round(subtotal * (percent / 100) * 100) / 100;
+    setSavingAdj(true);
+    try {
+      const result = await batchViewCall('add-adjustment', {
+        manager_token: token, batch_key: batchKey, kind,
+        customer_id: customerId, label: `${percent}% discount`, amount_ngn: -discountAmount,
+      });
+      if (result.error) { toast.error(result.error); return; }
+      await load();
+    } finally {
+      setSavingAdj(false);
+    }
+  };
+      
   const addAdjustment = async (customerId: string) => {
     const amount = Number(adjAmount);
     if (!adjLabel.trim() || !Number.isFinite(amount) || amount === 0) {
@@ -871,6 +902,7 @@ export default function ClosedBatchDetail({
                   savingAdj={savingAdj}
                   addAdjustment={addAdjustment}
                   removeAdjustment={removeAdjustment}
+                  applyPercentDiscount={applyPercentDiscount} 
                   isBilled={isBilled}
                   statusRow={statusRow}
                   ledgerRow={ledgerRow}
@@ -1021,6 +1053,7 @@ function CustomerCard({
   customerPriceFor, isOverridden, setCustomerPriceDrafts,
   saveCustomerPrice, revertCustomerPrice, customerBillTotal,
   adjustments, adjLabel, setAdjLabel, adjAmount, setAdjAmount, savingAdj, addAdjustment, removeAdjustment,
+  applyPercentDiscount,
   isBilled, statusRow, ledgerRow, isShippedC, isReceivedC,
   noteDrafts, setNoteDrafts, saveNote, runIndividual, individualActing,
   onSetItemShipping, productVariants, onSetItemVariant,
@@ -1048,7 +1081,9 @@ function CustomerCard({
   onSetItemShipping: (line: CustomerLine, method: 'flight' | 'sea_freight') => Promise<void>;
   productVariants: Record<string, VariantGroup[]>;
   onSetItemVariant: (line: CustomerLine, newVariantOptions: Record<string, string>) => Promise<void>;
+  applyPercentDiscount: (customerId: string, lines: CustomerLine[], percent: number, kind: BillKind) => Promise<void>;
 }) {
+  const [discountPercent, setDiscountPercent] = useState('');
   const id = customer.customerId;
   const billed = isBilled(id, billKind);
   const shipped = isShippedC(id);
@@ -1226,6 +1261,30 @@ function CustomerCard({
           <p className="text-xs font-bold text-gray-800">{billKind === 'clearance' ? 'Clearance bill' : 'Consolidation & shipping bill'}</p>
           <p className="text-sm font-black text-gray-900">{fmt(total)}</p>
         </div>
+
+        {!billed && (
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <span className="text-[11px] text-gray-500">Discount</span>
+            <input
+              type="number" inputMode="numeric" min={1} max={100}
+              value={discountPercent}
+              onChange={e => setDiscountPercent(e.target.value)}
+              placeholder="e.g. 20"
+              className="w-16 px-2 py-1.5 rounded-lg border border-gray-200 text-[11px] text-right"
+            />
+            <span className="text-[11px] text-gray-400">%</span>
+            <button
+              onClick={async () => {
+                await applyPercentDiscount(id, customer.lines, Number(discountPercent), billKind);
+                setDiscountPercent('');
+              }}
+              disabled={!discountPercent || savingAdj}
+              className="px-2.5 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-[11px] font-bold rounded-lg"
+            >
+              {savingAdj ? '…' : 'Apply'}
+            </button>
+          </div>
+        )}
 
         {adjustments.map(a => (
           <div key={a.id} className="flex items-center justify-between gap-2 bg-gray-50 rounded-lg px-2.5 py-1.5 mb-1.5">
