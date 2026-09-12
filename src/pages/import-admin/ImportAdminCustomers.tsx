@@ -732,7 +732,7 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
 
       {/* List */}
       <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-        {isLoading ? (
+        {isLoading && customers.length === 0 ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="px-4 py-3.5 animate-pulse flex items-center gap-3">
               <div className="w-9 h-9 rounded-full bg-gray-100" />
