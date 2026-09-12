@@ -97,6 +97,10 @@ interface ImportProduct {
   /** Admin-only 1688 sourcing link. Never returned by the public products endpoint. */
   source_url?: string | null;
   ship_only?: boolean;
+  volume_cbm?: number | null;
+  weight_grams?: number | null;
+  sea_shipping_cost_ngn?: number | null;
+  flight_shipping_cost_ngn?: number | null;
 }
 
 // Quick-add presets for the variant builder
@@ -121,6 +125,12 @@ function getTieredMarkupNgn(baseNgn: number): number {
   if (baseNgn < 200_000) return 9_000;
   return 25_000;
 }
+
+// Mirrors the edge function's shipping-cost rates — used only for the live
+// preview shown while typing. Keep in sync with SEA_RATE_NGN_PER_CBM /
+// FLIGHT_RATE_NGN_PER_GRAM in the edge function.
+const SEA_RATE_NGN_PER_CBM = 0;     // match edge function
+const FLIGHT_RATE_NGN_PER_GRAM = 0; // match edge function
 
 interface Rates {
   cnyToNgn: number;
@@ -1029,6 +1039,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [moq, setMoq]                 = useState('1');
   const [sourceUrl, setSourceUrl]     = useState('');
   const [shipOnly, setShipOnly]       = useState(false);
+  const [volumeCbm, setVolumeCbm] = useState('');
+  const [weightGrams, setWeightGrams] = useState('');
   const [unitsSold, setUnitsSold]     = useState('');
   const [variantGroups, setVariantGroups] = useState<VariantGroup[]>([]);
   const [expandedVariantGroups, setExpandedVariantGroups] = useState<Set<string>>(new Set());
@@ -1057,6 +1069,10 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const priceNgn = previewCostNgn > 0 ? previewCostNgn + previewMarkupNgn : 0;
   const priceUsd = rates && priceNgn ? priceNgn / rates.usdToNgn : 0;
   const priceCnyPreview = rates && priceUsd ? priceUsd * rates.cnyToUsd : 0;
+  const volumeCbmNum = parseFloat(volumeCbm) || 0;
+  const weightGramsNum = parseFloat(weightGrams) || 0;
+  const previewSeaShippingCost = volumeCbmNum > 0 ? volumeCbmNum * SEA_RATE_NGN_PER_CBM : 0;
+  const previewFlightShippingCost = weightGramsNum > 0 ? weightGramsNum * FLIGHT_RATE_NGN_PER_GRAM : 0;
 
   // ── Variant helpers ─────────────────────────────────────────────────────
   const toggleGroupOption = (groupName: string, option: string) => {
@@ -1153,6 +1169,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setImagePreviews([]); setImageFiles([null, null, null]);
     setSaveError('');
     setShowForm(true);
+    setVolumeCbm(''); setWeightGrams('');
   };
 
   const openEdit = (p: ImportProduct) => {
@@ -1181,6 +1198,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setImageFiles([null, null, null]);
     setSaveError('');
     setShowForm(true);
+    setVolumeCbm(p.volume_cbm != null ? p.volume_cbm.toString() : '');
+    setWeightGrams(p.weight_grams != null ? p.weight_grams.toString() : '');
   };
 
   // Routed in from the Total Orders tab (click a product in a batch) —
@@ -1271,6 +1290,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
         image_urls:      resolvedUrls,
         source_url:      sourceUrl.trim(),
         ship_only:       shipOnly,
+        volume_cbm: volumeCbm.trim() === '' ? null : Number(volumeCbm),
+        weight_grams: weightGrams.trim() === '' ? null : Number(weightGrams),
         manager_token:   token,
         ...(unitsSold.trim() !== '' ? { units_sold: parseInt(unitsSold, 10) } : {}),
       };
@@ -1507,6 +1528,36 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                     </span>
                   </span>
                 </label>
+              </div>
+
+              <div>
+                <Label>Volume for sea freight (cbm)</Label>
+                <input
+                  type="number" min={0} step="0.001"
+                  value={volumeCbm} onChange={e => setVolumeCbm(e.target.value)}
+                  placeholder="e.g. 0.05"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
+                />
+                {volumeCbmNum > 0 && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Sea shipping cost: <span className="font-semibold text-gray-600">{fmt(previewSeaShippingCost)}</span> ({volumeCbmNum} cbm × rate)
+                  </p>
+                )}
+              </div>
+              
+              <div>
+                <Label>Weight for flight (grams)</Label>
+                <input
+                  type="number" min={0}
+                  value={weightGrams} onChange={e => setWeightGrams(e.target.value)}
+                  placeholder="e.g. 350"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
+                />
+                {weightGramsNum > 0 && (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Flight shipping cost: <span className="font-semibold text-gray-600">{fmt(previewFlightShippingCost)}</span> ({weightGramsNum}g × rate)
+                  </p>
+                )}
               </div>
 
               <div>
