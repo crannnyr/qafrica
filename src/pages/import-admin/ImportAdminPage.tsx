@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingBag, LogOut, Package, Search, RefreshCw,
   Plus, Trash2, Edit2, Check, ChevronDown, ChevronUp,
-  Upload, Loader, TrendingUp, AlertCircle, ExternalLink, X,
+  Upload, Loader, TrendingUp, AlertCircle, ExternalLink, X, 
   Info, CheckCircle2,
 } from 'lucide-react';
 import { compressImage } from '@/lib/imageCompression';
