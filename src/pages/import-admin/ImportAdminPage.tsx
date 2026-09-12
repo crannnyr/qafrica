@@ -403,7 +403,7 @@ function LoadCodePanel({ token }: { token: string }) {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               className="mt-5 space-y-4"
-            >
+            >*
               {/* Customer block */}
               <div className="flex items-start justify-between">
                 <div>
