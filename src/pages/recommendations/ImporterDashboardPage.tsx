@@ -3,7 +3,7 @@
 // navigation over the order pipeline: To Pay -> Confirmed -> Billed
 // (Consolidation | Ship to Nigeria) -> To Receive -> Refund.
 // Route: /importations/dashboard (added in App.tsx)
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
@@ -192,6 +192,7 @@ export default function ImporterDashboardPage() {
   // charge (see bill-pay-verify in the edge function) — no manual admin
   // confirmation step needed anymore.
   const isPayingBillRef = useRef(false);
+  const [billPayError, setBillPayError] = useState('');
 
   const payBillWithPaystack = async (bill: ConsolidationBill) => {
     if (!customer?.id) return;
