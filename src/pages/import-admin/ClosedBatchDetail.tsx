@@ -17,7 +17,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ArrowLeft, Loader, Users, Plane, Ship, ShieldCheck, Send, AlertTriangle,
   ChevronRight, Package, CheckCircle2, Truck, PackageCheck, ExternalLink, Layers,
-  StickyNote, RotateCcw, Boxes, Pencil,
+  StickyNote, RotateCcw, Boxes, Pencil, Search,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { toast } from 'sonner';
@@ -575,15 +575,27 @@ export default function ClosedBatchDetail({
     [ledgerByKind, billKind]
   );
 
+  const [customerSearch, setCustomerSearch] = useState('');
+
   const visibleCustomers = useMemo(() => {
-    if (paymentFilter === 'all') return customersForList;
-    return customersForList.filter(c => {
-      const status = ledgerByCustomerActive.get(c.customerId)?.status;
-      if (paymentFilter === 'paid') return status === 'paid';
-      if (paymentFilter === 'awaiting') return status === 'awaiting_confirmation';
-      return status !== 'paid' && status !== 'awaiting_confirmation';
-    });
-  }, [customersForList, paymentFilter, ledgerByCustomerActive]);
+    let list = paymentFilter === 'all'
+      ? customersForList
+      : customersForList.filter(c => {
+          const status = ledgerByCustomerActive.get(c.customerId)?.status;
+          if (paymentFilter === 'paid') return status === 'paid';
+          if (paymentFilter === 'awaiting') return status === 'awaiting_confirmation';
+          return status !== 'paid' && status !== 'awaiting_confirmation';
+        });
+
+    const q = customerSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter(c =>
+        c.name.toLowerCase().includes(q) ||
+        c.lines.some(l => l.order_code.toLowerCase().includes(q))
+      );
+    }
+    return list;
+  }, [customersForList, paymentFilter, ledgerByCustomerActive, customerSearch]);
 
   const ledgerTotals = useMemo(() => {
     let paid = 0, awaiting = 0, unpaid = 0, outstanding = 0;
@@ -890,6 +902,17 @@ export default function ClosedBatchDetail({
                         ))}
                       </div>
                     </div>
+                  </div>
+
+                  <div className="relative mb-2">
+                    <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={customerSearch}
+                      onChange={e => setCustomerSearch(e.target.value)}
+                      placeholder="Search by customer name or order code…"
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-xs outline-none focus:border-gray-400"
+                    />
                   </div>
 
                   {ledgerByKind[billKind].length > 0 && (
