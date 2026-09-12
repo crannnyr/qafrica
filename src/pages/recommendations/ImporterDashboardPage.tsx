@@ -200,6 +200,14 @@ export default function ImporterDashboardPage() {
     try {
       await loadPaystackScript();
       const reference = generateReference('QAFBILL');
+
+      // Record the reference immediately — best effort, don't block checkout on it.
+      fetch(`${EDGE_URL}?action=bill-pay-init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customer.id, bill_id: bill.id, reference }),
+      }).catch(() => {});
+      
       initializePayment({
         email: customer.email,
         amount: toKobo(bill.amount_ngn),
