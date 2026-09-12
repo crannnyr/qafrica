@@ -130,7 +130,7 @@ function getTieredMarkupNgn(baseNgn: number): number {
 // preview shown while typing. Keep in sync with SEA_RATE_NGN_PER_CBM /
 // FLIGHT_RATE_NGN_PER_GRAM in the edge function.
 const SEA_RATE_NGN_PER_CBM = 0.50;     // match edge function
-const FLIGHT_RATE_NGN_PER_GRAM = 6.50; // match edge function
+const FLIGHT_RATE_NGN_PER_GRAM = 16.50; // match edge function
 
 interface Rates {
   cnyToNgn: number;
