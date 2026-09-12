@@ -204,7 +204,7 @@ export default function ImporterDashboardPage() {
         email: customer.email,
         amount: toKobo(bill.amount_ngn),
         reference,
-        metadata: { bill_id: bill.id, kind: bill.kind },
+        metadata: { type: 'china_import_bill', bill_id: bill.id, kind: bill.kind },
         onSuccess: async () => {
           try {
             const res = await fetch(`${EDGE_URL}?action=bill-pay-verify`, {
