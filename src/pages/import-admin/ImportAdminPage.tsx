@@ -750,7 +750,7 @@ function OrdersList({ token }: { token: string }) {
       </div>
 
       <div className="divide-y divide-gray-50">
-        {isLoading ? (
+        {isLoading && orders.length === 0 ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="px-5 py-4 animate-pulse flex items-center gap-3">
               <div className="flex-1 space-y-2">
@@ -1681,7 +1681,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
 
       {/* Products list */}
       <div className="divide-y divide-gray-50">
-        {isLoading ? (
+        {isLoading && products.length === 0 ? (
           Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="px-5 py-4 animate-pulse flex items-center gap-3">
               <div className="w-10 h-10 bg-gray-100 rounded-lg" />
