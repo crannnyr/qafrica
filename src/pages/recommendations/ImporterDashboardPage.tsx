@@ -191,23 +191,24 @@ export default function ImporterDashboardPage() {
   // Bills are paid via Paystack, verified server-side against the actual
   // charge (see bill-pay-verify in the edge function) — no manual admin
   // confirmation step needed anymore.
-  const [billPayError, setBillPayError] = useState('');
+  const isPayingBillRef = useRef(false);
 
   const payBillWithPaystack = async (bill: ConsolidationBill) => {
     if (!customer?.id) return;
+    if (isPayingBillRef.current) return; // hard guard, not dependent on re-render timing
+    isPayingBillRef.current = true;
     setIsPayingBill(true);
     setBillPayError('');
     try {
       await loadPaystackScript();
       const reference = generateReference('QAFBILL');
-
-      // Record the reference immediately — best effort, don't block checkout on it.
-      fetch(`${EDGE_URL}?action=bill-pay-init`, {
+  
+      await fetch(`${EDGE_URL}?action=bill-pay-init`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customer_id: customer.id, bill_id: bill.id, reference }),
       }).catch(() => {});
-      
+  
       initializePayment({
         email: customer.email,
         amount: toKobo(bill.amount_ngn),
@@ -230,16 +231,20 @@ export default function ImporterDashboardPage() {
             setBillPayError('Payment verification failed. Contact support.');
           } finally {
             setIsPayingBill(false);
+            isPayingBillRef.current = false;
           }
         },
-        onCancel: () => setIsPayingBill(false),
+        onCancel: () => {
+          setIsPayingBill(false);
+          isPayingBillRef.current = false;
+        },
       });
     } catch (e: any) {
       setBillPayError(e?.message ?? 'Could not start payment');
       setIsPayingBill(false);
+      isPayingBillRef.current = false;
     }
   };
-
   const submitBankDetails = async () => {
     if (!refundBankForm || !customer?.id) return;
     if (!bankFormData.bank_account_number.trim() || !bankFormData.bank_account_name.trim() || !bankFormData.bank_name.trim()) return;
