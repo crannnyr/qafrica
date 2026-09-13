@@ -2041,24 +2041,6 @@ function SettingsManager({ token }: { token: string }) {
             Orders at or under this amount must pay by Paystack. Orders above it must pay by manual transfer.
           </p>
         </div>
-
-        <div className="grid grid-cols-1 gap-3">
-          <div>
-            <Label>Bank name</Label>
-            <input type="text" value={settings.bank_name} onChange={e => setField('bank_name', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
-          </div>
-          <div>
-            <Label>Account name</Label>
-            <input type="text" value={settings.bank_account_name} onChange={e => setField('bank_account_name', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
-          </div>
-          <div>
-            <Label>Account number</Label>
-            <input type="text" value={settings.bank_account_number} onChange={e => setField('bank_account_number', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
-          </div>
-        </div>
       </div>
 
       {/* Shipping rates */}
