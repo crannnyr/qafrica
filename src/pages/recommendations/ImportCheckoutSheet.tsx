@@ -23,7 +23,7 @@ const STATIONS_REST_URL = `${CONFIG.SUPABASE_URL}/rest/v1/pickup_stations`;
 const SHIPPING_BLOG_SLUG = 'why-shipping-costs-so-much-and-how-we-fix-it';
 // Orders over this amount can't go through Paystack — manual bank transfer
 // only. Mirrors the same cap enforced server-side in checkout-init.
-const PAYSTACK_MAX_NGN = 50_000;
+// const PAYSTACK_MAX_NGN = 50_000;
 
 interface DeliveryAddress {
   name: string;
@@ -72,7 +72,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [delivery, setDelivery] = useState<'to_qafrica' | 'to_me'>('to_me');
   const [showWhyQafrica, setShowWhyQafrica] = useState(false);
   // Flight is the default shipping choice — customer can switch to sea freight.
-  const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>('flight');
+  // const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>('flight');
 
   // Some products cannot travel by air. With a single item in the cart this
   // still forces the whole (single) shipping choice to sea, same as before.
@@ -104,17 +104,67 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     return () => window.removeEventListener('beforeunload', handler);
   }, [isVerifying]);
 
+  // useEffect(() => {
+  //   fetch(`${EDGE_URL}?action=admin-settings`)
+  //     .then(res => res.json())
+  //     .then(data => {
+  //       if (data.settings && typeof data.settings.manual_transfer_enabled === 'boolean') {
+  //         setManualTransferEnabled(data.settings.manual_transfer_enabled);
+  //         if (!data.settings.manual_transfer_enabled) setPaymentMethod('paystack');
+  //       }
+  //     })
+  //     .catch(() => {});
+  // }, []);
+
+  const [shippingSettings, setShippingSettings] = useState({
+    chargeShippingAtCheckout: false,
+    shippingDiscountPercent: 0,
+    paystackManualThresholdNgn: 100_000,
+  });
+  
   useEffect(() => {
     fetch(`${EDGE_URL}?action=admin-settings`)
       .then(res => res.json())
       .then(data => {
-        if (data.settings && typeof data.settings.manual_transfer_enabled === 'boolean') {
+        if (!data.settings) return;
+        if (typeof data.settings.manual_transfer_enabled === 'boolean') {
           setManualTransferEnabled(data.settings.manual_transfer_enabled);
           if (!data.settings.manual_transfer_enabled) setPaymentMethod('paystack');
         }
+        setShippingSettings({
+          chargeShippingAtCheckout: data.settings.charge_shipping_at_checkout === true,
+          shippingDiscountPercent: Number(data.settings.shipping_discount_percent ?? 0),
+          paystackManualThresholdNgn: Number(data.settings.paystack_manual_threshold_ngn ?? 100_000),
+        });
       })
       .catch(() => {});
   }, []);
+
+  // Compute shipping per item and total
+  const shippingMethodFor = (item: CartItem) => cart.length > 1 ? itemShipping[item.cart_key] : shippingMethod;
+
+  const shippingCostFor = (item: CartItem) => {
+    const method = shippingMethodFor(item);
+    if (!method) return 0;
+    const rate = method === 'flight' ? item.flight_shipping_cost_ngn : item.sea_shipping_cost_ngn;
+    return (rate ?? 0) * item.quantity;
+  };
+  
+  const rawShippingTotal = cart.reduce((s, item) => s + shippingCostFor(item), 0);
+  const shippingTotal = Math.round(rawShippingTotal * (1 - shippingSettings.shippingDiscountPercent / 100));
+  
+  const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
+  const jumiaFee = delivery === 'to_qafrica' ? cart.reduce((s, i) => s + 200 * i.quantity, 0) : 0;
+  const total = subtotal + jumiaFee + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
+
+  // Paystack & Manual Option
+  const paystackAllowed = total <= shippingSettings.paystackManualThresholdNgn;
+  const manualAllowed = total > shippingSettings.paystackManualThresholdNgn;
+  
+  useEffect(() => {
+    if (!paystackAllowed && paymentMethod === 'paystack') setPaymentMethod('manual');
+    if (!manualAllowed && paymentMethod === 'manual') setPaymentMethod('paystack');
+  }, [paystackAllowed, manualAllowed, paymentMethod]);
 
   // Delivery address — only required when delivery === 'to_me'
   const [address, setAddress] = useState<DeliveryAddress>({
@@ -279,17 +329,17 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     );
   };
 
-  const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
-  const jumiaFee = delivery === 'to_qafrica' ? cart.reduce((s, i) => s + 200 * i.quantity, 0) : 0;
-  const total = subtotal + jumiaFee;
-  const paystackAllowed = total <= PAYSTACK_MAX_NGN;
+  // const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
+  // const jumiaFee = delivery === 'to_qafrica' ? cart.reduce((s, i) => s + 200 * i.quantity, 0) : 0;
+  // const total = subtotal + jumiaFee;
+  // const paystackAllowed = total <= PAYSTACK_MAX_NGN;
 
   // Orders over the Paystack cap must go manual — force the switch (and
   // back, if the cart shrinks below the cap again) rather than leaving the
   // customer stuck on a now-disabled option.
-  useEffect(() => {
-    if (!paystackAllowed && paymentMethod === 'paystack') setPaymentMethod('manual');
-  }, [paystackAllowed, paymentMethod]);
+  // useEffect(() => {
+  //   if (!paystackAllowed && paymentMethod === 'paystack') setPaymentMethod('manual');
+  //}, [paystackAllowed, paymentMethod]);
 
   // "Deliver to QAFRICA" (Jumia consolidation) only makes sense in bulk — it's
   // gated behind a 20-unit cart minimum.
@@ -316,16 +366,30 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
   // Every item defaults to Flight, except sea-only items which lock to Sea —
   // customer can still switch any non-locked item to Sea afterward.
+  // useEffect(() => {
+  //   if (cart.length <= 1) return;
+  //   setItemShipping(prev => {
+  //     const next = { ...prev };
+  //     let changed = false;
+  //     for (const item of cart) {
+  //       if (item.ship_only) {
+  //         if (next[item.cart_key] !== 'sea_freight') { next[item.cart_key] = 'sea_freight'; changed = true; }
+  //       } else if (!next[item.cart_key]) {
+  //         next[item.cart_key] = 'flight'; changed = true;
+  //       }
+  //     }
+  //     return changed ? next : prev;
+  //   });
+  // }, [cart]);
+
   useEffect(() => {
     if (cart.length <= 1) return;
     setItemShipping(prev => {
       const next = { ...prev };
       let changed = false;
       for (const item of cart) {
-        if (item.ship_only) {
-          if (next[item.cart_key] !== 'sea_freight') { next[item.cart_key] = 'sea_freight'; changed = true; }
-        } else if (!next[item.cart_key]) {
-          next[item.cart_key] = 'flight'; changed = true;
+        if (item.ship_only && next[item.cart_key] !== 'sea_freight') {
+          next[item.cart_key] = 'sea_freight'; changed = true;
         }
       }
       return changed ? next : prev;
@@ -621,12 +685,18 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                   <Plane className="w-4 h-4 text-gray-700 mb-1.5" />
                   <p className="font-semibold text-gray-900 text-xs">Flight</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">Faster, consolidated air freight</p>
+                  {cart[0]?.flight_shipping_cost_ngn != null && shippingSettings.chargeShippingAtCheckout && (
+                    <p className="text-[10px] font-bold text-gray-600 mt-1">{fmt(cart[0].flight_shipping_cost_ngn * cart[0].quantity)}</p>
+                  )}
                 </button>
                 <button onClick={() => setShippingMethod('sea_freight')}
                   className={`text-left p-3 rounded-xl border-2 transition-colors ${shippingMethod === 'sea_freight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
                   <Ship className="w-4 h-4 text-gray-700 mb-1.5" />
                   <p className="font-semibold text-gray-900 text-xs">Sea freight</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">Slower, lowest cost per kg</p>
+                  {cart[0]?.sea_shipping_cost_ngn != null && shippingSettings.chargeShippingAtCheckout && (
+                    <p className="text-[10px] font-bold text-gray-600 mt-1">{fmt(cart[0].sea_shipping_cost_ngn * cart[0].quantity)}</p>
+                  )}
                 </button>
               </div>
               {forcedSeaFreight && (
@@ -647,7 +717,12 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                 return (
                   <div key={item.cart_key} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-gray-100">
                     <img src={item.image_url} alt={item.name} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
-                    <p className="text-xs font-medium text-gray-800 flex-1 min-w-0 truncate">{item.name}</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
+                      {chosen && shippingSettings.chargeShippingAtCheckout && (
+                        <p className="text-[10px] text-gray-400">+{fmt(shippingCostFor(item))} shipping</p>
+                      )}
+                    </div>
                     <div className="flex gap-1 flex-shrink-0">
                       <button
                         onClick={() => !locked && setItemShippingMethod(item.cart_key, 'flight')}
@@ -870,13 +945,13 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
               <div>
                 <p className="font-semibold text-gray-900 text-xs">Pay with card — fastest</p>
                 <p className="text-[11px] text-gray-400">
-                  {paystackAllowed ? 'Instant confirmation via Paystack' : `For orders under ${fmt(PAYSTACK_MAX_NGN)} only`}
+                  {paystackAllowed ? 'Instant confirmation via Paystack' : `For orders under ${fmt(shippingSettings.paystackManualThresholdNgn)} only`}
                 </p>
               </div>
             </button>
             <button
               onClick={() => manualTransferEnabled && setPaymentMethod('manual')}
-              disabled={!manualTransferEnabled}
+              disabled={!manualTransferEnabled || !manualAllowed}   {/* ← changed */}
               className={`w-full flex items-center gap-3 text-left p-3 rounded-xl border-2 transition-colors ${
                 !manualTransferEnabled
                   ? 'border-gray-100 opacity-50 cursor-not-allowed'
@@ -909,6 +984,12 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         <div className="bg-gray-50 rounded-xl p-3.5 space-y-1.5">
           <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span className="font-medium">{fmt(subtotal)}</span></div>
           {delivery === 'to_qafrica' && <div className="flex justify-between text-xs text-gray-500"><span>Jumia listing fee</span><span className="font-medium">{fmt(jumiaFee)}</span></div>}
+          {shippingSettings.chargeShippingAtCheckout && (
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>Shipping{shippingSettings.shippingDiscountPercent > 0 ? ` (${shippingSettings.shippingDiscountPercent}% off)` : ''}</span>
+              <span className="font-medium">{fmt(shippingTotal)}</span>
+            </div>
+          )}
           <div className="flex justify-between text-xs font-bold text-gray-900 pt-1.5 border-t border-gray-200"><span>Total</span><span className="text-orange-500">{fmt(total)}</span></div>
         </div>
 
