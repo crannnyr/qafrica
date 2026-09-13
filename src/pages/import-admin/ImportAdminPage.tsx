@@ -1934,10 +1934,240 @@ function TimedOutOrdersManager({ token }: { token: string }) {
   );
 }
 
+// ── Settings ──────────────────────────────────────────────────────────────
+interface AdminSettings {
+  paystack_enabled: boolean;
+  manual_transfer_enabled: boolean;
+  bank_account_number: string;
+  bank_account_name: string;
+  bank_name: string;
+  sea_rate_ngn_per_cbm: number;
+  flight_rate_ngn_per_gram: number;
+  shipping_discount_percent: number;
+  shipping_discount_min_ngn: number;
+  bulk_discount_tier1_qty: number;
+  bulk_discount_tier1_percent: number;
+  bulk_discount_tier2_qty: number;
+  bulk_discount_tier2_percent: number;
+  charge_shipping_at_checkout: boolean;
+  paystack_manual_threshold_ngn: number;
+}
+
+function SettingsManager({ token }: { token: string }) {
+  const [settings, setSettings] = useState<AdminSettings | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-settings`);
+      const data = await res.json();
+      if (data.settings) setSettings(data.settings);
+    } catch {
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const setField = <K extends keyof AdminSettings>(field: K, value: AdminSettings[K]) =>
+    setSettings(prev => prev ? { ...prev, [field]: value } : prev);
+
+  const handleSave = async () => {
+    if (!settings) return;
+    setIsSaving(true);
+    setSaveError('');
+    setSaved(false);
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-update-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, ...settings }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setSaveError(data.error ?? 'Failed to save'); return; }
+      setSettings(data.settings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e: any) {
+      setSaveError(e?.message ?? 'Unexpected error');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading || !settings) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
+        <Loader className="w-5 h-5 animate-spin text-gray-300 mx-auto" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Payment methods */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+        <p className="font-semibold text-gray-800 text-sm">Payment methods</p>
+
+        <label className="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Paystack enabled</p>
+            <p className="text-[11px] text-gray-400">Turn off to force manual transfer only, site-wide.</p>
+          </div>
+          <input type="checkbox" checked={settings.paystack_enabled} onChange={e => setField('paystack_enabled', e.target.checked)} className="w-4 h-4 accent-orange-500" />
+        </label>
+
+        <label className="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Manual bank transfer enabled</p>
+            <p className="text-[11px] text-gray-400">Turn off to force Paystack only, site-wide.</p>
+          </div>
+          <input type="checkbox" checked={settings.manual_transfer_enabled} onChange={e => setField('manual_transfer_enabled', e.target.checked)} className="w-4 h-4 accent-orange-500" />
+        </label>
+
+        <div>
+          <Label>Paystack / Manual threshold (₦)</Label>
+          <input
+            type="number" min={0} value={settings.paystack_manual_threshold_ngn}
+            onChange={e => setField('paystack_manual_threshold_ngn', Number(e.target.value))}
+            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            Orders at or under this amount must pay by Paystack. Orders above it must pay by manual transfer.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3">
+          <div>
+            <Label>Bank name</Label>
+            <input type="text" value={settings.bank_name} onChange={e => setField('bank_name', e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+          <div>
+            <Label>Account name</Label>
+            <input type="text" value={settings.bank_account_name} onChange={e => setField('bank_account_name', e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+          <div>
+            <Label>Account number</Label>
+            <input type="text" value={settings.bank_account_number} onChange={e => setField('bank_account_number', e.target.value)}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+        </div>
+      </div>
+
+      {/* Shipping rates */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+        <p className="font-semibold text-gray-800 text-sm">Shipping rates</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Sea rate (₦ / cbm)</Label>
+            <input type="number" min={0} step="0.01" value={settings.sea_rate_ngn_per_cbm}
+              onChange={e => setField('sea_rate_ngn_per_cbm', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+          <div>
+            <Label>Flight rate (₦ / gram)</Label>
+            <input type="number" min={0} step="0.01" value={settings.flight_rate_ngn_per_gram}
+              onChange={e => setField('flight_rate_ngn_per_gram', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-400">
+          These drive the per-unit shipping cost saved on each product (volume × sea rate, weight × flight rate). Changing them only affects products saved/edited after the change — existing products keep their already-computed cost until re-saved.
+        </p>
+
+        <label className="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Charge shipping at checkout</p>
+            <p className="text-[11px] text-gray-400">When off, checkout doesn't add shipping to the total — bill it manually later instead.</p>
+          </div>
+          <input type="checkbox" checked={settings.charge_shipping_at_checkout} onChange={e => setField('charge_shipping_at_checkout', e.target.checked)} className="w-4 h-4 accent-orange-500" />
+        </label>
+      </div>
+
+      {/* Shipping discount */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+        <p className="font-semibold text-gray-800 text-sm">Shipping discount</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Base discount (%)</Label>
+            <input type="number" min={0} max={100} value={settings.shipping_discount_percent}
+              onChange={e => setField('shipping_discount_percent', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+          <div>
+            <Label>Minimum shipping fee to qualify (₦)</Label>
+            <input type="number" min={0} value={settings.shipping_discount_min_ngn}
+              onChange={e => setField('shipping_discount_min_ngn', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-400 -mt-2">
+          No discount applies at all until the cart's raw shipping cost reaches this amount.
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Bulk tier 1: qty threshold</Label>
+            <input type="number" min={0} value={settings.bulk_discount_tier1_qty}
+              onChange={e => setField('bulk_discount_tier1_qty', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+          <div>
+            <Label>Bulk tier 1: extra discount (%)</Label>
+            <input type="number" min={0} max={100} value={settings.bulk_discount_tier1_percent}
+              onChange={e => setField('bulk_discount_tier1_percent', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Bulk tier 2: qty threshold</Label>
+            <input type="number" min={0} value={settings.bulk_discount_tier2_qty}
+              onChange={e => setField('bulk_discount_tier2_qty', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+          <div>
+            <Label>Bulk tier 2: extra discount (%)</Label>
+            <input type="number" min={0} max={100} value={settings.bulk_discount_tier2_percent}
+              onChange={e => setField('bulk_discount_tier2_percent', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+        </div>
+        <p className="text-[11px] text-gray-400 -mt-2">
+          Cumulative: a cart with quantity ≥ tier 2 gets base + tier 1 + tier 2 all added together (e.g. defaults give 20+ units a total of +10%, on top of the base discount).
+        </p>
+      </div>
+
+      {saveError && (
+        <div className="flex items-center gap-2 text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {saveError}
+        </div>
+      )}
+
+      <button
+        onClick={handleSave}
+        disabled={isSaving}
+        className="w-full py-3 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+      >
+        {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
+        {isSaving ? 'Saving…' : saved ? 'Saved' : 'Save settings'}
+      </button>
+    </div>
+  );
+}
+
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'timed-out'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'timed-out' | 'settings'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -1972,7 +2202,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'timed-out'] as const).map(t => (
+          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'timed-out', 'settings'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -2012,6 +2242,8 @@ export default function ImportAdminPage() {
           <RefundsManager token={token} />
         ) : tab === 'timed-out' ? (
           <TimedOutOrdersManager token={token} />
+        ) : tab === 'settings' ? (
+          <SettingsManager token={token} />
         ) : (
           <ImportAdminCustomers token={token} />
         )}
