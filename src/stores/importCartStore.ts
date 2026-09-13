@@ -30,6 +30,13 @@ export interface ImportProduct {
   /** Sea freight only. Carried into the cart so checkout can force the
    *  shipping method without re-fetching the product. */
   ship_only?: boolean;
+  /** Volume/weight and their derived per-unit shipping costs — set by the
+   *  admin, carried into the cart so checkout can compute shipping without
+   *  re-fetching the product. */
+  volume_cbm?: number | null;
+  weight_grams?: number | null;
+  sea_shipping_cost_ngn?: number | null;
+  flight_shipping_cost_ngn?: number | null;
 }
 
 export interface ImportCartItem extends ImportProduct {
