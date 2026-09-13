@@ -687,6 +687,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                   <Plane className="w-4 h-4 text-gray-700 mb-1.5" />
                   <p className="font-semibold text-gray-900 text-xs">Flight</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">Faster, consolidated air freight</p>
+                  {cart[0]?.weight_grams != null && (
+                    <p className="text-[9px] text-gray-400 mt-0.5">{cart[0].weight_grams}g</p>
+                  )}
                   {cart[0]?.flight_shipping_cost_ngn != null && shippingSettings.chargeShippingAtCheckout && (
                     <p className="text-[10px] font-bold text-gray-600 mt-1">{fmt(cart[0].flight_shipping_cost_ngn * cart[0].quantity)}</p>
                   )}
@@ -696,6 +699,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                   <Ship className="w-4 h-4 text-gray-700 mb-1.5" />
                   <p className="font-semibold text-gray-900 text-xs">Sea freight</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">Slower, lowest cost per kg</p>
+                  {cart[0]?.volume_cbm != null && (
+                    <p className="text-[9px] text-gray-400 mt-0.5">{cart[0].volume_cbm} cbm</p>
+                  )}
                   {cart[0]?.sea_shipping_cost_ngn != null && shippingSettings.chargeShippingAtCheckout && (
                     <p className="text-[10px] font-bold text-gray-600 mt-1">{fmt(cart[0].sea_shipping_cost_ngn * cart[0].quantity)}</p>
                   )}
@@ -721,6 +727,13 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                     <img src={item.image_url} alt={item.name} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
+                      {(item.weight_grams != null || item.volume_cbm != null) && (
+                        <p className="text-[9px] text-gray-400">
+                          {item.weight_grams != null && `${item.weight_grams}g`}
+                          {item.weight_grams != null && item.volume_cbm != null && ' · '}
+                          {item.volume_cbm != null && `${item.volume_cbm} cbm`}
+                        </p>
+                      )}
                       {chosen && shippingSettings.chargeShippingAtCheckout && (
                         <p className="text-[10px] text-gray-400">+{fmt(shippingCostFor(item))} shipping</p>
                       )}
