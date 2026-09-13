@@ -126,12 +126,6 @@ function getTieredMarkupNgn(baseNgn: number): number {
   return 25_000;
 }
 
-// Mirrors the edge function's shipping-cost rates — used only for the live
-// preview shown while typing. Keep in sync with SEA_RATE_NGN_PER_CBM /
-// FLIGHT_RATE_NGN_PER_GRAM in the edge function.
-const SEA_RATE_NGN_PER_CBM = 0.50;     // match edge function
-const FLIGHT_RATE_NGN_PER_GRAM = 16.50; // match edge function
-
 interface Rates {
   cnyToNgn: number;
   usdToNgn: number;
@@ -1029,6 +1023,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [editProduct, setEditProduct] = useState<ImportProduct | null>(null);
   const [rates, setRates]             = useState<Rates | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [shippingRates, setShippingRates] = useState({ seaRateNgnPerCbm: 0, flightRateNgnPerGram: 0 });
 
   // Form state
   const [name, setName]               = useState('');
@@ -1071,8 +1066,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const priceCnyPreview = rates && priceUsd ? priceUsd * rates.cnyToUsd : 0;
   const volumeCbmNum = parseFloat(volumeCbm) || 0;
   const weightGramsNum = parseFloat(weightGrams) || 0;
-  const previewSeaShippingCost = volumeCbmNum > 0 ? volumeCbmNum * SEA_RATE_NGN_PER_CBM : 0;
-  const previewFlightShippingCost = weightGramsNum > 0 ? weightGramsNum * FLIGHT_RATE_NGN_PER_GRAM : 0;
+  const previewSeaShippingCost = volumeCbmNum > 0 ? volumeCbmNum * shippingRates.seaRateNgnPerCbm : 0;
+  const previewFlightShippingCost = weightGramsNum > 0 ? weightGramsNum * shippingRates.flightRateNgnPerGram : 0;
 
   // ── Variant helpers ─────────────────────────────────────────────────────
   const toggleGroupOption = (groupName: string, option: string) => {
@@ -1141,6 +1136,16 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     fetch(`${EDGE_URL}?action=rates`)
       .then(r => r.json())
       .then(d => setRates(d.rates))
+      .catch(() => {});
+    fetch(`${EDGE_URL}?action=admin-settings`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.settings) return;
+        setShippingRates({
+          seaRateNgnPerCbm: Number(d.settings.sea_rate_ngn_per_cbm ?? 0),
+          flightRateNgnPerGram: Number(d.settings.flight_rate_ngn_per_gram ?? 0),
+        });
+      })
       .catch(() => {});
   }, []);
 
