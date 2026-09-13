@@ -73,6 +73,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [showWhyQafrica, setShowWhyQafrica] = useState(false);
   // Flight is the default shipping choice — customer can switch to sea freight.
   // const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>('flight');
+  const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
 
   // Some products cannot travel by air. With a single item in the cart this
   // still forces the whole (single) shipping choice to sea, same as before.
@@ -139,6 +140,12 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       })
       .catch(() => {});
   }, []);
+
+  
+  // ── Per-item shipping method (only surfaced when the cart has 2+ items) ─
+  const [itemShipping, setItemShipping] = useState<Record<string, 'flight' | 'sea_freight'>>({});
+  const setItemShippingMethod = (cartKey: string, method: 'flight' | 'sea_freight') =>
+    setItemShipping(prev => ({ ...prev, [cartKey]: method }));
 
   // Compute shipping per item and total
   const shippingMethodFor = (item: CartItem) => cart.length > 1 ? itemShipping[item.cart_key] : shippingMethod;
@@ -270,11 +277,6 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     }).slice(0, 25);
   })();
   const selectedStation = stations.find(s => s.id === selectedStationId) ?? null;
-
-  // ── Per-item shipping method (only surfaced when the cart has 2+ items) ─
-  const [itemShipping, setItemShipping] = useState<Record<string, 'flight' | 'sea_freight'>>({});
-  const setItemShippingMethod = (cartKey: string, method: 'flight' | 'sea_freight') =>
-    setItemShipping(prev => ({ ...prev, [cartKey]: method }));
 
   // Optional GPS — supplements the manual address, never replaces it
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -951,7 +953,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
             </button>
             <button
               onClick={() => manualTransferEnabled && setPaymentMethod('manual')}
-              disabled={!manualTransferEnabled || !manualAllowed}   {/* ← changed */}
+              disabled={!manualTransferEnabled || !manualAllowed}  
               className={`w-full flex items-center gap-3 text-left p-3 rounded-xl border-2 transition-colors ${
                 !manualTransferEnabled
                   ? 'border-gray-100 opacity-50 cursor-not-allowed'
