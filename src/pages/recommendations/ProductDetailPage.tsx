@@ -495,24 +495,6 @@ export default function ProductDetailPage() {
             Sourced from verified manufacturers in China
           </p>
 
-          {(product.volume_cbm != null || product.weight_grams != null) && (
-            <div className="bg-gray-50 rounded-xl px-3.5 py-3 mb-4 space-y-1.5">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Shipping estimate</p>
-              {product.volume_cbm != null && product.sea_shipping_cost_ngn != null && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5 text-gray-500"><Ship className="w-3.5 h-3.5" /> Sea ({product.volume_cbm} cbm)</span>
-                  <span className="font-semibold text-gray-800">{fmt(product.sea_shipping_cost_ngn)}/unit</span>
-                </div>
-              )}
-              {product.weight_grams != null && product.flight_shipping_cost_ngn != null && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5 text-gray-500"><Plane className="w-3.5 h-3.5" /> Flight ({product.weight_grams}g)</span>
-                  <span className="font-semibold text-gray-800">{fmt(product.flight_shipping_cost_ngn)}/unit</span>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* A sea-only product should not advertise a flight option it
               cannot actually use — checkout would reject it. */}
           {product.ship_only ? (
@@ -531,6 +513,22 @@ export default function ProductDetailPage() {
               <span className="flex items-center gap-1 text-[11px] text-gray-400">
                 <Ship className="w-3 h-3" /> Sea 60–90 days
               </span>
+            </div>
+          )}
+
+          {(product.volume_cbm != null || product.weight_grams != null) && (
+            <div className="bg-gray-50 rounded-xl px-3.5 py-3 mb-4 space-y-1.5">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Shipping estimate</p>
+              {product.volume_cbm != null && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <Ship className="w-3.5 h-3.5" /> Sea: {product.volume_cbm} cbm
+                </div>
+              )}
+              {product.weight_grams != null && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <Plane className="w-3.5 h-3.5" /> Flight: {product.weight_grams}g
+                </div>
+              )}
             </div>
           )}
 
