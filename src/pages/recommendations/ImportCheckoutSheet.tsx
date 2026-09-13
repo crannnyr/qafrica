@@ -69,8 +69,6 @@ interface Props {
 }
 
 export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove, onSetQuantity }: Props) {
-  const [delivery, setDelivery] = useState<'to_qafrica' | 'to_me'>('to_me');
-  const [showWhyQafrica, setShowWhyQafrica] = useState(false);
   // Flight is the default shipping choice — customer can switch to sea freight.
   const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>('flight');
   // const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
@@ -120,6 +118,11 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [shippingSettings, setShippingSettings] = useState({
     chargeShippingAtCheckout: false,
     shippingDiscountPercent: 0,
+    shippingDiscountMinNgn: 1600,
+    bulkDiscountTier1Qty: 10,
+    bulkDiscountTier1Percent: 5,
+    bulkDiscountTier2Qty: 20,
+    bulkDiscountTier2Percent: 5,
     paystackManualThresholdNgn: 100_000,
   });
   
@@ -135,6 +138,11 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         setShippingSettings({
           chargeShippingAtCheckout: data.settings.charge_shipping_at_checkout === true,
           shippingDiscountPercent: Number(data.settings.shipping_discount_percent ?? 0),
+          shippingDiscountMinNgn: Number(data.settings.shipping_discount_min_ngn ?? 1600),
+          bulkDiscountTier1Qty: Number(data.settings.bulk_discount_tier1_qty ?? 10),
+          bulkDiscountTier1Percent: Number(data.settings.bulk_discount_tier1_percent ?? 5),
+          bulkDiscountTier2Qty: Number(data.settings.bulk_discount_tier2_qty ?? 20),
+          bulkDiscountTier2Percent: Number(data.settings.bulk_discount_tier2_percent ?? 5),
           paystackManualThresholdNgn: Number(data.settings.paystack_manual_threshold_ngn ?? 100_000),
         });
       })
@@ -157,12 +165,26 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     return (rate ?? 0) * item.quantity;
   };
   
+  const cartQty = cart.reduce((s, i) => s + i.quantity, 0);
   const rawShippingTotal = cart.reduce((s, item) => s + shippingCostFor(item), 0);
-  const shippingTotal = Math.round(rawShippingTotal * (1 - shippingSettings.shippingDiscountPercent / 100));
+  
+  // Discount only kicks in once raw shipping is at/above the floor — below
+  // that, no discount at all, matching the same rule enforced server-side.
+  const discountActive = rawShippingTotal >= shippingSettings.shippingDiscountMinNgn;
+  const effectiveDiscountPercent = discountActive
+    ? Math.min(
+        shippingSettings.shippingDiscountPercent
+          + (cartQty >= shippingSettings.bulkDiscountTier1Qty ? shippingSettings.bulkDiscountTier1Percent : 0)
+          + (cartQty >= shippingSettings.bulkDiscountTier2Qty ? shippingSettings.bulkDiscountTier2Percent : 0),
+        100
+      )
+    : 0;
+  const shippingTotal = discountActive
+    ? Math.round(rawShippingTotal * (1 - effectiveDiscountPercent / 100))
+    : rawShippingTotal;
   
   const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
-  const jumiaFee = delivery === 'to_qafrica' ? cart.reduce((s, i) => s + 200 * i.quantity, 0) : 0;
-  const total = subtotal + jumiaFee + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
+  const total = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
 
   // Paystack & Manual Option
   const paystackAllowed = total <= shippingSettings.paystackManualThresholdNgn;
@@ -343,25 +365,11 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   //   if (!paystackAllowed && paymentMethod === 'paystack') setPaymentMethod('manual');
   //}, [paystackAllowed, paymentMethod]);
 
-  // "Deliver to QAFRICA" (Jumia consolidation) only makes sense in bulk — it's
-  // gated behind a 20-unit cart minimum.
-  const cartTotalQty = cart.reduce((s, i) => s + i.quantity, 0);
-  const QAFRICA_MOQ = 20;
-  const qafricaUnlocked = cartTotalQty >= QAFRICA_MOQ;
-
-  // If the cart drops below that threshold after the option was already
-  // selected (items removed), fall back to "to_me" automatically rather
-  // than leaving an invalid state selected.
-  useEffect(() => {
-    if (delivery === 'to_qafrica' && !qafricaUnlocked) setDelivery('to_me');
-  }, [delivery, qafricaUnlocked]);
-
-  const addressComplete = delivery === 'to_qafrica' || (
-    deliveryMode === 'pickup_station'
-      ? !!(address.name.trim() && address.phone.trim() && selectedStationId)
-      : (address.name.trim() && address.phone.trim() && address.address_line1.trim() &&
-         address.city.trim() && address.state.trim())
-  );
+  const addressComplete = deliveryMode === 'pickup_station'
+  ? !!(address.name.trim() && address.phone.trim() && selectedStationId)
+  : (address.name.trim() && address.phone.trim() && address.address_line1.trim() &&
+     address.city.trim() && address.state.trim());
+  
   useEffect(() => {
     if (forcedSeaFreight && shippingMethod !== 'sea_freight') setShippingMethod('sea_freight');
   }, [forcedSeaFreight, shippingMethod]);
@@ -410,7 +418,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       // Persist a new address before checkout if the customer asked to
       // save it — a failure here shouldn't block the order, so it's best
       // effort and swallowed rather than surfaced as a checkout error.
-      if (delivery === 'to_me' && deliveryMode === 'home' && selectedAddressId === 'new' && saveThisAddress) {
+      if (deliveryMode === 'home' && selectedAddressId === 'new' && saveThisAddress) {
         fetch(`${EDGE_URL}?action=save-address`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -427,12 +435,12 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           customer_id: customer.id,
           customer_name: customer.full_name,
           customer_whatsapp: whatsapp.trim(),
-          delivery_type: delivery,
-          delivery_mode: delivery === 'to_me' ? deliveryMode : undefined,
+          delivery_type: 'to_me',
+          delivery_mode: deliveryMode,
           pickup_station_id: deliveryMode === 'pickup_station' ? selectedStationId : undefined,
           address_id: deliveryMode === 'home' && selectedAddressId !== 'new' ? selectedAddressId : undefined,
           shipping_method: cart.length === 1 ? shippingMethod : undefined,
-          delivery_address: delivery === 'to_me' ? address : undefined,
+          delivery_address: address,
           delivery_latitude: coords?.lat, delivery_longitude: coords?.lng,
           location_shared: !!coords,
           payment_method: paymentMethod,
@@ -618,49 +626,6 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           ))}
         </div>
 
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Delivery preference</p>
-          </div>
-          <div className="space-y-2">
-            <button
-              onClick={() => qafricaUnlocked && setDelivery('to_qafrica')}
-              disabled={!qafricaUnlocked}
-              className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${
-                !qafricaUnlocked ? 'border-gray-100 opacity-50 cursor-not-allowed' :
-                delivery === 'to_qafrica' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <p className="font-semibold text-gray-900 text-xs">Deliver to QAFRICA</p>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setShowWhyQafrica(true); }}
-                  className="text-[10px] font-bold text-orange-500 flex-shrink-0"
-                >
-                  Why this?
-                </button>
-              </div>
-              <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">
-                We receive, inspect & list on Jumia for you. +₦200/item
-              </p>
-              {!qafricaUnlocked && (
-                <p className="text-[11px] text-orange-500 mt-1 font-medium">
-                  Needs {QAFRICA_MOQ}+ units in cart — you have {cartTotalQty}
-                </p>
-              )}
-            </button>
-            <button onClick={() => setDelivery('to_me')}
-              className={`w-full text-left p-3 rounded-xl border-2 transition-colors ${delivery === 'to_me' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
-              <p className="font-semibold text-gray-900 text-xs">Deliver to my address</p>
-              <p className="text-[11px] text-gray-400 mt-0.5 leading-relaxed">Shipped directly to you. Cost confirmed after.</p>
-            </button>
-          </div>
-        </div>
-
-        {showWhyQafrica && <WhyQafricaExplainer onClose={() => setShowWhyQafrica(false)} />}
-
-
         {/* Shipping method — flight vs sea freight, with a link explaining why consolidation keeps rates low.
             Single-item carts keep the original one-off toggle; carts with 2+ items get a per-item toggle instead,
             since different products in the same order can now travel by different methods. */}
@@ -686,24 +651,48 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                   className={`text-left p-3 rounded-xl border-2 transition-colors ${forcedSeaFreight ? 'border-gray-100 opacity-40 cursor-not-allowed' : shippingMethod === 'flight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
                   <Plane className="w-4 h-4 text-gray-700 mb-1.5" />
                   <p className="font-semibold text-gray-900 text-xs">Flight</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">Faster, consolidated air freight</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Flight 20–30 days</p>
                   {cart[0]?.weight_grams != null && (
                     <p className="text-[9px] text-gray-400 mt-0.5">{cart[0].weight_grams}g</p>
                   )}
                   {cart[0]?.flight_shipping_cost_ngn != null && shippingSettings.chargeShippingAtCheckout && (
-                    <p className="text-[10px] font-bold text-gray-600 mt-1">{fmt(cart[0].flight_shipping_cost_ngn * cart[0].quantity)}</p>
+                    <div className="mt-1">
+                      {discountActive && effectiveDiscountPercent > 0 ? (
+                        <>
+                          <p className="text-[9px] text-gray-300 line-through">{fmt(cart[0].flight_shipping_cost_ngn * cart[0].quantity)}</p>
+                          <p className="text-[10px] font-bold text-emerald-600">
+                            {fmt(Math.round(cart[0].flight_shipping_cost_ngn * cart[0].quantity * (1 - effectiveDiscountPercent / 100)))}
+                            <span className="ml-1 text-[9px] font-bold bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded">-{effectiveDiscountPercent}%</span>
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[10px] font-bold text-gray-600">{fmt(cart[0].flight_shipping_cost_ngn * cart[0].quantity)}</p>
+                      )}
+                    </div>
                   )}
                 </button>
                 <button onClick={() => setShippingMethod('sea_freight')}
                   className={`text-left p-3 rounded-xl border-2 transition-colors ${shippingMethod === 'sea_freight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
                   <Ship className="w-4 h-4 text-gray-700 mb-1.5" />
                   <p className="font-semibold text-gray-900 text-xs">Sea freight</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">Slower, lowest cost per kg</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Sea 60–90 days</p>
                   {cart[0]?.volume_cbm != null && (
                     <p className="text-[9px] text-gray-400 mt-0.5">{cart[0].volume_cbm} cbm</p>
                   )}
                   {cart[0]?.sea_shipping_cost_ngn != null && shippingSettings.chargeShippingAtCheckout && (
-                    <p className="text-[10px] font-bold text-gray-600 mt-1">{fmt(cart[0].sea_shipping_cost_ngn * cart[0].quantity)}</p>
+                    <div className="mt-1">
+                      {discountActive && effectiveDiscountPercent > 0 ? (
+                        <>
+                          <p className="text-[9px] text-gray-300 line-through">{fmt(cart[0].sea_shipping_cost_ngn * cart[0].quantity)}</p>
+                          <p className="text-[10px] font-bold text-emerald-600">
+                            {fmt(Math.round(cart[0].sea_shipping_cost_ngn * cart[0].quantity * (1 - effectiveDiscountPercent / 100)))}
+                            <span className="ml-1 text-[9px] font-bold bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded">-{effectiveDiscountPercent}%</span>
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[10px] font-bold text-gray-600">{fmt(cart[0].sea_shipping_cost_ngn * cart[0].quantity)}</p>
+                      )}
+                    </div>
                   )}
                 </button>
               </div>
@@ -770,7 +759,6 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         </div>
 
         {/* Delivery address / pickup station — only required when shipping directly to the customer */}
-        {delivery === 'to_me' && (
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Delivery</p>
 
@@ -942,7 +930,6 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
               </div>
             )}
           </div>
-        )}
 
         <div>
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Payment method</p>
@@ -965,11 +952,17 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
               </div>
             </button>
             <button
-              onClick={() => manualTransferEnabled && setPaymentMethod('manual')}
-              disabled={!manualTransferEnabled || !manualAllowed}  
+              onClick={() => {
+                if (!manualTransferEnabled) return;
+                if (!manualAllowed) {
+                  setError(`Manual bank transfer isn't available for orders under ${fmt(shippingSettings.paystackManualThresholdNgn)}. Please pay with card instead.`);
+                  return;
+                }
+                setPaymentMethod('manual');
+              }}
               className={`w-full flex items-center gap-3 text-left p-3 rounded-xl border-2 transition-colors ${
-                !manualTransferEnabled
-                  ? 'border-gray-100 opacity-50 cursor-not-allowed'
+                !manualTransferEnabled || !manualAllowed
+                  ? 'border-gray-100 opacity-50'
                   : paymentMethod === 'manual' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'
               }`}
             >
@@ -998,10 +991,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
         <div className="bg-gray-50 rounded-xl p-3.5 space-y-1.5">
           <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span className="font-medium">{fmt(subtotal)}</span></div>
-          {delivery === 'to_qafrica' && <div className="flex justify-between text-xs text-gray-500"><span>Jumia listing fee</span><span className="font-medium">{fmt(jumiaFee)}</span></div>}
           {shippingSettings.chargeShippingAtCheckout && (
             <div className="flex justify-between text-xs text-gray-500">
-              <span>Shipping{shippingSettings.shippingDiscountPercent > 0 ? ` (${shippingSettings.shippingDiscountPercent}% off)` : ''}</span>
+              <span>Shipping{discountActive && effectiveDiscountPercent > 0 ? ` (${effectiveDiscountPercent}% off)` : ''}</span>              
               <span className="font-medium">{fmt(shippingTotal)}</span>
             </div>
           )}
@@ -1029,54 +1021,3 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     </motion.div>
   );
 }
-
-function WhyQafricaExplainer({ onClose }: { onClose: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[60] bg-black/50 flex items-end sm:items-center justify-center sm:p-4"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }}
-        transition={{ type: 'spring', damping: 28 }}
-        onClick={e => e.stopPropagation()}
-        className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6 max-h-[80vh] overflow-y-auto"
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="font-bold text-gray-900 text-lg">Why deliver to QAFRICA?</h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
-            <X className="w-4 h-4 text-gray-500" />
-          </button>
-        </div>
-
-        <div className="space-y-5 text-sm text-gray-600 leading-relaxed">
-          <div>
-            <p className="font-semibold text-gray-900 text-xs mb-1">The setup</p>
-            <p>
-              Instead of each unit shipping straight to you, we receive your whole order at our warehouse first, inspect it for quality, then list it for resale on Jumia. This only makes sense at bulk quantities — which is why it needs 20+ units in your cart — because consolidating a handful of items wouldn't cover its own handling cost.
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900 text-xs mb-1">When your order arrives</p>
-            <p>
-              We notify you the moment your shipment lands at the warehouse and clears inspection, so you always know where things stand — you're never left guessing whether it's arrived.
-            </p>
-          </div>
-          <div>
-            <p className="font-semibold text-gray-900 text-xs mb-1">Want a sample first?</p>
-            <p>
-              If you'd rather test a product before committing to a bulk Jumia order, reach out and we'll walk you through ordering a sample to "Deliver to my address" instead — no pressure to go straight to the bulk route.
-            </p>
-          </div>
-        </div>
-
-        <button onClick={onClose}
-          className="w-full mt-6 py-3 bg-gray-900 hover:bg-gray-700 text-white font-bold text-sm rounded-xl transition-colors">
-          Got it
-        </button>
-      </motion.div>
-    </motion.div>
-  );
-}
-
