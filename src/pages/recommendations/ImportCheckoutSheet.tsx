@@ -72,8 +72,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [delivery, setDelivery] = useState<'to_qafrica' | 'to_me'>('to_me');
   const [showWhyQafrica, setShowWhyQafrica] = useState(false);
   // Flight is the default shipping choice — customer can switch to sea freight.
-  // const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>('flight');
-  const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
+  const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>('flight');
+  // const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
 
   // Some products cannot travel by air. With a single item in the cart this
   // still forces the whole (single) shipping choice to sea, same as before.
