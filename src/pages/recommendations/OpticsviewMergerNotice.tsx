@@ -47,7 +47,7 @@ export default function OpticsviewMergerNotice() {
 
             <h2 className="font-bold text-gray-900 text-lg mb-2">Opticsview is now QAFRICA</h2>
             <p className="text-sm text-gray-600 leading-relaxed mb-4">
-              Opticsview.store is closing down, and we've moved everything over to QAFRICA — this is where all importing now happens. If you had an order in progress or want to reorder something you got from Opticsview before, you can pick it up right here.
+              Opticsview.store is moved it's Activity, and everything over to QAFRICA — this is where all importing now happens. If you had an order in progress or want to reorder something you got from Opticsview before, you can pick it up right here.
             </p>
 
             <button
