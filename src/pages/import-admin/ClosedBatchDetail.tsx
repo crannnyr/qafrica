@@ -157,7 +157,8 @@ function stageRank(status: string | undefined | null): number {
 type Tab = 'pricing' | 'sourcing' | 'customers';
 
 const emptyByKind = <T,>(): Record<BillKind, T[]> => ({ consolidation_shipping: [], clearance: [] });
-
+const [sourcingDrilldownProduct, setSourcingDrilldownProduct] = useState<{ id: string; name: string } | null>(null);
+  
 export default function ClosedBatchDetail({
   token, batchKey, orders, onClose, onOpenProduct, onReload,
 }: {
@@ -862,7 +863,15 @@ export default function ClosedBatchDetail({
                         )}
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-semibold text-gray-800 truncate">{r.product_name}</p>
-                          <p className="text-[10px] text-orange-500 font-bold">{r.total_qty} units · {r.customers_count} customer{r.customers_count !== 1 ? 's' : ''}</p>
+                          <p className="text-[10px] text-gray-400">   
+                            {r.total_qty} units ·{' '}   
+                            <button     
+                              onClick={() => setSourcingDrilldownProduct({ id: r.product_id, name: r.product_name })}     
+                              className="text-orange-500 font-bold underline decoration-dotted"   
+                            >     
+                              {r.customers_count} customer{r.customers_count !== 1 ? 's' : ''}   
+                            </button> 
+                          </p>
                         </div>
                         {r.source_url ? (
                           <a
@@ -880,6 +889,41 @@ export default function ClosedBatchDetail({
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Dropdown */}
+            {sourcingDrilldownProduct && (
+              <div className="fixed inset-0 z-[55] bg-black/60 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setSourcingDrilldownProduct(null)}>
+                <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl max-h-[80vh] flex flex-col">
+                  <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 flex-shrink-0">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-gray-800 truncate">{sourcingDrilldownProduct.name}</p>
+                      <p className="text-[10px] text-gray-400">Who ordered this</p>
+                    </div>
+                    <button onClick={() => setSourcingDrilldownProduct(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none px-1">×</button>
+                  </div>
+                  <div className="overflow-y-auto p-3 space-y-1.5">
+                    {breakdown
+                      .filter(r => r.product_id === sourcingDrilldownProduct.id)
+                      .map((r, i) => (
+                        <div key={`${r.customer_id}-${r.order_id}-${i}`} className="flex items-center justify-between gap-2 bg-gray-50 rounded-xl p-2.5">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-gray-800 truncate">{r.customer_name}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">{r.order_code} · qty {r.qty}</p>
+                          </div>
+                          {r.customer_id && (
+                            <button
+                              onClick={() => setProfileCustomerId(r.customer_id)}
+                              className="flex-shrink-0 text-[10px] font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg px-2.5 py-1.5"
+                            >
+                              View customer
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </div>
               </div>
             )}
 
