@@ -13,7 +13,7 @@
 // Pricing is "batch default with per-customer override": set a price once
 // for a product and it applies to everyone who bought it, unless you
 // override it for one customer specifically, from inside their card.
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Loader, Users, Plane, Ship, ShieldCheck, Send, AlertTriangle,
   ChevronRight, Package, CheckCircle2, Truck, PackageCheck, ExternalLink, Layers,
@@ -172,6 +172,7 @@ export default function ClosedBatchDetail({
   const [overridesByKind, setOverridesByKind] = useState<Record<BillKind, PriceOverride[]>>(emptyByKind());
   const [sourcingRows, setSourcingRows] = useState<SourcingRow[]>([]);
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid' | 'awaiting'>('all');
+  const [showOnlyUnbilled, setShowOnlyUnbilled] = useState(false);
   const [adjLabel, setAdjLabel] = useState('');
   const [adjAmount, setAdjAmount] = useState('');
   const [savingAdj, setSavingAdj] = useState(false);
@@ -191,6 +192,7 @@ export default function ClosedBatchDetail({
   const [individualActing, setIndividualActing] = useState<string | null>(null);
   const [selectedCustomerForDrilldown, setSelectedCustomerForDrilldown] = useState<string | null>(null);
   const [sourcingDrilldownProduct, setSourcingDrilldownProduct] = useState<{ id: string; name: string } | null>(null);
+  const listScrollPos = useRef(0); 
     
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -618,7 +620,11 @@ export default function ClosedBatchDetail({
           if (paymentFilter === 'awaiting') return status === 'awaiting_confirmation';
           return status !== 'paid' && status !== 'awaiting_confirmation';
         });
-
+  
+    if (showOnlyUnbilled) {
+      list = list.filter(c => !isBilled(c.customerId, billKind));
+    }
+  
     const q = customerSearch.trim().toLowerCase();
     if (q) {
       list = list.filter(c =>
@@ -627,7 +633,7 @@ export default function ClosedBatchDetail({
       );
     }
     return list;
-  }, [customersForList, paymentFilter, ledgerByCustomerActive, customerSearch]);
+  }, [customersForList, paymentFilter, ledgerByCustomerActive, customerSearch, showOnlyUnbilled, billKind]);
 
   const ledgerTotals = useMemo(() => {
     let paid = 0, awaiting = 0, unpaid = 0, outstanding = 0;
@@ -933,7 +939,10 @@ export default function ClosedBatchDetail({
                   customer={selectedCustomer}
                   billKind={billKind}
                   setBillKind={setBillKind}
-                  onBack={() => setSelectedCustomerForDrilldown(null)}
+                  onBack={() => {
+                    setSelectedCustomerForDrilldown(null);
+                    requestAnimationFrame(() => window.scrollTo(0, listScrollPos.current));
+                  }}                  
                   customerPriceFor={customerPriceFor}
                   isOverridden={isOverridden}
                   setCustomerPriceDrafts={setCustomerPriceDrafts}
@@ -991,6 +1000,16 @@ export default function ClosedBatchDetail({
                     />
                   </div>
 
+                  <button
+                    onClick={() => setShowOnlyUnbilled(v => !v)}
+                    className={`mb-2 px-3 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-colors ${
+                      showOnlyUnbilled ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 border border-gray-200'
+                    }`}
+                  >
+                    <Send className="w-3 h-3" />
+                    {showOnlyUnbilled ? 'Showing not-billed only' : 'Show not-billed only'}
+                  </button>
+
                   {ledgerByKind[billKind].length > 0 && (
                     <div className="mb-2">
                       <div className="flex gap-1.5 overflow-x-auto pb-1">
@@ -1031,7 +1050,10 @@ export default function ClosedBatchDetail({
                       return (
                         <button
                           key={c.customerId}
-                          onClick={() => setSelectedCustomerForDrilldown(c.customerId)}
+                          onClick={() => {
+                            listScrollPos.current = window.scrollY;
+                            setSelectedCustomerForDrilldown(c.customerId)
+                          }}
                           className="w-full flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 text-left hover:border-gray-200 transition-colors"
                         >
                           <div className="min-w-0">
