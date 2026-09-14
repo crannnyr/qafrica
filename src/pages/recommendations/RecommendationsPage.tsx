@@ -18,6 +18,7 @@ import DailyPromoModal from './DailyPromoModal';
 import ImportAuthSheet from './ImportAuthSheet';
 import ImportCheckoutSheet from './ImportCheckoutSheet';
 import ImportQtyControl from '@/components/ImportQtyControl';
+import OpticsviewMergerNotice from './OpticsviewMergerNotice';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -502,6 +503,7 @@ export default function RecommendationsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {isAuthenticated && <DailyPromoModal customerId={customer?.id} />}
+      <OpticsviewMergerNotice />
 
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
