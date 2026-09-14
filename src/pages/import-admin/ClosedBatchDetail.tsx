@@ -13,7 +13,7 @@
 // Pricing is "batch default with per-customer override": set a price once
 // for a product and it applies to everyone who bought it, unless you
 // override it for one customer specifically, from inside their card.
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Loader, Users, Plane, Ship, ShieldCheck, Send, AlertTriangle,
   ChevronRight, Package, CheckCircle2, Truck, PackageCheck, ExternalLink, Layers,
@@ -158,7 +158,7 @@ function stageRank(status: string | undefined | null): number {
 type Tab = 'pricing' | 'sourcing' | 'customers';
 
 const emptyByKind = <T,>(): Record<BillKind, T[]> => ({ consolidation_shipping: [], clearance: [] });
-
+  
 export default function ClosedBatchDetail({
   token, batchKey, orders, onClose, onOpenProduct, onReload,
 }: {
@@ -210,7 +210,8 @@ export default function ClosedBatchDetail({
   const [isActing, setIsActing] = useState(false);
   const [individualActing, setIndividualActing] = useState<string | null>(null);
   const [selectedCustomerForDrilldown, setSelectedCustomerForDrilldown] = useState<string | null>(null);
-
+  const listScrollPos = useRef(0);
+    
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -1079,7 +1080,10 @@ export default function ClosedBatchDetail({
                   customer={selectedCustomer}
                   billKind={billKind}
                   setBillKind={setBillKind}
-                  onBack={() => setSelectedCustomerForDrilldown(null)}
+                  onBack={() => {
+                    setSelectedCustomerForDrilldown(null);
+                    requestAnimationFrame(() => window.scrollTo(0, listScrollPos.current));
+                  }}                  
                   customerPriceFor={customerPriceFor}
                   isOverridden={isOverridden}
                   setCustomerPriceDrafts={setCustomerPriceDrafts}
@@ -1175,7 +1179,10 @@ export default function ClosedBatchDetail({
                       return (
                         <button
                           key={c.customerId}
-                          onClick={() => setSelectedCustomerForDrilldown(c.customerId)}
+                          onClick={() => {
+                            listScrollPos.current = window.scrollY;
+                            setSelectedCustomerForDrilldown(c.customerId)
+                          }}
                           className="w-full flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 text-left hover:border-gray-200 transition-colors"
                         >
                           <div className="min-w-0">
