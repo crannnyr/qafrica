@@ -6,6 +6,16 @@
 //
 // Auth uses the same import_admin_sessions token as china-import, so there is
 // one admin session concept rather than two.
+//
+// v5: auto-billing. set-customer-price now checks, after every save,
+// whether that customer's order in this batch is now fully priced (every
+// line item has a price, via get_batch_billing_eligible_customers) and if
+// so bills them immediately via close_batch_billing(p_customer_id=...) and
+// sends the itemized bill email right away -- no separate "close batch"
+// step needed for that customer. The bulk close-billing action uses the
+// same eligibility function, so the two can never disagree about who's
+// billable. Bill emails now include a per-item price breakdown grouped by
+// shipping method (air/sea), not just a total.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -46,6 +56,30 @@ function renderTemplate(template: string, tokens: Record<string, string>): strin
   return out.replace(/\{\{[a-z_]+\}\}/g, '')
 }
 
+// Line items from close_batch_billing carry shipping_method when they're
+// a real order item (even if null, for legacy pre-per-item-shipping
+// orders); adjustment lines (discounts, manual charges) never carry that
+// key at all -- that's how we tell the two apart here.
+function buildItemsBreakdownHtml(lineItems: any[]): string {
+  if (!Array.isArray(lineItems) || lineItems.length === 0) return ''
+  const priced = lineItems.filter((l: any) => l && typeof l.amount_ngn === 'number' && l.label)
+  const items = priced.filter((l: any) => 'shipping_method' in l)
+  const adjustments = priced.filter((l: any) => !('shipping_method' in l))
+  if (items.length === 0 && adjustments.length === 0) return ''
+
+  const flight = items.filter((i: any) => i.shipping_method === 'flight')
+  const sea = items.filter((i: any) => i.shipping_method === 'sea_freight')
+  const other = items.filter((i: any) => i.shipping_method !== 'flight' && i.shipping_method !== 'sea_freight')
+
+  const section = (title: string, rows: any[]) => rows.length === 0 ? '' : `
+    <p style="margin:12px 0 4px;font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.05em;">${title}</p>
+    <table style="width:100%;border-collapse:collapse;">
+      ${rows.map((r: any) => `<tr><td style="padding:4px 0;color:#374151;font-size:13px;">${r.label}</td><td style="padding:4px 0;color:#111827;font-size:13px;text-align:right;">₦${Number(r.amount_ngn).toLocaleString()}</td></tr>`).join('')}
+    </table>`
+
+  return `<div style="margin-bottom:16px;">${section('Arriving by air · 20–30 days', flight)}${section('Arriving by sea · 60–90 days', sea)}${section('Items', other)}${section('Adjustments', adjustments)}</div>`
+}
+
 async function queueTemplated(supabase: any, key: string, to: string, tokens: Record<string, string>): Promise<boolean> {
   const { data: tpl } = await supabase.from('import_message_templates').select('subject, body_html').eq('key', key).maybeSingle()
   if (!tpl) return false
@@ -55,6 +89,35 @@ async function queueTemplated(supabase: any, key: string, to: string, tokens: Re
     html: emailShell(renderTemplate(tpl.body_html, tokens)),
   })
   return !error
+}
+
+// Bills one customer via close_batch_billing (p_customer_id set) and, if it
+// actually billed them (they were fully priced and not already billed),
+// queues the itemized bill email. Used both after a single per-customer
+// price save and, in bulk, after a batch-wide default price save.
+async function autoBillAndNotify(
+  supabase: any, batchKey: string, kind: 'consolidation_shipping' | 'clearance', customerId: string | null,
+): Promise<{ billedCount: number }> {
+  const orderStatusTarget = kind === 'clearance' ? 'clearance_and_closed' : 'ordered_and_closed'
+  const timestampColumn = kind === 'clearance' ? 'clearance_closed_at' : 'ordered_closed_at'
+
+  const { data: result, error } = await supabase.rpc('close_batch_billing', {
+    p_batch_key: batchKey, p_kind: kind,
+    p_order_status_target: orderStatusTarget, p_batch_timestamp_column: timestampColumn,
+    p_customer_id: customerId,
+  })
+  if (error || result?.error) return { billedCount: 0 } // not eligible yet -- not an error condition here
+
+  const templateKey = kind === 'clearance' ? 'clearance_bill' : 'consolidation_shipping_bill'
+  for (const recip of (result?.recipients ?? [])) {
+    await queueTemplated(supabase, templateKey, recip.email, {
+      customer_name: recip.name ?? 'there',
+      amount_due: Number(recip.amount_ngn ?? 0).toLocaleString(),
+      pay_link: DASHBOARD_BILLS_URL,
+      items_breakdown: buildItemsBreakdownHtml(recip.line_items ?? []),
+    })
+  }
+  return { billedCount: result?.customers_billed ?? 0 }
 }
 
 serve(async (req: Request) => {
@@ -125,7 +188,13 @@ serve(async (req: Request) => {
       )
     // The database trigger refuses writes once this customer's bill has been sent.
     if (error) return json({ error: error.message }, /locked/i.test(error.message) ? 409 : 500)
-    return json({ success: true })
+
+    // Only this one customer could have just become fully priced -- check
+    // and bill them immediately if so. Never blocks the save response on
+    // failure; a failed auto-bill here just means they stay pending for
+    // the next price save or the bulk button to pick up.
+    const { billedCount } = await autoBillAndNotify(supabase, batchKey, kind, customer_id)
+    return json({ success: true, auto_billed: billedCount > 0 })
   }
 
   if (action === 'delete-customer-price') {
@@ -169,10 +238,23 @@ serve(async (req: Request) => {
   }
 
   // One row per product, quantities summed across every customer -- for
-  // placing the actual 1688 order. No prices, no customer names.
+  // placing the actual 1688 order. No prices, no customer names. Excludes
+  // already-billed customers and splits qty by shipping method.
   if (action === 'sourcing-totals') {
     if (!batchKey) return json({ error: 'Missing batch_key' }, 400)
     const { data, error } = await supabase.rpc('get_batch_sourcing_totals', { p_batch_key: batchKey })
+    if (error) return json({ error: error.message }, 500)
+    return json({ rows: data ?? [] })
+  }
+
+  // Variant x shipping-method breakdown for one product in Sourcing --
+  // unbilled customers only, same exclusion as sourcing-totals.
+  if (action === 'sourcing-product-breakdown') {
+    const { product_id } = body
+    if (!batchKey || !product_id) return json({ error: 'Missing batch_key or product_id' }, 400)
+    const { data, error } = await supabase.rpc('get_batch_product_shipping_breakdown', {
+      p_batch_key: batchKey, p_product_id: product_id,
+    })
     if (error) return json({ error: error.message }, 500)
     return json({ rows: data ?? [] })
   }
@@ -281,14 +363,15 @@ serve(async (req: Request) => {
     return json({ success: true })
   }
 
-  // Close & bill.
-  // The whole computation and every insert happen in one transaction inside
-  // close_batch_billing(). The previous JS version looped inserts with no
-  // transaction, so a failure partway through left some customers billed and
-  // the batch unlocked -- and rerunning would double-bill them.
+  // Close & bill -- now only ever bills customers who are fully priced
+  // (every line item), via get_batch_billing_eligible_customers inside
+  // close_batch_billing. Previously this would bill anyone with at least
+  // one priced line, silently dropping unpriced items from their total;
+  // that partial-billing behavior has been removed. Emails are itemized,
+  // grouped by shipping method.
   if (action === 'close-billing') {
     if (!batchKey) return json({ error: 'Missing batch_key' }, 400)
-    const customerId = body.customer_id ?? null // null = bulk: everyone priced & not yet billed
+    const customerId = body.customer_id ?? null // null = bulk: everyone fully priced & not yet billed
 
     const orderStatusTarget = kind === 'clearance' ? 'clearance_and_closed' : 'ordered_and_closed'
     const timestampColumn   = kind === 'clearance' ? 'clearance_closed_at' : 'ordered_closed_at'
@@ -306,28 +389,16 @@ serve(async (req: Request) => {
     }
     if (result?.error) return json({ error: result.error }, result.status ?? 400)
 
-    // Emails are queued after the transaction commits. Holding a database
-    // transaction open across network calls to the mail service would be a
-    // good way to lock the batch for everyone else.
-    const { data: tpl } = await supabase
-      .from('import_message_templates').select('subject, body_html')
-      .eq('key', kind === 'clearance' ? 'clearance_bill' : 'consolidation_shipping_bill')
-      .maybeSingle()
-
+    const templateKey = kind === 'clearance' ? 'clearance_bill' : 'consolidation_shipping_bill'
     let queued = 0
     for (const r of (result?.recipients ?? [])) {
-      if (!tpl) break
-      const tokens = {
+      const ok = await queueTemplated(supabase, templateKey, r.email, {
         customer_name: r.name ?? 'there',
         amount_due: Number(r.amount_ngn ?? 0).toLocaleString(),
         pay_link: DASHBOARD_BILLS_URL,
-      }
-      const { error: qErr } = await supabase.from('import_notification_queue').insert({
-        to_email: r.email,
-        subject: renderTemplate(tpl.subject, tokens),
-        html: emailShell(renderTemplate(tpl.body_html, tokens)),
+        items_breakdown: buildItemsBreakdownHtml(r.line_items ?? []),
       })
-      if (!qErr) queued++
+      if (ok) queued++
     }
 
     return json({

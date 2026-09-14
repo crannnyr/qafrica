@@ -418,6 +418,62 @@ async function resolveBatchId(supabase: any, batchKey: string): Promise<string |
 
 const DASHBOARD_BILLS_URL = 'https://qafrica.store/importations/dashboard'
 
+// Line items from close_batch_billing carry shipping_method when they're a
+// real order item (even if null, for legacy pre-per-item-shipping orders);
+// adjustment lines never carry that key at all -- that's how we tell the
+// two apart here. Mirrors the same helper in import-batch-view.
+function buildItemsBreakdownHtml(lineItems: any[]): string {
+  if (!Array.isArray(lineItems) || lineItems.length === 0) return ''
+  const priced = lineItems.filter((l: any) => l && typeof l.amount_ngn === 'number' && l.label)
+  const items = priced.filter((l: any) => 'shipping_method' in l)
+  const adjustments = priced.filter((l: any) => !('shipping_method' in l))
+  if (items.length === 0 && adjustments.length === 0) return ''
+
+  const flight = items.filter((i: any) => i.shipping_method === 'flight')
+  const sea = items.filter((i: any) => i.shipping_method === 'sea_freight')
+  const other = items.filter((i: any) => i.shipping_method !== 'flight' && i.shipping_method !== 'sea_freight')
+
+  const section = (title: string, rows: any[]) => rows.length === 0 ? '' : `
+    <p style="margin:12px 0 4px;font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.05em;">${title}</p>
+    <table style="width:100%;border-collapse:collapse;">
+      ${rows.map((r: any) => `<tr><td style="padding:4px 0;color:#374151;font-size:13px;">${r.label}</td><td style="padding:4px 0;color:#111827;font-size:13px;text-align:right;">₦${Number(r.amount_ngn).toLocaleString()}</td></tr>`).join('')}
+    </table>`
+
+  return `<div style="margin-bottom:16px;">${section('Arriving by air · 20–30 days', flight)}${section('Arriving by sea · 60–90 days', sea)}${section('Items', other)}${section('Adjustments', adjustments)}</div>`
+}
+
+// Bills every customer in the batch currently eligible for `kind` (fully
+// priced, not already billed, and — for clearance — already shipped) via
+// close_batch_billing(p_customer_id=null), and queues an itemized bill
+// email for each. Used after a batch-wide default price save, since that
+// single save can complete pricing for many customers at once.
+async function bulkAutoBillAndNotify(
+  supabase: any, batchKey: string, kind: 'consolidation_shipping' | 'clearance',
+): Promise<{ billedCount: number; queued: number }> {
+  const orderStatusTarget = kind === 'clearance' ? 'clearance_and_closed' : 'ordered_and_closed'
+  const timestampColumn = kind === 'clearance' ? 'clearance_closed_at' : 'ordered_closed_at'
+
+  const { data: result, error } = await supabase.rpc('close_batch_billing', {
+    p_batch_key: batchKey, p_kind: kind,
+    p_order_status_target: orderStatusTarget, p_batch_timestamp_column: timestampColumn,
+    p_customer_id: null,
+  })
+  if (error || result?.error) return { billedCount: 0, queued: 0 } // nobody eligible yet -- not an error condition here
+
+  const templateKey = kind === 'clearance' ? 'clearance_bill' : 'consolidation_shipping_bill'
+  let queued = 0
+  for (const recip of (result?.recipients ?? [])) {
+    const ok = await queueTemplatedEmail(supabase, templateKey, recip.email, {
+      customer_name: recip.name ?? 'there',
+      amount_due: Number(recip.amount_ngn ?? 0).toLocaleString(),
+      pay_link: DASHBOARD_BILLS_URL,
+      items_breakdown: buildItemsBreakdownHtml(recip.line_items ?? []),
+    })
+    if (ok) queued++
+  }
+  return { billedCount: result?.customers_billed ?? 0, queued }
+}
+
 async function fetchAllRows<T>(buildQuery: (from: number, to: number) => any, pageSize = 1000): Promise<T[]> {
   const out: T[] = []
   let from = 0
@@ -1771,15 +1827,26 @@ serve(async (req: Request) => {
       if (!batch_key || !product_id || !product_name || typeof unit_amount_ngn !== 'number') return json({ error: 'Missing fields' }, 400)
       const billKind = kind === 'clearance' ? 'clearance' : 'consolidation_shipping'
 
-      const { data: status } = await supabase.from('import_batch_bill_status').select('status').eq('batch_key', batch_key).eq('kind', billKind).maybeSingle()
-      if (status?.status === 'sent') {
-        return json({ error: 'This batch has already been billed and is locked. Pricing can no longer be changed — handle any corrections directly with the customer.' }, 409)
-      }
-
+      // NOTE: previously checked import_batch_bill_status for a 'sent' row
+      // with .maybeSingle() and no customer_id filter — that table is
+      // per-customer, so once 2+ customers were billed for this batch+kind
+      // that query threw (PostgREST errors on multiple rows for
+      // maybeSingle()), silently blocking admin from ever re-pricing a
+      // partially-billed batch. Removed: the real protection now lives in
+      // get_batch_billing_eligible_customers, which already excludes
+      // already-billed customers per-customer when auto-billing below —
+      // changing the batch default here only affects customers not yet
+      // billed, exactly as intended.
       const { error } = await supabase.from('import_batch_item_bills')
         .upsert({ batch_key, product_id, product_name, unit_amount_ngn, kind: billKind, updated_at: new Date().toISOString() }, { onConflict: 'batch_key,product_id,kind' })
       if (error) return json({ error: error.message }, 500)
-      return json({ success: true })
+
+      // Setting this batch-wide default price can complete pricing for any
+      // number of customers who ordered this product and had everything
+      // else already priced — bill everyone now eligible, immediately,
+      // with an itemized email each.
+      const { billedCount, queued } = await bulkAutoBillAndNotify(supabase, batch_key, billKind)
+      return json({ success: true, auto_billed_count: billedCount, emails_queued: queued })
     }
 
     if (req.method === 'POST' && action === 'admin-batch-toggle-audit') {

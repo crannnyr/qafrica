@@ -66,7 +66,8 @@ interface PriceOverride { id: string; batch_key: string; customer_id: string; pr
 interface CustomerStatusRow { customer_id: string; status: 'draft' | 'sent' | 'cancelled'; sent_at: string | null; admin_note: string | null; }
 // One row per product, quantities summed across every customer — for
 // placing the actual 1688 order. No prices, no customer names.
-interface SourcingRow { product_id: string; product_name: string; product_image: string | null; source_url: string | null; total_qty: number; customers_count: number; }
+interface SourcingRow { product_id: string; product_name: string; product_image: string | null; source_url: string | null; total_qty: number; customers_count: number; flight_qty: number | null; sea_qty: number | null; }
+interface SourcingVariantBreakdown { variant_options: Record<string, string> | null; shipping_method: 'flight' | 'sea_freight' | null; qty: number; customers_count: number; }
 
 function fmt(n: number) { return `₦${Math.round(n).toLocaleString()}`; }
 
@@ -171,7 +172,26 @@ export default function ClosedBatchDetail({
   const [statusByKind, setStatusByKind] = useState<Record<BillKind, CustomerStatusRow[]>>(emptyByKind());
   const [overridesByKind, setOverridesByKind] = useState<Record<BillKind, PriceOverride[]>>(emptyByKind());
   const [sourcingRows, setSourcingRows] = useState<SourcingRow[]>([]);
-  const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'unpaid' | 'awaiting'>('all');
+  const [expandedSourcingProduct, setExpandedSourcingProduct] = useState<string | null>(null);
+  const [sourcingBreakdown, setSourcingBreakdown] = useState<SourcingVariantBreakdown[]>([]);
+  const [sourcingBreakdownLoading, setSourcingBreakdownLoading] = useState(false);
+  const [sourcingShippingFilter, setSourcingShippingFilter] = useState<'all' | 'flight' | 'sea_freight'>('all');
+  const [sourcingSearch, setSourcingSearch] = useState('');
+  const [sourcingDiscountDrafts, setSourcingDiscountDrafts] = useState<Record<string, string>>({});
+
+  const openSourcingProduct = async (productId: string) => {
+    if (expandedSourcingProduct === productId) { setExpandedSourcingProduct(null); return; }
+    setExpandedSourcingProduct(productId);
+    setSourcingBreakdownLoading(true);
+    try {
+      const result = await batchViewCall('sourcing-product-breakdown', { manager_token: token, batch_key: batchKey, product_id: productId });
+      setSourcingBreakdown(result.rows ?? []);
+    } finally {
+      setSourcingBreakdownLoading(false);
+    }
+  };
+
+  const [billStatusTab, setBillStatusTab] = useState<'unbilled' | 'billed' | 'paid'>('unbilled');
   const [adjLabel, setAdjLabel] = useState('');
   const [adjAmount, setAdjAmount] = useState('');
   const [savingAdj, setSavingAdj] = useState(false);
@@ -606,17 +626,26 @@ export default function ClosedBatchDetail({
     [ledgerByKind, billKind]
   );
 
+  const visibleSourcingRows = useMemo(() => {
+    let list = sourcingRows;
+    if (sourcingShippingFilter === 'flight') list = list.filter(r => (r.flight_qty ?? 0) > 0);
+    if (sourcingShippingFilter === 'sea_freight') list = list.filter(r => (r.sea_qty ?? 0) > 0);
+    const q = sourcingSearch.trim().toLowerCase();
+    if (q) list = list.filter(r => r.product_name.toLowerCase().includes(q));
+    return list;
+  }, [sourcingRows, sourcingShippingFilter, sourcingSearch]);
+
   const [customerSearch, setCustomerSearch] = useState('');
 
   const visibleCustomers = useMemo(() => {
-    let list = paymentFilter === 'all'
-      ? customersForList
-      : customersForList.filter(c => {
-          const status = ledgerByCustomerActive.get(c.customerId)?.status;
-          if (paymentFilter === 'paid') return status === 'paid';
-          if (paymentFilter === 'awaiting') return status === 'awaiting_confirmation';
-          return status !== 'paid' && status !== 'awaiting_confirmation';
-        });
+    let list = customersForList.filter(c => {
+      const billed = isBilled(c.customerId, billKind);
+      if (billStatusTab === 'unbilled') return !billed;
+      if (!billed) return false; // billed / paid tabs only ever show billed customers
+      const status = ledgerByCustomerActive.get(c.customerId)?.status;
+      if (billStatusTab === 'paid') return status === 'paid';
+      return status !== 'paid'; // 'billed' = bill sent, payment not yet confirmed (unpaid or awaiting confirmation)
+    });
 
     const q = customerSearch.trim().toLowerCase();
     if (q) {
@@ -626,7 +655,19 @@ export default function ClosedBatchDetail({
       );
     }
     return list;
-  }, [customersForList, paymentFilter, ledgerByCustomerActive, customerSearch]);
+  }, [customersForList, billStatusTab, billKind, statusByKind, ledgerByCustomerActive, customerSearch]);
+
+  // Counts for the three tabs — recomputed from the same source data so they
+  // can never drift from what visibleCustomers actually shows.
+  const billStatusCounts = useMemo(() => {
+    let unbilled = 0, billed = 0, paid = 0;
+    for (const c of customersForList) {
+      if (!isBilled(c.customerId, billKind)) { unbilled++; continue; }
+      const status = ledgerByCustomerActive.get(c.customerId)?.status;
+      if (status === 'paid') paid++; else billed++;
+    }
+    return { unbilled, billed, paid };
+  }, [customersForList, billKind, statusByKind, ledgerByCustomerActive]);
 
   const ledgerTotals = useMemo(() => {
     let paid = 0, awaiting = 0, unpaid = 0, outstanding = 0;
@@ -842,42 +883,191 @@ export default function ClosedBatchDetail({
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">For placing the 1688 order</span>
                 </div>
                 <p className="text-[10px] text-gray-400 mb-3">
-                  One row per product, quantities totalled across every customer — no prices, no names. The per-customer billing view repeats a product once per buyer; this doesn't.
+                  One row per product, quantities totalled across every not-yet-billed customer. Tap a product to see the variant/shipping
+                  breakdown, price it, or override an individual customer's shipping method.
                 </p>
-                {sourcingRows.length === 0 ? (
+
+                <div className="relative mb-2">
+                  <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text" value={sourcingSearch} onChange={e => setSourcingSearch(e.target.value)}
+                    placeholder="Search products…"
+                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-xs outline-none focus:border-gray-400"
+                  />
+                </div>
+                <div className="flex gap-1.5 mb-3">
+                  {([
+                    ['all', 'All'], ['flight', 'By air'], ['sea_freight', 'By sea'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      onClick={() => setSourcingShippingFilter(value)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${sourcingShippingFilter === value ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-500'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {visibleSourcingRows.length === 0 ? (
                   <div className="py-8 text-center">
                     <Boxes className="w-5 h-5 text-gray-300 mx-auto mb-2" />
-                    <p className="text-xs text-gray-400">No items in this batch yet.</p>
+                    <p className="text-xs text-gray-400">{sourcingRows.length === 0 ? 'No items in this batch yet.' : 'No products match.'}</p>
                   </div>
                 ) : (
-                  <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-2 lg:space-y-0">
-                    {sourcingRows.map(r => (
-                      <div key={r.product_id} className="flex items-center gap-2.5 bg-gray-50 rounded-xl p-2.5">
-                        {r.product_image ? (
-                          <img src={r.product_image} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                            <Package className="w-4 h-4 text-gray-300" />
-                          </div>
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold text-gray-800 truncate">{r.product_name}</p>
-                          <p className="text-[10px] text-orange-500 font-bold">{r.total_qty} units · {r.customers_count} customer{r.customers_count !== 1 ? 's' : ''}</p>
+                  <div className="space-y-2">
+                    {visibleSourcingRows.map(r => {
+                      const expanded = expandedSourcingProduct === r.product_id;
+                      return (
+                        <div key={r.product_id} className="bg-gray-50 rounded-xl overflow-hidden">
+                          <button onClick={() => openSourcingProduct(r.product_id)} className="w-full flex items-center gap-2.5 p-2.5 text-left">
+                            {r.product_image ? (
+                              <img src={r.product_image} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
+                                <Package className="w-4 h-4 text-gray-300" />
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold text-gray-800 truncate">{r.product_name}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                <span className="text-[10px] text-orange-500 font-bold">{r.total_qty} units · {r.customers_count} customer{r.customers_count !== 1 ? 's' : ''}</span>
+                                {!!r.flight_qty && (
+                                  <span className="flex items-center gap-0.5 text-[9px] font-bold text-sky-600 bg-sky-50 rounded-full px-1.5 py-0.5"><Plane className="w-2.5 h-2.5" /> {r.flight_qty}</span>
+                                )}
+                                {!!r.sea_qty && (
+                                  <span className="flex items-center gap-0.5 text-[9px] font-bold text-indigo-600 bg-indigo-50 rounded-full px-1.5 py-0.5"><Ship className="w-2.5 h-2.5" /> {r.sea_qty}</span>
+                                )}
+                              </div>
+                            </div>
+                            {r.source_url && (
+                              <a
+                                href={r.source_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                                className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-100 hover:bg-orange-200 rounded-lg px-2 py-1.5 flex-shrink-0"
+                              >
+                                <ExternalLink className="w-3 h-3" /> 1688
+                              </a>
+                            )}
+                            <ChevronRight className={`w-4 h-4 text-gray-300 flex-shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                          </button>
+
+                          {expanded && (
+                            <div className="px-2.5 pb-3 space-y-3 border-t border-gray-100 pt-3">
+                              {/* Batch default price for this product, this kind — same field as the Pricing tab */}
+                              <div>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">
+                                  Price per unit ({billKind === 'clearance' ? 'clearance' : 'consolidation & shipping'})
+                                </p>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs text-gray-400">₦</span>
+                                  <input
+                                    type="number" inputMode="decimal"
+                                    defaultValue={priceFor(r.product_id, billKind)}
+                                    onBlur={e => e.target.value && savePrice(r.product_id, r.product_name, e.target.value, billKind)}
+                                    placeholder="Set price"
+                                    className="flex-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs"
+                                  />
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-1">
+                                  Applies to every customer not yet billed. If this is the last unpriced item for a customer, they're billed immediately.
+                                </p>
+                              </div>
+
+                              {/* Variant × shipping breakdown */}
+                              <div>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Variant &amp; shipping breakdown</p>
+                                {sourcingBreakdownLoading ? (
+                                  <div className="flex justify-center py-4"><Loader className="w-4 h-4 animate-spin text-gray-300" /></div>
+                                ) : sourcingBreakdown.length === 0 ? (
+                                  <p className="text-[11px] text-gray-400">No variant data.</p>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {sourcingBreakdown.map((b, i) => (
+                                      <div key={i} className="flex items-center justify-between bg-white rounded-lg px-2.5 py-1.5 border border-gray-100">
+                                        <span className="text-[11px] text-gray-700">{variantLabel(b.variant_options) || 'No variant'}</span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] text-gray-400">{b.customers_count} cust.</span>
+                                          <span className={`flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${b.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600' : b.shipping_method === 'sea_freight' ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-100 text-gray-400'}`}>
+                                            {b.shipping_method === 'flight' ? <Plane className="w-2.5 h-2.5" /> : b.shipping_method === 'sea_freight' ? <Ship className="w-2.5 h-2.5" /> : null}
+                                            {b.qty}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Per-order shipping override — same toggle used in the by-customer view,
+                                  scoped to just this product's lines so admin can act on individual orders
+                                  right from Sourcing instead of hunting through the by-customer list. Each
+                                  row also gets the same % discount action as the by-customer view — it
+                                  discounts that customer's whole order (every product), not just this one
+                                  line, so it stays consistent with what "discount" means there. */}
+                              <div>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Per order</p>
+                                <div className="space-y-1.5">
+                                  {customerLines.filter(l => l.product_id === r.product_id && !isBilled(l.customer_id, 'consolidation_shipping')).map(l => {
+                                    const rowKey = `${l.order_id}:${l.product_id}:${JSON.stringify(l.variant_options)}`;
+                                    const draft = sourcingDiscountDrafts[l.customer_id] ?? '';
+                                    return (
+                                      <div key={rowKey} className="bg-white rounded-lg px-2.5 py-1.5 border border-gray-100 space-y-1.5">
+                                        <div className="flex items-center gap-2">
+                                          <div className="min-w-0 flex-1">
+                                            <p className="text-[11px] font-semibold text-gray-700 truncate">{l.customer_name}</p>
+                                            <p className="text-[10px] text-gray-400 truncate">{variantLabel(l.variant_options) || 'No variant'} · qty {l.qty}</p>
+                                          </div>
+                                          {l.ship_only ? (
+                                            <span className="text-[9px] font-bold text-blue-700 bg-blue-50 rounded-full px-1.5 py-0.5 flex-shrink-0">Sea only</span>
+                                          ) : (
+                                            <div className="flex gap-1 flex-shrink-0">
+                                              <button
+                                                onClick={() => setItemShipping(l, 'flight')}
+                                                className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${l.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                                              >
+                                                <Plane className="w-2.5 h-2.5" /> Air
+                                              </button>
+                                              <button
+                                                onClick={() => setItemShipping(l, 'sea_freight')}
+                                                className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${l.shipping_method === 'sea_freight' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                                              >
+                                                <Ship className="w-2.5 h-2.5" /> Sea
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="text-[10px] text-gray-400">Discount</span>
+                                          <input
+                                            type="number" inputMode="numeric" min={1} max={100}
+                                            value={draft}
+                                            onChange={e => setSourcingDiscountDrafts(prev => ({ ...prev, [l.customer_id]: e.target.value }))}
+                                            placeholder="e.g. 20"
+                                            className="w-14 px-1.5 py-1 rounded-lg border border-gray-200 text-[10px] text-right"
+                                          />
+                                          <span className="text-[10px] text-gray-400">%</span>
+                                          <button
+                                            onClick={async () => {
+                                              await applyPercentDiscount(l.customer_id, customerLines.filter(cl => cl.customer_id === l.customer_id), Number(draft), billKind);
+                                              setSourcingDiscountDrafts(prev => ({ ...prev, [l.customer_id]: '' }));
+                                            }}
+                                            disabled={!draft || savingAdj}
+                                            className="px-2 py-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg"
+                                          >
+                                            {savingAdj ? '…' : 'Apply'}
+                                          </button>
+                                          <span className="text-[9px] text-gray-300">applies to their whole order</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        {r.source_url ? (
-                          <a
-                            href={r.source_url} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-[10px] font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg px-2 py-1.5 flex-shrink-0"
-                          >
-                            <ExternalLink className="w-3 h-3" /> 1688
-                          </a>
-                        ) : (
-                          <span className="flex items-center gap-1 text-[10px] font-bold text-gray-300 bg-gray-50 rounded-lg px-2 py-1.5 flex-shrink-0 cursor-not-allowed">
-                            <ExternalLink className="w-3 h-3" /> 1688
-                          </span>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -947,31 +1137,29 @@ export default function ClosedBatchDetail({
                     />
                   </div>
 
-                  {ledgerByKind[billKind].length > 0 && (
-                    <div className="mb-2">
-                      <div className="flex gap-1.5 overflow-x-auto pb-1">
-                        {([
-                          ['all', `All ${customersForList.length}`],
-                          ['unpaid', `Unpaid ${ledgerTotals.unpaid}`],
-                          ['awaiting', `Awaiting ${ledgerTotals.awaiting}`],
-                          ['paid', `Paid ${ledgerTotals.paid}`],
-                        ] as const).map(([value, label]) => (
-                          <button
-                            key={value}
-                            onClick={() => setPaymentFilter(value)}
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${paymentFilter === value ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                      {ledgerTotals.outstanding > 0 && (
-                        <p className="text-[11px] text-amber-600 font-semibold mt-1">
-                          {fmt(ledgerTotals.outstanding)} still outstanding
-                        </p>
-                      )}
+                  <div className="mb-2">
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      {([
+                        ['unbilled', '1. Unbilled', billStatusCounts.unbilled],
+                        ['billed', '2. Billed', billStatusCounts.billed],
+                        ['paid', '3. Paid', billStatusCounts.paid],
+                      ] as const).map(([value, label, count]) => (
+                        <button
+                          key={value}
+                          onClick={() => setBillStatusTab(value)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${billStatusTab === value ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
+                        >
+                          {label} · {count}
+                        </button>
+                      ))}
                     </div>
-                  )}
+                    {billStatusTab === 'billed' && ledgerTotals.outstanding > 0 && (
+                      <p className="text-[11px] text-amber-600 font-semibold mt-1">
+                        {fmt(ledgerTotals.outstanding)} still outstanding
+                      </p>
+                    )}
+                  </div>
+
 
                   <div className="space-y-1.5">
                     {visibleCustomers.length === 0 ? (
