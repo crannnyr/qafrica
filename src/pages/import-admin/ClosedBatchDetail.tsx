@@ -157,7 +157,6 @@ function stageRank(status: string | undefined | null): number {
 type Tab = 'pricing' | 'sourcing' | 'customers';
 
 const emptyByKind = <T,>(): Record<BillKind, T[]> => ({ consolidation_shipping: [], clearance: [] });
-const [sourcingDrilldownProduct, setSourcingDrilldownProduct] = useState<{ id: string; name: string } | null>(null);
   
 export default function ClosedBatchDetail({
   token, batchKey, orders, onClose, onOpenProduct, onReload,
@@ -191,7 +190,8 @@ export default function ClosedBatchDetail({
   const [isActing, setIsActing] = useState(false);
   const [individualActing, setIndividualActing] = useState<string | null>(null);
   const [selectedCustomerForDrilldown, setSelectedCustomerForDrilldown] = useState<string | null>(null);
-
+  const [sourcingDrilldownProduct, setSourcingDrilldownProduct] = useState<{ id: string; name: string } | null>(null);
+    
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
