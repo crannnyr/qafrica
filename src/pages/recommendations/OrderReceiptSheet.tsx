@@ -33,7 +33,7 @@ function fmt(n: number) {
 export default function OrderReceiptSheet({ order, onClose }: { order: ReceiptOrder; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[80] bg-black/50 flex items-end sm:items-center justify-center sm:p-4">
-      <div className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col">
+      <div className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 print:hidden">
           <h2 className="font-bold text-gray-900 text-sm">Receipt</h2>
           <div className="flex items-center gap-1">
@@ -63,29 +63,58 @@ export default function OrderReceiptSheet({ order, onClose }: { order: ReceiptOr
 
           <p className="text-xs text-gray-500 mb-4">Billed to: <span className="font-semibold text-gray-800">{order.customer_name}</span></p>
 
-          <div className="border-t border-b border-gray-100 py-3 mb-3 space-y-2.5">
-            {order.items.map((item, i) => (
-              <div key={i} className="flex justify-between text-xs">
-                <div className="flex-1 min-w-0 pr-2">
-                  <p className="text-gray-800">{item.name}</p>
-                  {item.variant_options && Object.keys(item.variant_options).length > 0 && (
-                    <p className="text-[10px] text-gray-400">{Object.entries(item.variant_options).map(([k, v]) => `${k}: ${v}`).join(', ')}</p>
-                  )}
-                  <p className="text-[10px] text-gray-400">{fmt(item.price_ngn)} × {item.quantity}</p>
-                </div>
-                <p className="font-semibold text-gray-800 flex-shrink-0">{fmt(item.price_ngn * item.quantity)}</p>
-              </div>
-            ))}
-          </div>
+          {/* Items table — real <table> so it prints/copies cleanly and
+              lines columns up, rather than the earlier flex-row version. */}
+          <table className="w-full text-xs border-collapse mb-4">
+            <thead>
+              <tr className="border-b-2 border-gray-200">
+                <th className="text-left font-bold text-gray-500 uppercase tracking-wide text-[10px] py-2 pr-2">Item</th>
+                <th className="text-center font-bold text-gray-500 uppercase tracking-wide text-[10px] py-2 px-2 w-10">Qty</th>
+                <th className="text-right font-bold text-gray-500 uppercase tracking-wide text-[10px] py-2 px-2">Unit price</th>
+                <th className="text-right font-bold text-gray-500 uppercase tracking-wide text-[10px] py-2 pl-2">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {order.items.map((item, i) => (
+                <tr key={i} className="border-b border-gray-100">
+                  <td className="py-2 pr-2 align-top">
+                    <p className="text-gray-800">{item.name}</p>
+                    {item.variant_options && Object.keys(item.variant_options).length > 0 && (
+                      <p className="text-[10px] text-gray-400">{Object.entries(item.variant_options).map(([k, v]) => `${k}: ${v}`).join(', ')}</p>
+                    )}
+                  </td>
+                  <td className="py-2 px-2 text-center align-top text-gray-600">{item.quantity}</td>
+                  <td className="py-2 px-2 text-right align-top text-gray-600">{fmt(item.price_ngn)}</td>
+                  <td className="py-2 pl-2 text-right align-top font-semibold text-gray-800">{fmt(item.price_ngn * item.quantity)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-          <div className="space-y-1.5 text-xs mb-4">
-            <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{fmt(order.subtotal_ngn)}</span></div>
-            {!!order.jumia_fee_ngn && <div className="flex justify-between text-gray-500"><span>Jumia fee</span><span>{fmt(order.jumia_fee_ngn)}</span></div>}
-            {!!order.prepaid_shipping_ngn && <div className="flex justify-between text-gray-500"><span>Shipping</span><span>{fmt(order.prepaid_shipping_ngn)}</span></div>}
-            <div className="flex justify-between font-bold text-gray-900 pt-1.5 border-t border-gray-100">
-              <span>Total</span><span className="text-orange-500">{fmt(order.total_ngn)}</span>
-            </div>
-          </div>
+          <table className="w-full text-xs mb-4">
+            <tbody>
+              <tr>
+                <td className="py-0.5 text-gray-500">Subtotal</td>
+                <td className="py-0.5 text-right text-gray-700">{fmt(order.subtotal_ngn)}</td>
+              </tr>
+              {!!order.jumia_fee_ngn && (
+                <tr>
+                  <td className="py-0.5 text-gray-500">Jumia fee</td>
+                  <td className="py-0.5 text-right text-gray-700">{fmt(order.jumia_fee_ngn)}</td>
+                </tr>
+              )}
+              {!!order.prepaid_shipping_ngn && (
+                <tr>
+                  <td className="py-0.5 text-gray-500">Shipping</td>
+                  <td className="py-0.5 text-right text-gray-700">{fmt(order.prepaid_shipping_ngn)}</td>
+                </tr>
+              )}
+              <tr className="border-t border-gray-200">
+                <td className="pt-1.5 font-bold text-gray-900">Total</td>
+                <td className="pt-1.5 text-right font-bold text-orange-500">{fmt(order.total_ngn)}</td>
+              </tr>
+            </tbody>
+          </table>
 
           <div className="text-center text-[11px] text-gray-400">
             Payment: <span className="font-semibold text-gray-600 capitalize">{order.payment_status}</span>
