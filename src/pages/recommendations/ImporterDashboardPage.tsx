@@ -9,7 +9,7 @@ import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
   Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
   ShoppingBag, Ship, ExternalLink, ChevronDown, Heart,
-  FileText, ShieldCheck, Navigation, MailWarning,
+  FileText, ShieldCheck, Navigation, MailWarning, Sparkles, Plus,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
@@ -30,6 +30,7 @@ import { loadPaystackScript, initializePayment, generateReference, toKobo } from
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const REMINDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/order-reminders`;
 const REFUNDS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/refunds`;
+const CUSTOM_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/custom-orders`;
 
 interface FailedOrder {
   id: string;
@@ -39,6 +40,23 @@ interface FailedOrder {
   delivery_type: 'to_qafrica' | 'to_me';
   order_created_at: string;
   failed_at: string;
+}
+
+interface CustomOrderItem {
+  id: string;
+  image_url: string;
+  description: string;
+  quantity: number;
+  estimated_budget_ngn: number | null;
+  product_url: string | null;
+  product_name: string | null;
+}
+interface CustomOrderRequest {
+  id: string;
+  status: 'pending' | 'in_progress' | 'ready';
+  created_at: string;
+  ready_at: string | null;
+  custom_order_items: CustomOrderItem[];
 }
 
 interface DashboardOrder {
@@ -103,7 +121,7 @@ function timeAgo(d: string) {
 }
 
 // Which pipeline tab a bank icon-grid tile is
-type PipelineTab = 'to_pay' | 'confirmed' | 'billed' | 'shipped' | 'to_receive' | 'refund';
+type PipelineTab = 'to_pay' | 'confirmed' | 'billed' | 'shipped' | 'to_receive' | 'refund' | 'custom';
 
 export default function ImporterDashboardPage() {
   useImportPwaManifest();
@@ -113,6 +131,7 @@ export default function ImporterDashboardPage() {
   const [orders, setOrders] = useState<DashboardOrder[]>([]);
   const [bills, setBills] = useState<ConsolidationBill[]>([]);
   const [failedOrders, setFailedOrders] = useState<FailedOrder[]>([]);
+  const [customOrderRequests, setCustomOrderRequests] = useState<CustomOrderRequest[]>([]);
   const [refunds, setRefunds] = useState<Refund[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<PipelineTab>('to_pay');
@@ -149,7 +168,7 @@ export default function ImporterDashboardPage() {
     if (!customer?.id) return;
     setIsLoading(true);
     try {
-      const [ordersRes, billsRes, failedRes, refundsRes] = await Promise.all([
+      const [ordersRes, billsRes, failedRes, refundsRes, customOrdersRes] = await Promise.all([
         fetch(`${EDGE_URL}?action=my-orders`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -170,15 +189,22 @@ export default function ImporterDashboardPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ customer_id: customer.id }),
         }),
+        fetch(`${CUSTOM_ORDERS_EDGE_URL}?action=my-requests`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: customer.id }),
+        }),
       ]);
       const ordersData = await ordersRes.json();
       const billsData = await billsRes.json();
       const failedData = await failedRes.json();
       const refundsData = await refundsRes.json();
+      const customOrdersData = await customOrdersRes.json();
       setOrders(ordersData.orders ?? []);
       setBills(billsData.bills ?? []);
       setFailedOrders(failedData.failed_orders ?? []);
       setRefunds(refundsData.refunds ?? []);
+      setCustomOrderRequests(customOrdersData.requests ?? []);
     } catch {
       // leave lists empty; the UI already handles empty state gracefully
     } finally {
@@ -291,6 +317,7 @@ export default function ImporterDashboardPage() {
     { key: 'shipped', label: 'Shipped', icon: Ship, count: shippedOrders.length },
     { key: 'to_receive', label: 'To Receive', icon: PackageCheck, count: toReceiveOrders.length },
     { key: 'refund', label: 'Refund', icon: RotateCcw, count: pendingRefundsCount },
+    { key: 'custom', label: 'Custom', icon: Sparkles, count: customOrderRequests.filter(r => r.status === 'ready').length },
   ];
 
   const avatarBg = fallbackAvatarColor(customer?.id ?? 'x');
@@ -365,7 +392,7 @@ export default function ImporterDashboardPage() {
 
         {/* ── Order pipeline icon grid ─────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-4">
-          <div className="grid grid-cols-6 gap-1">
+          <div className="grid grid-cols-4 gap-y-3 gap-x-1">
             {TABS.map(t => {
               const Icon = t.icon;
               const isActive = activeTab === t.key;
@@ -690,6 +717,74 @@ export default function ImporterDashboardPage() {
                         Paid {r.paid_at ? timeAgo(r.paid_at) : ''} · You're welcome to place a new order anytime.
                       </p>
                     )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {activeTab === 'custom' && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-bold text-gray-800 text-sm">Custom Orders</h2>
+              <Link
+                to="/custom-order"
+                className="flex items-center gap-1 text-[11px] font-bold text-orange-500 hover:text-orange-600"
+              >
+                <Plus className="w-3 h-3" /> New request
+              </Link>
+            </div>
+            {isLoading ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-24" />
+            ) : customOrderRequests.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
+                <Sparkles className="w-6 h-6 text-gray-200 mx-auto mb-2" />
+                <p className="text-xs text-gray-400 mb-3">You haven't sent a custom order request yet.</p>
+                <Link
+                  to="/custom-order"
+                  className="inline-block px-4 py-2.5 bg-gray-900 hover:bg-gray-700 text-white text-xs font-bold rounded-xl transition-colors"
+                >
+                  Request a custom order
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {customOrderRequests.map(r => (
+                  <div key={r.id} className="bg-white rounded-2xl border border-gray-100 p-4">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <span className="text-[11px] text-gray-400">{new Date(r.created_at).toLocaleDateString()} · {r.custom_order_items.length} item{r.custom_order_items.length !== 1 ? 's' : ''}</span>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        r.status === 'ready' ? 'bg-emerald-50 text-emerald-700' :
+                        r.status === 'in_progress' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {r.status === 'ready' ? 'Ready to order' : r.status === 'in_progress' ? 'Sourcing in progress' : 'Received'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {r.custom_order_items.map(item => (
+                        <div key={item.id} className="flex items-center gap-2.5">
+                          <img src={item.image_url} alt="" className="w-11 h-11 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs text-gray-700 truncate">{item.description}</p>
+                            <p className="text-[10px] text-gray-400">
+                              Qty {item.quantity}{item.estimated_budget_ngn ? ` · up to ${fmt(item.estimated_budget_ngn)} each` : ''}
+                            </p>
+                          </div>
+                          {item.product_url ? (
+                            <a
+                              href={item.product_url} target="_blank" rel="noopener noreferrer"
+                              className="flex-shrink-0 text-[10px] font-bold text-white bg-orange-500 hover:bg-orange-600 rounded-lg px-2.5 py-1.5"
+                            >
+                              Order now
+                            </a>
+                          ) : (
+                            <span className="flex-shrink-0 text-[10px] font-semibold text-gray-300">Sourcing…</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>

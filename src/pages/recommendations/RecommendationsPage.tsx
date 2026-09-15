@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingBag, Plus, Package,
-  ChevronRight, Search, X, User, LogOut, LayoutDashboard, Heart,
+  ChevronRight, Search, X, User, LogOut, LayoutDashboard, Heart, Sparkles,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { formatSoldCount } from '@/lib/utils';
@@ -551,6 +551,22 @@ export default function RecommendationsPage() {
 
       <div className="max-w-7xl mx-auto px-4 pt-5 pb-28 lg:pb-16">
         <AnnouncementBanner />
+        {/* Custom order — for items not in the catalog. Sits right before
+            search since it's the natural next step if a search comes up empty. */}
+        <Link
+          to="/custom-order"
+          className="mb-3 flex items-center gap-2.5 bg-gradient-to-r from-orange-50 to-orange-100/60 border border-orange-100 rounded-xl px-3.5 py-2.5 hover:border-orange-200 transition-colors"
+        >
+          <div className="w-8 h-8 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-gray-900">Can't find it? Request a custom order</p>
+            <p className="text-[10px] text-gray-500">Send us a photo of what you want — we'll source it for you</p>
+          </div>
+          <ChevronRight className="w-4 h-4 text-orange-400 flex-shrink-0" />
+        </Link>
+
         {/* Search */}
         <div className="mb-4 lg:flex lg:justify-end">
           <div className="lg:w-72">

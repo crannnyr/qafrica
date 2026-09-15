@@ -39,6 +39,7 @@ const ImportAdminLogin = lazy(() => import('@/pages/import-admin/ImportAdminLogi
 const ImportAdminPage = lazy(() => import('@/pages/import-admin/ImportAdminPage'));
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
+const CustomOrderRequestPage = lazy(() => import('@/pages/recommendations/CustomOrderRequestPage'));
 const RecommendationsProductDetailPage = lazy(() => import('@/pages/recommendations/ProductDetailPage'));
 const LogisticsBlogPage = lazy(() => import('@/pages/recommendations/LogisticsBlogPage'));
 
@@ -325,6 +326,7 @@ function App() {
           <Route path="/importations/admin" element={<ImportAdminPage />} />
           <Route path="/importations/dashboard" element={<ImporterDashboardPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
+          <Route path="/custom-order" element={<CustomOrderRequestPage />} />
           <Route path="/recommendations/logistics" element={<LogisticsBlogPage />} />
           <Route path="/recommendations/:id" element={<RecommendationsProductDetailPage />} />
 

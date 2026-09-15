@@ -6,7 +6,7 @@ import {
   ShoppingBag, LogOut, Package, Search, RefreshCw,
   Plus, Trash2, Edit2, Check, ChevronDown, ChevronUp,
   Upload, Loader, TrendingUp, AlertCircle, ExternalLink, X,
-  Info, CheckCircle2,
+  Info, CheckCircle2, Send,
 } from 'lucide-react';
 import { compressImage } from '@/lib/imageCompression';
 import { toast } from 'sonner';
@@ -25,6 +25,7 @@ import BroadcastEmailManager from './BroadcastEmailManager';
 import RefundsManager from './RefundsManager';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const CUSTOM_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/custom-orders`;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ImportOrder {
@@ -2151,10 +2152,185 @@ function SettingsManager({ token }: { token: string }) {
   );
 }
 
+// ── Custom Orders ────────────────────────────────────────────────────────
+// Customer-submitted "find this for me" requests: each has one or more
+// items (image, description, qty, budget). Admin attaches a store product
+// link per item as they're sourced, then marks the whole request ready,
+// which emails the customer and surfaces "Order now" buttons in their
+// dashboard's Custom tab.
+interface CustomOrderItemRow {
+  id: string;
+  image_url: string;
+  description: string;
+  quantity: number;
+  estimated_budget_ngn: number | null;
+  product_url: string | null;
+  product_name: string | null;
+}
+interface CustomOrderRequestRow {
+  id: string;
+  status: 'pending' | 'in_progress' | 'ready';
+  created_at: string;
+  ready_at: string | null;
+  custom_order_items: CustomOrderItemRow[];
+  customer_name: string | null;
+  customer_email: string | null;
+  customer_phone: string | null;
+}
+
+function CustomOrdersManager({ token }: { token: string }) {
+  const [requests, setRequests] = useState<CustomOrderRequestRow[]>([]);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'ready'>('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [linkDrafts, setLinkDrafts] = useState<Record<string, string>>({});
+  const [savingItemId, setSavingItemId] = useState<string | null>(null);
+  const [markingReadyId, setMarkingReadyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetch(`${CUSTOM_ORDERS_EDGE_URL}?action=admin-list-requests`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, status: statusFilter === 'all' ? undefined : statusFilter }),
+      });
+      const data = await res.json();
+      setRequests(data.requests ?? []);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [token, statusFilter]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const saveLink = async (item: CustomOrderItemRow) => {
+    const url = (linkDrafts[item.id] ?? item.product_url ?? '').trim();
+    if (!url) { toast.error('Paste a product link first'); return; }
+    setSavingItemId(item.id);
+    try {
+      const res = await fetch(`${CUSTOM_ORDERS_EDGE_URL}?action=admin-set-item-link`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, item_id: item.id, product_url: url }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Could not save link'); return; }
+      toast.success('Link saved');
+      await load();
+    } finally {
+      setSavingItemId(null);
+    }
+  };
+
+  const markReady = async (request: CustomOrderRequestRow) => {
+    setMarkingReadyId(request.id);
+    try {
+      const res = await fetch(`${CUSTOM_ORDERS_EDGE_URL}?action=admin-mark-ready`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, request_id: request.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Could not mark ready'); return; }
+      toast.success('Marked ready — customer notified');
+      await load();
+    } finally {
+      setMarkingReadyId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
+        {(['all', 'pending', 'in_progress', 'ready'] as const).map(s => (
+          <button
+            key={s}
+            onClick={() => setStatusFilter(s)}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors capitalize ${statusFilter === s ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
+          >
+            {s.replace('_', ' ')}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-10"><Loader className="w-5 h-5 animate-spin text-gray-300" /></div>
+      ) : requests.length === 0 ? (
+        <div className="text-center py-10">
+          <p className="text-sm text-gray-400">No custom order requests here.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {requests.map(r => {
+            const unlinkedCount = r.custom_order_items.filter(i => !i.product_url).length;
+            return (
+              <div key={r.id} className="bg-white rounded-2xl border border-gray-100 p-4">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">{r.customer_name ?? 'Unknown customer'}</p>
+                    <p className="text-[11px] text-gray-400 truncate">
+                      {r.customer_email ?? 'no email'}{r.customer_phone ? ` · ${r.customer_phone}` : ''}
+                    </p>
+                    <p className="text-[10px] text-gray-300 mt-0.5">{new Date(r.created_at).toLocaleString()}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                    r.status === 'ready' ? 'bg-emerald-50 text-emerald-700' :
+                    r.status === 'in_progress' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {r.status.replace('_', ' ')}
+                  </span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {r.custom_order_items.map(item => (
+                    <div key={item.id} className="flex gap-2.5 bg-gray-50 rounded-xl p-2.5">
+                      <img src={item.image_url} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-gray-700">{item.description}</p>
+                        <p className="text-[10px] text-gray-400 mb-1.5">
+                          Qty {item.quantity}{item.estimated_budget_ngn ? ` · up to ₦${Number(item.estimated_budget_ngn).toLocaleString()} each` : ''}
+                        </p>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            defaultValue={item.product_url ?? ''}
+                            onChange={e => setLinkDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            placeholder="Paste QAFRICA product link…"
+                            className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px]"
+                          />
+                          <button
+                            onClick={() => saveLink(item)}
+                            disabled={savingItemId === item.id}
+                            className="flex-shrink-0 px-2.5 py-1.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg"
+                          >
+                            {savingItemId === item.id ? '…' : item.product_url ? 'Update' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {r.status !== 'ready' && (
+                  <button
+                    onClick={() => markReady(r)}
+                    disabled={unlinkedCount > 0 || markingReadyId === r.id}
+                    className="w-full mt-3 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-30 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    {markingReadyId === r.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                    {unlinkedCount > 0 ? `${unlinkedCount} item${unlinkedCount > 1 ? 's' : ''} still need a link` : 'Mark ready & notify customer'}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'timed-out' | 'settings'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'timed-out' | 'settings' | 'custom-orders'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -2189,7 +2365,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'timed-out', 'settings'] as const).map(t => (
+          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'timed-out', 'settings', 'custom-orders'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -2199,7 +2375,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t}
             </button>
           ))}
         </div>
@@ -2231,6 +2407,8 @@ export default function ImportAdminPage() {
           <TimedOutOrdersManager token={token} />
         ) : tab === 'settings' ? (
           <SettingsManager token={token} />
+        ) : tab === 'custom-orders' ? (
+          <CustomOrdersManager token={token} />
         ) : (
           <ImportAdminCustomers token={token} />
         )}
