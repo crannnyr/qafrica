@@ -866,7 +866,17 @@ export default function ClosedBatchDetail({
                               </div>
                             )}
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs font-semibold text-gray-800 truncate">{r.product_name}</p>
+                              <p className="text-xs font-semibold text-gray-800 truncate">
+                                <a
+                                  href={`/recommendations/${r.product_id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  className="text-xs font-semibold text-gray-800 truncate hover:text-orange-600 hover:underline block"
+                                >
+                                  {r.product_name}
+                                </a>
+                              </p>
                               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                 <span className="text-[10px] text-orange-500 font-bold">
                                   {r.total_qty} units ·{' '}
