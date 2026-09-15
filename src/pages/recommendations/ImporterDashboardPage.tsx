@@ -25,6 +25,7 @@ import TrackOrderModal from './TrackOrderModal';
 import RetryPaymentSheet from './RetryPaymentSheet';
 import AvatarSheet from './AvatarSheet';
 import ConfirmEmailSheet from './ConfirmEmailSheet';
+import OrderReceiptSheet from './OrderReceiptSheet';
 import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
@@ -66,6 +67,9 @@ interface DashboardOrder {
   payment_status: 'unpaid' | 'awaiting_confirmation' | 'paid' | 'failed';
   payment_method: 'paystack' | 'manual' | null;
   total_ngn: number;
+  subtotal_ngn: number;              
+  jumia_fee_ngn?: number;           
+  prepaid_shipping_ngn?: number | null; 
   delivery_type: 'to_qafrica' | 'to_me';
   items: Array<{ id: string; name: string; price_ngn: number; quantity: number; image_url: string; variant_options?: Record<string, string> }>;
   created_at: string;
@@ -149,6 +153,7 @@ export default function ImporterDashboardPage() {
   const [bankFormData, setBankFormData] = useState({ bank_account_number: '', bank_account_name: '', bank_name: '' });
   const [isSubmittingBank, setIsSubmittingBank] = useState(false);
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
+  const [receiptOrder, setReceiptOrder] = useState<DashboardOrder | null>(null);
 
   const toggleExpanded = (id: string) => {
     setExpandedOrderIds(prev => {
@@ -529,7 +534,15 @@ export default function ImporterDashboardPage() {
                             : "Payment received — we're getting this ready to source."}
                         </p>
                       </div>
-                      <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className="font-semibold text-gray-800 text-sm">{fmt(order.total_ngn)}</span>
+                        <button
+                          onClick={() => setReceiptOrder(order)}
+                          className="flex items-center gap-1 text-[10px] font-bold text-orange-500 hover:text-orange-600"
+                        >
+                          <Receipt className="w-3 h-3" /> Receipt
+                        </button>
+                      </div>
                     </div>
                     <OrderItemsDropdown
                       order={order}
@@ -597,7 +610,15 @@ export default function ImporterDashboardPage() {
                             </p>
                           )}
                         </div>
-                        <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <span className="font-semibold text-gray-800 text-sm">{fmt(order.total_ngn)}</span>
+                          <button
+                            onClick={() => setReceiptOrder(order)}
+                            className="flex items-center gap-1 text-[10px] font-bold text-orange-500 hover:text-orange-600"
+                          >
+                            <Receipt className="w-3 h-3" /> Receipt
+                          </button>
+                        </div>
                       </div>
                       {held && (
                         <div className="px-5 pb-4">
@@ -639,7 +660,15 @@ export default function ImporterDashboardPage() {
                         <span className="font-bold text-gray-900 font-mono text-xs tracking-wider block mb-0.5">{order.code}</span>
                         <p className="text-[11px] text-emerald-600">Cleared and ready — reach out to arrange pickup or delivery.</p>
                       </div>
-                      <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                      <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                        <span className="font-semibold text-gray-800 text-sm">{fmt(order.total_ngn)}</span>
+                        <button
+                          onClick={() => setReceiptOrder(order)}
+                          className="flex items-center gap-1 text-[10px] font-bold text-orange-500 hover:text-orange-600"
+                        >
+                          <Receipt className="w-3 h-3" /> Receipt
+                        </button>
+                      </div>
                     </div>
                     <OrderItemsDropdown
                       order={order}
@@ -833,6 +862,13 @@ export default function ImporterDashboardPage() {
           customer={{ id: customer.id, email: customer.email, full_name: customer.full_name }}
           onClose={() => setRetryOrder(null)}
           onPaid={() => { setRetryOrder(null); load(); }}
+        />
+      )}
+
+      {receiptOrder && customer && (
+        <OrderReceiptSheet
+          order={{ ...receiptOrder, customer_name: customer.full_name }}
+          onClose={() => setReceiptOrder(null)}
         />
       )}
 
