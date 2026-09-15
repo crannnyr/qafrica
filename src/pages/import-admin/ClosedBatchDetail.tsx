@@ -1,18 +1,4 @@
 // src/pages/import-admin/ClosedBatchDetail.tsx
-// Full-page view for one closed batch (not a modal — occupies the whole
-// admin content area with its own back button).
-//
-// Every stage of the pipeline (bill, ship, clearance-bill, receive) now
-// tracks status PER CUSTOMER rather than per batch. Each stage has an
-// individual action (act on one customer, from their drill-down) and a
-// bulk action (act on every customer still eligible for that stage, from
-// the panel at the top). Both call the exact same backend function; bulk
-// just omits customer_id, so it naturally skips anyone already moved
-// individually — nothing ever fires twice.
-//
-// Pricing is "batch default with per-customer override": set a price once
-// for a product and it applies to everyone who bought it, unless you
-// override it for one customer specifically, from inside their card.
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Loader, Users, Plane, Ship, ShieldCheck, Send, AlertTriangle,
@@ -24,9 +10,6 @@ import { toast } from 'sonner';
 import { CustomerDetail } from './ImportAdminCustomers';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
-// Closed-batch admin data and billing/lifecycle actions live in their own
-// small function so this screen does not force a redeploy of the whole
-// order/payment surface.
 const BATCH_VIEW_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-batch-view`;
 
 interface OrderItem { id: string; name: string; image_url: string; quantity: number; price_ngn?: number; variant_options?: Record<string, string>; }
@@ -42,9 +25,6 @@ interface BreakdownRow {
   order_id: string; order_code: string; order_created_at: string;
   variant_options: Record<string, string> | null;
 }
-// One (customer, product) line from get_batch_customer_breakdown. Carries the
-// price paid at checkout, the admin-only 1688 link, and both "others ordered
-// this" counts, so the drill-down needs no further stitching.
 interface CustomerLine {
   customer_id: string; customer_name: string;
   first_order_at: string; order_count: number;
@@ -60,27 +40,18 @@ type BillKind = 'consolidation_shipping' | 'clearance';
 interface Adjustment { id: string; batch_key: string; customer_id: string; kind: BillKind; label: string; amount_ngn: number; }
 interface LedgerRow { customer_id: string; bill_id: string; amount_ngn: number; status: string; reminder_count: number; customer_marked_paid_at: string | null; manual_sender_name: string | null; }
 interface ItemBill { id: string; product_id: string; product_name: string; unit_amount_ngn: number; kind: BillKind; audit_status: boolean; }
-// Per-customer override on top of the batch default price.
 interface PriceOverride { id: string; batch_key: string; customer_id: string; product_id: string; kind: BillKind; unit_amount_ngn: number; }
-// Per-customer bill lock state for one kind. status 'sent' = locked & billed.
 interface CustomerStatusRow { customer_id: string; status: 'draft' | 'sent' | 'cancelled'; sent_at: string | null; admin_note: string | null; }
-// One row per product, quantities summed across every customer — for
-// placing the actual 1688 order. No prices, no customer names.
 interface SourcingRow { product_id: string; product_name: string; product_image: string | null; source_url: string | null; total_qty: number; customers_count: number; flight_qty: number | null; sea_qty: number | null; }
 interface SourcingVariantBreakdown { variant_options: Record<string, string> | null; shipping_method: 'flight' | 'sea_freight' | null; qty: number; customers_count: number; }
 
 function fmt(n: number) { return `₦${Math.round(n).toLocaleString()}`; }
 
-// e.g. {Color: "Pink", Size: "L"} -> "Pink, L". Empty/null means the item
-// had no variant selection (single-variant or no-variant product).
 function variantLabel(v: Record<string, string> | null | undefined): string {
   if (!v || Object.keys(v).length === 0) return '';
   return Object.values(v).join(', ');
 }
 
-// Inline "change this customer's variant" affordance — collapsed to a small
-// "Edit variant" link by default, expands into one <select> per variant
-// group. Manages its own draft/open state since each line needs its own.
 function VariantEditRow({ line, groups, onSave }: {
   line: CustomerLine;
   groups: VariantGroup[];
@@ -118,6 +89,7 @@ function VariantEditRow({ line, groups, onSave }: {
           </select>
         </div>
       ))}
+
       <div className="flex gap-1.5 pt-0.5">
         <button
           disabled={!canSave || saving}
@@ -158,7 +130,7 @@ function stageRank(status: string | undefined | null): number {
 type Tab = 'pricing' | 'sourcing' | 'customers';
 
 const emptyByKind = <T,>(): Record<BillKind, T[]> => ({ consolidation_shipping: [], clearance: [] });
-  
+
 export default function ClosedBatchDetail({
   token, batchKey, orders, onClose, onOpenProduct, onReload,
 }: {
@@ -178,6 +150,10 @@ export default function ClosedBatchDetail({
   const [sourcingShippingFilter, setSourcingShippingFilter] = useState<'all' | 'flight' | 'sea_freight'>('all');
   const [sourcingSearch, setSourcingSearch] = useState('');
   const [sourcingDiscountDrafts, setSourcingDiscountDrafts] = useState<Record<string, string>>({});
+  // Restored: clicking a product's "N customers" count in Sourcing opens a
+  // small dropdown listing who ordered it, with a button to open their
+  // full customer profile — independent of the row's own expand/collapse.
+  const [sourcingDrilldownProduct, setSourcingDrilldownProduct] = useState<{ id: string; name: string } | null>(null);
 
   const openSourcingProduct = async (productId: string) => {
     if (expandedSourcingProduct === productId) { setExpandedSourcingProduct(null); return; }
@@ -211,7 +187,7 @@ export default function ClosedBatchDetail({
   const [individualActing, setIndividualActing] = useState<string | null>(null);
   const [selectedCustomerForDrilldown, setSelectedCustomerForDrilldown] = useState<string | null>(null);
   const listScrollPos = useRef(0);
-    
+
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -222,7 +198,6 @@ export default function ClosedBatchDetail({
         batchViewCall('customer-breakdown', { manager_token: token, batch_key: batchKey, kind: 'clearance' }),
         batchViewCall('sourcing-totals', { manager_token: token, batch_key: batchKey }),
       ]);
-      // `rows` (the line items) don't depend on kind — either response has them.
       setCustomerLines(consolRes.rows ?? []);
       setAdjustmentsByKind({ consolidation_shipping: consolRes.adjustments ?? [], clearance: clearRes.adjustments ?? [] });
       setLedgerByKind({ consolidation_shipping: consolRes.ledger ?? [], clearance: clearRes.ledger ?? [] });
@@ -239,8 +214,6 @@ export default function ClosedBatchDetail({
 
   useEffect(() => { load(); }, [load]);
 
-  // Variant group definitions per product, for the variant-edit UI below.
-  // Fetched once (not per-batch) since it's the full catalog, not batch-scoped.
   const [productVariants, setProductVariants] = useState<Record<string, VariantGroup[]>>({});
   useEffect(() => {
     call('admin-products', { manager_token: token }).then(res => {
@@ -263,7 +236,6 @@ export default function ClosedBatchDetail({
     return breakdown.filter(r => orderShippingMethod.get(r.order_id) === shippingFilter);
   }, [breakdown, shippingFilter, orderShippingMethod]);
 
-  // Products for the Pricing tab, sorted oldest-order-first.
   const products = useMemo(() => {
     const map = new Map<string, { id: string; name: string; image: string | null; oldestAt: string; totalQty: number }>();
     for (const row of filteredBreakdown) {
@@ -278,8 +250,6 @@ export default function ClosedBatchDetail({
     return Array.from(map.values()).sort((a, b) => new Date(a.oldestAt).getTime() - new Date(b.oldestAt).getTime());
   }, [filteredBreakdown]);
 
-  // Actual sales revenue per product — what customers paid at checkout, not
-  // the consolidation/clearance fee. Independent of billing stage.
   const revenueByProduct = useMemo(() => {
     const map = new Map<string, number>();
     let source = orders;
@@ -298,10 +268,6 @@ export default function ClosedBatchDetail({
     [revenueByProduct]
   );
 
-  // ── Batch default price (per product, applies to everyone unless
-  //    overridden for a specific customer). Deliberately never locked —
-  //    a sent bill is already a frozen snapshot, so editing the default
-  //    afterward only affects not-yet-billed customers going forward.
   const priceFor = (productId: string, kind: BillKind) => {
     const draft = priceDrafts[`${productId}:${kind}`];
     if (draft !== undefined) return draft;
@@ -334,7 +300,6 @@ export default function ClosedBatchDetail({
     return total;
   }, [breakdown, itemBills, priceDrafts, billKind]);
 
-  // ── Per-customer override on top of the batch default ───────────────────
   const overrideMapByKind = useMemo(() => {
     const out: Record<BillKind, Map<string, number>> = { consolidation_shipping: new Map(), clearance: new Map() };
     (['consolidation_shipping', 'clearance'] as BillKind[]).forEach(k => {
@@ -380,10 +345,6 @@ export default function ClosedBatchDetail({
     await load();
   };
 
-  // Per-item variant override. Unlike shipping (patched locally), a variant
-  // change can also change price_ngn/subtotal/total, so the simplest correct
-  // thing is to just reload the batch data rather than try to reconcile
-  // totals client-side.
   const setItemVariant = async (line: CustomerLine, newVariantOptions: Record<string, string>) => {
     const result = await call('admin-set-item-variant', {
       manager_token: token, order_id: line.order_id, product_id: line.product_id,
@@ -394,9 +355,6 @@ export default function ClosedBatchDetail({
     await load();
   };
 
-
-  // bill is locked (enforced server-side too; the toggle is simply hidden
-  // client-side once billed, see CustomerCard). Notifies the customer by email.
   const setItemShipping = async (line: CustomerLine, method: 'flight' | 'sea_freight') => {
     const result = await call('admin-set-item-shipping-method', {
       manager_token: token, order_id: line.order_id, product_id: line.product_id,
@@ -410,10 +368,6 @@ export default function ClosedBatchDetail({
     ));
   };
 
-  // ── Per-customer stage, from the ground truth ────────────────────────────
-  // Bill state comes from statusByKind, not order.status: cancelling a bill
-  // resets the lock but doesn't roll order.status back, so order.status
-  // alone can't be trusted for "is this customer billed".
   const customerOrders = useCallback((customerId: string) => orders.filter(o => o.user_id === customerId), [orders]);
   const allOrdersAtLeast = useCallback((customerId: string, target: OrderStage) => {
     const list = customerOrders(customerId);
@@ -441,10 +395,6 @@ export default function ClosedBatchDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerPriceDrafts, overrideMapByKind, defaultPriceMapByKind, adjustmentsByCustomer]);
 
-  // Computes X% off the customer's line-item subtotal (before any existing
-  // manual adjustments), then records it as a normal negative adjustment —
-  // reuses the same backend action and ledger as a manual discount, so it
-  // shows up in the adjustments list and can be removed like any other line.
   const applyPercentDiscount = async (customerId: string, lines: CustomerLine[], percent: number, kind: BillKind) => {
     if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
       toast.error('Enter a percentage between 1 and 100.');
@@ -471,7 +421,7 @@ export default function ClosedBatchDetail({
       setSavingAdj(false);
     }
   };
-      
+
   const addAdjustment = async (customerId: string) => {
     const amount = Number(adjAmount);
     if (!adjLabel.trim() || !Number.isFinite(amount) || amount === 0) {
@@ -507,7 +457,6 @@ export default function ClosedBatchDetail({
     await load();
   };
 
-  // ── Bulk actions: every eligible customer at once ────────────────────────
   const runBulk = async (type: 'bill' | 'ship' | 'clearance_bill' | 'receive') => {
     setIsActing(true);
     try {
@@ -536,7 +485,6 @@ export default function ClosedBatchDetail({
     }
   };
 
-  // ── Individual actions: one customer, from their card ────────────────────
   const runIndividual = async (type: 'bill' | 'clearance_bill' | 'ship' | 'receive' | 'cancel', customerId: string, kind?: BillKind) => {
     const key = `${type}:${customerId}`;
     setIndividualActing(key);
@@ -566,9 +514,6 @@ export default function ClosedBatchDetail({
     }
   };
 
-  // By-customer list, built from the enriched line data. Sorted oldest
-  // buyer first: whoever ordered earliest in this batch has been waiting
-  // longest, so they head the list.
   const customersForList = useMemo(() => {
     const filtered = shippingFilter
       ? customerLines.filter(l => l.shipping_method === shippingFilter)
@@ -599,8 +544,6 @@ export default function ClosedBatchDetail({
   const hasPricedLine = (customerId: string, kind: BillKind, lines: CustomerLine[]) =>
     lines.some(l => customerPriceFor(customerId, l.product_id, kind) !== '');
 
-  // Live counts for the bulk-action panel. Best-effort on the client —
-  // the server re-validates on the actual call either way.
   const counts = useMemo(() => {
     let billedC = 0, eligibleC = 0, shippedN = 0, eligibleShip = 0, billedClr = 0, eligibleClr = 0, receivedN = 0, eligibleRecv = 0;
     for (const c of customersForList) {
@@ -621,7 +564,6 @@ export default function ClosedBatchDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customersForList, statusByKind, ledgerByKind, customerPriceDrafts, overrideMapByKind, defaultPriceMapByKind]);
 
-  // Who has paid and who has not, for the active kind's ledger.
   const ledgerByCustomerActive = useMemo(
     () => new Map(ledgerByKind[billKind].map(l => [l.customer_id, l])),
     [ledgerByKind, billKind]
@@ -642,10 +584,10 @@ export default function ClosedBatchDetail({
     let list = customersForList.filter(c => {
       const billed = isBilled(c.customerId, billKind);
       if (billStatusTab === 'unbilled') return !billed;
-      if (!billed) return false; // billed / paid tabs only ever show billed customers
+      if (!billed) return false;
       const status = ledgerByCustomerActive.get(c.customerId)?.status;
       if (billStatusTab === 'paid') return status === 'paid';
-      return status !== 'paid'; // 'billed' = bill sent, payment not yet confirmed (unpaid or awaiting confirmation)
+      return status !== 'paid';
     });
 
     const q = customerSearch.trim().toLowerCase();
@@ -658,8 +600,6 @@ export default function ClosedBatchDetail({
     return list;
   }, [customersForList, billStatusTab, billKind, statusByKind, ledgerByCustomerActive, customerSearch]);
 
-  // Counts for the three tabs — recomputed from the same source data so they
-  // can never drift from what visibleCustomers actually shows.
   const billStatusCounts = useMemo(() => {
     let unbilled = 0, billed = 0, paid = 0;
     for (const c of customersForList) {
@@ -670,15 +610,17 @@ export default function ClosedBatchDetail({
     return { unbilled, billed, paid };
   }, [customersForList, billKind, statusByKind, ledgerByCustomerActive]);
 
+  // Added paidAmount: the actual ₦ total confirmed paid so far, for the
+  // Paid tab — previously only a count existed, no sum.
   const ledgerTotals = useMemo(() => {
-    let paid = 0, awaiting = 0, unpaid = 0, outstanding = 0;
+    let paid = 0, awaiting = 0, unpaid = 0, outstanding = 0, paidAmount = 0;
     for (const c of customersForList) {
       const row = ledgerByCustomerActive.get(c.customerId);
-      if (row?.status === 'paid') paid++;
+      if (row?.status === 'paid') { paid++; paidAmount += Number(row.amount_ngn ?? 0); }
       else if (row?.status === 'awaiting_confirmation') { awaiting++; outstanding += Number(row.amount_ngn ?? 0); }
       else { unpaid++; outstanding += Number(row?.amount_ngn ?? 0); }
     }
-    return { paid, awaiting, unpaid, outstanding };
+    return { paid, awaiting, unpaid, outstanding, paidAmount };
   }, [customersForList, ledgerByCustomerActive]);
 
   const selectedCustomer = customersForList.find(c => c.customerId === selectedCustomerForDrilldown);
@@ -709,7 +651,6 @@ export default function ClosedBatchDetail({
           <div className="py-16 text-center"><Loader className="w-5 h-5 animate-spin text-gray-300 mx-auto" /></div>
         ) : (
           <>
-            {/* ── All / Flight / Sea — clickable filters ────────────────── */}
             <div className="flex gap-2">
               <button
                 onClick={() => setShippingFilter(null)}
@@ -743,11 +684,6 @@ export default function ClosedBatchDetail({
               </button>
             </div>
 
-            {/* ── Bulk actions: every stage, always visible ───────────────
-                Bulk is the same underlying action as the individual one on a
-                customer's card — it just applies to everyone still eligible,
-                so it's always safe to run regardless of what's already been
-                done individually. */}
             <div className="bg-white rounded-2xl border border-gray-100 p-4">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2.5">Batch actions</p>
               <div className="space-y-1.5">
@@ -790,7 +726,6 @@ export default function ClosedBatchDetail({
               </div>
             </div>
 
-            {/* ── Tabs ──────────────────────────────────────────────────── */}
             <div className="flex gap-1.5">
               {([
                 ['customers', 'By customer'],
@@ -884,8 +819,8 @@ export default function ClosedBatchDetail({
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">For placing the 1688 order</span>
                 </div>
                 <p className="text-[10px] text-gray-400 mb-3">
-                  One row per product, quantities totalled across every not-yet-billed customer. Tap a product to see the variant/shipping
-                  breakdown, price it, or override an individual customer's shipping method.
+                  One row per product, quantities totalled across every customer still in the pipeline. Tap the customer count to see who
+                  ordered it; tap the row itself for the variant/shipping breakdown, pricing, or a per-order shipping override.
                 </p>
 
                 <div className="relative mb-2">
@@ -896,6 +831,7 @@ export default function ClosedBatchDetail({
                     className="w-full pl-9 pr-3 py-2 rounded-xl border border-gray-200 text-xs outline-none focus:border-gray-400"
                   />
                 </div>
+
                 <div className="flex gap-1.5 mb-3">
                   {([
                     ['all', 'All'], ['flight', 'By air'], ['sea_freight', 'By sea'],
@@ -932,7 +868,15 @@ export default function ClosedBatchDetail({
                             <div className="min-w-0 flex-1">
                               <p className="text-xs font-semibold text-gray-800 truncate">{r.product_name}</p>
                               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                <span className="text-[10px] text-orange-500 font-bold">{r.total_qty} units · {r.customers_count} customer{r.customers_count !== 1 ? 's' : ''}</span>
+                                <span className="text-[10px] text-orange-500 font-bold">
+                                  {r.total_qty} units ·{' '}
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setSourcingDrilldownProduct({ id: r.product_id, name: r.product_name }); }}
+                                    className="underline decoration-dotted"
+                                  >
+                                    {r.customers_count} customer{r.customers_count !== 1 ? 's' : ''}
+                                  </button>
+                                </span>
                                 {!!r.flight_qty && (
                                   <span className="flex items-center gap-0.5 text-[9px] font-bold text-sky-600 bg-sky-50 rounded-full px-1.5 py-0.5"><Plane className="w-2.5 h-2.5" /> {r.flight_qty}</span>
                                 )}
@@ -954,7 +898,6 @@ export default function ClosedBatchDetail({
 
                           {expanded && (
                             <div className="px-2.5 pb-3 space-y-3 border-t border-gray-100 pt-3">
-                              {/* Batch default price for this product, this kind — same field as the Pricing tab */}
                               <div>
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">
                                   Price per unit ({billKind === 'clearance' ? 'clearance' : 'consolidation & shipping'})
@@ -974,7 +917,6 @@ export default function ClosedBatchDetail({
                                 </p>
                               </div>
 
-                              {/* Variant × shipping breakdown */}
                               <div>
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Variant &amp; shipping breakdown</p>
                                 {sourcingBreakdownLoading ? (
@@ -999,12 +941,6 @@ export default function ClosedBatchDetail({
                                 )}
                               </div>
 
-                              {/* Per-order shipping override — same toggle used in the by-customer view,
-                                  scoped to just this product's lines so admin can act on individual orders
-                                  right from Sourcing instead of hunting through the by-customer list. Each
-                                  row also gets the same % discount action as the by-customer view — it
-                                  discounts that customer's whole order (every product), not just this one
-                                  line, so it stays consistent with what "discount" means there. */}
                               <div>
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Per order</p>
                                 <div className="space-y-1.5">
@@ -1074,6 +1010,44 @@ export default function ClosedBatchDetail({
               </div>
             )}
 
+            {/* Restored: "who ordered this" dropdown, opened by the customer
+                count above. Uses `breakdown` (already loaded for the Pricing
+                tab) rather than a new fetch, and links straight into the
+                same CustomerDetail sheet used elsewhere on this page. */}
+            {sourcingDrilldownProduct && (
+              <div className="fixed inset-0 z-[55] bg-black/60 flex items-end sm:items-center justify-center sm:p-4" onClick={() => setSourcingDrilldownProduct(null)}>
+                <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl max-h-[80vh] flex flex-col">
+                  <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 flex-shrink-0">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-gray-800 truncate">{sourcingDrilldownProduct.name}</p>
+                      <p className="text-[10px] text-gray-400">Who ordered this</p>
+                    </div>
+                    <button onClick={() => setSourcingDrilldownProduct(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none px-1">×</button>
+                  </div>
+                  <div className="overflow-y-auto p-3 space-y-1.5">
+                    {breakdown
+                      .filter(r => r.product_id === sourcingDrilldownProduct.id)
+                      .map((r, i) => (
+                        <div key={`${r.customer_id}-${r.order_id}-${i}`} className="flex items-center justify-between gap-2 bg-gray-50 rounded-xl p-2.5">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-gray-800 truncate">{r.customer_name}</p>
+                            <p className="text-[10px] text-gray-400 font-mono">{r.order_code} · qty {r.qty}</p>
+                          </div>
+                          {r.customer_id && (
+                            <button
+                              onClick={() => setProfileCustomerId(r.customer_id)}
+                              className="flex-shrink-0 text-[10px] font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg px-2.5 py-1.5"
+                            >
+                              View customer
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {tab === 'customers' && (
               selectedCustomer ? (
                 <CustomerCard
@@ -1083,7 +1057,7 @@ export default function ClosedBatchDetail({
                   onBack={() => {
                     setSelectedCustomerForDrilldown(null);
                     requestAnimationFrame(() => window.scrollTo(0, listScrollPos.current));
-                  }}                  
+                  }}
                   customerPriceFor={customerPriceFor}
                   isOverridden={isOverridden}
                   setCustomerPriceDrafts={setCustomerPriceDrafts}
@@ -1096,7 +1070,7 @@ export default function ClosedBatchDetail({
                   savingAdj={savingAdj}
                   addAdjustment={addAdjustment}
                   removeAdjustment={removeAdjustment}
-                  applyPercentDiscount={applyPercentDiscount} 
+                  applyPercentDiscount={applyPercentDiscount}
                   isBilled={isBilled}
                   statusRow={statusRow}
                   ledgerRow={ledgerRow}
@@ -1162,8 +1136,14 @@ export default function ClosedBatchDetail({
                         {fmt(ledgerTotals.outstanding)} still outstanding
                       </p>
                     )}
+                    {/* Restored: total ₦ amount actually paid so far, shown
+                        under the Paid tab — previously only a count existed. */}
+                    {billStatusTab === 'paid' && ledgerTotals.paidAmount > 0 && (
+                      <p className="text-[11px] text-emerald-600 font-semibold mt-1">
+                        {fmt(ledgerTotals.paidAmount)} paid so far
+                      </p>
+                    )}
                   </div>
-
 
                   <div className="space-y-1.5">
                     {visibleCustomers.length === 0 ? (
@@ -1240,9 +1220,6 @@ export default function ClosedBatchDetail({
   );
 }
 
-// ── One customer's card: line items with editable per-customer pricing,
-//    internal note, and this-customer-only actions for whichever stage
-//    they're at. ──────────────────────────────────────────────────────────
 function CustomerCard({
   customer, billKind, setBillKind, onBack,
   customerPriceFor, isOverridden, setCustomerPriceDrafts,
@@ -1315,7 +1292,6 @@ function CustomerCard({
         </div>
       </div>
 
-      {/* Overall pipeline position for this customer, independent of kind. */}
       <div className="flex items-center gap-1.5 mb-3 flex-wrap">
         {received ? (
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-600">Received</span>
@@ -1336,8 +1312,6 @@ function CustomerCard({
         )}
       </div>
 
-      {/* Line items — price editable per customer, defaults from the batch,
-          overridable here. */}
       <div className="space-y-2">
         {customer.lines.map((line, i) => {
           const priceStr = customerPriceFor(id, line.product_id, billKind);
@@ -1357,9 +1331,6 @@ function CustomerCard({
                   {variantLabel(line.variant_options) && (
                     <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(line.variant_options)}</p>
                   )}
-                  {/* Variant change — only for products that have variants defined,
-                      and only before the batch is billed (some customers ask for a
-                      size/color swap after paying). */}
                   {productVariants[line.product_id] && !isBilled(id, 'consolidation_shipping') && (
                     <VariantEditRow
                       line={line}
@@ -1376,9 +1347,6 @@ function CustomerCard({
                       </span>
                     )}
                   </div>
-                  {/* Shipping method for this item — visible always, editable only before
-                      the consolidation_shipping bill is locked (isBilled checks that kind
-                      specifically, independent of whichever bill tab is currently open). */}
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <span className="text-[10px] text-gray-400">Shipping:</span>
                     {isBilled(id, 'consolidation_shipping') || line.ship_only ? (
@@ -1450,7 +1418,6 @@ function CustomerCard({
         })}
       </div>
 
-      {/* Bill total + adjustments */}
       <div className="bg-white rounded-2xl border border-gray-100 p-3 mt-3">
         <div className="flex items-center justify-between mb-2">
           <p className="text-xs font-bold text-gray-800">{billKind === 'clearance' ? 'Clearance bill' : 'Consolidation & shipping bill'}</p>
@@ -1509,7 +1476,6 @@ function CustomerCard({
         )}
       </div>
 
-      {/* Internal note — admin-only, never sent to the customer. */}
       <div className="bg-white rounded-2xl border border-gray-100 p-3 mt-3">
         <div className="flex items-center gap-1.5 mb-1.5">
           <StickyNote className="w-3.5 h-3.5 text-gray-400" />
@@ -1526,7 +1492,6 @@ function CustomerCard({
         />
       </div>
 
-      {/* This-customer-only actions for whichever stage they're at. */}
       <div className="bg-white rounded-2xl border border-gray-100 p-3 mt-3">
         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">This customer</p>
 
