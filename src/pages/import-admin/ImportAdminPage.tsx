@@ -23,6 +23,7 @@ import ConfirmedPaymentsManager from './ConfirmedPaymentsManager';
 import ConfirmedOrderMessagingManager from './ConfirmedOrderMessagingManager';
 import BroadcastEmailManager from './BroadcastEmailManager';
 import RefundsManager from './RefundsManager';
+import AdminOrderReceiptSheet from './AdminOrderReceiptSheet';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const CUSTOM_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/custom-orders`;
@@ -253,6 +254,7 @@ function LoadCodePanel({ token }: { token: string }) {
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [rates, setRates]         = useState<Rates | null>(null);
   const [expanded, setExpanded]   = useState(false);
+  const [showPackingSlip, setShowPackingSlip] = useState(false);
 
   useEffect(() => {
     fetch(`${EDGE_URL}?action=rates`)
@@ -634,8 +636,31 @@ function LoadCodePanel({ token }: { token: string }) {
                   <ExternalLink className="w-3.5 h-3.5" />
                   Message on WhatsApp
                 </a>
+                <button
+                  onClick={() => setShowPackingSlip(true)}
+                  className="w-full py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                >
+                  Print packing slip
+                </button>
               </div>
             </motion.div>
+          )}
+
+          {showPackingSlip && (
+            <AdminOrderReceiptSheet
+              order={{
+                code: order.code,
+                created_at: order.created_at,
+                customer_name: order.customer_name,
+                customer_whatsapp: order.customer_whatsapp,
+                items: order.items,
+                total_ngn: order.total_ngn,
+                delivery_type: order.delivery_type,
+                delivery_address: order.delivery_address,
+                shipping_method: order.shipping_method,
+              }}
+              onClose={() => setShowPackingSlip(false)}
+            />
           )}
         </div>
       )}
