@@ -645,24 +645,24 @@ function LoadCodePanel({ token }: { token: string }) {
               </div>
             </motion.div>
           )}
-
-          {showPackingSlip && (
-            <AdminOrderReceiptSheet
-              order={{
-                code: order.code,
-                created_at: order.created_at,
-                customer_name: order.customer_name,
-                customer_whatsapp: order.customer_whatsapp,
-                items: order.items,
-                total_ngn: order.total_ngn,
-                delivery_type: order.delivery_type,
-                delivery_address: order.delivery_address,
-                shipping_method: order.shipping_method,
-              }}
-              onClose={() => setShowPackingSlip(false)}
-            />
-          )}
         </div>
+      
+        {showPackingSlip && (
+          <AdminOrderReceiptSheet
+            order={{
+              code: order.code,
+              created_at: order.created_at,
+              customer_name: order.customer_name,
+              customer_whatsapp: order.customer_whatsapp,
+              items: order.items,
+              total_ngn: order.total_ngn,
+              delivery_type: order.delivery_type,
+              delivery_address: order.delivery_address,
+              shipping_method: order.shipping_method,
+            }}
+            onClose={() => setShowPackingSlip(false)}
+          />
+        )}
       )}
     </div>
   );
