@@ -43,7 +43,7 @@ function SlipCopy({ order, label }: { order: PackingSlipOrder; label: string }) 
         aria-hidden="true"
       >
         <span
-          className="text-gray-200 font-black uppercase whitespace-nowrap"
+          className="text-gray-100 font-black uppercase whitespace-nowrap"
           style={{ fontSize: '3.2rem', transform: 'rotate(-35deg)', letterSpacing: '0.05em' }}
         >
           {label}
