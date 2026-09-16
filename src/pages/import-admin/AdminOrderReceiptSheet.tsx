@@ -44,7 +44,7 @@ function SlipCopy({ order, label }: { order: PackingSlipOrder; label: string }) 
       >
         <span
           className="text-gray-200 font-black uppercase whitespace-nowrap"
-          style={{ fontSize: '3.2rem', transform: 'rotate(-28deg)', letterSpacing: '0.05em' }}
+          style={{ fontSize: '3.2rem', transform: 'rotate(-25deg)', letterSpacing: '0.05em' }}
         >
           {label}
         </span>
