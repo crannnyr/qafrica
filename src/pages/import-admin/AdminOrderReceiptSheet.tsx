@@ -1,8 +1,4 @@
 // src/pages/import-admin/AdminOrderReceiptSheet.tsx
-// Warehouse packing slip — prints as two copies side by side on one A4
-// landscape sheet (customer copy + QAFRICA copy), with a dashed cut line
-// down the middle. No product photos; carries a scannable QR code encoding
-// the order code, same idea as a Jumia shipping label.
 import { X, Printer } from 'lucide-react';
 
 interface PackingSlipItem {
@@ -35,81 +31,95 @@ function qrCodeUrl(text: string, size = 110) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}`;
 }
 
-// One printable copy — rendered twice (customer / QAFRICA) so both halves
-// stay in sync automatically if the layout ever changes.
+// One printable copy — rendered twice (customer / QAFRICA). The label is a
+// large diagonal watermark behind the content (like a Remita receipt or a
+// JAMB admission letter), not a visible badge.
 function SlipCopy({ order, label }: { order: PackingSlipOrder; label: string }) {
   return (
-    <div className="flex-1 px-5 py-4 flex flex-col">
-      <div className="flex items-start justify-between mb-3">
-        <div>
-          <p className="font-black text-gray-900 text-base leading-none">QAFRICA</p>
-          <p className="text-[9px] text-gray-400 mt-1">Packing slip</p>
-          <span className="inline-block mt-1.5 text-[8px] font-bold uppercase tracking-wide bg-gray-900 text-white px-1.5 py-0.5 rounded-full">
-            {label}
-          </span>
-        </div>
-        <img src={qrCodeUrl(order.code)} alt={`QR code for ${order.code}`} className="w-16 h-16 flex-shrink-0" />
+    <div className="relative flex-1 px-5 py-4 flex flex-col overflow-hidden">
+      {/* Watermark — bold, light gray, diagonal, sits behind everything */}
+      <div
+        className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"
+        aria-hidden="true"
+      >
+        <span
+          className="text-gray-200 font-black uppercase whitespace-nowrap"
+          style={{ fontSize: '3.2rem', transform: 'rotate(-28deg)', letterSpacing: '0.05em' }}
+        >
+          {label}
+        </span>
       </div>
 
-      <div className="text-center mb-3">
-        <p className="text-[8px] text-gray-400 uppercase tracking-widest mb-0.5">Order code</p>
-        <p className="font-mono font-black text-gray-900 text-lg tracking-widest">{order.code}</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 mb-3 text-[10px]">
-        <div>
-          <p className="text-gray-400">Customer</p>
-          <p className="font-semibold text-gray-800">{order.customer_name}</p>
-          {order.customer_whatsapp && <p className="text-gray-500">{order.customer_whatsapp}</p>}
+      {/* Content sits above the watermark */}
+      <div className="relative">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <p className="font-black text-gray-900 text-base leading-none">QAFRICA</p>
+            <p className="text-[9px] text-gray-400 mt-1">Packing slip</p>
+          </div>
+          <img src={qrCodeUrl(order.code)} alt={`QR code for ${order.code}`} className="w-16 h-16 flex-shrink-0" />
         </div>
-        <div className="text-right">
-          <p className="text-gray-400">Date</p>
-          <p className="font-semibold text-gray-800">{new Date(order.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-          {order.shipping_method && (
-            <p className="text-gray-500 capitalize">{order.shipping_method === 'flight' ? 'Air freight' : 'Sea freight'}</p>
-          )}
-        </div>
-      </div>
 
-      {order.delivery_address && (
-        <div className="bg-gray-50 rounded-lg p-2 mb-3 text-[10px]">
-          <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wide mb-0.5">Deliver to</p>
-          <p className="font-semibold text-gray-800">{order.delivery_address.name} · {order.delivery_address.phone}</p>
-          <p className="text-gray-600">
-            {order.delivery_address.address_line1}
-            {order.delivery_address.address_line2 ? `, ${order.delivery_address.address_line2}` : ''}
-          </p>
-          <p className="text-gray-600">{order.delivery_address.city}, {order.delivery_address.state}</p>
+        <div className="text-center mb-3">
+          <p className="text-[8px] text-gray-400 uppercase tracking-widest mb-0.5">Order code</p>
+          <p className="font-mono font-black text-gray-900 text-lg tracking-widest">{order.code}</p>
         </div>
-      )}
 
-      <table className="w-full text-[10px] border-collapse mb-2 flex-1">
-        <thead>
-          <tr className="border-b-2 border-gray-200">
-            <th className="text-left font-bold text-gray-500 uppercase tracking-wide text-[8px] py-1 pr-1">Item</th>
-            <th className="text-center font-bold text-gray-500 uppercase tracking-wide text-[8px] py-1 px-1 w-8">Qty</th>
-          </tr>
-        </thead>
-        <tbody>
-          {order.items.map((item, i) => (
-            <tr key={i} className="border-b border-gray-100">
-              <td className="py-1 pr-1 align-top">
-                <p className="text-gray-800">{item.name}</p>
-                {item.variant_options && Object.keys(item.variant_options).length > 0 && (
-                  <p className="text-[8px] text-gray-400">{Object.entries(item.variant_options).map(([k, v]) => `${k}: ${v}`).join(', ')}</p>
-                )}
-              </td>
-              <td className="py-1 px-1 text-center align-top font-semibold text-gray-800">{item.quantity}</td>
+        <div className="grid grid-cols-2 gap-2 mb-3 text-[10px]">
+          <div>
+            <p className="text-gray-400">Customer</p>
+            <p className="font-semibold text-gray-800">{order.customer_name}</p>
+            {order.customer_whatsapp && <p className="text-gray-500">{order.customer_whatsapp}</p>}
+          </div>
+          <div className="text-right">
+            <p className="text-gray-400">Date</p>
+            <p className="font-semibold text-gray-800">{new Date(order.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+            {order.shipping_method && (
+              <p className="text-gray-500 capitalize">{order.shipping_method === 'flight' ? 'Air freight' : 'Sea freight'}</p>
+            )}
+          </div>
+        </div>
+
+        {order.delivery_address && (
+          <div className="bg-white/70 rounded-lg p-2 mb-3 text-[10px] border border-gray-100">
+            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wide mb-0.5">Deliver to</p>
+            <p className="font-semibold text-gray-800">{order.delivery_address.name} · {order.delivery_address.phone}</p>
+            <p className="text-gray-600">
+              {order.delivery_address.address_line1}
+              {order.delivery_address.address_line2 ? `, ${order.delivery_address.address_line2}` : ''}
+            </p>
+            <p className="text-gray-600">{order.delivery_address.city}, {order.delivery_address.state}</p>
+          </div>
+        )}
+
+        <table className="w-full text-[10px] border-collapse mb-2">
+          <thead>
+            <tr className="border-b-2 border-gray-200">
+              <th className="text-left font-bold text-gray-500 uppercase tracking-wide text-[8px] py-1 pr-1">Item</th>
+              <th className="text-center font-bold text-gray-500 uppercase tracking-wide text-[8px] py-1 px-1 w-8">Qty</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {order.items.map((item, i) => (
+              <tr key={i} className="border-b border-gray-100">
+                <td className="py-1 pr-1 align-top">
+                  <p className="text-gray-800">{item.name}</p>
+                  {item.variant_options && Object.keys(item.variant_options).length > 0 && (
+                    <p className="text-[8px] text-gray-400">{Object.entries(item.variant_options).map(([k, v]) => `${k}: ${v}`).join(', ')}</p>
+                  )}
+                </td>
+                <td className="py-1 px-1 text-center align-top font-semibold text-gray-800">{item.quantity}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
 
-      {typeof order.total_ngn === 'number' && (
-        <p className="text-right text-xs font-bold text-gray-900 mb-1">Total: <span className="text-orange-500">{fmt(order.total_ngn)}</span></p>
-      )}
+        {typeof order.total_ngn === 'number' && (
+          <p className="text-right text-xs font-bold text-gray-900 mb-1">Total: <span className="text-orange-500">{fmt(order.total_ngn)}</span></p>
+        )}
 
-      <p className="text-center text-[8px] text-gray-300 mt-1">Scan to verify at dispatch.</p>
+        <p className="text-center text-[8px] text-gray-300 mt-1">Scan to verify at dispatch.</p>
+      </div>
     </div>
   );
 }
