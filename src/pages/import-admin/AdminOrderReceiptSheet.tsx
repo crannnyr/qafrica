@@ -57,7 +57,7 @@ function SlipCopy({ order, label }: { order: PackingSlipOrder; label: string }) 
             <p className="font-black text-gray-900 text-base leading-none">QAFRICA</p>
             <p className="text-[9px] text-gray-400 mt-1">Packing slip</p>
           </div>
-          <img src={qrCodeUrl(order.code)} alt={`QR code for ${order.code}`} className="w-16 h-16 flex-shrink-0" />
+          <img src={qrCodeUrl(`https://qafrica.store/importations/admin?load_code=${order.code}`)} alt={`QR code for ${order.code}`} className="w-16 h-16 flex-shrink-0" />
         </div>
 
         <div className="text-center mb-3">
