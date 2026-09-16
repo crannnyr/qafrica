@@ -1,6 +1,6 @@
 // src/pages/import-admin/ImportAdminPage.tsx 
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingBag, LogOut, Package, Search, RefreshCw,
@@ -255,6 +255,21 @@ function LoadCodePanel({ token }: { token: string }) {
   const [rates, setRates]         = useState<Rates | null>(null);
   const [expanded, setExpanded]   = useState(false);
   const [showPackingSlip, setShowPackingSlip] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const fromUrl = searchParams.get('load_code');
+    if (fromUrl) {
+      setCode(fromUrl.toUpperCase());
+      setExpanded(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  
+  useEffect(() => {
+    if (code && expanded && !order && !isLoading) loadCode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code, expanded]);
 
   useEffect(() => {
     fetch(`${EDGE_URL}?action=rates`)
