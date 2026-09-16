@@ -126,7 +126,7 @@ function SlipCopy({ order, label }: { order: PackingSlipOrder; label: string }) 
 
 export default function AdminOrderReceiptSheet({ order, onClose }: { order: PackingSlipOrder; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[80] bg-black/60 flex items-end sm:items-center justify-center sm:p-4 print:bg-white print:p-0 print:block">
+    <div className="fixed inset-0 z-[80] bg-black/60 flex items-end sm:items-center justify-center sm:p-4 print:static print:inset-auto print:bg-white print:p-0 print:block print:w-auto print:h-auto">
       {/* On-screen chrome — hidden entirely when printing */}
       <div className="bg-white w-full sm:max-w-3xl rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col print:hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -150,8 +150,11 @@ export default function AdminOrderReceiptSheet({ order, onClose }: { order: Pack
       </div>
 
       {/* Print-only layout — two copies filling an A4 landscape page with a
-          dashed cut guide down the middle. Hidden on screen. */}
-      <div className="hidden print:flex print:w-full print:h-full">
+          dashed cut guide down the middle. Hidden on screen. Height is
+          fixed (not 100vh/100%) so the print engine can paginate correctly
+          instead of miscounting pages, which is what "print:static" above
+          also fixes by taking this out of fixed positioning. */}
+      <div className="hidden print:flex print:w-full" style={{ height: '190mm' }}>
         <div className="flex-1 flex flex-col justify-center border-r-2 border-dashed border-gray-400">
           <SlipCopy order={order} label="Customer copy" />
         </div>
@@ -160,10 +163,10 @@ export default function AdminOrderReceiptSheet({ order, onClose }: { order: Pack
         </div>
       </div>
 
-      {/* Forces landscape A4 for this print job specifically. */}
       <style>{`
         @media print {
           @page { size: A4 landscape; margin: 10mm; }
+          html, body { height: auto !important; }
         }
       `}</style>
     </div>
