@@ -1,8 +1,4 @@
 // src/pages/recommendations/OrderReceiptSheet.tsx
-// Printable receipt for one order — used from both the customer dashboard
-// and the admin order views. Pulls prices straight from the order's stored
-// `items` array (the price at checkout time), never from live product data,
-// so a later product price change never alters what a past receipt shows.
 import { X, Printer } from 'lucide-react';
 
 interface ReceiptItem {
@@ -10,6 +6,7 @@ interface ReceiptItem {
   name: string;
   price_ngn: number;
   quantity: number;
+  image_url?: string;
   variant_options?: Record<string, string> | null;
 }
 
@@ -63,11 +60,10 @@ export default function OrderReceiptSheet({ order, onClose }: { order: ReceiptOr
 
           <p className="text-xs text-gray-500 mb-4">Billed to: <span className="font-semibold text-gray-800">{order.customer_name}</span></p>
 
-          {/* Items table — real <table> so it prints/copies cleanly and
-              lines columns up, rather than the earlier flex-row version. */}
           <table className="w-full text-xs border-collapse mb-4">
             <thead>
               <tr className="border-b-2 border-gray-200">
+                <th className="text-left font-bold text-gray-500 uppercase tracking-wide text-[10px] py-2 pr-2 w-9"></th>
                 <th className="text-left font-bold text-gray-500 uppercase tracking-wide text-[10px] py-2 pr-2">Item</th>
                 <th className="text-center font-bold text-gray-500 uppercase tracking-wide text-[10px] py-2 px-2 w-10">Qty</th>
                 <th className="text-right font-bold text-gray-500 uppercase tracking-wide text-[10px] py-2 px-2">Unit price</th>
@@ -77,6 +73,13 @@ export default function OrderReceiptSheet({ order, onClose }: { order: ReceiptOr
             <tbody>
               {order.items.map((item, i) => (
                 <tr key={i} className="border-b border-gray-100">
+                  <td className="py-2 pr-2 align-top">
+                    {item.image_url ? (
+                      <img src={item.image_url} alt={item.name} className="w-9 h-9 rounded-lg object-cover border border-gray-100" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-lg bg-gray-50 border border-gray-100" />
+                    )}
+                  </td>
                   <td className="py-2 pr-2 align-top">
                     <p className="text-gray-800">{item.name}</p>
                     {item.variant_options && Object.keys(item.variant_options).length > 0 && (
