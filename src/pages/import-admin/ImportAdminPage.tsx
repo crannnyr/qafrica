@@ -2430,8 +2430,8 @@ export default function ImportAdminPage() {
           <BroadcastEmailManager token={token} />
         ) : tab === 'orders' ? (
           <>
-            <OrdersList token={token} />
             <LoadCodePanel token={token} />
+            <OrdersList token={token} />
           </>
         ) : tab === 'total-orders' ? (
           <TotalOrdersView token={token} onOpenProduct={id => { setPendingProductId(id); setTab('products'); }} />
