@@ -24,7 +24,7 @@ import ConfirmedOrderMessagingManager from './ConfirmedOrderMessagingManager';
 import BroadcastEmailManager from './BroadcastEmailManager';
 import RefundsManager from './RefundsManager';
 import AdminOrderReceiptSheet from './AdminOrderReceiptSheet';
-import PaystackTransactions from './PaystackTransactions';
+import PaystackTransactions from './PaystackTransactions'; 
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const CUSTOM_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/custom-orders`;
