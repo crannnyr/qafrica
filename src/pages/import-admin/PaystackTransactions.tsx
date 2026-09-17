@@ -179,6 +179,10 @@ export default function PaystackTransactions({
 
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [searchResults, setSearchResults] =
+    useState<Transaction[] | null>(null)
+  const [searchLoading, setSearchLoading] =
+    useState(false)
   const [status, setStatus] = useState('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -203,32 +207,25 @@ export default function PaystackTransactions({
 
   const load = useCallback(async () => {
     setIsLoading(true)
-
+  
     try {
       const params = new URLSearchParams()
-
+  
       params.set('action', 'list')
       params.set('page', String(page))
-
+  
       if (status !== 'all') {
         params.set('status', status)
       }
-
+  
       if (from) {
         params.set('from', from)
       }
-
+  
       if (to) {
         params.set('to', to)
       }
-
-      if (search.includes('@')) {
-        params.set(
-          'customer',
-          search.trim(),
-        )
-      }
-
+  
       const response = await fetch(
         `${EDGE_URL}?${params.toString()}`,
         {
@@ -239,23 +236,23 @@ export default function PaystackTransactions({
           },
         },
       )
-
+  
       const data =
         await response.json().catch(() => null)
-
+  
       if (!response.ok || !data?.success) {
         throw new Error(
           data?.error ||
             'Failed to load Paystack transactions',
         )
       }
-
+  
       setTransactions(
         Array.isArray(data.data)
           ? data.data
           : [],
       )
-
+  
       setPagination({
         page: Number(
           data.meta?.page || page,
@@ -279,6 +276,7 @@ export default function PaystackTransactions({
           ? error.message
           : 'Failed to load transactions',
       )
+  
       setTransactions([])
     } finally {
       setIsLoading(false)
@@ -289,7 +287,6 @@ export default function PaystackTransactions({
     status,
     from,
     to,
-    search,
   ])
 
   useEffect(() => {
