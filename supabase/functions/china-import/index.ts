@@ -1139,8 +1139,31 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'all-orders') {
-      const { manager_token, date_from, date_to, payment_status, status, page, per_page } = await req.json()
+      const { manager_token, date_from, date_to, payment_status, status, page, per_page, search } = await req.json()
       if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+
+      // Search is server-side too, so pagination never requires loading the
+      // whole order history into the browser.
+      const rawSearch = typeof search === 'string' ? search.trim().slice(0, 100) : ''
+      const safeSearch = rawSearch.replace(/[%,()]/g, ' ').replace(/\\/g, '').trim()
+
+      // Email lives on customers, while the searchable order fields live on
+      // china_import_orders. Resolve matching customer IDs first, then include
+      // those IDs in the order filter.
+      let matchingCustomerIds: string[] = []
+      if (safeSearch) {
+        const { data: matchingCustomers, error: customerSearchError } = await supabase
+          .from('customers')
+          .select('id')
+          .ilike('email', `%${safeSearch}%`)
+          .limit(200)
+
+        if (customerSearchError) {
+          return json({ error: customerSearchError.message }, 500)
+        }
+
+        matchingCustomerIds = (matchingCustomers ?? []).map((c: any) => c.id)
+      }
 
       // Backward-compatible pagination:
       // - Existing callers that omit page keep the old full-data response.
@@ -1168,6 +1191,18 @@ serve(async (req: Request) => {
       if (date_to) query = query.lte('created_at', date_to)
       if (payment_status) query = query.eq('payment_status', payment_status)
       if (status) query = query.eq('status', status)
+
+      if (safeSearch) {
+        const filters = [
+          `code.ilike.*${safeSearch}*`,
+          `customer_name.ilike.*${safeSearch}*`,
+          `customer_whatsapp.ilike.*${safeSearch}*`,
+          ...(matchingCustomerIds.length
+            ? [`user_id.in.(${matchingCustomerIds.join(',')})`]
+            : []),
+        ]
+        query = query.or(filters.join(','))
+      }
 
       if (paginated) {
         const from = (requestedPage - 1) * requestedPerPage
