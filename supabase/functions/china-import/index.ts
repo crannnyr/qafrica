@@ -1139,33 +1139,66 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'all-orders') {
-      const { manager_token, date_from, date_to, payment_status, status } = await req.json()
+      const { manager_token, date_from, date_to, payment_status, status, page, per_page } = await req.json()
       if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
 
-      const buildQuery = (from: number, to: number) => {
-        let q = supabase.from('china_import_orders')
-          .select('*, customers(email)')
-          .order('created_at', { ascending: false })
-          .range(from, to)
-        if (date_from) q = q.gte('created_at', date_from)
-        if (date_to) q = q.lte('created_at', date_to)
-        if (payment_status) q = q.eq('payment_status', payment_status)
-        if (status) q = q.eq('status', status)
-        return q
+      // Backward-compatible pagination:
+      // - Existing callers that omit page keep the old full-data response.
+      // - OrdersList can opt into server pagination with page/per_page.
+      const paginated = page !== undefined || per_page !== undefined
+      const requestedPage = page === undefined ? 1 : Number(page)
+      const requestedPerPage = per_page === undefined ? 25 : Number(per_page)
+
+      if (
+        !Number.isInteger(requestedPage) ||
+        requestedPage < 1 ||
+        !Number.isInteger(requestedPerPage) ||
+        requestedPerPage < 1 ||
+        requestedPerPage > 100
+      ) {
+        return json({ error: 'Invalid pagination parameters' }, 400)
       }
 
-      let raw: any[]
-      try {
-        raw = await fetchAllRows(buildQuery)
-      } catch (e: any) {
-        return json({ error: e?.message ?? 'Failed to fetch orders' }, 500)
+      let query = supabase
+        .from('china_import_orders')
+        .select('*, customers(email)', paginated ? { count: 'exact' } : undefined)
+        .order('created_at', { ascending: false })
+
+      if (date_from) query = query.gte('created_at', date_from)
+      if (date_to) query = query.lte('created_at', date_to)
+      if (payment_status) query = query.eq('payment_status', payment_status)
+      if (status) query = query.eq('status', status)
+
+      if (paginated) {
+        const from = (requestedPage - 1) * requestedPerPage
+        const to = from + requestedPerPage - 1
+        query = query.range(from, to)
+      } else {
+        query = query.limit(1000)
       }
-      const orders = raw.map((o: any) => ({
+
+      const { data: raw, error, count } = await query
+      if (error) return json({ error: error.message }, 500)
+
+      const orders = (raw ?? []).map((o: any) => ({
         ...o,
         customer_email: o.customers?.email ?? null,
         customers: undefined,
       }))
-      return json({ orders })
+
+      return json({
+        orders,
+        ...(paginated
+          ? {
+              pagination: {
+                page: requestedPage,
+                per_page: requestedPerPage,
+                total: count ?? 0,
+                page_count: Math.ceil((count ?? 0) / requestedPerPage),
+              },
+            }
+          : {}),
+      })
     }
 
     if (req.method === 'POST' && action === 'admin-analytics') {
