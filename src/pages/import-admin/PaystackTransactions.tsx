@@ -4,68 +4,81 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
-  Loader2,
-  X,
+  Loader,
   RefreshCw,
+  X,
+  Copy,
+  Check,
   CheckCircle2,
   XCircle,
-  Clock3,
+  Clock,
   AlertCircle,
   CreditCard,
   User,
-  Calendar,
-  Hash,
   Banknote,
-  Copy,
-  Check,
+  Calendar,
 } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
+import CONFIG from '@/lib/config'
+import { toast } from 'sonner'
+
+const EDGE_URL =
+  `${CONFIG.SUPABASE_URL}/functions/v1/paystack-transactions`
 
 const PAGE_SIZE = 50
 
-type Transaction = {
+interface PaystackCustomer {
+  id?: number
+  first_name?: string
+  last_name?: string
+  email?: string
+  phone?: string
+  customer_code?: string
+}
+
+interface Authorization {
+  authorization_code?: string
+  bin?: string
+  last4?: string
+  exp_month?: string
+  exp_year?: string
+  channel?: string
+  card_type?: string
+  bank?: string
+  country_code?: string
+  brand?: string
+  reusable?: boolean
+  signature?: string
+}
+
+interface Transaction {
   id: number
-  domain?: string | null
-  status?: string | null
   reference?: string | null
   amount?: number | null
+  requested_amount?: number | null
+  currency?: string | null
+  status?: string | null
+  channel?: string | null
+  fees?: number | null
   message?: string | null
   gateway_response?: string | null
   paid_at?: string | null
   created_at?: string | null
-  channel?: string | null
-  currency?: string | null
-  ip_address?: string | null
-  metadata?: Record<string, any> | null
-  customer?: {
-    id?: number | null
-    first_name?: string | null
-    last_name?: string | null
-    email?: string | null
-    customer_code?: string | null
-    phone?: string | null
-  } | null
-  authorization?: {
-    authorization_code?: string | null
-    bin?: string | null
-    last4?: string | null
-    exp_month?: string | null
-    exp_year?: string | null
-    channel?: string | null
-    card_type?: string | null
-    bank?: string | null
-    country_code?: string | null
-    brand?: string | null
-    reusable?: boolean | null
-    signature?: string | null
-  } | null
-  fees?: number | null
-  plan?: any
-  requested_amount?: number | null
   transaction_date?: string | null
+  ip_address?: string | null
+  metadata?: Record<string, unknown> | null
+  customer?: PaystackCustomer | null
+  authorization?: Authorization | null
 }
 
-type PaginationMeta = {
+interface TimelineEvent {
+  type?: string | null
+  message?: string | null
+  status?: string | null
+  time?: string | null
+  data?: unknown
+}
+
+interface Pagination {
   page: number
   perPage: number
   pageCount: number
@@ -73,25 +86,20 @@ type PaginationMeta = {
   totalVolume: number
 }
 
-type TimelineEvent = {
-  type?: string | null
-  time?: string | null
-  message?: string | null
-  status?: string | null
-  data?: any
-}
-
-function formatMoney(amount?: number | null, currency = 'NGN') {
-  const value = Number(amount || 0) / 100
-
+function fmtAmount(
+  amount: number | null | undefined,
+  currency = 'NGN',
+) {
   return new Intl.NumberFormat('en-NG', {
     style: 'currency',
     currency,
     maximumFractionDigits: 2,
-  }).format(value)
+  }).format(Number(amount || 0) / 100)
 }
 
-function formatDate(value?: string | null) {
+function fmtDate(
+  value: string | null | undefined,
+) {
   if (!value) return '—'
 
   const date = new Date(value)
@@ -106,128 +114,101 @@ function formatDate(value?: string | null) {
   }).format(date)
 }
 
-function statusLabel(status?: string | null) {
-  if (!status) return 'Unknown'
+function customerName(
+  customer?: PaystackCustomer | null,
+) {
+  const name =
+    `${customer?.first_name || ''} ${customer?.last_name || ''}`
+      .trim()
 
-  return status.charAt(0).toUpperCase() + status.slice(1)
+  return name || 'Unknown customer'
 }
 
-function StatusBadge({
-  status,
+function statusBadge(status?: string | null) {
+  switch (String(status || '').toLowerCase()) {
+    case 'success':
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700">
+          <CheckCircle2 className="w-3 h-3" />
+          Successful
+        </span>
+      )
+
+    case 'failed':
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-red-50 text-red-600">
+          <XCircle className="w-3 h-3" />
+          Failed
+        </span>
+      )
+
+    case 'abandoned':
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-700">
+          <Clock className="w-3 h-3" />
+          Abandoned
+        </span>
+      )
+
+    default:
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-gray-100 text-gray-500">
+          <AlertCircle className="w-3 h-3" />
+          {status || 'Unknown'}
+        </span>
+      )
+  }
+}
+
+export default function PaystackTransactions({
+  token,
 }: {
-  status?: string | null
+  token: string
 }) {
-  const normalized = String(status || '').toLowerCase()
+  const [transactions, setTransactions] =
+    useState<Transaction[]>([])
 
-  if (normalized === 'success') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600">
-        <CheckCircle2 size={13} />
-        Successful
-      </span>
-    )
-  }
-
-  if (normalized === 'failed') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-600">
-        <XCircle size={13} />
-        Failed
-      </span>
-    )
-  }
-
-  if (normalized === 'abandoned') {
-    return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-600">
-        <Clock3 size={13} />
-        Abandoned
-      </span>
-    )
-  }
-
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-gray-500/10 px-2.5 py-1 text-xs font-medium text-gray-600">
-      <AlertCircle size={13} />
-      {statusLabel(status)}
-    </span>
-  )
-}
-
-function getCustomerName(transaction: Transaction) {
-  const first = transaction.customer?.first_name || ''
-  const last = transaction.customer?.last_name || ''
-
-  const name = `${first} ${last}`.trim()
-
-  return name || transaction.customer?.email || 'Unknown customer'
-}
-
-function getPaymentType(transaction: Transaction) {
-  const metadata = transaction.metadata
-
-  if (!metadata) return '—'
-
-  return (
-    metadata.type ||
-    metadata.payment_type ||
-    metadata.kind ||
-    '—'
-  )
-}
-
-export default function PaystackTransactions() {
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [meta, setMeta] = useState<PaginationMeta>({
-    page: 1,
-    perPage: PAGE_SIZE,
-    pageCount: 0,
-    skipped: 0,
-    totalVolume: 0,
-  })
+  const [pagination, setPagination] =
+    useState<Pagination>({
+      page: 1,
+      perPage: PAGE_SIZE,
+      pageCount: 0,
+      skipped: 0,
+      totalVolume: 0,
+    })
 
   const [page, setPage] = useState(1)
-
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
 
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [isLoading, setIsLoading] =
+    useState(true)
 
-  const [selectedTransaction, setSelectedTransaction] =
+  const [selected, setSelected] =
     useState<Transaction | null>(null)
 
-  const [timeline, setTimeline] = useState<TimelineEvent[]>([])
-  const [loadingDetails, setLoadingDetails] = useState(false)
-  const [detailsError, setDetailsError] = useState('')
+  const [detailsLoading, setDetailsLoading] =
+    useState(false)
 
-  const [copied, setCopied] = useState('')
+  const [detailsError, setDetailsError] =
+    useState('')
 
-  const totalPages = Math.max(meta.pageCount || 1, 1)
+  const [timeline, setTimeline] =
+    useState<TimelineEvent[]>([])
 
-  const hasPrevious = page > 1
-  const hasNext = page < totalPages
+  const [copied, setCopied] =
+    useState<string | null>(null)
 
-  const loadTransactions = useCallback(async () => {
-    setLoading(true)
-    setError('')
+  const load = useCallback(async () => {
+    setIsLoading(true)
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session?.access_token) {
-        throw new Error('Your session has expired. Please sign in again.')
-      }
-
       const params = new URLSearchParams()
 
       params.set('action', 'list')
       params.set('page', String(page))
-      params.set('perPage', String(PAGE_SIZE))
 
       if (status !== 'all') {
         params.set('status', status)
@@ -241,42 +222,44 @@ export default function PaystackTransactions() {
         params.set('to', to)
       }
 
-      /*
-       * Paystack does not provide arbitrary free-text search
-       * over all transaction fields through the list endpoint.
-       *
-       * We pass customer when the search value looks like
-       * an email. Reference search is handled locally for
-       * the transactions returned by the current page.
-       */
       if (search.includes('@')) {
-        params.set('customer', search.trim())
+        params.set(
+          'customer',
+          search.trim(),
+        )
       }
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/paystack-transactions?${params.toString()}`,
+        `${EDGE_URL}?${params.toString()}`,
         {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json',
+            'X-Manager-Token': token,
           },
         },
       )
 
-      const data = await response.json().catch(() => null)
+      const data =
+        await response.json().catch(() => null)
 
       if (!response.ok || !data?.success) {
         throw new Error(
           data?.error ||
-            'Unable to load Paystack transactions.',
+            'Failed to load Paystack transactions',
         )
       }
 
-      setTransactions(data.data || [])
+      setTransactions(
+        Array.isArray(data.data)
+          ? data.data
+          : [],
+      )
 
-      setMeta({
-        page: Number(data.meta?.page || page),
+      setPagination({
+        page: Number(
+          data.meta?.page || page,
+        ),
         perPage: Number(
           data.meta?.perPage || PAGE_SIZE,
         ),
@@ -290,88 +273,87 @@ export default function PaystackTransactions() {
           data.meta?.totalVolume || 0,
         ),
       })
-    } catch (err) {
-      console.error(err)
-
-      setTransactions([])
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to load transactions.',
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to load transactions',
       )
+      setTransactions([])
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
-  }, [page, status, from, to, search])
+  }, [
+    token,
+    page,
+    status,
+    from,
+    to,
+    search,
+  ])
 
   useEffect(() => {
-    loadTransactions()
-  }, [loadTransactions])
+    load()
+  }, [load])
 
-  const visibleTransactions = useMemo(() => {
-    const query = search.trim().toLowerCase()
+  const visibleTransactions =
+    useMemo(() => {
+      const q =
+        search.trim().toLowerCase()
 
-    if (!query || query.includes('@')) {
-      return transactions
-    }
-
-    return transactions.filter((transaction) => {
-      const reference =
-        transaction.reference?.toLowerCase() || ''
-
-      const customerEmail =
-        transaction.customer?.email?.toLowerCase() || ''
-
-      const customerName =
-        getCustomerName(transaction).toLowerCase()
-
-      return (
-        reference.includes(query) ||
-        customerEmail.includes(query) ||
-        customerName.includes(query)
-      )
-    })
-  }, [transactions, search])
-
-  async function viewTransaction(
-    transaction: Transaction,
-  ) {
-    setSelectedTransaction(transaction)
-    setTimeline([])
-    setDetailsError('')
-    setLoadingDetails(true)
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session?.access_token) {
-        throw new Error('Your session has expired.')
+      if (!q || q.includes('@')) {
+        return transactions
       }
 
-      const baseUrl =
-        `${import.meta.env.VITE_SUPABASE_URL}` +
-        '/functions/v1/paystack-transactions'
+      return transactions.filter(
+        transaction => {
+          const reference =
+            transaction.reference
+              ?.toLowerCase() || ''
 
-      const detailsUrl =
-        `${baseUrl}?action=details&id=${encodeURIComponent(
-          String(transaction.id),
-        )}`
+          const email =
+            transaction.customer?.email
+              ?.toLowerCase() || ''
 
-      const detailsResponse = await fetch(
-        detailsUrl,
-        {
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-          },
+          const name =
+            customerName(
+              transaction.customer,
+            ).toLowerCase()
+
+          return (
+            reference.includes(q) ||
+            email.includes(q) ||
+            name.includes(q)
+          )
         },
       )
+    }, [transactions, search])
+
+  const viewTransaction = async (
+    transaction: Transaction,
+  ) => {
+    setSelected(transaction)
+    setTimeline([])
+    setDetailsError('')
+    setDetailsLoading(true)
+
+    try {
+      const detailsResponse =
+        await fetch(
+          `${EDGE_URL}?action=details&id=${encodeURIComponent(
+            String(transaction.id),
+          )}`,
+          {
+            headers: {
+              'X-Manager-Token': token,
+            },
+          },
+        )
 
       const detailsData =
-        await detailsResponse.json().catch(() => null)
+        await detailsResponse
+          .json()
+          .catch(() => null)
 
       if (
         !detailsResponse.ok ||
@@ -379,1022 +361,690 @@ export default function PaystackTransactions() {
       ) {
         throw new Error(
           detailsData?.error ||
-            'Unable to load transaction details.',
+            'Failed to load transaction details',
         )
       }
 
-      setSelectedTransaction(detailsData.data)
+      setSelected(
+        detailsData.data,
+      )
 
-      /*
-       * Timeline is useful but should not prevent
-       * the transaction details from displaying.
-       */
-      try {
-        const timelineUrl =
-          `${baseUrl}?action=timeline&id=${encodeURIComponent(
+      const timelineResponse =
+        await fetch(
+          `${EDGE_URL}?action=timeline&id=${encodeURIComponent(
             String(transaction.id),
-          )}`
-
-        const timelineResponse = await fetch(
-          timelineUrl,
+          )}`,
           {
             headers: {
-              Authorization: `Bearer ${session.access_token}`,
-              apikey:
-                import.meta.env.VITE_SUPABASE_ANON_KEY,
+              'X-Manager-Token': token,
             },
           },
         )
 
-        const timelineData =
-          await timelineResponse.json().catch(() => null)
+      const timelineData =
+        await timelineResponse
+          .json()
+          .catch(() => null)
 
-        if (
-          timelineResponse.ok &&
-          timelineData?.success
-        ) {
-          setTimeline(
-            Array.isArray(timelineData.data)
-              ? timelineData.data
-              : [],
-          )
-        }
-      } catch (timelineError) {
-        console.warn(
-          'Unable to load transaction timeline:',
-          timelineError,
+      if (
+        timelineResponse.ok &&
+        timelineData?.success &&
+        Array.isArray(timelineData.data)
+      ) {
+        setTimeline(
+          timelineData.data,
         )
       }
-    } catch (err) {
-      console.error(err)
-
+    } catch (error) {
       setDetailsError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to load transaction details.',
+        error instanceof Error
+          ? error.message
+          : 'Failed to load transaction',
       )
     } finally {
-      setLoadingDetails(false)
+      setDetailsLoading(false)
     }
   }
 
-  async function copyValue(
+  const copy = async (
     value: string,
     key: string,
-  ) {
+  ) => {
     try {
-      await navigator.clipboard.writeText(value)
+      await navigator.clipboard.writeText(
+        value,
+      )
 
       setCopied(key)
 
       window.setTimeout(() => {
-        setCopied('')
+        setCopied(null)
       }, 1500)
     } catch {
-      // Ignore clipboard errors.
+      toast.error(
+        'Could not copy value',
+      )
     }
   }
 
-  function resetFilters() {
-    setSearch('')
-    setStatus('all')
-    setFrom('')
-    setTo('')
-    setPage(1)
-  }
-
-  function handleSearchChange(
-    value: string,
-  ) {
-    setSearch(value)
-    setPage(1)
-  }
-
-  function handleStatusChange(
-    value: string,
-  ) {
-    setStatus(value)
-    setPage(1)
-  }
-
-  function handleFromChange(
-    value: string,
-  ) {
-    setFrom(value)
-    setPage(1)
-  }
-
-  function handleToChange(
-    value: string,
-  ) {
-    setTo(value)
-    setPage(1)
-  }
+  const totalPages = Math.max(
+    pagination.pageCount,
+    1,
+  )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">
-            Paystack Transactions
-          </h2>
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <CreditCard className="w-4 h-4 text-gray-400" />
 
-          <p className="mt-1 text-sm text-gray-500">
-            View and inspect Paystack payment transactions.
-          </p>
-        </div>
+            <div>
+              <p className="font-semibold text-gray-800 text-sm">
+                Paystack Transactions
+              </p>
 
-        <button
-          type="button"
-          onClick={loadTransactions}
-          disabled={loading}
-          className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <RefreshCw
-            size={16}
-            className={
-              loading ? 'animate-spin' : ''
-            }
-          />
-
-          Refresh
-        </button>
-      </div>
-
-      {/* Filters */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-          <div className="relative lg:col-span-2">
-            <Search
-              size={18}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-
-            <input
-              value={search}
-              onChange={(event) =>
-                handleSearchChange(
-                  event.target.value,
-                )
-              }
-              placeholder="Search reference, customer or email..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-gray-400 focus:bg-white"
-            />
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                50 transactions per page
+              </p>
+            </div>
           </div>
 
-          <select
-            value={status}
-            onChange={(event) =>
-              handleStatusChange(
-                event.target.value,
-              )
-            }
-            className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-gray-400"
-          >
-            <option value="all">
-              All statuses
-            </option>
-            <option value="success">
-              Successful
-            </option>
-            <option value="failed">
-              Failed
-            </option>
-            <option value="abandoned">
-              Abandoned
-            </option>
-          </select>
-
           <button
-            type="button"
-            onClick={resetFilters}
-            className="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+            onClick={load}
+            disabled={isLoading}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
           >
-            Reset filters
+            <RefreshCw
+              className={`w-3.5 h-3.5 text-gray-400 ${
+                isLoading
+                  ? 'animate-spin'
+                  : ''
+              }`}
+            />
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-500">
-              From
-            </label>
+        {/* Filters */}
+        <div className="px-5 py-3 border-b border-gray-100 space-y-2.5">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
+
+            <input
+              type="text"
+              value={search}
+              onChange={e => {
+                setSearch(e.target.value)
+                setPage(1)
+              }}
+              placeholder="Search reference, customer or email…"
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <select
+              value={status}
+              onChange={e => {
+                setStatus(e.target.value)
+                setPage(1)
+              }}
+              className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white outline-none"
+            >
+              <option value="all">
+                All statuses
+              </option>
+              <option value="success">
+                Successful
+              </option>
+              <option value="failed">
+                Failed
+              </option>
+              <option value="abandoned">
+                Abandoned
+              </option>
+            </select>
 
             <input
               type="date"
               value={from}
-              onChange={(event) =>
-                handleFromChange(
-                  event.target.value,
-                )
-              }
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+              onChange={e => {
+                setFrom(e.target.value)
+                setPage(1)
+              }}
+              className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none"
             />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-gray-500">
-              To
-            </label>
 
             <input
               type="date"
               value={to}
-              onChange={(event) =>
-                handleToChange(
-                  event.target.value,
-                )
-              }
-              className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none focus:border-gray-400"
+              onChange={e => {
+                setTo(e.target.value)
+                setPage(1)
+              }}
+              className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none"
             />
           </div>
         </div>
-      </div>
 
-      {/* Summary */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-gray-500">
-            Current page
-          </p>
-
-          <p className="mt-1 text-2xl font-semibold text-gray-900">
-            {visibleTransactions.length}
-          </p>
-
-          <p className="mt-1 text-xs text-gray-400">
-            Maximum 50 transactions
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-gray-500">
-            Page
-          </p>
-
-          <p className="mt-1 text-2xl font-semibold text-gray-900">
-            {page} / {totalPages}
-          </p>
-
-          <p className="mt-1 text-xs text-gray-400">
-            Server-side pagination
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-          <p className="text-sm text-gray-500">
-            Page volume
-          </p>
-
-          <p className="mt-1 text-2xl font-semibold text-gray-900">
-            {formatMoney(meta.totalVolume)}
-          </p>
-
-          <p className="mt-1 text-xs text-gray-400">
-            Paystack reported volume
-          </p>
-        </div>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <AlertCircle
-            size={18}
-            className="mt-0.5 shrink-0"
-          />
-
-          <div>
-            <p className="font-medium">
-              Unable to load transactions
-            </p>
-
-            <p className="mt-1">
-              {error}
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-        {loading ? (
-          <div className="flex min-h-[360px] items-center justify-center">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Loader2
-                size={20}
-                className="animate-spin"
-              />
-
-              Loading Paystack transactions...
+        {/* Table */}
+        <div className="overflow-x-auto">
+          {isLoading ? (
+            <div className="py-12 text-center">
+              <Loader className="w-5 h-5 animate-spin text-gray-300 mx-auto" />
+              <p className="text-xs text-gray-400 mt-2">
+                Loading transactions…
+              </p>
             </div>
-          </div>
-        ) : visibleTransactions.length === 0 ? (
-          <div className="flex min-h-[360px] flex-col items-center justify-center px-6 text-center">
-            <CreditCard
-              size={40}
-              className="text-gray-300"
-            />
+          ) : visibleTransactions.length === 0 ? (
+            <div className="py-12 text-center">
+              <CreditCard className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <p className="text-sm text-gray-400">
+                No transactions found.
+              </p>
+            </div>
+          ) : (
+            <table className="min-w-full">
+              <thead className="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    Reference
+                  </th>
 
-            <h3 className="mt-4 font-medium text-gray-900">
-              No transactions found
-            </h3>
+                  <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    Customer
+                  </th>
 
-            <p className="mt-1 text-sm text-gray-500">
-              Try changing your search or filters.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-100">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Transaction
-                    </th>
+                  <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    Amount
+                  </th>
 
-                    <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Customer
-                    </th>
+                  <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    Channel
+                  </th>
 
-                    <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Amount
-                    </th>
+                  <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    Status
+                  </th>
 
-                    <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Channel
-                    </th>
+                  <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    Date
+                  </th>
 
-                    <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Status
-                    </th>
+                  <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                    Action
+                  </th>
+                </tr>
+              </thead>
 
-                    <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Date
-                    </th>
+              <tbody className="divide-y divide-gray-50">
+                {visibleTransactions.map(
+                  transaction => (
+                    <tr
+                      key={transaction.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
+                      <td className="px-5 py-3.5">
+                        <p className="text-xs font-mono font-bold text-gray-800">
+                          {transaction.reference ||
+                            '—'}
+                        </p>
 
-                    <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
+                        <p className="text-[10px] text-gray-300 mt-0.5">
+                          #{transaction.id}
+                        </p>
+                      </td>
 
-                <tbody className="divide-y divide-gray-100">
-                  {visibleTransactions.map(
-                    (transaction) => (
-                      <tr
-                        key={
-                          transaction.id
-                        }
-                        className="transition hover:bg-gray-50"
-                      >
-                        <td className="px-5 py-4">
-                          <div className="max-w-[220px]">
-                            <p className="truncate text-sm font-medium text-gray-900">
-                              {transaction.reference ||
-                                '—'}
-                            </p>
+                      <td className="px-5 py-3.5">
+                        <p className="text-xs font-semibold text-gray-800">
+                          {customerName(
+                            transaction.customer,
+                          )}
+                        </p>
 
-                            <p className="mt-1 text-xs text-gray-400">
-                              ID #{transaction.id}
-                            </p>
-                          </div>
-                        </td>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {transaction.customer
+                            ?.email || '—'}
+                        </p>
+                      </td>
 
-                        <td className="px-5 py-4">
-                          <p className="text-sm font-medium text-gray-900">
-                            {getCustomerName(
-                              transaction,
-                            )}
-                          </p>
+                      <td className="px-5 py-3.5">
+                        <p className="text-xs font-bold text-gray-800">
+                          {fmtAmount(
+                            transaction.amount,
+                            transaction.currency ||
+                              'NGN',
+                          )}
+                        </p>
 
-                          <p className="mt-1 max-w-[220px] truncate text-xs text-gray-500">
-                            {transaction.customer
-                              ?.email ||
-                              '—'}
-                          </p>
-                        </td>
-
-                        <td className="whitespace-nowrap px-5 py-4">
-                          <p className="text-sm font-semibold text-gray-900">
-                            {formatMoney(
-                              transaction.amount,
+                        {transaction.fees !=
+                          null && (
+                          <p className="text-[10px] text-gray-400 mt-0.5">
+                            Fee:{' '}
+                            {fmtAmount(
+                              transaction.fees,
                               transaction.currency ||
                                 'NGN',
                             )}
                           </p>
+                        )}
+                      </td>
 
-                          {transaction.fees !=
-                            null && (
-                            <p className="mt-1 text-xs text-gray-400">
-                              Fee:{' '}
-                              {formatMoney(
-                                transaction.fees,
-                                transaction.currency ||
-                                  'NGN',
-                              )}
-                            </p>
+                      <td className="px-5 py-3.5">
+                        <span className="text-xs text-gray-600 capitalize">
+                          {transaction.channel ||
+                            '—'}
+                        </span>
+                      </td>
+
+                      <td className="px-5 py-3.5">
+                        {statusBadge(
+                          transaction.status,
+                        )}
+                      </td>
+
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <span className="text-xs text-gray-600">
+                          {fmtDate(
+                            transaction.paid_at ||
+                              transaction.created_at,
                           )}
-                        </td>
+                        </span>
+                      </td>
 
-                        <td className="whitespace-nowrap px-5 py-4">
-                          <span className="text-sm capitalize text-gray-700">
-                            {transaction.channel ||
-                              '—'}
-                          </span>
-                        </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <button
+                          onClick={() =>
+                            viewTransaction(
+                              transaction,
+                            )
+                          }
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-900 hover:bg-gray-700 text-white text-[10px] font-bold transition-colors"
+                        >
+                          <Eye className="w-3 h-3" />
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ),
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
 
-                        <td className="whitespace-nowrap px-5 py-4">
-                          <StatusBadge
-                            status={
-                              transaction.status
-                            }
-                          />
-                        </td>
-
-                        <td className="whitespace-nowrap px-5 py-4">
-                          <p className="text-sm text-gray-700">
-                            {formatDate(
-                              transaction.paid_at ||
-                                transaction.created_at,
-                            )}
-                          </p>
-                        </td>
-
-                        <td className="whitespace-nowrap px-5 py-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              viewTransaction(
-                                transaction,
-                              )
-                            }
-                            className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
-                          >
-                            <Eye size={15} />
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ),
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            <div className="flex flex-col gap-3 border-t border-gray-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-gray-500">
+        {/* Pagination */}
+        {!isLoading &&
+          visibleTransactions.length > 0 && (
+            <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between">
+              <p className="text-[11px] text-gray-400">
                 Page{' '}
-                <span className="font-medium text-gray-900">
+                <span className="font-bold text-gray-700">
                   {page}
                 </span>{' '}
                 of{' '}
-                <span className="font-medium text-gray-900">
+                <span className="font-bold text-gray-700">
                   {totalPages}
                 </span>
               </p>
 
-              <div className="flex items-center gap-2">
+              <div className="flex gap-1.5">
                 <button
-                  type="button"
-                  disabled={!hasPrevious || loading}
                   onClick={() =>
-                    setPage(
-                      (current) =>
-                        Math.max(
-                          1,
-                          current - 1,
-                        ),
+                    setPage(p =>
+                      Math.max(p - 1, 1),
                     )
                   }
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={page <= 1}
+                  className="px-3 py-1.5 rounded-lg border border-gray-200 text-[10px] font-bold text-gray-600 disabled:opacity-30"
                 >
-                  <ChevronLeft size={16} />
+                  <ChevronLeft className="w-3 h-3 inline" />
                   Previous
                 </button>
 
                 <button
-                  type="button"
-                  disabled={!hasNext || loading}
                   onClick={() =>
-                    setPage(
-                      (current) =>
-                        Math.min(
-                          totalPages,
-                          current + 1,
-                        ),
+                    setPage(p =>
+                      Math.min(
+                        p + 1,
+                        totalPages,
+                      ),
                     )
                   }
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={
+                    page >= totalPages
+                  }
+                  className="px-3 py-1.5 rounded-lg border border-gray-200 text-[10px] font-bold text-gray-600 disabled:opacity-30"
                 >
                   Next
-                  <ChevronRight size={16} />
+                  <ChevronRight className="w-3 h-3 inline" />
                 </button>
               </div>
             </div>
-          </>
-        )}
+          )}
       </div>
 
-      {/* Details Modal */}
-      {selectedTransaction && (
+      {/* Details modal */}
+      {selected && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(event) => {
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onMouseDown={e => {
             if (
-              event.target ===
-              event.currentTarget
+              e.target ===
+              e.currentTarget
             ) {
-              setSelectedTransaction(null)
+              setSelected(null)
             }
           }}
         >
-          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <div className="bg-white w-full max-w-4xl max-h-[92vh] rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Transaction Details
-                </h3>
+                <p className="font-bold text-gray-900 text-sm">
+                  Transaction details
+                </p>
 
-                <p className="mt-1 text-xs text-gray-500">
-                  Paystack transaction #
-                  {selectedTransaction.id}
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {selected.reference ||
+                    `Transaction #${selected.id}`}
                 </p>
               </div>
 
               <button
-                type="button"
                 onClick={() =>
-                  setSelectedTransaction(
-                    null,
-                  )
+                  setSelected(null)
                 }
-                className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+                className="p-1.5 hover:bg-gray-100 rounded-lg"
               >
-                <X size={20} />
+                <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
 
-            {/* Modal Content */}
-            <div className="overflow-y-auto p-6">
-              {loadingDetails ? (
-                <div className="flex min-h-[300px] items-center justify-center">
-                  <div className="flex items-center gap-2 text-sm text-gray-500">
-                    <Loader2
-                      size={20}
-                      className="animate-spin"
-                    />
-                    Loading transaction details...
-                  </div>
+            <div className="overflow-y-auto p-5 space-y-5">
+              {detailsLoading ? (
+                <div className="py-12 text-center">
+                  <Loader className="w-5 h-5 animate-spin text-gray-300 mx-auto" />
+                  <p className="text-xs text-gray-400 mt-2">
+                    Loading full transaction…
+                  </p>
                 </div>
               ) : detailsError ? (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                <div className="bg-red-50 text-red-600 text-xs rounded-xl p-3 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
                   {detailsError}
                 </div>
               ) : (
-                <div className="space-y-6">
-                  {/* Main summary */}
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                      <div className="flex items-center gap-2 text-xs font-medium text-gray-500">
-                        <Banknote size={14} />
-                        Amount
-                      </div>
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                    <SummaryCard
+                      label="Amount"
+                      value={fmtAmount(
+                        selected.amount,
+                        selected.currency ||
+                          'NGN',
+                      )}
+                    />
 
-                      <p className="mt-2 text-xl font-semibold text-gray-900">
-                        {formatMoney(
-                          selectedTransaction.amount,
-                          selectedTransaction.currency ||
-                            'NGN',
-                        )}
-                      </p>
-                    </div>
+                    <SummaryCard
+                      label="Status"
+                      value={
+                        selected.status ||
+                        '—'
+                      }
+                    />
 
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                      <div className="text-xs font-medium text-gray-500">
-                        Status
-                      </div>
+                    <SummaryCard
+                      label="Channel"
+                      value={
+                        selected.channel ||
+                        '—'
+                      }
+                    />
 
-                      <div className="mt-2">
-                        <StatusBadge
-                          status={
-                            selectedTransaction.status
-                          }
-                        />
-                      </div>
-                    </div>
-
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                      <div className="text-xs font-medium text-gray-500">
-                        Channel
-                      </div>
-
-                      <p className="mt-2 text-sm font-semibold capitalize text-gray-900">
-                        {selectedTransaction.channel ||
-                          '—'}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-                      <div className="text-xs font-medium text-gray-500">
-                        Payment Type
-                      </div>
-
-                      <p className="mt-2 text-sm font-semibold text-gray-900">
-                        {getPaymentType(
-                          selectedTransaction,
-                        )}
-                      </p>
-                    </div>
+                    <SummaryCard
+                      label="Fees"
+                      value={
+                        selected.fees !=
+                        null
+                          ? fmtAmount(
+                              selected.fees,
+                              selected.currency ||
+                                'NGN',
+                            )
+                          : '—'
+                      }
+                    />
                   </div>
 
-                  {/* Reference */}
-                  <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <Hash
-                        size={17}
-                        className="text-gray-500"
-                      />
+                  <DetailSection
+                    icon={
+                      <Banknote className="w-4 h-4" />
+                    }
+                    title="Transaction"
+                  >
+                    <DetailGrid
+                      rows={[
+                        [
+                          'Transaction ID',
+                          String(
+                            selected.id,
+                          ),
+                          'transaction-id',
+                        ],
+                        [
+                          'Reference',
+                          selected.reference ||
+                            '—',
+                          'reference',
+                        ],
+                        [
+                          'Currency',
+                          selected.currency ||
+                            '—',
+                        ],
+                        [
+                          'Gateway response',
+                          selected.gateway_response ||
+                            '—',
+                        ],
+                        [
+                          'Message',
+                          selected.message ||
+                            '—',
+                        ],
+                        [
+                          'IP address',
+                          selected.ip_address ||
+                            '—',
+                        ],
+                        [
+                          'Created',
+                          fmtDate(
+                            selected.created_at,
+                          ),
+                        ],
+                        [
+                          'Paid',
+                          fmtDate(
+                            selected.paid_at,
+                          ),
+                        ],
+                      ]}
+                      copied={copied}
+                      onCopy={copy}
+                    />
+                  </DetailSection>
 
-                      <h4 className="font-semibold text-gray-900">
-                        Transaction
-                      </h4>
-                    </div>
+                  <DetailSection
+                    icon={
+                      <User className="w-4 h-4" />
+                    }
+                    title="Customer"
+                  >
+                    <DetailGrid
+                      rows={[
+                        [
+                          'Name',
+                          customerName(
+                            selected.customer,
+                          ),
+                        ],
+                        [
+                          'Email',
+                          selected.customer
+                            ?.email ||
+                            '—',
+                        ],
+                        [
+                          'Phone',
+                          selected.customer
+                            ?.phone ||
+                            '—',
+                        ],
+                        [
+                          'Customer code',
+                          selected.customer
+                            ?.customer_code ||
+                            '—',
+                        ],
+                      ]}
+                    />
+                  </DetailSection>
 
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <DetailRow
-                        label="Transaction ID"
-                        value={String(
-                          selectedTransaction.id,
-                        )}
-                        copyKey="transaction-id"
-                        copied={copied}
-                        onCopy={() =>
-                          copyValue(
-                            String(
-                              selectedTransaction.id,
-                            ),
-                            'transaction-id',
-                          )
-                        }
-                      />
-
-                      <DetailRow
-                        label="Reference"
-                        value={
-                          selectedTransaction.reference ||
-                          '—'
-                        }
-                        copyKey="reference"
-                        copied={copied}
-                        onCopy={() =>
-                          selectedTransaction.reference &&
-                          copyValue(
-                            selectedTransaction.reference,
-                            'reference',
-                          )
-                        }
-                      />
-
-                      <DetailRow
-                        label="Currency"
-                        value={
-                          selectedTransaction.currency ||
-                          '—'
-                        }
-                      />
-
-                      <DetailRow
-                        label="Gateway Response"
-                        value={
-                          selectedTransaction.gateway_response ||
-                          '—'
-                        }
-                      />
-
-                      <DetailRow
-                        label="Message"
-                        value={
-                          selectedTransaction.message ||
-                          '—'
-                        }
-                      />
-
-                      <DetailRow
-                        label="IP Address"
-                        value={
-                          selectedTransaction.ip_address ||
-                          '—'
-                        }
-                      />
-
-                      <DetailRow
-                        label="Created"
-                        value={formatDate(
-                          selectedTransaction.created_at,
-                        )}
-                      />
-
-                      <DetailRow
-                        label="Paid"
-                        value={formatDate(
-                          selectedTransaction.paid_at,
-                        )}
-                      />
-                    </div>
-                  </section>
-
-                  {/* Customer */}
-                  <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <User
-                        size={17}
-                        className="text-gray-500"
-                      />
-
-                      <h4 className="font-semibold text-gray-900">
-                        Customer
-                      </h4>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <DetailRow
-                        label="Name"
-                        value={getCustomerName(
-                          selectedTransaction,
-                        )}
-                      />
-
-                      <DetailRow
-                        label="Email"
-                        value={
-                          selectedTransaction.customer
-                            ?.email || '—'
-                        }
-                      />
-
-                      <DetailRow
-                        label="Phone"
-                        value={
-                          selectedTransaction.customer
-                            ?.phone || '—'
-                        }
-                      />
-
-                      <DetailRow
-                        label="Customer Code"
-                        value={
-                          selectedTransaction.customer
-                            ?.customer_code || '—'
-                        }
-                      />
-                    </div>
-                  </section>
-
-                  {/* Authorization */}
-                  {selectedTransaction.authorization && (
-                    <section>
-                      <div className="mb-3 flex items-center gap-2">
-                        <CreditCard
-                          size={17}
-                          className="text-gray-500"
-                        />
-
-                        <h4 className="font-semibold text-gray-900">
-                          Authorization
-                        </h4>
-                      </div>
-
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                        <DetailRow
-                          label="Channel"
-                          value={
-                            selectedTransaction
-                              .authorization
-                              ?.channel || '—'
-                          }
-                        />
-
-                        <DetailRow
-                          label="Card Type"
-                          value={
-                            selectedTransaction
-                              .authorization
-                              ?.card_type || '—'
-                          }
-                        />
-
-                        <DetailRow
-                          label="Brand"
-                          value={
-                            selectedTransaction
-                              .authorization
-                              ?.brand || '—'
-                          }
-                        />
-
-                        <DetailRow
-                          label="Bank"
-                          value={
-                            selectedTransaction
-                              .authorization
-                              ?.bank || '—'
-                          }
-                        />
-
-                        <DetailRow
-                          label="BIN"
-                          value={
-                            selectedTransaction
-                              .authorization
-                              ?.bin || '—'
-                          }
-                        />
-
-                        <DetailRow
-                          label="Last 4"
-                          value={
-                            selectedTransaction
-                              .authorization
-                              ?.last4 || '—'
-                          }
-                        />
-
-                        <DetailRow
-                          label="Expiry"
-                          value={
-                            selectedTransaction
-                              .authorization
+                  {selected.authorization && (
+                    <DetailSection
+                      icon={
+                        <CreditCard className="w-4 h-4" />
+                      }
+                      title="Authorization"
+                    >
+                      <DetailGrid
+                        rows={[
+                          [
+                            'Channel',
+                            selected.authorization
+                              ?.channel ||
+                              '—',
+                          ],
+                          [
+                            'Card type',
+                            selected.authorization
+                              ?.card_type ||
+                              '—',
+                          ],
+                          [
+                            'Brand',
+                            selected.authorization
+                              ?.brand ||
+                              '—',
+                          ],
+                          [
+                            'Bank',
+                            selected.authorization
+                              ?.bank ||
+                              '—',
+                          ],
+                          [
+                            'BIN',
+                            selected.authorization
+                              ?.bin ||
+                              '—',
+                          ],
+                          [
+                            'Last 4',
+                            selected.authorization
+                              ?.last4 ||
+                              '—',
+                          ],
+                          [
+                            'Expiry',
+                            selected.authorization
                               ?.exp_month &&
-                            selectedTransaction
-                              .authorization
+                            selected.authorization
                               ?.exp_year
-                              ? `${selectedTransaction.authorization.exp_month}/${selectedTransaction.authorization.exp_year}`
-                              : '—'
-                          }
-                        />
-
-                        <DetailRow
-                          label="Country"
-                          value={
-                            selectedTransaction
-                              .authorization
-                              ?.country_code || '—'
-                          }
-                        />
-
-                        <DetailRow
-                          label="Reusable"
-                          value={
-                            selectedTransaction
-                              .authorization
+                              ? `${selected.authorization.exp_month}/${selected.authorization.exp_year}`
+                              : '—',
+                          ],
+                          [
+                            'Country',
+                            selected.authorization
+                              ?.country_code ||
+                              '—',
+                          ],
+                          [
+                            'Reusable',
+                            selected.authorization
                               ?.reusable
                               ? 'Yes'
-                              : 'No'
-                          }
-                        />
-                      </div>
-                    </section>
+                              : 'No',
+                          ],
+                        ]}
+                      />
+                    </DetailSection>
                   )}
 
-                  {/* Fees */}
-                  <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <Banknote
-                        size={17}
-                        className="text-gray-500"
-                      />
-
-                      <h4 className="font-semibold text-gray-900">
-                        Payment Amount
-                      </h4>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <DetailRow
-                        label="Amount"
-                        value={formatMoney(
-                          selectedTransaction.amount,
-                          selectedTransaction.currency ||
-                            'NGN',
-                        )}
-                      />
-
-                      <DetailRow
-                        label="Paystack Fee"
-                        value={
-                          selectedTransaction.fees !=
-                          null
-                            ? formatMoney(
-                                selectedTransaction.fees,
-                                selectedTransaction.currency ||
-                                  'NGN',
-                              )
-                            : '—'
-                        }
-                      />
-
-                      <DetailRow
-                        label="Requested Amount"
-                        value={
-                          selectedTransaction.requested_amount !=
-                          null
-                            ? formatMoney(
-                                selectedTransaction.requested_amount,
-                                selectedTransaction.currency ||
-                                  'NGN',
-                              )
-                            : '—'
-                        }
-                      />
-                    </div>
-                  </section>
-
-                  {/* Metadata */}
-                  {selectedTransaction.metadata && (
-                    <section>
-                      <div className="mb-3 flex items-center gap-2">
-                        <Hash
-                          size={17}
-                          className="text-gray-500"
-                        />
-
-                        <h4 className="font-semibold text-gray-900">
-                          Metadata
-                        </h4>
-                      </div>
-
-                      <pre className="max-h-80 overflow-auto rounded-xl bg-gray-950 p-4 text-xs leading-6 text-gray-100">
+                  {selected.metadata && (
+                    <DetailSection
+                      icon={
+                        <Calendar className="w-4 h-4" />
+                      }
+                      title="Metadata"
+                    >
+                      <pre className="bg-gray-950 text-gray-100 text-[10px] leading-5 rounded-xl p-4 overflow-auto max-h-72">
                         {JSON.stringify(
-                          selectedTransaction.metadata,
+                          selected.metadata,
                           null,
                           2,
                         )}
                       </pre>
-                    </section>
+                    </DetailSection>
                   )}
 
-                  {/* Timeline */}
-                  <section>
-                    <div className="mb-3 flex items-center gap-2">
-                      <Calendar
-                        size={17}
-                        className="text-gray-500"
-                      />
-
-                      <h4 className="font-semibold text-gray-900">
-                        Transaction Timeline
-                      </h4>
-                    </div>
-
+                  <DetailSection
+                    icon={
+                      <Calendar className="w-4 h-4" />
+                    }
+                    title="Timeline"
+                  >
                     {timeline.length === 0 ? (
-                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-500">
+                      <p className="text-xs text-gray-400">
                         No timeline information available.
-                      </div>
+                      </p>
                     ) : (
-                      <div className="space-y-3">
+                      <div className="space-y-2">
                         {timeline.map(
                           (event, index) => (
                             <div
                               key={index}
-                              className="flex gap-3 rounded-xl border border-gray-200 p-4"
+                              className="border border-gray-100 rounded-xl p-3"
                             >
-                              <div className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full bg-gray-400" />
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-xs font-semibold text-gray-800">
+                                  {event.type ||
+                                    event.status ||
+                                    'Event'}
+                                </p>
 
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-sm font-medium text-gray-900">
-                                    {event.type ||
-                                      event.status ||
-                                      'Event'}
-                                  </p>
-
-                                  {event.time && (
-                                    <span className="text-xs text-gray-400">
-                                      {formatDate(
-                                        event.time,
-                                      )}
-                                    </span>
+                                <span className="text-[10px] text-gray-400">
+                                  {fmtDate(
+                                    event.time,
                                   )}
-                                </div>
-
-                                {event.message && (
-                                  <p className="mt-1 text-sm text-gray-600">
-                                    {event.message}
-                                  </p>
-                                )}
+                                </span>
                               </div>
+
+                              {event.message && (
+                                <p className="text-[11px] text-gray-500 mt-1">
+                                  {event.message}
+                                </p>
+                              )}
                             </div>
                           ),
                         )}
                       </div>
                     )}
-                  </section>
-                </div>
+                  </DetailSection>
+                </>
               )}
             </div>
           </div>
@@ -1404,48 +1054,109 @@ export default function PaystackTransactions() {
   )
 }
 
-function DetailRow({
+function SummaryCard({
   label,
   value,
-  copyKey,
-  copied,
-  onCopy,
 }: {
   label: string
   value: string
-  copyKey?: string
-  copied?: string
-  onCopy?: () => void
 }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3">
-      <p className="text-xs font-medium text-gray-500">
+    <div className="bg-gray-50 rounded-xl border border-gray-100 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
         {label}
       </p>
 
-      <div className="mt-1 flex items-center justify-between gap-3">
-        <p className="min-w-0 break-all text-sm text-gray-900">
-          {value}
-        </p>
+      <p className="text-sm font-bold text-gray-800 mt-1 capitalize">
+        {value}
+      </p>
+    </div>
+  )
+}
 
-        {copyKey && onCopy && value !== '—' && (
-          <button
-            type="button"
-            onClick={onCopy}
-            className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-            title="Copy"
-          >
-            {copied === copyKey ? (
-              <Check
-                size={14}
-                className="text-emerald-600"
-              />
-            ) : (
-              <Copy size={14} />
-            )}
-          </button>
-        )}
+function DetailSection({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  children: React.ReactNode
+}) {
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-2.5 text-gray-500">
+        {icon}
+
+        <h4 className="text-xs font-bold text-gray-800">
+          {title}
+        </h4>
       </div>
+
+      {children}
+    </section>
+  )
+}
+
+function DetailGrid({
+  rows,
+  copied,
+  onCopy,
+}: {
+  rows: Array<
+    [
+      string,
+      string,
+      string?,
+    ]
+  >
+  copied?: string | null
+  onCopy?: (
+    value: string,
+    key: string,
+  ) => void
+}) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+      {rows.map(
+        ([label, value, copyKey]) => (
+          <div
+            key={label}
+            className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5"
+          >
+            <p className="text-[10px] text-gray-400">
+              {label}
+            </p>
+
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <p className="text-xs font-medium text-gray-800 break-all">
+                {value}
+              </p>
+
+              {copyKey &&
+                onCopy &&
+                value !== '—' && (
+                  <button
+                    onClick={() =>
+                      onCopy(
+                        value,
+                        copyKey,
+                      )
+                    }
+                    className="shrink-0 p-1 rounded hover:bg-white"
+                  >
+                    {copied ===
+                    copyKey ? (
+                      <Check className="w-3 h-3 text-emerald-600" />
+                    ) : (
+                      <Copy className="w-3 h-3 text-gray-400" />
+                    )}
+                  </button>
+                )}
+            </div>
+          </div>
+        ),
+      )}
     </div>
   )
 }
