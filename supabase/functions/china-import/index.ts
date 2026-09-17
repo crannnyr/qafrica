@@ -1139,101 +1139,33 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'all-orders') {
-      const { manager_token, date_from, date_to, payment_status, status, page, per_page, search } = await req.json()
+      const { manager_token, date_from, date_to, payment_status, status } = await req.json()
       if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
 
-      // Search is server-side too, so pagination never requires loading the
-      // whole order history into the browser.
-      const rawSearch = typeof search === 'string' ? search.trim().slice(0, 100) : ''
-      const safeSearch = rawSearch.replace(/[%,()]/g, ' ').replace(/\\/g, '').trim()
-
-      // Email lives on customers, while the searchable order fields live on
-      // china_import_orders. Resolve matching customer IDs first, then include
-      // those IDs in the order filter.
-      let matchingCustomerIds: string[] = []
-      if (safeSearch) {
-        const { data: matchingCustomers, error: customerSearchError } = await supabase
-          .from('customers')
-          .select('id')
-          .ilike('email', `%${safeSearch}%`)
-          .limit(200)
-
-        if (customerSearchError) {
-          return json({ error: customerSearchError.message }, 500)
-        }
-
-        matchingCustomerIds = (matchingCustomers ?? []).map((c: any) => c.id)
+      const buildQuery = (from: number, to: number) => {
+        let q = supabase.from('china_import_orders')
+          .select('*, customers(email)')
+          .order('created_at', { ascending: false })
+          .range(from, to)
+        if (date_from) q = q.gte('created_at', date_from)
+        if (date_to) q = q.lte('created_at', date_to)
+        if (payment_status) q = q.eq('payment_status', payment_status)
+        if (status) q = q.eq('status', status)
+        return q
       }
 
-      // Backward-compatible pagination:
-      // - Existing callers that omit page keep the old full-data response.
-      // - OrdersList can opt into server pagination with page/per_page.
-      const paginated = page !== undefined || per_page !== undefined
-      const requestedPage = page === undefined ? 1 : Number(page)
-      const requestedPerPage = per_page === undefined ? 25 : Number(per_page)
-
-      if (
-        !Number.isInteger(requestedPage) ||
-        requestedPage < 1 ||
-        !Number.isInteger(requestedPerPage) ||
-        requestedPerPage < 1 ||
-        requestedPerPage > 100
-      ) {
-        return json({ error: 'Invalid pagination parameters' }, 400)
+      let raw: any[]
+      try {
+        raw = await fetchAllRows(buildQuery)
+      } catch (e: any) {
+        return json({ error: e?.message ?? 'Failed to fetch orders' }, 500)
       }
-
-      let query = supabase
-        .from('china_import_orders')
-        .select('*, customers(email)', paginated ? { count: 'exact' } : undefined)
-        .order('created_at', { ascending: false })
-
-      if (date_from) query = query.gte('created_at', date_from)
-      if (date_to) query = query.lte('created_at', date_to)
-      if (payment_status) query = query.eq('payment_status', payment_status)
-      if (status) query = query.eq('status', status)
-
-      if (safeSearch) {
-        const filters = [
-          `code.ilike.*${safeSearch}*`,
-          `customer_name.ilike.*${safeSearch}*`,
-          `customer_whatsapp.ilike.*${safeSearch}*`,
-          ...(matchingCustomerIds.length
-            ? [`user_id.in.(${matchingCustomerIds.join(',')})`]
-            : []),
-        ]
-        query = query.or(filters.join(','))
-      }
-
-      if (paginated) {
-        const from = (requestedPage - 1) * requestedPerPage
-        const to = from + requestedPerPage - 1
-        query = query.range(from, to)
-      } else {
-        query = query.limit(1000)
-      }
-
-      const { data: raw, error, count } = await query
-      if (error) return json({ error: error.message }, 500)
-
-      const orders = (raw ?? []).map((o: any) => ({
+      const orders = raw.map((o: any) => ({
         ...o,
         customer_email: o.customers?.email ?? null,
         customers: undefined,
       }))
-
-      return json({
-        orders,
-        ...(paginated
-          ? {
-              pagination: {
-                page: requestedPage,
-                per_page: requestedPerPage,
-                total: count ?? 0,
-                page_count: Math.ceil((count ?? 0) / requestedPerPage),
-              },
-            }
-          : {}),
-      })
+      return json({ orders })
     }
 
     if (req.method === 'POST' && action === 'admin-analytics') {
