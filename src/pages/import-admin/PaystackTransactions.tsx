@@ -289,9 +289,86 @@ export default function PaystackTransactions({
     to,
   ])
 
+  const runSearch = useCallback(
+    async (query: string) => {
+      const q = query.trim()
+  
+      if (!q) {
+        setSearchResults(null)
+        setSearchLoading(false)
+        return
+      }
+  
+      setSearchLoading(true)
+  
+      try {
+        const params = new URLSearchParams()
+  
+        params.set('action', 'search')
+        params.set('q', q)
+  
+        const response = await fetch(
+          `${EDGE_URL}?${params.toString()}`,
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Manager-Token': token,
+            },
+          },
+        )
+  
+        const data =
+          await response.json().catch(() => null)
+  
+        if (!response.ok || !data?.success) {
+          throw new Error(
+            data?.error ||
+              'Transaction search failed',
+          )
+        }
+  
+        setSearchResults(
+          Array.isArray(data.data)
+            ? data.data
+            : [],
+        )
+      } catch (error) {
+        setSearchResults([])
+  
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : 'Transaction search failed',
+        )
+      } finally {
+        setSearchLoading(false)
+      }
+    },
+    [token],
+  )
+
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    const q = search.trim()
+  
+    if (!q) {
+      setSearchResults(null)
+      setSearchLoading(false)
+      return
+    }
+  
+    const timer = window.setTimeout(() => {
+      runSearch(q)
+    }, 500)
+  
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [search, runSearch])
 
   const visibleTransactions =
     useMemo(() => {
