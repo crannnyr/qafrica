@@ -27,6 +27,7 @@ import AdminOrderReceiptSheet from './AdminOrderReceiptSheet';
 import PaystackTransactions from './PaystackTransactions';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const IMPORT_ADMIN_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-admin-orders`;
 const CUSTOM_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/custom-orders`;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -784,7 +785,7 @@ function OrdersList({ token }: { token: string }) {
       const trimmedSearch = search.trim().toLowerCase();
       if (trimmedSearch) body.search = trimmedSearch;
 
-      const res = await fetch(`${EDGE_URL}?action=all-orders`, {
+      const res = await fetch(IMPORT_ADMIN_ORDERS_EDGE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
