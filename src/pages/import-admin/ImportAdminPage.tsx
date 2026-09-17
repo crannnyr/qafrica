@@ -767,7 +767,7 @@ function OrdersList({ token }: { token: string }) {
   const [pageCount, setPageCount] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
-  const load = useCallback(async (targetPage = 1) => {
+  const load = useCallback(async (targetPage = 1, signal?: AbortSignal) => {
     setIsLoading(true);
 
     try {
@@ -782,13 +782,16 @@ function OrdersList({ token }: { token: string }) {
       if (range.date_from) body.date_from = range.date_from;
       if (range.date_to) body.date_to = range.date_to;
 
-      const trimmedSearch = search.trim().toLowerCase();
+      // Keep the original casing/spacing. The backend handles the searchable
+      // fields and customer lookup; lowercasing here was unnecessary.
+      const trimmedSearch = search.trim();
       if (trimmedSearch) body.search = trimmedSearch;
 
       const res = await fetch(IMPORT_ADMIN_ORDERS_EDGE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal,
       });
 
       const data = await res.json();
@@ -799,21 +802,27 @@ function OrdersList({ token }: { token: string }) {
       setPageCount(Math.max(1, Number(data.pagination?.page_count ?? 1)));
       setPage(Number(data.pagination?.page ?? targetPage));
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
       console.error('[OrdersList]', error);
       setOrders([]);
       setTotalCount(0);
       setPageCount(1);
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) setIsLoading(false);
     }
   }, [token, filter, dateFilter, search]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      load(1);
-    }, search.trim() ? 250 : 0);
+    const controller = new AbortController();
 
-    return () => clearTimeout(timer);
+    const timer = setTimeout(() => {
+      load(1, controller.signal);
+    }, search.trim() ? 350 : 0);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, [load]);
 
   useEffect(() => {
@@ -859,15 +868,33 @@ function OrdersList({ token }: { token: string }) {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
           <input
-            type="text"
+            type="search"
             value={search}
             onChange={e => {
               setSearch(e.target.value);
               setPage(1);
             }}
-            placeholder="Search by code, name, email or number…"
-            className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 outline-none"
+            onKeyDown={e => {
+              if (e.key === 'Escape') setSearch('');
+            }}
+            placeholder="Search order code, customer, email, phone or payment ref…"
+            className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 outline-none"
+            autoComplete="off"
+            spellCheck={false}
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('');
+                setPage(1);
+              }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         <div className="flex gap-1.5 overflow-x-auto pb-0.5">
