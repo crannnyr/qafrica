@@ -372,36 +372,18 @@ export default function PaystackTransactions({
 
   const visibleTransactions =
     useMemo(() => {
-      const q =
-        search.trim().toLowerCase()
-
-      if (!q || q.includes('@')) {
+      const q = search.trim()
+  
+      if (!q) {
         return transactions
       }
-
-      return transactions.filter(
-        transaction => {
-          const reference =
-            transaction.reference
-              ?.toLowerCase() || ''
-
-          const email =
-            transaction.customer?.email
-              ?.toLowerCase() || ''
-
-          const name =
-            customerName(
-              transaction.customer,
-            ).toLowerCase()
-
-          return (
-            reference.includes(q) ||
-            email.includes(q) ||
-            name.includes(q)
-          )
-        },
-      )
-    }, [transactions, search])
+  
+      return searchResults || []
+    }, [
+      transactions,
+      search,
+      searchResults,
+  ])
 
   const viewTransaction = async (
     transaction: Transaction,
@@ -545,16 +527,38 @@ export default function PaystackTransactions({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
 
-            <input
-              type="text"
-              value={search}
-              onChange={e => {
-                setSearch(e.target.value)
-                setPage(1)
-              }}
-              placeholder="Search reference, customer or email…"
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 outline-none"
-            />
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
+            
+              <input
+                type="text"
+                value={search}
+                onChange={e => {
+                  setSearch(e.target.value)
+                  setPage(1)
+                }}
+                placeholder="Search reference, customer email or code…"
+                className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 outline-none"
+              />
+            
+              {searchLoading && (
+                <Loader className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 animate-spin" />
+              )}
+            
+              {!searchLoading && search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('')
+                    setSearchResults(null)
+                    setPage(1)
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-100"
+                >
+                  <X className="w-3.5 h-3.5 text-gray-400" />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -750,7 +754,8 @@ export default function PaystackTransactions({
 
         {/* Pagination */}
         {!isLoading &&
-          visibleTransactions.length > 0 && (
+          visibleTransactions.length > 0 &&
+          !search.trim() && (
             <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between">
               <p className="text-[11px] text-gray-400">
                 Page{' '}
