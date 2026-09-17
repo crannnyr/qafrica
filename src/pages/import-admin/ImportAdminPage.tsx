@@ -685,57 +685,153 @@ function LoadCodePanel({ token }: { token: string }) {
 }
 
 // ── All Orders List ───────────────────────────────────────────────────────────
+type OrderDateFilter = 'all' | 'today' | 'yesterday' | '7d' | 'month' | 'older';
+
+const ORDER_PAGE_SIZE = 25;
+
+function startOfLocalDay(date = new Date()) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function endOfLocalDay(date = new Date()) {
+  const d = startOfLocalDay(date);
+  d.setDate(d.getDate() + 1);
+  return d;
+}
+
+function addDays(date: Date, days: number) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function getOrderDateRange(filter: OrderDateFilter): { date_from?: string; date_to?: string } {
+  const todayStart = startOfLocalDay();
+  const tomorrowStart = endOfLocalDay();
+
+  switch (filter) {
+    case 'today':
+      return {
+        date_from: todayStart.toISOString(),
+        date_to: tomorrowStart.toISOString(),
+      };
+    case 'yesterday': {
+      const yesterdayStart = addDays(todayStart, -1);
+      return {
+        date_from: yesterdayStart.toISOString(),
+        date_to: todayStart.toISOString(),
+      };
+    }
+    case '7d':
+      return {
+        date_from: addDays(todayStart, -6).toISOString(),
+        date_to: tomorrowStart.toISOString(),
+      };
+    case 'month': {
+      const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+      return {
+        date_from: monthStart.toISOString(),
+        date_to: tomorrowStart.toISOString(),
+      };
+    }
+    case 'older':
+      return {
+        date_to: addDays(todayStart, -6).toISOString(),
+      };
+    default:
+      return {};
+  }
+}
+
+function formatOrderDate(dateStr: string) {
+  return new Date(dateStr).toLocaleString('en-NG', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function OrdersList({ token }: { token: string }) {
-  const [orders, setOrders]       = useState<ImportOrder[]>([]);
+  const [orders, setOrders] = useState<ImportOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter]       = useState('all');
-  const [search, setSearch]       = useState('');
-  const [todayOnly, setTodayOnly] = useState(false);
+  const [filter, setFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState<OrderDateFilter>('all');
+  const [search, setSearch] = useState('');
   const [billingOrder, setBillingOrder] = useState<ImportOrder | null>(null);
   const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetPage = 1) => {
     setIsLoading(true);
+
     try {
+      const range = getOrderDateRange(dateFilter);
+      const body: Record<string, unknown> = {
+        manager_token: token,
+        page: targetPage,
+        per_page: ORDER_PAGE_SIZE,
+      };
+
+      if (filter !== 'all') body.status = filter;
+      if (range.date_from) body.date_from = range.date_from;
+      if (range.date_to) body.date_to = range.date_to;
+
+      const trimmedSearch = search.trim().toLowerCase();
+      if (trimmedSearch) body.search = trimmedSearch;
+
       const res = await fetch(`${EDGE_URL}?action=all-orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token }),
+        body: JSON.stringify(body),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to load orders');
+
       setOrders(data.orders ?? []);
-    } catch {
+      setTotalCount(Number(data.pagination?.total ?? data.orders?.length ?? 0));
+      setPageCount(Math.max(1, Number(data.pagination?.page_count ?? 1)));
+      setPage(Number(data.pagination?.page ?? targetPage));
+    } catch (error) {
+      console.error('[OrdersList]', error);
+      setOrders([]);
+      setTotalCount(0);
+      setPageCount(1);
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, filter, dateFilter, search]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      load(1);
+    }, search.trim() ? 250 : 0);
 
-  const isToday = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const now = new Date();
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    return () => clearTimeout(timer);
+  }, [load]);
+
+  useEffect(() => {
+    if (page > pageCount) setPage(1);
+  }, [page, pageCount]);
+
+  const changeDateFilter = (next: OrderDateFilter) => {
+    setDateFilter(next);
+    setPage(1);
   };
 
-  const filtered = orders.filter(o => {
-    const matchStatus = filter === 'all' || o.status === filter;
-    const matchSearch = !search ||
-      o.code.includes(search.toUpperCase()) ||
-      o.customer_name.toLowerCase().includes(search.toLowerCase()) ||
-      o.customer_whatsapp.includes(search) ||
-      (o.customer_email ?? '').toLowerCase().includes(search.toLowerCase());
-    const matchToday = !todayOnly || isToday((o as any).created_at);
-    return matchStatus && matchSearch && matchToday;
-  });
+  const changeStatusFilter = (next: string) => {
+    setFilter(next);
+    setPage(1);
+  };
 
-  const todayCount = orders.filter(o => isToday((o as any).created_at)).length;
-
-  const counts = STATUS_FLOW.reduce((acc, s) => {
-    acc[s] = orders.filter(o => o.status === s).length;
-    return acc;
-  }, {} as Record<string, number>);
+  const todayCountHint = dateFilter === 'today' && filter === 'all' && !search.trim()
+    ? totalCount
+    : null;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
@@ -744,11 +840,16 @@ function OrdersList({ token }: { token: string }) {
           <Package className="w-4 h-4 text-gray-400" />
           <span className="font-semibold text-gray-800 text-sm">All orders</span>
           <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">
-            {orders.length}
+            {totalCount.toLocaleString()}
           </span>
         </div>
-        <button onClick={load} disabled={isLoading}
-          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors">
+
+        <button
+          onClick={() => load(page)}
+          disabled={isLoading}
+          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+          title="Refresh orders"
+        >
           <RefreshCw className={`w-3.5 h-3.5 text-gray-400 ${isLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
@@ -759,100 +860,235 @@ function OrdersList({ token }: { token: string }) {
           <input
             type="text"
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
             placeholder="Search by code, name, email or number…"
             className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 outline-none"
           />
         </div>
+
         <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
-              filter === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'
-            }`}
-          >
-            All ({orders.length})
-          </button>
-          <button
-            onClick={() => setTodayOnly(v => !v)}
-            className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
-              todayOnly ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
-            }`}
-          >
-            Today ({todayCount})
-          </button>
-          {STATUS_FLOW.map(s => counts[s] > 0 && (
+          {([
+            ['all', 'All'],
+            ['today', 'Today'],
+            ['yesterday', 'Yesterday'],
+            ['7d', 'Last 7 days'],
+            ['month', 'This month'],
+            ['older', 'Older'],
+          ] as const).map(([key, label]) => (
             <button
-              key={s}
-              onClick={() => setFilter(s)}
-              className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
-                filter === s ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
+              key={key}
+              onClick={() => changeDateFilter(key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                dateFilter === key ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'
               }`}
             >
-              {STATUS_LABELS[s]} ({counts[s]})
+              {label}
+              {key === 'today' && todayCountHint !== null ? ` (${todayCountHint})` : ''}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+          <button
+            onClick={() => changeStatusFilter('all')}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+              filter === 'all' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            All statuses
+          </button>
+
+          {STATUS_FLOW.map(status => (
+            <button
+              key={status}
+              onClick={() => changeStatusFilter(status)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+                filter === status ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              {STATUS_LABELS[status]}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="divide-y divide-gray-50">
-        {isLoading && orders.length === 0 ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="px-5 py-4 animate-pulse flex items-center gap-3">
-              <div className="flex-1 space-y-2">
-                <div className="h-3 w-28 bg-gray-100 rounded" />
-                <div className="h-2 w-44 bg-gray-100 rounded" />
-              </div>
-            </div>
-          ))
-        ) : filtered.length === 0 ? (
-          <div className="px-5 py-12 text-center">
-            <p className="text-sm text-gray-300">No orders found</p>
-          </div>
-        ) : (
-          filtered.map(order => (
-            <div
-              key={order.id}
-              onClick={() => order.user_id && setProfileCustomerId(order.user_id)}
-              className={`px-5 py-3.5 hover:bg-gray-50 transition-colors ${order.user_id ? 'cursor-pointer' : ''}`}
-            >
-              <div className="flex items-start justify-between gap-2 mb-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-gray-900 font-mono tracking-wider text-xs">
-                    {order.code}
-                  </span>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[order.status]}`}>
-                    {STATUS_LABELS[order.status]}
-                  </span>
-                </div>
-                <span className="font-semibold text-gray-800 text-xs flex-shrink-0">
-                  {fmt(order.total_ngn)}
-                </span>
-              </div>
-              <p className="text-sm text-gray-700">{order.customer_name}</p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[11px] text-gray-400">{order.customer_whatsapp}</span>
-                <span className="text-gray-200">·</span>
-                <span className="text-[11px] text-gray-400">{timeSince(order.created_at)}</span>
-                <span className="text-gray-200">·</span>
-                <span className={`text-[10px] font-medium ${
-                  order.delivery_type === 'to_qafrica' ? 'text-orange-500' : 'text-sky-500'
-                }`}>
-                  {order.delivery_type === 'to_qafrica' ? 'Jumia' : 'To customer'}
-                </span>
-              </div>
-              {order.user_id && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); setBillingOrder(order); }}
-                  className="mt-2 text-[11px] font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg transition-colors"
+      <div className="overflow-x-auto">
+        <table className="min-w-[920px] w-full text-left">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+              <th className="px-5 py-3">Order</th>
+              <th className="px-5 py-3">Customer</th>
+              <th className="px-5 py-3">Payment</th>
+              <th className="px-5 py-3">Delivery</th>
+              <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3 text-right">Total</th>
+              <th className="px-5 py-3">Created</th>
+              <th className="px-5 py-3 text-right">Action</th>
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-gray-50">
+            {isLoading && orders.length === 0 ? (
+              Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} className="animate-pulse">
+                  {Array.from({ length: 8 }).map((__, j) => (
+                    <td key={j} className="px-5 py-4">
+                      <div className="h-3 bg-gray-100 rounded w-20" />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : orders.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-5 py-12 text-center">
+                  <p className="text-sm text-gray-300">No orders found</p>
+                </td>
+              </tr>
+            ) : (
+              orders.map(order => (
+                <tr
+                  key={order.id}
+                  onClick={() => order.user_id && setProfileCustomerId(order.user_id)}
+                  className={`hover:bg-gray-50 transition-colors ${order.user_id ? 'cursor-pointer' : ''}`}
                 >
-                  Bill this customer
-                </button>
-              )}
-            </div>
-          ))
-        )}
+                  <td className="px-5 py-3.5 align-middle">
+                    <div>
+                      <p className="font-bold text-gray-900 font-mono tracking-wider text-xs">
+                        {order.code}
+                      </p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        {formatOrderDate(order.created_at)}
+                      </p>
+                    </div>
+                  </td>
+
+                  <td className="px-5 py-3.5 align-middle">
+                    <p className="text-sm font-medium text-gray-800">{order.customer_name}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5 max-w-[190px] truncate">
+                      {order.customer_email ?? order.customer_whatsapp}
+                    </p>
+                  </td>
+
+                  <td className="px-5 py-3.5 align-middle">
+                    <span className={`inline-flex text-[10px] font-bold px-2 py-1 rounded-full ${
+                      order.payment_status === 'paid'
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : order.payment_status === 'awaiting_confirmation'
+                          ? 'bg-amber-50 text-amber-700'
+                          : order.payment_status === 'failed'
+                            ? 'bg-red-50 text-red-600'
+                            : 'bg-gray-100 text-gray-500'
+                    }`}>
+                      {PAYMENT_STATUS_LABELS[order.payment_status] ?? order.payment_status}
+                    </span>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      {order.payment_method === 'paystack' ? 'Paystack' : order.payment_method === 'manual' ? 'Bank transfer' : '—'}
+                    </p>
+                  </td>
+
+                  <td className="px-5 py-3.5 align-middle">
+                    <span className={`text-[10px] font-medium ${
+                      order.delivery_type === 'to_qafrica' ? 'text-orange-500' : 'text-sky-500'
+                    }`}>
+                      {order.delivery_type === 'to_qafrica' ? 'QAFRICA / Jumia' : 'To customer'}
+                    </span>
+                  </td>
+
+                  <td className="px-5 py-3.5 align-middle">
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${STATUS_COLORS[order.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                      {STATUS_LABELS[order.status] ?? order.status}
+                    </span>
+                  </td>
+
+                  <td className="px-5 py-3.5 align-middle text-right">
+                    <span className="font-semibold text-gray-800 text-xs whitespace-nowrap">
+                      {fmt(order.total_ngn)}
+                    </span>
+                  </td>
+
+                  <td className="px-5 py-3.5 align-middle whitespace-nowrap">
+                    <span className="text-[11px] text-gray-500">
+                      {formatOrderDate(order.created_at)}
+                    </span>
+                    <span className="block text-[10px] text-gray-300">
+                      {timeSince(order.created_at)}
+                    </span>
+                  </td>
+
+                  <td className="px-5 py-3.5 align-middle text-right">
+                    {order.user_id ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBillingOrder(order);
+                        }}
+                        className="text-[11px] font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                      >
+                        Bill
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-gray-300">Guest</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
+
+      {pageCount > 1 && (
+        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
+          <p className="text-[11px] text-gray-400 whitespace-nowrap">
+            Page {page} of {pageCount} · {totalCount.toLocaleString()} orders
+          </p>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => load(page - 1)}
+              disabled={page <= 1 || isLoading}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Previous
+            </button>
+
+            {Array.from({ length: Math.min(5, pageCount) }).map((_, index) => {
+              let pageNumber = index + 1;
+              if (pageCount > 5) {
+                if (page <= 3) pageNumber = index + 1;
+                else if (page >= pageCount - 2) pageNumber = pageCount - 4 + index;
+                else pageNumber = page - 2 + index;
+              }
+
+              return (
+                <button
+                  key={pageNumber}
+                  onClick={() => load(pageNumber)}
+                  disabled={isLoading}
+                  className={`min-w-8 h-8 px-2 rounded-lg text-xs font-semibold transition-colors ${
+                    page === pageNumber
+                      ? 'bg-gray-900 text-white'
+                      : 'border border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+                >
+                  {pageNumber}
+                </button>
+              );
+            })}
+
+            <button
+              onClick={() => load(page + 1)}
+              disabled={page >= pageCount || isLoading}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {billingOrder && (
         <BillCustomerModal
@@ -866,7 +1102,10 @@ function OrdersList({ token }: { token: string }) {
         <CustomerDetail
           token={token}
           customerId={profileCustomerId}
-          onClose={() => { setProfileCustomerId(null); load(); }}
+          onClose={() => {
+            setProfileCustomerId(null);
+            load(page);
+          }}
           onFavoriteToggled={() => {}}
         />
       )}
