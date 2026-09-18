@@ -1474,20 +1474,26 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     fetch(`${EDGE_URL}?action=admin-pricing-settings`)
       .then(r => r.json())
       .then(d => {
-        const rate = Number(d?.settings?.usd_to_ngn);
-        if (Number.isFinite(rate) && rate > 0) setPricingUsdToNgn(rate);
-      })
-      .catch(() => {});
-    fetch(`${EDGE_URL}?action=admin-pricing-settings`)
-      .then(r => r.json())
-      .then(d => {
-        if (!d.settings) return;
+        const s = d?.settings;
+        if (!s) return;
+
+        const usdToNgn = Number(s.usd_to_ngn);
+        const seaRate = Number(s.sea_rate_ngn_per_cbm);
+        // Accept both API names for the air rate so the admin preview
+        // never silently falls back to zero if the response uses either
+        // the air or flight naming convention.
+        const airRate = Number(s.air_rate_ngn_per_gram ?? s.flight_rate_ngn_per_gram);
+        const seaProductPct = Number(s.sea_product_allocation_percent ?? s.sea_shipping_product_allocation_percent);
+        const seaCustomerPct = Number(s.sea_customer_percent ?? s.sea_shipping_customer_percent);
+
+        if (Number.isFinite(usdToNgn) && usdToNgn > 0) setPricingUsdToNgn(usdToNgn);
+
         setShippingRates({
-          seaRateNgnPerCbm: Number(d.settings.sea_rate_ngn_per_cbm ?? 0),
-          flightRateNgnPerGram: Number(d.settings.flight_rate_ngn_per_gram ?? 0),
-          seaProductAllocationPercent: Number(d.settings.sea_shipping_product_allocation_percent ?? 80),
-          seaCustomerPercent: Number(d.settings.sea_shipping_customer_percent ?? 20),
-          airCreditEnabled: d.settings.air_shipping_credit_enabled !== false,
+          seaRateNgnPerCbm: Number.isFinite(seaRate) && seaRate >= 0 ? seaRate : 0,
+          flightRateNgnPerGram: Number.isFinite(airRate) && airRate >= 0 ? airRate : 0,
+          seaProductAllocationPercent: Number.isFinite(seaProductPct) ? seaProductPct : 80,
+          seaCustomerPercent: Number.isFinite(seaCustomerPct) ? seaCustomerPct : 20,
+          airCreditEnabled: s.air_credit_enabled !== false,
         });
       })
       .catch(() => {});
