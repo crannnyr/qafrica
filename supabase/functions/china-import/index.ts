@@ -667,10 +667,8 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'GET' && action === 'rates') {
-      const cached = cacheGet<number>('cnyToUsd')
-      const cnyToUsd = cached ?? await getCnyToUsd()
-      if (!cached) cacheSet('cnyToUsd', cnyToUsd, 5 * 60_000)
-      return jsonCached({ rates: { usdToNgn: USD_TO_NGN_RATE, cnyToUsd } }, 300)
+      const settings = await getImportPricingSettings(supabase)
+      return json({ rates: { usdToNgn: settings.usdToNgn, cnyToUsd: settings.cnyToUsd } })
     }
 
     if (req.method === 'POST' && action === 'generate-code') {
