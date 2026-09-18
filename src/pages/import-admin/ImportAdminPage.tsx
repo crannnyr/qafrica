@@ -1868,7 +1868,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                 />
                 {volumeCbmNum > 0 && (
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Sea shipping cost: <span className="font-semibold text-gray-600">{fmt(previewSeaShippingCost)}</span> ({volumeCbmNum} cbm × rate)
+                    Raw sea: <span className="font-semibold text-gray-600">{fmt(previewRawSeaShipping)}</span> · Product allocation: <span className="font-semibold text-gray-600">{fmt(previewSeaAllocation)}</span> · Customer: <span className="font-semibold text-gray-600">{fmt(previewSeaCustomer)}</span>
                   </p>
                 )}
               </div>
@@ -1883,7 +1883,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                 />
                 {weightGramsNum > 0 && (
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Flight shipping cost: <span className="font-semibold text-gray-600">{fmt(previewFlightShippingCost)}</span> ({weightGramsNum}g × rate)
+                    Raw air: <span className="font-semibold text-gray-600">{fmt(previewRawAirShipping)}</span> · Final customer air: <span className="font-semibold text-gray-600">{fmt(previewAirShipping)}</span>
                   </p>
                 )}
               </div>
@@ -2043,7 +2043,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
 
               <div className="flex gap-2 pt-1">
                 <button onClick={handleSave}
-                  disabled={isSaving || !name || !priceAmount || imagePreviews.length === 0}
+                  disabled={isSaving || !name || !originalPriceUsd || !categoryId || !subcategoryId || imagePreviews.length === 0}
                   className="flex-1 py-2.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-2">
                   {isSaving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                   {editProduct ? 'Save changes' : 'Add product'}
