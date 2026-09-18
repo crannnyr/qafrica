@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader, RefreshCw, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
@@ -36,6 +36,7 @@ export default function CategoryManager({ token }: Props) {
   const [subcategoryMarkupPercent, setSubcategoryMarkupPercent] = useState('0');
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const modalScrollPosition = useRef(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,13 +58,16 @@ export default function CategoryManager({ token }: Props) {
   }, [load]);
 
   const openNewSubcategory = (categoryId: string) => {
+    modalScrollPosition.current = window.scrollY;
     setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(categoryId); setSubcategoryMarkupPercent('0'); setFormOpen(true);
   };
   const openEditSubcategory = (subcategory: SubcategoryRow) => {
+    modalScrollPosition.current = window.scrollY;
     setEditingSubcategory(subcategory); setSubcategoryName(subcategory.name); setSubcategoryCategoryId(subcategory.category_id); setSubcategoryMarkupPercent(String(subcategory.markup_percent ?? 0)); setFormOpen(true);
   };
   const closeSubcategoryForm = () => {
     setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(''); setSubcategoryMarkupPercent('0'); setFormOpen(false);
+    requestAnimationFrame(() => window.scrollTo({ top: modalScrollPosition.current, behavior: 'auto' }));
   };
   const saveSubcategory = async () => {
     const name = subcategoryName.trim(); const category = categories.find(c => c.id === subcategoryCategoryId);
