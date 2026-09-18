@@ -616,13 +616,31 @@ serve(async (req: Request) => {
 
       const { data: order, error } = await supabase
         .from('china_import_orders')
-        .select('code, status, shipping_method, shipped_at, created_at, items, delivery_mode, pickup_station_name, pickup_station_address')
+        .select('id, code, status, shipping_method, shipped_at, received_at, created_at, items, delivery_mode, pickup_station_name, pickup_station_address')
         .eq('code', code.trim().toUpperCase())
         .maybeSingle()
       if (error) return json({ error: error.message }, 500)
       if (!order) return json({ error: "No order found with that code. Double-check and try again." }, 404)
 
-      return json({ order })
+      // The consolidation/shipping bill is the source of truth for the
+      // customer-facing warehouse milestone. Any active bill means the order
+      // has entered the billing/warehouse stage; cancelled bills do not.
+      const { data: consolidationBill, error: billError } = await supabase
+        .from('china_import_consolidation_bills')
+        .select('id, status')
+        .eq('order_id', order.id)
+        .eq('kind', 'consolidation_shipping')
+        .not('status', 'eq', 'cancelled')
+        .maybeSingle()
+      if (billError) return json({ error: billError.message }, 500)
+
+      return json({
+        order: {
+          ...order,
+          consolidation_billed: !!consolidationBill,
+          consolidation_bill_status: consolidationBill?.status ?? null,
+        },
+      })
     }
 
     if (req.method === 'POST' && action === 'admin-products') {
