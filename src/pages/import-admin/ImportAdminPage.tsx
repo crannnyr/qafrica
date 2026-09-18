@@ -1766,63 +1766,56 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
 
               <div>
                 <Label>Category</Label>
-                <input type="text" value={category} onChange={e => setCategory(e.target.value)}
-                  placeholder="e.g. Electronics, Fashion, Home"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+                <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setSubcategoryId(''); }}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:border-gray-400 outline-none">
+                  <option value="">Select category</option>
+                  {productCategories.map(c => (
+                    <option key={c.niche_id + ':' + c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
               </div>
 
-              {/* Price input with markup note */}
               <div>
-                <Label>Price from source</Label>
+                <Label>Subcategory</Label>
+                <select value={subcategoryId} onChange={e => setSubcategoryId(e.target.value)} disabled={!categoryId}
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:border-gray-400 outline-none disabled:bg-gray-50">
+                  <option value="">Select subcategory</option>
+                  {(selectedCategory?.subcategories ?? []).map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
 
-                {/* Markup info banner */}
-                <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 mb-2">
-                  <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-blue-600 leading-relaxed">
-                    Enter the <strong>exact cost price</strong> in whatever currency you have it. A tiered platform markup (₦200–₦25,000 depending on price band) is added automatically before saving.
-                  </p>
-                </div>
-
-                <div className="flex gap-2">
-                  <input type="number" value={priceAmount} onChange={e => setPriceAmount(e.target.value)}
-                    placeholder="e.g. 45.00"
-                    className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
-                  <select value={priceCurrency} onChange={e => setPriceCurrency(e.target.value as 'cny' | 'usd' | 'ngn')}
-                    className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:border-gray-400 outline-none">
-                    <option value="cny">CNY ¥</option>
-                    <option value="usd">USD $</option>
-                    <option value="ngn">NGN ₦</option>
-                  </select>
-                </div>
-
-                {/* Live conversion preview */}
-                {priceNgn > 0 && rates && (
+              <div>
+                <Label>Original product price (USD)</Label>
+                <input type="number" min={0.01} step="0.01" value={originalPriceUsd}
+                  onChange={e => setOriginalPriceUsd(e.target.value)}
+                  placeholder="e.g. 10.00"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+                <p className="text-[11px] text-gray-400 mt-1">Current USD → NGN rate: {pricingSettings ? fmt(pricingSettings.usd_to_ngn) : 'Loading…'}</p>
+                {originalUsdNum > 0 && pricingSettings && (
                   <div className="mt-2 bg-white border border-gray-100 rounded-xl px-4 py-3 space-y-1.5">
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Cost price</span>
-                      <span className="font-medium">{fmt(previewCostNgn)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>+ Platform markup</span>
-                      <span className="font-medium text-orange-500">{fmt(previewMarkupNgn)}</span>
-                    </div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Base NGN cost</span><span className="font-medium">{fmt(previewBaseCostNgn)}</span></div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Markup ({previewMarkupPercent}%)</span><span className="font-medium">{fmt(previewMarkupNgn)}</span></div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Product cost before shipping</span><span className="font-medium">{fmt(previewProductCostBeforeShipping)}</span></div>
                     <div className="h-px bg-gray-100" />
-                    <div className="flex justify-between text-xs font-bold text-gray-800">
-                      <span>Customer price</span>
-                      <span>{fmt(priceNgn)}</span>
-                    </div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Raw sea shipping</span><span className="font-medium">{fmt(previewRawSeaShipping)}</span></div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Sea allocation to product ({pricingSettings.sea_product_allocation_percent}%)</span><span className="font-medium">{fmt(previewSeaAllocation)}</span></div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Customer sea shipping ({pricingSettings.sea_customer_percent}%)</span><span className="font-medium">{fmt(previewSeaCustomer)}</span></div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Raw air shipping</span><span className="font-medium">{fmt(previewRawAirShipping)}</span></div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>{pricingSettings.air_credit_enabled ? 'Air shipping (after sea credit)' : 'Air shipping'}</span><span className="font-medium">{fmt(previewAirShipping)}</span></div>
+                    <div className="h-px bg-gray-100" />
+                    <div className="flex justify-between text-xs font-bold text-gray-800"><span>Final product selling price</span><span>{fmt(priceNgn)}</span></div>
                     <div className="flex gap-2 pt-0.5">
-                      <span className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded-lg font-semibold">
-                        ${priceUsd.toFixed(2)} USD
-                      </span>
-                      <span className="text-[10px] bg-red-50 text-red-500 px-2 py-0.5 rounded-lg font-semibold">
-                        ¥{priceCnyPreview.toFixed(2)} CNY
-                      </span>
+                      <span className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded-lg font-semibold">${priceUsd.toFixed(2)} USD</span>
+                      <span className="text-[10px] bg-red-50 text-red-500 px-2 py-0.5 rounded-lg font-semibold">¥{priceCnyPreview.toFixed(2)} CNY</span>
                     </div>
                   </div>
                 )}
+                {originalUsdNum > 0 && !selectedSubcategory && (
+                  <p className="text-[11px] text-amber-600 mt-2">Select a subcategory to load its markup percentage.</p>
+                )}
               </div>
-
               <div>
                 <Label>Minimum order quantity</Label>
                 <input type="number" min={1} value={moq} onChange={e => setMoq(e.target.value)}
