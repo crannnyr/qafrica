@@ -35,18 +35,7 @@ function json(body: unknown, status = 200) {
   })
 }
 
-const USD_TO_NGN_RATE = 1480
 const FALLBACK_CNY_TO_USD = 1 / 7.15
-
-function getTieredMarkupNgn(baseNgn: number): number {
-  if (baseNgn < 1_000) return 200
-  if (baseNgn < 10_000) return 1_000
-  if (baseNgn < 20_000) return 1_500
-  if (baseNgn < 50_000) return 2_000
-  if (baseNgn < 100_000) return 5_000
-  if (baseNgn < 200_000) return 9_000
-  return 25_000
-}
 
 function round2(n: number) {
   return Math.round(n * 100) / 100
@@ -67,41 +56,60 @@ function sanitizeSourceUrl(input: unknown): string | null {
   }
 }
 
-async function getCnyToUsd(): Promise<number> {
-  try {
-    const res = await fetch('https://open.er-api.com/v6/latest/USD')
-    if (res.ok) {
-      const data = await res.json()
-      const cnyPerUsd = data?.rates?.CNY
-      if (typeof cnyPerUsd === 'number' && cnyPerUsd > 0) return 1 / cnyPerUsd
-    }
-  } catch (e) {
-    console.warn('[china-import] CNY rate fetch failed, using fallback:', e)
+async function getImportPricingSettings(supabase: any) {
+  const { data, error } = await supabase
+    .from('import_admin_credentials')
+    .select('usd_to_ngn_rate, cny_to_usd_rate, sea_rate_ngn_per_cbm, flight_rate_ngn_per_gram, sea_shipping_product_allocation_percent, sea_shipping_customer_percent, air_shipping_credit_enabled')
+    .eq('id', 1).single()
+  if (error || !data) throw new Error(error?.message ?? 'Pricing settings unavailable')
+  return {
+    usdToNgn: Number(data.usd_to_ngn_rate),
+    cnyToUsd: Number(data.cny_to_usd_rate),
+    seaRate: Number(data.sea_rate_ngn_per_cbm),
+    airRate: Number(data.flight_rate_ngn_per_gram),
+    seaProductPct: Number(data.sea_shipping_product_allocation_percent),
+    seaCustomerPct: Number(data.sea_shipping_customer_percent),
+    airCreditEnabled: Boolean(data.air_shipping_credit_enabled),
   }
-  return FALLBACK_CNY_TO_USD
 }
 
 function computeImportPricing(
-  amount: number,
-  currency: 'ngn' | 'usd' | 'cny',
-  cnyToUsd: number
+  originalPriceUsd: number,
+  markupPercent: number,
+  settings: {
+    usdToNgn: number
+    cnyToUsd: number
+    seaRate: number
+    airRate: number
+    seaProductPct: number
+    seaCustomerPct: number
+    airCreditEnabled: boolean
+  },
+  volumeCbm: number,
+  weightGrams: number,
 ) {
-  let costNgn: number
-  if (currency === 'ngn') costNgn = amount
-  else if (currency === 'usd') costNgn = amount * USD_TO_NGN_RATE
-  else costNgn = amount * cnyToUsd * USD_TO_NGN_RATE
-
-  const markupNgn = getTieredMarkupNgn(costNgn)
-  const priceNgn = costNgn + markupNgn
-  const priceUsd = priceNgn / USD_TO_NGN_RATE
-  const priceCny = priceUsd / cnyToUsd
+  const baseCostNgn = originalPriceUsd * settings.usdToNgn
+  const markupAmountNgn = baseCostNgn * (markupPercent / 100)
+  const productCostBeforeShipping = baseCostNgn + markupAmountNgn
+  const rawSeaShipping = Math.max(volumeCbm, 0) * settings.seaRate
+  const seaAllocationNgn = rawSeaShipping * (settings.seaProductPct / 100)
+  const seaCustomerNgn = rawSeaShipping * (settings.seaCustomerPct / 100)
+  const rawAirShipping = Math.max(weightGrams, 0) * settings.airRate
+  const airCustomerNgn = Math.max(rawAirShipping - (settings.airCreditEnabled ? seaAllocationNgn : 0), 0)
+  const productPriceNgn = productCostBeforeShipping + seaAllocationNgn
+  const productPriceUsd = productPriceNgn / settings.usdToNgn
+  const productPriceCny = settings.cnyToUsd > 0 ? productPriceUsd / settings.cnyToUsd : 0
 
   return {
-    costNgn: round2(costNgn),
-    markupNgn,
-    priceNgn: round2(priceNgn),
-    priceUsd: round2(priceUsd),
-    priceCny: round2(priceCny),
+    baseCostNgn: round2(baseCostNgn),
+    markupAmountNgn: round2(markupAmountNgn),
+    productCostBeforeShipping: round2(productCostBeforeShipping),
+    seaAllocationNgn: round2(seaAllocationNgn),
+    seaCustomerNgn: round2(seaCustomerNgn),
+    airCustomerNgn: round2(airCustomerNgn),
+    productPriceNgn: round2(productPriceNgn),
+    productPriceUsd: round2(productPriceUsd),
+    productPriceCny: round2(productPriceCny),
   }
 }
 
@@ -650,7 +658,7 @@ serve(async (req: Request) => {
       // Admin is the only surface that sees source_url.
       const { data, error } = await supabase
         .from('china_import_products')
-        .select('id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, sort_order, units_sold, is_trending, trending_order, trending_source, created_at')
+        .select('id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, sort_order, units_sold, is_trending, trending_order, trending_source, created_at')
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
 
@@ -1141,46 +1149,89 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && (action === 'add-product' || action === 'update-product')) {
       const body = await req.json()
-      const { manager_token, id, name, description, category, image_url, image_urls, moq, has_variants, variants } = body
-      const amount = Number(body.price_amount)
-      const currency = (body.price_currency ?? 'cny') as 'ngn' | 'usd' | 'cny'
+      const { manager_token, id, name, description, category_id, subcategory_id, image_url, image_urls, moq, has_variants, variants } = body
+      const originalPriceUsd = Number(body.original_price_usd)
+      const volumeCbm = body.volume_cbm == null || body.volume_cbm === '' ? 0 : Number(body.volume_cbm)
+      const weightGrams = body.weight_grams == null || body.weight_grams === '' ? 0 : Number(body.weight_grams)
 
       if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
-      if (!name || !amount || !image_urls?.length) return json({ error: 'Missing required fields' }, 400)
+      if (!name || !Number.isFinite(originalPriceUsd) || originalPriceUsd <= 0 || !image_urls?.length) {
+        return json({ error: 'Product name, original USD price and at least one image are required' }, 400)
+      }
+      if (!Number.isFinite(volumeCbm) || volumeCbm < 0 || !Number.isFinite(weightGrams) || weightGrams < 0) {
+        return json({ error: 'Volume and weight must be valid non-negative numbers' }, 400)
+      }
+      if (!category_id || !subcategory_id) return json({ error: 'Category and subcategory are required' }, 400)
 
-      // Both optional. A link that is present but unparseable is rejected
-      // rather than silently stored, otherwise the admin thinks it saved and
-      // finds a dead button later during sourcing.
+      const { data: subcategory, error: subErr } = await supabase
+        .from('niche_subcategories')
+        .select('id, category_id, niche_id, name, markup_percent')
+        .eq('id', subcategory_id)
+        .eq('category_id', category_id)
+        .maybeSingle()
+      if (subErr) return json({ error: subErr.message }, 500)
+      if (!subcategory) return json({ error: 'Selected subcategory does not belong to the selected category' }, 400)
+
+      const { data: parentCategory, error: catErr } = await supabase
+        .from('niche_categories')
+        .select('id, niche_id, name')
+        .eq('id', category_id)
+        .eq('niche_id', subcategory.niche_id)
+        .maybeSingle()
+      if (catErr) return json({ error: catErr.message }, 500)
+      if (!parentCategory) return json({ error: 'Selected category was not found for this niche' }, 400)
+
+      const pricingSettings = await getImportPricingSettings(supabase)
+      const markupPercent = Number(subcategory.markup_percent ?? 0)
+      const pricing = computeImportPricing(
+        originalPriceUsd,
+        markupPercent,
+        pricingSettings,
+        volumeCbm,
+        weightGrams,
+      )
+      const cleanVariants = sanitizeVariants(variants)
+
       const sourceUrl = sanitizeSourceUrl(body.source_url)
       if (body.source_url && String(body.source_url).trim() && !sourceUrl) {
         return json({ error: 'The 1688 link is not a valid URL. It should start with https://' }, 400)
       }
       const shipOnly = body.ship_only === true
-
-      const cnyToUsd = await getCnyToUsd()
-      const pricing = computeImportPricing(amount, currency, cnyToUsd)
-      const cleanVariants = sanitizeVariants(variants)
-
       const seedSold = Number(body.units_sold)
       const hasSeedSold = Number.isFinite(seedSold) && seedSold >= 0
 
       const row = {
-        name, description: description ?? '', category: category || 'General',
-        image_url: image_url || image_urls[0], image_urls,
+        name,
+        description: description ?? '',
+        category: parentCategory.name,
+        parent_category: parentCategory.name,
+        category_id: parentCategory.id,
+        subcategory_id: subcategory.id,
+        image_url: image_url || image_urls[0],
+        image_urls,
         moq: Number(moq) >= 1 ? Number(moq) : 1,
-        price_cny_original: currency === 'cny' ? amount : round2(pricing.priceCny - 0),
-        price_cny: pricing.priceCny,
-        price_ngn: pricing.priceNgn,
-        price_usd: pricing.priceUsd,
-        cost_ngn: pricing.costNgn,
-        price_input_currency: currency,
-        price_input_amount: amount,
+        price_cny_original: round2(originalPriceUsd / pricingSettings.cnyToUsd),
+        price_cny: pricing.productPriceCny,
+        price_ngn: pricing.productPriceNgn,
+        price_usd: pricing.productPriceUsd,
+        cost_ngn: pricing.baseCostNgn,
+        price_input_currency: 'usd',
+        price_input_amount: originalPriceUsd,
+        original_price_usd: round2(originalPriceUsd),
+        usd_to_ngn_rate: round2(pricingSettings.usdToNgn),
+        markup_percent: round2(markupPercent),
+        markup_amount_ngn: pricing.markupAmountNgn,
+        volume_cbm: volumeCbm > 0 ? volumeCbm : null,
+        weight_grams: weightGrams > 0 ? weightGrams : null,
+        sea_shipping_allocation_ngn: pricing.seaAllocationNgn,
+        sea_shipping_customer_ngn: pricing.seaCustomerNgn,
+        air_shipping_customer_ngn: pricing.airCustomerNgn,
+        sea_shipping_cost_ngn: pricing.seaCustomerNgn,
+        flight_shipping_cost_ngn: pricing.airCustomerNgn,
         has_variants: !!has_variants && cleanVariants.length > 0,
         variants: cleanVariants,
         source_url: sourceUrl,
         ship_only: shipOnly,
-        // A sea-only product's stated delivery time should not still read
-        // "air" in the storefront.
         delivery_time: shipOnly ? 'sea' : 'air',
         ...(hasSeedSold ? { units_sold: Math.round(seedSold) } : {}),
       }
@@ -1194,7 +1245,7 @@ serve(async (req: Request) => {
         if (error) return json({ error: error.message }, 500)
       }
       memoryCache.delete('products')
-      return json({ success: true })
+      return json({ success: true, pricing: { ...pricing, markupPercent, originalPriceUsd, usdToNgnRate: pricingSettings.usdToNgn } })
     }
 
     if (req.method === 'POST' && action === 'delete-product') {
