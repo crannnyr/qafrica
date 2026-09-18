@@ -2461,6 +2461,230 @@ function SettingsManager({ token }: { token: string }) {
   );
 }
 
+// ── Pricing & Shipping Management ─────────────────────────────────────────
+interface ImportPricingSettings {
+  usd_to_ngn: number;
+  cny_to_usd: number;
+  sea_rate_ngn_per_cbm: number;
+  air_rate_ngn_per_gram: number;
+  sea_product_allocation_percent: number;
+  sea_customer_percent: number;
+  air_credit_enabled: boolean;
+  updated_at?: string;
+}
+
+function PricingShippingManager({ token }: { token: string }) {
+  const [settings, setSettings] = useState<ImportPricingSettings>({
+    usd_to_ngn: 1480,
+    cny_to_usd: 0.13986014,
+    sea_rate_ngn_per_cbm: 0,
+    air_rate_ngn_per_gram: 0,
+    sea_product_allocation_percent: 80,
+    sea_customer_percent: 20,
+    air_credit_enabled: true,
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-pricing-settings`);
+      const data = await res.json();
+      if (!res.ok || !data.settings) throw new Error(data.error ?? 'Could not load pricing settings');
+      setSettings({
+        usd_to_ngn: Number(data.settings.usd_to_ngn),
+        cny_to_usd: Number(data.settings.cny_to_usd),
+        sea_rate_ngn_per_cbm: Number(data.settings.sea_rate_ngn_per_cbm),
+        air_rate_ngn_per_gram: Number(data.settings.air_rate_ngn_per_gram),
+        sea_product_allocation_percent: Number(data.settings.sea_product_allocation_percent),
+        sea_customer_percent: Number(data.settings.sea_customer_percent),
+        air_credit_enabled: Boolean(data.settings.air_credit_enabled),
+        updated_at: data.settings.updated_at,
+      });
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not load pricing settings');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const setField = <K extends keyof ImportPricingSettings>(key: K, value: ImportPricingSettings[K]) => {
+    setSaved(false);
+    setSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleSave = async () => {
+    setError('');
+    setSaved(false);
+
+    const numericChecks: Array<[string, number, boolean]> = [
+      ['USD → NGN rate', settings.usd_to_ngn, settings.usd_to_ngn > 0],
+      ['CNY → USD rate', settings.cny_to_usd, settings.cny_to_usd > 0],
+      ['Sea rate', settings.sea_rate_ngn_per_cbm, settings.sea_rate_ngn_per_cbm >= 0],
+      ['Air rate', settings.air_rate_ngn_per_gram, settings.air_rate_ngn_per_gram >= 0],
+      ['Sea product allocation', settings.sea_product_allocation_percent, settings.sea_product_allocation_percent >= 0 && settings.sea_product_allocation_percent <= 100],
+      ['Sea customer percentage', settings.sea_customer_percent, settings.sea_customer_percent >= 0 && settings.sea_customer_percent <= 100],
+    ];
+    const invalid = numericChecks.find(([, value, ok]) => !Number.isFinite(value) || !ok);
+    if (invalid) {
+      setError(`${invalid[0]} must be a valid non-negative value within its allowed range.`);
+      return;
+    }
+    if (Math.abs(settings.sea_product_allocation_percent + settings.sea_customer_percent - 100) > 0.0001) {
+      setError('Sea product allocation and customer percentage must add up to 100%.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-update-pricing-settings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, ...settings }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not save pricing settings');
+      if (data.settings) {
+        setSettings({
+          usd_to_ngn: Number(data.settings.usd_to_ngn),
+          cny_to_usd: Number(data.settings.cny_to_usd),
+          sea_rate_ngn_per_cbm: Number(data.settings.sea_rate_ngn_per_cbm),
+          air_rate_ngn_per_gram: Number(data.settings.air_rate_ngn_per_gram),
+          sea_product_allocation_percent: Number(data.settings.sea_product_allocation_percent),
+          sea_customer_percent: Number(data.settings.sea_customer_percent),
+          air_credit_enabled: Boolean(data.settings.air_credit_enabled),
+          updated_at: data.settings.updated_at,
+        });
+      }
+      setSaved(true);
+      toast.success('Pricing & shipping settings saved');
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not save pricing settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return <div className="bg-white rounded-2xl border border-gray-100 py-12 flex justify-center"><Loader className="w-5 h-5 animate-spin text-gray-300" /></div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-gray-900">Pricing & Shipping</h2>
+        <p className="text-xs text-gray-400 mt-1">These are the rates and shipping allocation rules used by the import pricing system.</p>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+        <div>
+          <p className="font-semibold text-gray-800 text-sm">Currency rates</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">The USD → NGN rate is the main pricing conversion. CNY → USD is kept for legacy/import price conversion.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label>USD → NGN</Label>
+            <input type="number" min={0.0001} step="0.01" value={settings.usd_to_ngn}
+              onChange={e => setField('usd_to_ngn', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+            <p className="text-[10px] text-gray-400 mt-1">Example: 1 USD = ₦1,480</p>
+          </div>
+          <div>
+            <Label>CNY → USD</Label>
+            <input type="number" min={0.00000001} step="0.00000001" value={settings.cny_to_usd}
+              onChange={e => setField('cny_to_usd', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+            <p className="text-[10px] text-gray-400 mt-1">Example: ¥1 = $0.13986014</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+        <div>
+          <p className="font-semibold text-gray-800 text-sm">Shipping rates</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">Set the raw freight cost before the sea allocation/air credit rules are applied.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label>Sea rate (₦ / CBM)</Label>
+            <input type="number" min={0} step="0.01" value={settings.sea_rate_ngn_per_cbm}
+              onChange={e => setField('sea_rate_ngn_per_cbm', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+          <div>
+            <Label>Air rate (₦ / gram)</Label>
+            <input type="number" min={0} step="0.0001" value={settings.air_rate_ngn_per_gram}
+              onChange={e => setField('air_rate_ngn_per_gram', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+        <div>
+          <p className="font-semibold text-gray-800 text-sm">Sea shipping allocation</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">Raw sea freight is split once. The product allocation is added to product cost; the remaining percentage stays as customer sea shipping.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <Label>Moved into product cost (%)</Label>
+            <input type="number" min={0} max={100} step="0.01" value={settings.sea_product_allocation_percent}
+              onChange={e => setField('sea_product_allocation_percent', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+          <div>
+            <Label>Remaining customer sea fee (%)</Label>
+            <input type="number" min={0} max={100} step="0.01" value={settings.sea_customer_percent}
+              onChange={e => setField('sea_customer_percent', Number(e.target.value))}
+              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
+          </div>
+        </div>
+        <div className="rounded-xl bg-gray-50 px-4 py-3 text-[11px] text-gray-500">
+          Example with 80% / 20%: if raw sea freight is ₦10,000, ₦8,000 is added to the product cost and ₦2,000 remains as the customer's sea shipping fee.
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+        <label className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Use sea allocation as an air-shipping credit</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">When enabled, the absolute NGN amount allocated into product cost from sea freight is credited against raw air freight. It is not another percentage discount.</p>
+          </div>
+          <input type="checkbox" checked={settings.air_credit_enabled}
+            onChange={e => setField('air_credit_enabled', e.target.checked)}
+            className="w-4 h-4 accent-orange-500 flex-shrink-0" />
+        </label>
+      </div>
+
+      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-[11px] text-blue-700">
+        <p className="font-bold mb-1">Calculation rules</p>
+        <p>Sea: volume × sea rate → raw sea freight → split into product allocation + customer sea fee.</p>
+        <p className="mt-1">Air: weight × air rate → raw air freight → subtract the sea allocation credit when enabled → never below ₦0.</p>
+        <p className="mt-1">Changing these settings does not recalculate existing products. Existing saved prices remain unchanged until a product is deliberately edited/re-saved.</p>
+      </div>
+
+      {error && (
+        <div className="flex items-center gap-2 text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg">
+          <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      <button onClick={handleSave} disabled={isSaving}
+        className="w-full py-3 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-2">
+        {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
+        {isSaving ? 'Saving…' : saved ? 'Saved' : 'Save pricing & shipping settings'}
+      </button>
+    </div>
+  );
+}
+
 // ── Custom Orders ────────────────────────────────────────────────────────
 // Customer-submitted "find this for me" requests: each has one or more
 // items (image, description, qty, budget). Admin attaches a store product
@@ -2639,7 +2863,7 @@ function CustomOrdersManager({ token }: { token: string }) {
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'custom-orders' | 'categories'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -2674,7 +2898,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'custom-orders', 'categories'] as const).map(t => (
+          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -2684,7 +2908,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
             </button>
           ))}
         </div>
@@ -2720,6 +2944,8 @@ export default function ImportAdminPage() {
           <CategoryManager token={token} />
         ) : tab === 'settings' ? (
           <SettingsManager token={token} />
+        ) : tab === 'pricing-shipping' ? (
+          <PricingShippingManager token={token} />
         ) : tab === 'custom-orders' ? (
           <CustomOrdersManager token={token} />
         ) : (
