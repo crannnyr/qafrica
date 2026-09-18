@@ -119,22 +119,25 @@ function genId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-// Mirrors the china-import edge function's getTieredMarkupNgn() — used only
-// for the live price preview shown to the admin while typing.
-function getTieredMarkupNgn(baseNgn: number): number {
-  if (baseNgn < 1_000) return 200;
-  if (baseNgn < 10_000) return 1_000;
-  if (baseNgn < 20_000) return 1_500;
-  if (baseNgn < 50_000) return 2_000;
-  if (baseNgn < 100_000) return 5_000;
-  if (baseNgn < 200_000) return 9_000;
-  return 25_000;
-}
-
 interface Rates {
   cnyToNgn: number;
   usdToNgn: number;
   cnyToUsd: number;
+}
+
+interface ProductCategory {
+  id: string;
+  niche_id: string;
+  name: string;
+  sort_order: number;
+  subcategories: Array<{
+    id: string;
+    category_id: string;
+    niche_id: string;
+    name: string;
+    sort_order: number;
+    markup_percent: number;
+  }>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1332,15 +1335,24 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [showForm, setShowForm]       = useState(false);
   const [editProduct, setEditProduct] = useState<ImportProduct | null>(null);
   const [rates, setRates]             = useState<Rates | null>(null);
+  const [pricingSettings, setPricingSettings] = useState<{
+    usd_to_ngn: number;
+    cny_to_usd: number;
+    sea_rate_ngn_per_cbm: number;
+    air_rate_ngn_per_gram: number;
+    sea_product_allocation_percent: number;
+    sea_customer_percent: number;
+    air_credit_enabled: boolean;
+  } | null>(null);
+  const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [shippingRates, setShippingRates] = useState({ seaRateNgnPerCbm: 0, flightRateNgnPerGram: 0 });
 
   // Form state
   const [name, setName]               = useState('');
   const [description, setDesc]        = useState('');
-  const [category, setCategory]       = useState('General');
-  const [priceAmount, setPriceAmount] = useState(''); // raw price as entered by admin
-  const [priceCurrency, setPriceCurrency] = useState<'cny' | 'usd' | 'ngn'>('cny');
+  const [categoryId, setCategoryId]   = useState('');
+  const [subcategoryId, setSubcategoryId] = useState('');
+  const [originalPriceUsd, setOriginalPriceUsd] = useState('');
   const [moq, setMoq]                 = useState('1');
   const [sourceUrl, setSourceUrl]     = useState('');
   const [shipOnly, setShipOnly]       = useState(false);
@@ -1362,22 +1374,24 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [isSaving, setIsSaving]       = useState(false);
   const [saveError, setSaveError]     = useState('');
 
-  // Live preview using the same tiered-markup logic the backend applies
-  const rawAmount = parseFloat(priceAmount) || 0;
-  let previewCostNgn = 0;
-  if (rawAmount > 0 && rates) {
-    if (priceCurrency === 'ngn') previewCostNgn = rawAmount;
-    else if (priceCurrency === 'usd') previewCostNgn = rawAmount * rates.usdToNgn;
-    else previewCostNgn = (rawAmount / rates.cnyToUsd) * rates.usdToNgn; // cny -> usd -> ngn
-  }
-  const previewMarkupNgn = previewCostNgn > 0 ? getTieredMarkupNgn(previewCostNgn) : 0;
-  const priceNgn = previewCostNgn > 0 ? previewCostNgn + previewMarkupNgn : 0;
-  const priceUsd = rates && priceNgn ? priceNgn / rates.usdToNgn : 0;
-  const priceCnyPreview = rates && priceUsd ? priceUsd * rates.cnyToUsd : 0;
+  // Live preview mirrors the server-side pricing formula.
+  const originalUsdNum = parseFloat(originalPriceUsd) || 0;
   const volumeCbmNum = parseFloat(volumeCbm) || 0;
   const weightGramsNum = parseFloat(weightGrams) || 0;
-  const previewSeaShippingCost = volumeCbmNum > 0 ? volumeCbmNum * shippingRates.seaRateNgnPerCbm : 0;
-  const previewFlightShippingCost = weightGramsNum > 0 ? weightGramsNum * shippingRates.flightRateNgnPerGram : 0;
+  const selectedCategory = productCategories.find(c => c.id === categoryId);
+  const selectedSubcategory = selectedCategory?.subcategories.find(s => s.id === subcategoryId);
+  const previewMarkupPercent = Number(selectedSubcategory?.markup_percent ?? 0);
+  const previewBaseCostNgn = pricingSettings && originalUsdNum > 0 ? originalUsdNum * pricingSettings.usd_to_ngn : 0;
+  const previewMarkupNgn = previewBaseCostNgn * (previewMarkupPercent / 100);
+  const previewProductCostBeforeShipping = previewBaseCostNgn + previewMarkupNgn;
+  const previewRawSeaShipping = pricingSettings ? volumeCbmNum * pricingSettings.sea_rate_ngn_per_cbm : 0;
+  const previewSeaAllocation = pricingSettings ? previewRawSeaShipping * (pricingSettings.sea_product_allocation_percent / 100) : 0;
+  const previewSeaCustomer = pricingSettings ? previewRawSeaShipping * (pricingSettings.sea_customer_percent / 100) : 0;
+  const previewRawAirShipping = pricingSettings ? weightGramsNum * pricingSettings.air_rate_ngn_per_gram : 0;
+  const previewAirShipping = Math.max(previewRawAirShipping - (pricingSettings?.air_credit_enabled ? previewSeaAllocation : 0), 0);
+  const priceNgn = previewProductCostBeforeShipping + previewSeaAllocation;
+  const priceUsd = pricingSettings && priceNgn ? priceNgn / pricingSettings.usd_to_ngn : 0;
+  const priceCnyPreview = pricingSettings && priceUsd ? priceUsd / pricingSettings.cny_to_usd : 0;
 
   // ── Variant helpers ─────────────────────────────────────────────────────
   const toggleGroupOption = (groupName: string, option: string) => {
@@ -1443,19 +1457,29 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
 
   useEffect(() => {
     loadProducts();
-    fetch(`${EDGE_URL}?action=rates`)
-      .then(r => r.json())
-      .then(d => setRates(d.rates))
-      .catch(() => {});
-    fetch(`${EDGE_URL}?action=admin-settings`)
+    fetch(`${EDGE_URL}?action=admin-pricing-settings`)
       .then(r => r.json())
       .then(d => {
         if (!d.settings) return;
-        setShippingRates({
-          seaRateNgnPerCbm: Number(d.settings.sea_rate_ngn_per_cbm ?? 0),
-          flightRateNgnPerGram: Number(d.settings.flight_rate_ngn_per_gram ?? 0),
+        setPricingSettings({
+          usd_to_ngn: Number(d.settings.usd_to_ngn),
+          cny_to_usd: Number(d.settings.cny_to_usd),
+          sea_rate_ngn_per_cbm: Number(d.settings.sea_rate_ngn_per_cbm),
+          air_rate_ngn_per_gram: Number(d.settings.air_rate_ngn_per_gram),
+          sea_product_allocation_percent: Number(d.settings.sea_product_allocation_percent),
+          sea_customer_percent: Number(d.settings.sea_customer_percent),
+          air_credit_enabled: Boolean(d.settings.air_credit_enabled),
+        });
+        setRates({
+          cnyToNgn: Number(d.settings.usd_to_ngn) / Number(d.settings.cny_to_usd),
+          usdToNgn: Number(d.settings.usd_to_ngn),
+          cnyToUsd: Number(d.settings.cny_to_usd),
         });
       })
+      .catch(() => {});
+    fetch(`${CONFIG.SUPABASE_URL}/functions/v1/category?action=list`)
+      .then(r => r.json())
+      .then(d => setProductCategories(d.categories ?? []))
       .catch(() => {});
   }, []);
 
