@@ -49,7 +49,7 @@ export default function CategoryManager({ token }: Props) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not load categories');
       setCategories(data.categories ?? []);
-      if (restoreScroll) requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' as ScrollBehavior }));
+      if (restoreScroll) requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'auto' }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load categories');
     } finally {
