@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { serve } from 'https://deno.land/std@0.168.0/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const CORS = {
@@ -29,10 +29,10 @@ serve(async (req) => {
   try {
     if (req.method === 'GET' && action === 'list') {
       const { data: categories, error: ce } = await db.from('niche_categories')
-        .select('id,niche_id,name,sort_order').order('niche_id').order('sort_order').order('name')
+        .select('id,niche_id,name,sort_order').order('name').order('niche_id').order('sort_order')
       if (ce) return json({ error: ce.message, categories: [] }, 500)
       const { data: subs, error: se } = await db.from('niche_subcategories')
-        .select('id,category_id,niche_id,name,sort_order,markup_percent').order('niche_id').order('sort_order').order('name')
+        .select('id,category_id,niche_id,name,sort_order,markup_percent').order('name').order('niche_id').order('sort_order')
       if (se) return json({ error: se.message, categories: [] }, 500)
       return json({ categories: (categories ?? []).map((c: any) => ({
         ...c, subcategories: (subs ?? []).filter((s: any) => s.category_id === c.id && s.niche_id === c.niche_id),
