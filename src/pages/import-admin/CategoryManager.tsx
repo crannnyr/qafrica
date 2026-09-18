@@ -108,17 +108,45 @@ export default function CategoryManager({ token }: Props) {
       </div>
 
       {formOpen && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-4">
-          <div className="flex items-center justify-between mb-3"><p className="font-bold text-gray-900 text-sm">{editingSubcategory ? 'Edit Subcategory' : 'Add Subcategory'}</p><button onClick={closeSubcategoryForm} className="p-1.5 text-gray-400"><X className="w-4 h-4" /></button></div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <select value={subcategoryCategoryId} onChange={e => setSubcategoryCategoryId(e.target.value)} className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white"><option value="">Select category</option>{categories.map(category => <option key={category.niche_id + ':' + category.id} value={category.id}>{category.name}</option>)}</select>
-            <input value={subcategoryName} onChange={e => setSubcategoryName(e.target.value)} placeholder="Subcategory name" className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm" />
-            <div className="relative">
-              <input type="number" min="0" max="100" step="0.01" value={subcategoryMarkupPercent} onChange={e => setSubcategoryMarkupPercent(e.target.value)} placeholder="Markup percentage" className="w-full px-3 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm" />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6" onMouseDown={e => { if (e.target === e.currentTarget) closeSubcategoryForm(); }}>
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl border border-gray-100 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div>
+                <p className="font-bold text-gray-900 text-sm">{editingSubcategory ? 'Edit Subcategory' : 'Add Subcategory'}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Set the subcategory name and markup percentage.</p>
+              </div>
+              <button onClick={closeSubcategoryForm} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50" aria-label="Close">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Category</label>
+                <select value={subcategoryCategoryId} onChange={e => setSubcategoryCategoryId(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white">
+                  <option value="">Select category</option>
+                  {categories.map(category => <option key={category.niche_id + ':' + category.id} value={category.id}>{category.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Subcategory name</label>
+                <input value={subcategoryName} onChange={e => setSubcategoryName(e.target.value)} placeholder="e.g. Phones" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Markup percentage</label>
+                <div className="relative">
+                  <input type="number" min="0" max="100" step="0.01" value={subcategoryMarkupPercent} onChange={e => setSubcategoryMarkupPercent(e.target.value)} placeholder="0" className="w-full px-3 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm" />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 bg-gray-50 border-t border-gray-100">
+              <button onClick={closeSubcategoryForm} disabled={saving} className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white text-gray-600 text-xs font-semibold hover:bg-gray-50 disabled:opacity-40">Cancel</button>
+              <button onClick={saveSubcategory} disabled={saving || !subcategoryName.trim() || !subcategoryCategoryId || !Number.isFinite(Number(subcategoryMarkupPercent)) || Number(subcategoryMarkupPercent) < 0 || Number(subcategoryMarkupPercent) > 100} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gray-900 text-white text-xs font-semibold disabled:opacity-40">
+                {saving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                {saving ? 'Saving…' : editingSubcategory ? 'Save changes' : 'Save subcategory'}
+              </button>
             </div>
           </div>
-          <div className="flex justify-end mt-3"><button onClick={saveSubcategory} disabled={saving || !subcategoryName.trim() || !subcategoryCategoryId} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gray-900 text-white text-xs font-semibold disabled:opacity-40">{saving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{saving ? 'Saving…' : 'Save subcategory'}</button></div>
         </div>
       )}
 
