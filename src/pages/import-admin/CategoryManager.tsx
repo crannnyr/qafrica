@@ -171,7 +171,12 @@ export default function CategoryManager({ token }: Props) {
                       ) : (
                         <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                       )}
-                      <span className="text-sm font-semibold text-gray-800 truncate">{category.name}</span>\n                      <div className="flex items-center gap-1 ml-auto">\n                        <button onClick={e => { e.stopPropagation(); openEditCategory(category); }} className="p-1 text-gray-400 hover:text-gray-800" title="Edit category"><Pencil className="w-3 h-3" /></button>\n                        <button onClick={e => { e.stopPropagation(); deleteCategory(category); }} className="p-1 text-gray-400 hover:text-red-600" title="Delete category"><Trash2 className="w-3 h-3" /></button>\n                        <button onClick={e => { e.stopPropagation(); openNewCategory(category); }} className="p-1 text-gray-400 hover:text-gray-800" title="Add category"><Plus className="w-3 h-3" /></button>\n                      </div>
+                      <span className="text-sm font-semibold text-gray-800 truncate">{category.name}</span>
+<div className="flex items-center gap-1 ml-auto">
+<button onClick={e => { e.stopPropagation(); openEditCategory(category); }} className="p-1 text-gray-400 hover:text-gray-800" title="Edit category"><Pencil className="w-3 h-3" /></button>
+<button onClick={e => { e.stopPropagation(); deleteCategory(category); }} className="p-1 text-gray-400 hover:text-red-600" title="Delete category"><Trash2 className="w-3 h-3" /></button>
+<button onClick={e => { e.stopPropagation(); openNewCategory(category); }} className="p-1 text-gray-400 hover:text-gray-800" title="Add category"><Plus className="w-3 h-3" /></button>
+</div>
                     </div>
                     <span className="text-xs text-gray-400">
                       {category.subcategories.length} subcategor{category.subcategories.length === 1 ? 'y' : 'ies'}
