@@ -1501,8 +1501,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
 
   const openAdd = () => {
     setEditProduct(null);
-    setName(''); setDesc(''); setCategory('General');
-    setPriceAmount(''); setPriceCurrency('cny'); setMoq('1'); setUnitsSold('');
+    setName(''); setDesc(''); setCategoryId(''); setSubcategoryId('');
+    setOriginalPriceUsd(''); setMoq('1'); setUnitsSold('');
     setSourceUrl(''); setShipOnly(false);
     setVariantGroups([]); setCustomGroupName(''); setCustomOptionDrafts({}); setExpandedVariantGroups(new Set());
     setImagePreviews([]); setImageFiles([null, null, null]);
@@ -1513,17 +1513,14 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
 
   const openEdit = (p: ImportProduct) => {
     setEditProduct(p);
-    setName(p.name); setDesc(p.description); setCategory(p.category);
-    // Restore exactly what the admin originally typed — the currency they
-    // picked and the raw amount — instead of guessing. Falls back to the
-    // old CNY-only assumption only for products saved before this field existed.
-    if (p.price_input_currency && p.price_input_amount != null) {
-      setPriceAmount(p.price_input_amount.toString());
-      setPriceCurrency(p.price_input_currency);
-    } else {
-      setPriceAmount((p.price_cny_original ?? p.price_cny).toString());
-      setPriceCurrency('cny');
-    }
+    setName(p.name); setDesc(p.description);
+    const fallbackCategory = productCategories.find(c => c.name === p.parent_category || c.name === p.category);
+    setCategoryId(p.category_id ?? fallbackCategory?.id ?? '');
+    const fallbackSub = fallbackCategory?.subcategories.find(s => s.name === p.category);
+    setSubcategoryId(p.subcategory_id ?? fallbackSub?.id ?? '');
+    const fallbackUsd = p.original_price_usd
+      ?? (p.price_input_currency === 'usd' ? p.price_input_amount : (p.price_ngn && pricingSettings ? p.price_ngn / pricingSettings.usd_to_ngn : 0));
+    setOriginalPriceUsd(fallbackUsd ? Number(fallbackUsd).toString() : '');
     setMoq((p.moq ?? 1).toString());
     setSourceUrl(p.source_url ?? '');
     setShipOnly(p.ship_only === true);
@@ -1531,7 +1528,6 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setVariantGroups(p.variants?.length ? p.variants.map(g => ({ ...g, id: g.id || genId() })) : []);
     setExpandedVariantGroups(new Set());
     setCustomGroupName(''); setCustomOptionDrafts({});
-    // Populate previews from existing image_urls or fallback to image_url
     const existing = p.image_urls?.length ? p.image_urls : (p.image_url ? [p.image_url] : []);
     setImagePreviews(existing.slice(0, 3));
     setImageFiles([null, null, null]);
@@ -1602,7 +1598,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   };
 
   const handleSave = async () => {
-    if (!name || !priceAmount || imagePreviews.length === 0) return;
+    if (!name || !originalPriceUsd || !categoryId || !subcategoryId || imagePreviews.length === 0) return;
     setIsSaving(true);
     setSaveError('');
     try {
@@ -1619,9 +1615,9 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
       const payload = {
         name,
         description,
-        category,
-        price_amount:   rawAmount,
-        price_currency: priceCurrency,
+        category_id: categoryId,
+        subcategory_id: subcategoryId,
+        original_price_usd: originalUsdNum,
         moq:             parseInt(moq, 10) >= 1 ? parseInt(moq, 10) : 1,
         has_variants:    variantGroups.length > 0,
         variants:        variantGroups,
