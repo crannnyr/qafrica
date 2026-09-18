@@ -608,7 +608,7 @@ serve(async (req: Request) => {
       // the badge and force sea freight at checkout.
       const { data, error } = await supabase
         .from('china_import_products')
-        .select('id, name, description, image_url, image_urls, price_cny, price_ngn, price_usd, category, moq, has_variants, variants, delivery_time, ship_only, sort_order, units_sold, is_trending, trending_order, created_at')
+        .select('id, name, description, image_url, image_urls, price_cny, price_ngn, price_usd, category, moq, has_variants, variants, delivery_time, ship_only, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, sort_order, units_sold, is_trending, trending_order, created_at')
         .eq('is_active', true)
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
