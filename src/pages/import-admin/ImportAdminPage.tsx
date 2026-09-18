@@ -1346,7 +1346,13 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [rates, setRates]             = useState<Rates | null>(null);
   const [pricingUsdToNgn, setPricingUsdToNgn] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [shippingRates, setShippingRates] = useState({ seaRateNgnPerCbm: 0, flightRateNgnPerGram: 0 });
+  const [shippingRates, setShippingRates] = useState({
+    seaRateNgnPerCbm: 0,
+    flightRateNgnPerGram: 0,
+    seaProductAllocationPercent: 80,
+    seaCustomerPercent: 20,
+    airCreditEnabled: true,
+  });
   const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
 
   // Form state
@@ -1387,8 +1393,15 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const previewProductCostNgn = previewBaseCostNgn + previewMarkupNgn;
   const volumeCbmNum = parseFloat(volumeCbm) || 0;
   const weightGramsNum = parseFloat(weightGrams) || 0;
-  const previewSeaShippingCost = volumeCbmNum > 0 ? volumeCbmNum * shippingRates.seaRateNgnPerCbm : 0;
-  const previewFlightShippingCost = weightGramsNum > 0 ? weightGramsNum * shippingRates.flightRateNgnPerGram : 0;
+  const previewRawSeaShipping = volumeCbmNum > 0 ? volumeCbmNum * shippingRates.seaRateNgnPerCbm : 0;
+  const previewSeaAllocationNgn = previewRawSeaShipping * (shippingRates.seaProductAllocationPercent / 100);
+  const previewSeaCustomerNgn = previewRawSeaShipping * (shippingRates.seaCustomerPercent / 100);
+  const previewRawAirShipping = weightGramsNum > 0 ? weightGramsNum * shippingRates.flightRateNgnPerGram : 0;
+  const previewAirCustomerNgn = Math.max(
+    previewRawAirShipping - (shippingRates.airCreditEnabled ? previewSeaAllocationNgn : 0),
+    0,
+  );
+  const previewFinalProductPriceNgn = previewProductCostNgn + previewSeaAllocationNgn;
 
   // ── Variant helpers ─────────────────────────────────────────────────────
   const toggleGroupOption = (groupName: string, option: string) => {
@@ -1465,13 +1478,16 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
         if (Number.isFinite(rate) && rate > 0) setPricingUsdToNgn(rate);
       })
       .catch(() => {});
-    fetch(`${EDGE_URL}?action=admin-settings`)
+    fetch(`${EDGE_URL}?action=admin-pricing-settings`)
       .then(r => r.json())
       .then(d => {
         if (!d.settings) return;
         setShippingRates({
           seaRateNgnPerCbm: Number(d.settings.sea_rate_ngn_per_cbm ?? 0),
           flightRateNgnPerGram: Number(d.settings.flight_rate_ngn_per_gram ?? 0),
+          seaProductAllocationPercent: Number(d.settings.sea_shipping_product_allocation_percent ?? 80),
+          seaCustomerPercent: Number(d.settings.sea_shipping_customer_percent ?? 20),
+          airCreditEnabled: d.settings.air_shipping_credit_enabled !== false,
         });
       })
       .catch(() => {});
@@ -1889,7 +1905,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
               </div>
 
               <div>
-                <Label>Volume for sea freight (cbm)</Label>
+                <Label>Volume for sea freight (CBM)</Label>
                 <input
                   type="number" min={0} step="0.001"
                   value={volumeCbm} onChange={e => setVolumeCbm(e.target.value)}
@@ -1897,12 +1913,28 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
                 />
                 {volumeCbmNum > 0 && (
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Sea shipping cost: <span className="font-semibold text-gray-600">{fmt(previewSeaShippingCost)}</span> ({volumeCbmNum} cbm × rate)
-                  </p>
+                  <div className="mt-2 bg-white border border-gray-100 rounded-xl px-4 py-3 space-y-1.5">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Raw sea freight</span>
+                      <span className="font-medium">{fmt(previewRawSeaShipping)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Added to product ({shippingRates.seaProductAllocationPercent.toFixed(2)}%)</span>
+                      <span className="font-medium">{fmt(previewSeaAllocationNgn)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Customer sea fee ({shippingRates.seaCustomerPercent.toFixed(2)}%)</span>
+                      <span className="font-medium">{fmt(previewSeaCustomerNgn)}</span>
+                    </div>
+                    <div className="h-px bg-gray-100" />
+                    <div className="flex justify-between text-xs font-bold text-gray-800">
+                      <span>Product price incl. sea allocation</span>
+                      <span>{pricingUsdToNgn ? fmt(previewFinalProductPriceNgn) : '—'}</span>
+                    </div>
+                  </div>
                 )}
               </div>
-              
+
               <div>
                 <Label>Weight for flight (grams)</Label>
                 <input
@@ -1912,9 +1944,23 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
                 />
                 {weightGramsNum > 0 && (
-                  <p className="text-[11px] text-gray-400 mt-1">
-                    Flight shipping cost: <span className="font-semibold text-gray-600">{fmt(previewFlightShippingCost)}</span> ({weightGramsNum}g × rate)
-                  </p>
+                  <div className="mt-2 bg-white border border-gray-100 rounded-xl px-4 py-3 space-y-1.5">
+                    <div className="flex justify-between text-xs text-gray-500">
+                      <span>Raw air freight</span>
+                      <span className="font-medium">{fmt(previewRawAirShipping)}</span>
+                    </div>
+                    {shippingRates.airCreditEnabled && (
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Sea allocation credit</span>
+                        <span className="font-medium text-emerald-600">−{fmt(Math.min(previewSeaAllocationNgn, previewRawAirShipping))}</span>
+                      </div>
+                    )}
+                    <div className="h-px bg-gray-100" />
+                    <div className="flex justify-between text-xs font-bold text-gray-800">
+                      <span>Customer air fee</span>
+                      <span>{fmt(previewAirCustomerNgn)}</span>
+                    </div>
+                  </div>
                 )}
               </div>
 
