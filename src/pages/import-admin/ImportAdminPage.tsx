@@ -2358,27 +2358,9 @@ function SettingsManager({ token }: { token: string }) {
         </div>
       </div>
 
-      {/* Shipping rates */}
+      {/* Shipping checkout behavior */}
       <div className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
-        <p className="font-semibold text-gray-800 text-sm">Shipping rates</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>Sea rate (₦ / cbm)</Label>
-            <input type="number" min={0} step="0.01" value={settings.sea_rate_ngn_per_cbm}
-              onChange={e => setField('sea_rate_ngn_per_cbm', Number(e.target.value))}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
-          </div>
-          <div>
-            <Label>Flight rate (₦ / gram)</Label>
-            <input type="number" min={0} step="0.01" value={settings.flight_rate_ngn_per_gram}
-              onChange={e => setField('flight_rate_ngn_per_gram', Number(e.target.value))}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
-          </div>
-        </div>
-        <p className="text-[11px] text-gray-400">
-          These drive the per-unit shipping cost saved on each product (volume × sea rate, weight × flight rate). Changing them only affects products saved/edited after the change — existing products keep their already-computed cost until re-saved.
-        </p>
-
+        <p className="font-semibold text-gray-800 text-sm">Shipping checkout behavior</p>
         <label className="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200">
           <div>
             <p className="text-sm font-semibold text-gray-900">Charge shipping at checkout</p>
@@ -2386,6 +2368,9 @@ function SettingsManager({ token }: { token: string }) {
           </div>
           <input type="checkbox" checked={settings.charge_shipping_at_checkout} onChange={e => setField('charge_shipping_at_checkout', e.target.checked)} className="w-4 h-4 accent-orange-500" />
         </label>
+        <p className="text-[11px] text-gray-400">
+          Sea and air freight rates are managed in <strong>Pricing &amp; Shipping</strong>, which is the single source of truth for import pricing and shipping rates.
+        </p>
       </div>
 
       {/* Shipping discount */}
