@@ -46,7 +46,7 @@ serve(async (req) => {
       const name = clean(body.name), niche_id = clean(body.niche_id), id = clean(body.id) || slugify(name)
       if (!name || !niche_id || !id) return json({ error: 'Category name, niche_id and a valid category id are required' }, 400)
       const { data, error } = await db.from('niche_categories')
-        .upsert({ id, niche_id, name, sort_order: sort(body.sort_order) }, { onConflict: 'id,niche_id' })
+        .upsert({ id, niche_id, name, sort_order: sort(body.sort_order), markup_percent }, { onConflict: 'id,niche_id' })
         .select('id,niche_id,name,sort_order').single()
       if (error) return json({ error: error.message }, 400)
       return json({ category: data })
@@ -55,7 +55,9 @@ serve(async (req) => {
     if (action === 'save-subcategory') {
       const name = clean(body.name), category_id = clean(body.category_id), niche_id = clean(body.niche_id)
       const markup_percent = Number(body.markup_percent ?? 0)
+      const markup_percent = Number(body.markup_percent ?? 0)
       if (!name || !category_id || !niche_id) return json({ error: 'Niche, category and subcategory name are required' }, 400)
+      if (!Number.isFinite(markup_percent) || markup_percent < 0 || markup_percent > 100) return json({ error: 'Markup percentage must be between 0 and 100' }, 400)
       if (!Number.isFinite(markup_percent) || markup_percent < 0 || markup_percent > 100) return json({ error: 'Markup percentage must be between 0 and 100' }, 400)
       const { data: category, error: ce } = await db.from('niche_categories')
         .select('id,niche_id').eq('id', category_id).eq('niche_id', niche_id).maybeSingle()
@@ -64,7 +66,7 @@ serve(async (req) => {
       const id = clean(body.id)
       const row = { ...(id ? { id } : {}), category_id, niche_id, name, sort_order: sort(body.sort_order), markup_percent }
       const q = id ? db.from('niche_subcategories').update(row).eq('id', id) : db.from('niche_subcategories').insert(row)
-      const { data, error } = await q.select('id,category_id,niche_id,name,sort_order').single()
+      const { data, error } = await q.select('id,category_id,niche_id,name,sort_order,markup_percent').single()
       if (error) return json({ error: error.message }, 400)
       return json({ subcategory: data })
     }
