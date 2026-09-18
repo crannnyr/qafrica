@@ -12,7 +12,8 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ShoppingBag, Search, Loader, CheckCircle2, Warehouse, PlaneTakeoff,
-  AlertCircle, Plane, Ship, Store, Home, MapPin,
+  AlertCircle, Plane, Ship, Store, Home, MapPin, ClipboardCheck, ShoppingCart,
+  ShieldCheck, PackageCheck,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
@@ -26,7 +27,7 @@ interface TrackedItem {
 interface TrackedOrder {
   code: string; status: string;
   shipping_method: 'flight' | 'sea_freight' | 'mixed' | null;
-  shipped_at: string | null; created_at: string;
+  shipped_at: string | null; received_at?: string | null; created_at: string;
   items?: TrackedItem[];
   delivery_mode?: 'home' | 'pickup_station';
   pickup_station_name?: string | null;
@@ -37,15 +38,23 @@ interface TrackedOrder {
 // steps rather than one continuous fill — spec asks for "distinct color
 // coding across different progress stages along the timeline".
 const STAGES = [
-  { key: 'received', label: 'Order Received / Processing', icon: CheckCircle2, color: 'sky' },
-  { key: 'consolidation', label: 'At Consolidation Warehouse', icon: Warehouse, color: 'amber' },
-  { key: 'transit', label: 'In Transit to Nigeria', icon: PlaneTakeoff, color: 'emerald' },
+  { key: 'pending', label: 'Order Received', description: 'Your order has been received and is being processed.', icon: CheckCircle2, color: 'sky' },
+  { key: 'confirmed', label: 'Order Confirmed', description: 'Your payment/order details have been confirmed.', icon: ClipboardCheck, color: 'blue' },
+  { key: 'ordered', label: 'Order Placed', description: 'Your items have been placed with the supplier.', icon: ShoppingCart, color: 'violet' },
+  { key: 'ordered_and_closed', label: 'At Consolidation Warehouse', description: 'Your consolidation & shipping bill has been raised and your order is at the warehouse stage.', icon: Warehouse, color: 'amber' },
+  { key: 'shipped_and_closed', label: 'Shipped to Nigeria', description: 'Your shipment has left the consolidation warehouse and is on its way to Nigeria.', icon: PlaneTakeoff, color: 'emerald' },
+  { key: 'clearance_and_closed', label: 'Nigeria Clearance', description: 'Your shipment has arrived in Nigeria and is going through the clearance stage.', icon: ShieldCheck, color: 'orange' },
+  { key: 'received', label: 'Received', description: 'Your order has been received and is ready for the final delivery or pickup step.', icon: PackageCheck, color: 'teal' },
 ] as const;
 
 const STAGE_CLASSES: Record<string, { dot: string; ring: string; line: string; text: string }> = {
   sky: { dot: 'bg-sky-500 border-sky-500', ring: 'ring-sky-100', line: 'bg-sky-500', text: 'text-sky-600' },
+  blue: { dot: 'bg-blue-500 border-blue-500', ring: 'ring-blue-100', line: 'bg-blue-500', text: 'text-blue-600' },
+  violet: { dot: 'bg-violet-500 border-violet-500', ring: 'ring-violet-100', line: 'bg-violet-500', text: 'text-violet-600' },
   amber: { dot: 'bg-amber-500 border-amber-500', ring: 'ring-amber-100', line: 'bg-amber-500', text: 'text-amber-600' },
   emerald: { dot: 'bg-emerald-500 border-emerald-500', ring: 'ring-emerald-100', line: 'bg-emerald-500', text: 'text-emerald-600' },
+  orange: { dot: 'bg-orange-500 border-orange-500', ring: 'ring-orange-100', line: 'bg-orange-500', text: 'text-orange-600' },
+  teal: { dot: 'bg-teal-500 border-teal-500', ring: 'ring-teal-100', line: 'bg-teal-500', text: 'text-teal-600' },
 };
 
 // Maps the real backend pipeline to the customer-facing tracking labels
@@ -54,9 +63,13 @@ const STAGE_CLASSES: Record<string, { dot: string; ring: string; line: string; t
 // "At Consolidation Warehouse" stage until shipped_at is set, at which
 // point status flips to to_review and the stage becomes "In Transit".
 function stageIndexFor(order: TrackedOrder): number {
-  if (order.status === 'to_review' || order.shipped_at) return 2;
-  if (order.status === 'billed') return 1;
-  return 0; // pending / confirmed
+  if (order.received_at || order.status === 'received') return 6;
+  if (order.status === 'clearance_and_closed') return 5;
+  if (order.status === 'shipped_and_closed' || order.status === 'to_review' || order.shipped_at) return 4;
+  if (order.status === 'ordered_and_closed' || order.status === 'billed') return 3;
+  if (order.status === 'ordered') return 2;
+  if (order.status === 'confirmed') return 1;
+  return 0;
 }
 
 function daysSince(dateStr: string) {
@@ -253,25 +266,10 @@ export default function ImportTrackingPage() {
                 </div>
               )}
 
-              {/* Vertical milestone tracker — each segment colored to its own stage */}
+              {/* Full customer-facing lifecycle. */}
               <div className="relative pl-8">
-                <div className="absolute left-[11px] top-2 bottom-2 w-0.5 bg-gray-100" />
-                {STAGES.slice(1).map((stage, gapI) => {
-                  const segDone = gapI < stageIdx; // gap i sits between stage i and i+1
-                  const classes = STAGE_CLASSES[stage.color];
-                  const segCount = STAGES.length - 1;
-                  return (
-                    <div
-                      key={stage.key}
-                      className={`absolute left-[11px] w-0.5 transition-all duration-700 ${segDone ? classes.line : ''}`}
-                      style={{
-                        top: `calc(0.5rem + ${(gapI / segCount) * 100}%)`,
-                        height: segDone ? `${(1 / segCount) * 100}%` : 0,
-                      }}
-                    />
-                  );
-                })}
-                <div className="space-y-6">
+                <div className="absolute left-[11px] top-3 bottom-3 w-0.5 bg-gray-100" />
+                <div className="space-y-5">
                   {STAGES.map((stage, i) => {
                     const isDone = i < stageIdx;
                     const isCurrent = i === stageIdx;
@@ -279,21 +277,20 @@ export default function ImportTrackingPage() {
                     const classes = STAGE_CLASSES[stage.color];
                     return (
                       <div key={stage.key} className="relative">
-                        <div
-                          className={`absolute -left-8 w-6 h-6 rounded-full flex items-center justify-center border-2 ${
-                            isDone || isCurrent ? classes.dot : 'bg-white border-gray-200'
-                          } ${isCurrent ? `animate-pulse ring-4 ${classes.ring}` : ''}`}
-                        >
+                        {i < STAGES.length - 1 && (
+                          <div className={`absolute left-[-21px] top-6 w-0.5 h-5 transition-colors duration-500 ${i < stageIdx ? classes.line : 'bg-gray-100'}`} />
+                        )}
+                        <div className={`absolute -left-8 w-6 h-6 rounded-full flex items-center justify-center border-2 ${isDone || isCurrent ? classes.dot : 'bg-white border-gray-200'} ${isCurrent ? `animate-pulse ring-4 ${classes.ring}` : ''}`}>
                           <Icon className={`w-3 h-3 ${isDone || isCurrent ? 'text-white' : 'text-gray-300'}`} />
                         </div>
-                        <p className={`text-sm font-semibold ${isCurrent ? 'text-gray-900' : isDone ? 'text-gray-600' : 'text-gray-300'}`}>
-                          {stage.label}
-                        </p>
-                        {isCurrent && <p className={`text-[10px] font-medium mt-0.5 ${classes.text}`}>Current status</p>}
+                        <p className={`text-sm font-semibold ${isCurrent ? 'text-gray-900' : isDone ? 'text-gray-600' : 'text-gray-300'}`}>{stage.label}</p>
+                        {isCurrent && <p className={`text-[10px] font-medium mt-0.5 leading-relaxed ${classes.text}`}>{stage.description}</p>}
+                        {isDone && <p className="text-[10px] text-gray-400 mt-0.5">Completed</p>}
                       </div>
                     );
                   })}
                 </div>
+              </div>
               </div>
             </div>
 
