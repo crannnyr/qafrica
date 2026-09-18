@@ -1029,6 +1029,93 @@ serve(async (req: Request) => {
       return json({ success: true, settings: data })
     }
 
+    // ── Pricing & Shipping settings ───────────────────────────────────────
+    if (req.method === 'GET' && action === 'admin-pricing-settings') {
+      const { data, error } = await supabase
+        .from('import_pricing_settings')
+        .select('id, usd_to_ngn, cny_to_usd, sea_rate_ngn_per_cbm, air_rate_ngn_per_gram, sea_product_allocation_percent, sea_customer_percent, air_credit_enabled, updated_at')
+        .eq('id', 1).single()
+      if (error) return json({ error: error.message }, 500)
+      return json({ settings: data })
+    }
+
+    if (req.method === 'POST' && action === 'admin-update-pricing-settings') {
+      const {
+        manager_token,
+        usd_to_ngn,
+        cny_to_usd,
+        sea_rate_ngn_per_cbm,
+        air_rate_ngn_per_gram,
+        sea_product_allocation_percent,
+        sea_customer_percent,
+        air_credit_enabled,
+      } = await req.json()
+
+      if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+
+      const updates: Record<string, unknown> = {}
+      const positive = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v > 0
+      const nonNegative = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0
+      const percent = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100
+
+      if (usd_to_ngn !== undefined) {
+        if (!positive(usd_to_ngn)) return json({ error: 'USD → NGN rate must be greater than 0.' }, 400)
+        updates.usd_to_ngn = round2(Number(usd_to_ngn))
+      }
+      if (cny_to_usd !== undefined) {
+        if (!positive(cny_to_usd)) return json({ error: 'CNY → USD rate must be greater than 0.' }, 400)
+        updates.cny_to_usd = Number(cny_to_usd)
+      }
+      if (sea_rate_ngn_per_cbm !== undefined) {
+        if (!nonNegative(sea_rate_ngn_per_cbm)) return json({ error: 'Sea rate cannot be negative.' }, 400)
+        updates.sea_rate_ngn_per_cbm = round2(Number(sea_rate_ngn_per_cbm))
+      }
+      if (air_rate_ngn_per_gram !== undefined) {
+        if (!nonNegative(air_rate_ngn_per_gram)) return json({ error: 'Air rate cannot be negative.' }, 400)
+        updates.air_rate_ngn_per_gram = Number(air_rate_ngn_per_gram)
+      }
+      if (sea_product_allocation_percent !== undefined) {
+        if (!percent(sea_product_allocation_percent)) return json({ error: 'Sea product allocation must be between 0 and 100.' }, 400)
+        updates.sea_product_allocation_percent = Number(sea_product_allocation_percent)
+      }
+      if (sea_customer_percent !== undefined) {
+        if (!percent(sea_customer_percent)) return json({ error: 'Sea customer percentage must be between 0 and 100.' }, 400)
+        updates.sea_customer_percent = Number(sea_customer_percent)
+      }
+      if (air_credit_enabled !== undefined) {
+        if (typeof air_credit_enabled !== 'boolean') return json({ error: 'Air credit setting must be true or false.' }, 400)
+        updates.air_credit_enabled = air_credit_enabled
+      }
+
+      const nextProductPercent = updates.sea_product_allocation_percent ?? null
+      const nextCustomerPercent = updates.sea_customer_percent ?? null
+      if (nextProductPercent !== null || nextCustomerPercent !== null) {
+        const { data: current, error: currentErr } = await supabase
+          .from('import_pricing_settings')
+          .select('sea_product_allocation_percent, sea_customer_percent')
+          .eq('id', 1).single()
+        if (currentErr) return json({ error: currentErr.message }, 500)
+        const productPct = Number(nextProductPercent ?? current.sea_product_allocation_percent)
+        const customerPct = Number(nextCustomerPercent ?? current.sea_customer_percent)
+        if (Math.abs(productPct + customerPct - 100) > 0.0001) {
+          return json({ error: 'Sea product allocation and customer percentage must add up to 100%.' }, 400)
+        }
+      }
+
+      updates.updated_at = new Date().toISOString()
+
+      const { data, error } = await supabase
+        .from('import_pricing_settings')
+        .update(updates)
+        .eq('id', 1)
+        .select()
+        .single()
+      if (error) return json({ error: error.message }, 500)
+
+      memoryCache.delete('import_pricing_settings')
+      return json({ success: true, settings: data })
+    }
+
     if (req.method === 'POST' && (action === 'add-product' || action === 'update-product')) {
       const body = await req.json()
       const { manager_token, id, name, description, category, image_url, image_urls, moq, has_variants, variants } = body
