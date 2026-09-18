@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronRight, Loader, RefreshCw } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
@@ -24,14 +24,8 @@ interface Props {
   token: string;
 }
 
-const NICHE_ORDER = [
-  'fashion', 'electronics', 'beauty', 'home', 'food', 'health', 'sports',
-  'baby', 'automotive', 'books', 'jewelry', 'handmade', 'pets', 'office', 'agriculture',
-];
-
 export default function CategoryManager({ token }: Props) {
   const [categories, setCategories] = useState<CategoryRow[]>([]);
-  const [selectedNiche, setSelectedNiche] = useState('fashion');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -55,11 +49,6 @@ export default function CategoryManager({ token }: Props) {
     load();
   }, [load]);
 
-  const visibleCategories = useMemo(
-    () => categories.filter(category => category.niche_id === selectedNiche),
-    [categories, selectedNiche],
-  );
-
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl border border-gray-100 p-4">
@@ -80,20 +69,6 @@ export default function CategoryManager({ token }: Props) {
           </button>
         </div>
 
-        <div className="mt-4">
-          <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Category group</label>
-          <select
-            value={selectedNiche}
-            onChange={e => setSelectedNiche(e.target.value)}
-            className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white outline-none focus:border-gray-400"
-          >
-            {NICHE_ORDER.map(niche => (
-              <option key={niche} value={niche}>
-                {niche.replace(/-/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase())}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
 
       {error && (
@@ -106,7 +81,7 @@ export default function CategoryManager({ token }: Props) {
         <div className="bg-white rounded-2xl border border-gray-100 flex items-center justify-center py-14">
           <Loader className="w-5 h-5 animate-spin text-gray-300" />
         </div>
-      ) : visibleCategories.length === 0 ? (
+      ) : categories.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 text-center py-14 text-sm text-gray-400">
           No categories found.
         </div>
@@ -118,7 +93,7 @@ export default function CategoryManager({ token }: Props) {
           </div>
 
           <div className="divide-y divide-gray-100">
-            {visibleCategories.map(category => {
+            {categories.map(category => {
               const isOpen = expanded[category.id] ?? true;
               return (
                 <div key={`${category.niche_id}:${category.id}`}>
@@ -162,7 +137,7 @@ export default function CategoryManager({ token }: Props) {
       )}
 
       <div className="text-[10px] text-gray-400 px-1">
-        {visibleCategories.length} categor{visibleCategories.length === 1 ? 'y' : 'ies'} loaded.
+        {categories.length} categor{categories.length === 1 ? 'y' : 'ies'} loaded.
       </div>
     </div>
   );
