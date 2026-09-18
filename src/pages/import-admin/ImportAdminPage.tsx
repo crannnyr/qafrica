@@ -109,6 +109,10 @@ interface ImportProduct {
   weight_grams?: number | null;
   sea_shipping_cost_ngn?: number | null;
   flight_shipping_cost_ngn?: number | null;
+  original_price_usd?: number | null;
+  usd_to_ngn_rate?: number | null;
+  markup_percent?: number | null;
+  markup_amount_ngn?: number | null;
 }
 
 // Quick-add presets for the variant builder
@@ -122,17 +126,7 @@ function genId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
-// Mirrors the china-import edge function's getTieredMarkupNgn() — used only
-// for the live price preview shown to the admin while typing.
-function getTieredMarkupNgn(baseNgn: number): number {
-  if (baseNgn < 1_000) return 200;
-  if (baseNgn < 10_000) return 1_000;
-  if (baseNgn < 20_000) return 1_500;
-  if (baseNgn < 50_000) return 2_000;
-  if (baseNgn < 100_000) return 5_000;
-  if (baseNgn < 200_000) return 9_000;
-  return 25_000;
-}
+
 
 interface Rates {
   cnyToNgn: number;
@@ -1350,6 +1344,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [showForm, setShowForm]       = useState(false);
   const [editProduct, setEditProduct] = useState<ImportProduct | null>(null);
   const [rates, setRates]             = useState<Rates | null>(null);
+  const [pricingUsdToNgn, setPricingUsdToNgn] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [shippingRates, setShippingRates] = useState({ seaRateNgnPerCbm: 0, flightRateNgnPerGram: 0 });
   const [productCategories, setProductCategories] = useState<ProductCategory[]>([]);
@@ -1361,7 +1356,6 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [categoryId, setCategoryId] = useState('');
   const [subcategoryId, setSubcategoryId] = useState('');
   const [priceAmount, setPriceAmount] = useState(''); // raw price as entered by admin
-  const [priceCurrency, setPriceCurrency] = useState<'cny' | 'usd' | 'ngn'>('cny');
   const [moq, setMoq]                 = useState('1');
   const [sourceUrl, setSourceUrl]     = useState('');
   const [shipOnly, setShipOnly]       = useState(false);
@@ -1383,19 +1377,15 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [isSaving, setIsSaving]       = useState(false);
   const [saveError, setSaveError]     = useState('');
 
-  // Live preview using the same tiered-markup logic the backend applies
+  // Live preview: original USD → current USD/NGN rate → selected subcategory markup.
   const rawAmount = parseFloat(priceAmount) || 0;
-  let previewCostNgn = 0;
-  if (rawAmount > 0 && rates) {
-    if (priceCurrency === 'ngn') previewCostNgn = rawAmount;
-    else if (priceCurrency === 'usd') previewCostNgn = rawAmount * rates.usdToNgn;
-    else previewCostNgn = (rawAmount / rates.cnyToUsd) * rates.usdToNgn; // cny -> usd -> ngn
-  }
-  const previewMarkupNgn = previewCostNgn > 0 ? getTieredMarkupNgn(previewCostNgn) : 0;
-  const priceNgn = previewCostNgn > 0 ? previewCostNgn + previewMarkupNgn : 0;
-  const priceUsd = rates && priceNgn ? priceNgn / rates.usdToNgn : 0;
-  const priceCnyPreview = rates && priceUsd ? priceUsd * rates.cnyToUsd : 0;
-  const volumeCbmNum = parseFloat(volumeCbm) || 0;
+  const selectedCategory = productCategories.find(c => c.id === categoryId);
+  const selectedSubcategory = selectedCategory?.subcategories.find(s => s.id === subcategoryId);
+  const previewMarkupPercent = Number(selectedSubcategory?.markup_percent ?? 0);
+  const previewBaseCostNgn = rawAmount > 0 && pricingUsdToNgn ? rawAmount * pricingUsdToNgn : 0;
+  const previewMarkupNgn = previewBaseCostNgn * (previewMarkupPercent / 100);
+  const previewProductCostNgn = previewBaseCostNgn + previewMarkupNgn;
+  const volumeCbmNum
   const weightGramsNum = parseFloat(weightGrams) || 0;
   const previewSeaShippingCost = volumeCbmNum > 0 ? volumeCbmNum * shippingRates.seaRateNgnPerCbm : 0;
   const previewFlightShippingCost = weightGramsNum > 0 ? weightGramsNum * shippingRates.flightRateNgnPerGram : 0;
@@ -1468,6 +1458,13 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
       .then(r => r.json())
       .then(d => setRates(d.rates))
       .catch(() => {});
+    fetch(`${EDGE_URL}?action=admin-pricing-settings`)
+      .then(r => r.json())
+      .then(d => {
+        const rate = Number(d?.settings?.usd_to_ngn);
+        if (Number.isFinite(rate) && rate > 0) setPricingUsdToNgn(rate);
+      })
+      .catch(() => {});
     fetch(`${EDGE_URL}?action=admin-settings`)
       .then(r => r.json())
       .then(d => {
@@ -1504,7 +1501,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setEditProduct(null);
     setName(''); setDesc(''); setCategory('General');
     setCategoryId(''); setSubcategoryId('');
-    setPriceAmount(''); setPriceCurrency('cny'); setMoq('1'); setUnitsSold('');
+    setPriceAmount(''); setMoq('1'); setUnitsSold('');
     setSourceUrl(''); setShipOnly(false);
     setVariantGroups([]); setCustomGroupName(''); setCustomOptionDrafts({}); setExpandedVariantGroups(new Set());
     setImagePreviews([]); setImageFiles([null, null, null]);
@@ -1524,16 +1521,18 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
       s.id === p.subcategory_id || s.name === p.category
     );
     setSubcategoryId(matchedSubcategory?.id ?? p.subcategory_id ?? '');
-    // Restore exactly what the admin originally typed — the currency they
-    // picked and the raw amount — instead of guessing. Falls back to the
-    // old CNY-only assumption only for products saved before this field existed.
-    if (p.price_input_currency && p.price_input_amount != null) {
-      setPriceAmount(p.price_input_amount.toString());
-      setPriceCurrency(p.price_input_currency);
+    // New products store the original supplier price in USD. For older products,
+    // use the stored original CNY price as a fallback when CNY→USD is available.
+    if (p.original_price_usd != null && Number(p.original_price_usd) > 0) {
+      setPriceAmount(Number(p.original_price_usd).toString());
+    } else if (p.price_cny_original != null && rates?.cnyToUsd) {
+      setPriceAmount((Number(p.price_cny_original) * rates.cnyToUsd).toFixed(2));
+    } else if (p.cost_ngn != null && pricingUsdToNgn) {
+      setPriceAmount((Number(p.cost_ngn) / pricingUsdToNgn).toFixed(2));
     } else {
-      setPriceAmount((p.price_cny_original ?? p.price_cny).toString());
-      setPriceCurrency('cny');
+      setPriceAmount('');
     }
+    setMoq((p.moq ?? 1).toString());
     setMoq((p.moq ?? 1).toString());
     setSourceUrl(p.source_url ?? '');
     setShipOnly(p.ship_only === true);
@@ -1632,8 +1631,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
         category,
         category_id: categoryId || undefined,
         subcategory_id: subcategoryId || undefined,
-        price_amount:   rawAmount,
-        price_currency: priceCurrency,
+        original_price_usd: rawAmount,
         moq:             parseInt(moq, 10) >= 1 ? parseInt(moq, 10) : 1,
         has_variants:    variantGroups.length > 0,
         variants:        variantGroups,
@@ -1821,59 +1819,35 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                 </select>
               </div>
 
-              {/* Price input with markup note */}
+              {/* Original USD price + subcategory markup preview */}
               <div>
-                <Label>Price from source</Label>
-
-                {/* Markup info banner */}
+                <Label>Original product price (USD)</Label>
                 <div className="flex items-start gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 mb-2">
                   <Info className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" />
                   <p className="text-[11px] text-blue-600 leading-relaxed">
-                    Enter the <strong>exact cost price</strong> in whatever currency you have it. A tiered platform markup (₦200–₦25,000 depending on price band) is added automatically before saving.
+                    Enter the <strong>original supplier price in USD</strong>. The selected subcategory's markup percentage is applied automatically.
                   </p>
                 </div>
-
-                <div className="flex gap-2">
-                  <input type="number" value={priceAmount} onChange={e => setPriceAmount(e.target.value)}
-                    placeholder="e.g. 45.00"
-                    className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
-                  <select value={priceCurrency} onChange={e => setPriceCurrency(e.target.value as 'cny' | 'usd' | 'ngn')}
-                    className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:border-gray-400 outline-none">
-                    <option value="cny">CNY ¥</option>
-                    <option value="usd">USD $</option>
-                    <option value="ngn">NGN ₦</option>
-                  </select>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input type="number" min={0} step="0.01" value={priceAmount}
+                    onChange={e => setPriceAmount(e.target.value)} placeholder="e.g. 10.00"
+                    className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none" />
                 </div>
-
-                {/* Live conversion preview */}
-                {priceNgn > 0 && rates && (
+                {rawAmount > 0 && (
                   <div className="mt-2 bg-white border border-gray-100 rounded-xl px-4 py-3 space-y-1.5">
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>Cost price</span>
-                      <span className="font-medium">{fmt(previewCostNgn)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs text-gray-500">
-                      <span>+ Platform markup</span>
-                      <span className="font-medium text-orange-500">{fmt(previewMarkupNgn)}</span>
-                    </div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Original price</span><span className="font-medium">{fmtUsd(rawAmount)}</span></div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>USD → NGN rate</span><span className="font-medium">{pricingUsdToNgn ? `₦${pricingUsdToNgn.toLocaleString()}` : 'Loading…'}</span></div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Base cost</span><span className="font-medium">{pricingUsdToNgn ? fmt(previewBaseCostNgn) : '—'}</span></div>
+                    <div className="flex justify-between text-xs text-gray-500"><span>Markup ({previewMarkupPercent.toFixed(2)}%)</span><span className="font-medium text-orange-500">{pricingUsdToNgn ? fmt(previewMarkupNgn) : '—'}</span></div>
                     <div className="h-px bg-gray-100" />
-                    <div className="flex justify-between text-xs font-bold text-gray-800">
-                      <span>Customer price</span>
-                      <span>{fmt(priceNgn)}</span>
-                    </div>
-                    <div className="flex gap-2 pt-0.5">
-                      <span className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded-lg font-semibold">
-                        ${priceUsd.toFixed(2)} USD
-                      </span>
-                      <span className="text-[10px] bg-red-50 text-red-500 px-2 py-0.5 rounded-lg font-semibold">
-                        ¥{priceCnyPreview.toFixed(2)} CNY
-                      </span>
-                    </div>
+                    <div className="flex justify-between text-xs font-bold text-gray-800"><span>Product cost before shipping</span><span>{pricingUsdToNgn ? fmt(previewProductCostNgn) : '—'}</span></div>
                   </div>
                 )}
               </div>
 
               <div>
+                <Label>Minimum order quantity</Label>
                 <Label>Minimum order quantity</Label>
                 <input type="number" min={1} value={moq} onChange={e => setMoq(e.target.value)}
                   placeholder="1"
