@@ -18,6 +18,7 @@ interface SubcategoryRow {
   niche_id: string;
   name: string;
   sort_order: number;
+  markup_percent: number;
 }
 
 interface Props {
@@ -32,6 +33,7 @@ export default function CategoryManager({ token }: Props) {
   const [editingSubcategory, setEditingSubcategory] = useState<SubcategoryRow | null>(null);
   const [subcategoryName, setSubcategoryName] = useState('');
   const [subcategoryCategoryId, setSubcategoryCategoryId] = useState('');
+  const [subcategoryMarkupPercent, setSubcategoryMarkupPercent] = useState('0');
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
 
@@ -55,20 +57,21 @@ export default function CategoryManager({ token }: Props) {
   }, [load]);
 
   const openNewSubcategory = (categoryId: string) => {
-    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(categoryId); setFormOpen(true);
+    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(categoryId); setSubcategoryMarkupPercent('0'); setFormOpen(true);
   };
   const openEditSubcategory = (subcategory: SubcategoryRow) => {
-    setEditingSubcategory(subcategory); setSubcategoryName(subcategory.name); setSubcategoryCategoryId(subcategory.category_id); setFormOpen(true);
+    setEditingSubcategory(subcategory); setSubcategoryName(subcategory.name); setSubcategoryCategoryId(subcategory.category_id); setSubcategoryMarkupPercent(String(subcategory.markup_percent ?? 0)); setFormOpen(true);
   };
   const closeSubcategoryForm = () => {
-    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(''); setFormOpen(false);
+    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(''); setSubcategoryMarkupPercent('0'); setFormOpen(false);
   };
   const saveSubcategory = async () => {
     const name = subcategoryName.trim(); const category = categories.find(c => c.id === subcategoryCategoryId);
-    if (!name || !category) return; setSaving(true); setError('');
+    const markupPercent = Number(subcategoryMarkupPercent);
+    if (!name || !category || !Number.isFinite(markupPercent) || markupPercent < 0 || markupPercent > 100) return; setSaving(true); setError('');
     try {
       const res = await fetch(CATEGORY_EDGE_URL + '?action=save-subcategory', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, id: editingSubcategory?.id, name, category_id: category.id, niche_id: category.niche_id, sort_order: editingSubcategory?.sort_order ?? category.subcategories.length }) });
+        body: JSON.stringify({ manager_token: token, id: editingSubcategory?.id, name, category_id: category.id, niche_id: category.niche_id, sort_order: editingSubcategory?.sort_order ?? category.subcategories.length, markup_percent: markupPercent }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error ?? 'Could not save subcategory');
       closeSubcategoryForm(); await load();
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save subcategory'); } finally { setSaving(false); }
@@ -110,6 +113,10 @@ export default function CategoryManager({ token }: Props) {
           <div className="grid gap-3 sm:grid-cols-2">
             <select value={subcategoryCategoryId} onChange={e => setSubcategoryCategoryId(e.target.value)} className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white"><option value="">Select category</option>{categories.map(category => <option key={category.niche_id + ':' + category.id} value={category.id}>{category.name}</option>)}</select>
             <input value={subcategoryName} onChange={e => setSubcategoryName(e.target.value)} placeholder="Subcategory name" className="px-3 py-2.5 rounded-xl border border-gray-200 text-sm" />
+            <div className="relative">
+              <input type="number" min="0" max="100" step="0.01" value={subcategoryMarkupPercent} onChange={e => setSubcategoryMarkupPercent(e.target.value)} placeholder="Markup percentage" className="w-full px-3 pr-8 py-2.5 rounded-xl border border-gray-200 text-sm" />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+            </div>
           </div>
           <div className="flex justify-end mt-3"><button onClick={saveSubcategory} disabled={saving || !subcategoryName.trim() || !subcategoryCategoryId} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gray-900 text-white text-xs font-semibold disabled:opacity-40">{saving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{saving ? 'Saving…' : 'Save subcategory'}</button></div>
         </div>
@@ -165,6 +172,7 @@ export default function CategoryManager({ token }: Props) {
                         {category.subcategories.map(subcategory => (
                           <div key={subcategory.id} className="group flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-100">
                             <span className="text-[11px] text-gray-600">{subcategory.name}</span>
+                            <span className="text-[10px] font-semibold text-gray-400">{Number(subcategory.markup_percent ?? 0)}%</span>
                             <button onClick={() => openEditSubcategory(subcategory)} className="hidden group-hover:block text-gray-400" title="Edit"><Pencil className="w-3 h-3" /></button>
                             <button onClick={() => deleteSubcategory(subcategory)} className="hidden group-hover:block text-gray-400 hover:text-red-600" title="Delete"><Trash2 className="w-3 h-3" /></button>
                           </div>
