@@ -38,6 +38,7 @@ export default function CategoryManager({ token }: Props) {
   const [editingCategory, setEditingCategory] = useState<CategoryRow | null>(null);
   const [categoryName, setCategoryName] = useState('');
   const [categoryNicheId, setCategoryNicheId] = useState('');
+  const [categoryId, setCategoryId] = useState('');
 
   const load = useCallback(async (restoreScroll = false) => {
     const scrollY = window.scrollY;
@@ -61,10 +62,10 @@ export default function CategoryManager({ token }: Props) {
   }, [load]);
 
   const openNewCategory = (category: CategoryRow) => {
-    setFormType('category'); setEditingCategory(null); setCategoryName(''); setCategoryNicheId(category.niche_id); setFormOpen(true);
+    setFormType('category'); setEditingCategory(null); setCategoryName(''); setCategoryId(''); setCategoryNicheId(category.niche_id); setFormOpen(true);
   };
   const openEditCategory = (category: CategoryRow) => {
-    setFormType('category'); setEditingCategory(category); setCategoryName(category.name); setCategoryNicheId(category.niche_id); setFormOpen(true);
+    setFormType('category'); setEditingCategory(category); setCategoryName(category.name); setCategoryId(category.id); setCategoryNicheId(category.niche_id); setFormOpen(true);
   };
   const openNewSubcategory = (categoryId: string) => {
     setFormType('subcategory');
@@ -74,13 +75,13 @@ export default function CategoryManager({ token }: Props) {
     setFormType('subcategory'); setEditingSubcategory(subcategory); setSubcategoryName(subcategory.name); setSubcategoryCategoryId(subcategory.category_id); setFormOpen(true);
   };
   const closeSubcategoryForm = () => {
-    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(''); setFormOpen(false);
+    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(''); setEditingCategory(null); setCategoryName(''); setCategoryId(''); setCategoryNicheId(''); setFormOpen(false);
   };
   const saveCategory = async () => {
     const name = categoryName.trim(); if (!name || !categoryNicheId) return; setSaving(true); setError('');
     try {
       const res = await fetch(CATEGORY_EDGE_URL + '?action=save-category', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, id: editingCategory?.id, name, niche_id: categoryNicheId, sort_order: editingCategory?.sort_order ?? categories.length }) });
+        body: JSON.stringify({ manager_token: token, id: editingCategory?.id || categoryId || undefined, name, niche_id: categoryNicheId, sort_order: editingCategory?.sort_order ?? categories.filter(c => c.niche_id === categoryNicheId).length }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error ?? 'Could not save category');
       closeSubcategoryForm(); await load(true);
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not save category'); } finally { setSaving(false); }
@@ -208,7 +209,10 @@ export default function CategoryManager({ token }: Props) {
             </div>
             <div className="space-y-3">
               {formType === 'category' ? (
+                <>
                 <input autoFocus value={categoryName} onChange={e => setCategoryName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !saving && categoryName.trim()) saveCategory(); if (e.key === 'Escape') closeSubcategoryForm(); }} placeholder="Category name" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
+                <p className="text-[10px] text-gray-400">New categories are added to the same category group as the category you clicked.</p>
+                </>
               ) : <>
               <select value={subcategoryCategoryId} onChange={e => setSubcategoryCategoryId(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white outline-none focus:border-gray-400"><option value="">Select category</option>{categories.map(category => <option key={category.niche_id + ':' + category.id} value={category.id}>{category.name}</option>)}</select>
               <input autoFocus value={subcategoryName} onChange={e => setSubcategoryName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !saving && subcategoryName.trim() && subcategoryCategoryId) saveSubcategory(); if (e.key === 'Escape') closeSubcategoryForm(); }} placeholder="Subcategory name" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
