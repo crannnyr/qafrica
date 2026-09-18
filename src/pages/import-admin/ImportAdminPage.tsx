@@ -1385,7 +1385,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const previewBaseCostNgn = rawAmount > 0 && pricingUsdToNgn ? rawAmount * pricingUsdToNgn : 0;
   const previewMarkupNgn = previewBaseCostNgn * (previewMarkupPercent / 100);
   const previewProductCostNgn = previewBaseCostNgn + previewMarkupNgn;
-  const volumeCbmNum
+  const volumeCbmNum = parseFloat(volumeCbm) || 0;
   const weightGramsNum = parseFloat(weightGrams) || 0;
   const previewSeaShippingCost = volumeCbmNum > 0 ? volumeCbmNum * shippingRates.seaRateNgnPerCbm : 0;
   const previewFlightShippingCost = weightGramsNum > 0 ? weightGramsNum * shippingRates.flightRateNgnPerGram : 0;
@@ -1847,7 +1847,6 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
               </div>
 
               <div>
-                <Label>Minimum order quantity</Label>
                 <Label>Minimum order quantity</Label>
                 <input type="number" min={1} value={moq} onChange={e => setMoq(e.target.value)}
                   placeholder="1"
