@@ -25,6 +25,7 @@ import BroadcastEmailManager from './BroadcastEmailManager';
 import RefundsManager from './RefundsManager';
 import AdminOrderReceiptSheet from './AdminOrderReceiptSheet';
 import PaystackTransactions from './PaystackTransactions';
+import CategoryManager from './CategoryManager';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const IMPORT_ADMIN_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-admin-orders`;
@@ -2638,7 +2639,7 @@ function CustomOrdersManager({ token }: { token: string }) {
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'custom-orders'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'custom-orders' | 'categories'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -2673,7 +2674,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'custom-orders'] as const).map(t => (
+          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'custom-orders', 'categories'] as const).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -2683,7 +2684,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t}
             </button>
           ))}
         </div>
@@ -2715,6 +2716,8 @@ export default function ImportAdminPage() {
           <PaystackTransactions token={token} />
         ) : tab === 'timed-out' ? (
           <TimedOutOrdersManager token={token} />
+        ) : tab === 'categories' ? (
+          <CategoryManager token={token} />
         ) : tab === 'settings' ? (
           <SettingsManager token={token} />
         ) : tab === 'custom-orders' ? (
