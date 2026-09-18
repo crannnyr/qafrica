@@ -33,6 +33,7 @@ export default function CategoryManager({ token }: Props) {
   const [subcategoryName, setSubcategoryName] = useState('');
   const [subcategoryCategoryId, setSubcategoryCategoryId] = useState('');
   const [saving, setSaving] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,13 +55,13 @@ export default function CategoryManager({ token }: Props) {
   }, [load]);
 
   const openNewSubcategory = (categoryId: string) => {
-    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(categoryId);
+    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(categoryId); setFormOpen(true);
   };
   const openEditSubcategory = (subcategory: SubcategoryRow) => {
-    setEditingSubcategory(subcategory); setSubcategoryName(subcategory.name); setSubcategoryCategoryId(subcategory.category_id);
+    setEditingSubcategory(subcategory); setSubcategoryName(subcategory.name); setSubcategoryCategoryId(subcategory.category_id); setFormOpen(true);
   };
   const closeSubcategoryForm = () => {
-    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId('');
+    setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(''); setFormOpen(false);
   };
   const saveSubcategory = async () => {
     const name = subcategoryName.trim(); const category = categories.find(c => c.id === subcategoryCategoryId);
@@ -103,7 +104,7 @@ export default function CategoryManager({ token }: Props) {
 
       </div>
 
-      {(subcategoryName || editingSubcategory) && (
+      {formOpen && (
         <div className="bg-white rounded-2xl border border-gray-100 p-4">
           <div className="flex items-center justify-between mb-3"><p className="font-bold text-gray-900 text-sm">{editingSubcategory ? 'Edit Subcategory' : 'Add Subcategory'}</p><button onClick={closeSubcategoryForm} className="p-1.5 text-gray-400"><X className="w-4 h-4" /></button></div>
           <div className="grid gap-3 sm:grid-cols-2">
