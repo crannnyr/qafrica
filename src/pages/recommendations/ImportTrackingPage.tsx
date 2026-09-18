@@ -291,7 +291,6 @@ export default function ImportTrackingPage() {
                   })}
                 </div>
               </div>
-              </div>
             </div>
 
             {/* Itemized shipping details — always shown so a mixed-method
