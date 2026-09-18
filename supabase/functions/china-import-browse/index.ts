@@ -122,7 +122,7 @@ function spreadCategories<T extends { category?: string | null }>(items: T[]): T
   return out
 }
 
-const PRODUCT_COLUMNS = 'id, name, description, image_url, image_urls, price_cny, price_ngn, price_usd, category, parent_category, moq, has_variants, variants, delivery_time, ship_only, sort_order, units_sold, is_trending, trending_order, created_at'
+const PRODUCT_COLUMNS = 'id, name, description, image_url, image_urls, price_cny, price_ngn, price_usd, category, parent_category, moq, has_variants, variants, delivery_time, ship_only, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, sort_order, units_sold, is_trending, trending_order, created_at'
 
 const SYNONYMS: Record<string, string[]> = {
   phone: ['iphone', 'smartphone', 'android', 'cellphone', 'mobile'],
