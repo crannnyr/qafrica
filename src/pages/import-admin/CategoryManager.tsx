@@ -34,6 +34,10 @@ export default function CategoryManager({ token }: Props) {
   const [subcategoryCategoryId, setSubcategoryCategoryId] = useState('');
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
+  const [formType, setFormType] = useState<'category' | 'subcategory'>('subcategory');
+  const [editingCategory, setEditingCategory] = useState<CategoryRow | null>(null);
+  const [categoryName, setCategoryName] = useState('');
+  const [categoryNicheId, setCategoryNicheId] = useState('');
 
   const load = useCallback(async (restoreScroll = false) => {
     const scrollY = window.scrollY;
@@ -56,14 +60,38 @@ export default function CategoryManager({ token }: Props) {
     load();
   }, [load]);
 
+  const openNewCategory = (category: CategoryRow) => {
+    setFormType('category'); setEditingCategory(null); setCategoryName(''); setCategoryNicheId(category.niche_id); setFormOpen(true);
+  };
+  const openEditCategory = (category: CategoryRow) => {
+    setFormType('category'); setEditingCategory(category); setCategoryName(category.name); setCategoryNicheId(category.niche_id); setFormOpen(true);
+  };
   const openNewSubcategory = (categoryId: string) => {
+    setFormType('subcategory');
     setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(categoryId); setFormOpen(true);
   };
   const openEditSubcategory = (subcategory: SubcategoryRow) => {
-    setEditingSubcategory(subcategory); setSubcategoryName(subcategory.name); setSubcategoryCategoryId(subcategory.category_id); setFormOpen(true);
+    setFormType('subcategory'); setEditingSubcategory(subcategory); setSubcategoryName(subcategory.name); setSubcategoryCategoryId(subcategory.category_id); setFormOpen(true);
   };
   const closeSubcategoryForm = () => {
     setEditingSubcategory(null); setSubcategoryName(''); setSubcategoryCategoryId(''); setFormOpen(false);
+  };
+  const saveCategory = async () => {
+    const name = categoryName.trim(); if (!name || !categoryNicheId) return; setSaving(true); setError('');
+    try {
+      const res = await fetch(CATEGORY_EDGE_URL + '?action=save-category', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, id: editingCategory?.id, name, niche_id: categoryNicheId, sort_order: editingCategory?.sort_order ?? categories.length }) });
+      const data = await res.json(); if (!res.ok) throw new Error(data.error ?? 'Could not save category');
+      closeSubcategoryForm(); await load(true);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save category'); } finally { setSaving(false); }
+  };
+  const deleteCategory = async (category: CategoryRow) => {
+    if (category.subcategories.length) { setError('Delete the subcategories first before deleting this category.'); return; }
+    if (!window.confirm('Delete "' + category.name + '"?')) return; setError('');
+    try {
+      const res = await fetch(CATEGORY_EDGE_URL + '?action=delete-category', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ manager_token: token, id: category.id, niche_id: category.niche_id }) });
+      const data = await res.json(); if (!res.ok) throw new Error(data.error ?? 'Could not delete category'); await load(true);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Could not delete category'); }
   };
   const saveSubcategory = async () => {
     const name = subcategoryName.trim(); const category = categories.find(c => c.id === subcategoryCategoryId);
@@ -142,7 +170,7 @@ export default function CategoryManager({ token }: Props) {
                       ) : (
                         <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                       )}
-                      <span className="text-sm font-semibold text-gray-800 truncate">{category.name}</span>
+                      <span className="text-sm font-semibold text-gray-800 truncate">{category.name}</span>\n                      <div className="flex items-center gap-1 ml-auto">\n                        <button onClick={e => { e.stopPropagation(); openEditCategory(category); }} className="p-1 text-gray-400 hover:text-gray-800" title="Edit category"><Pencil className="w-3 h-3" /></button>\n                        <button onClick={e => { e.stopPropagation(); deleteCategory(category); }} className="p-1 text-gray-400 hover:text-red-600" title="Delete category"><Trash2 className="w-3 h-3" /></button>\n                        <button onClick={e => { e.stopPropagation(); openNewCategory(category); }} className="p-1 text-gray-400 hover:text-gray-800" title="Add category"><Plus className="w-3 h-3" /></button>\n                      </div>
                     </div>
                     <span className="text-xs text-gray-400">
                       {category.subcategories.length} subcategor{category.subcategories.length === 1 ? 'y' : 'ies'}
@@ -175,16 +203,20 @@ export default function CategoryManager({ token }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) closeSubcategoryForm(); }}>
           <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-100 p-5">
             <div className="flex items-center justify-between mb-4">
-              <div><p className="font-bold text-gray-900 text-sm">{editingSubcategory ? 'Edit Subcategory' : 'Add Subcategory'}</p><p className="text-[11px] text-gray-400 mt-0.5">Changes apply to the selected category.</p></div>
+              <div><p className="font-bold text-gray-900 text-sm">{formType === 'category' ? (editingCategory ? 'Edit Category' : 'Add Category') : (editingSubcategory ? 'Edit Subcategory' : 'Add Subcategory')}</p><p className="text-[11px] text-gray-400 mt-0.5">{formType === 'category' ? 'The category stays in its existing category group.' : 'Changes apply to the selected category.'}</p></div>
               <button onClick={closeSubcategoryForm} className="p-2 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-50"><X className="w-4 h-4" /></button>
             </div>
             <div className="space-y-3">
+              {formType === 'category' ? (
+                <input autoFocus value={categoryName} onChange={e => setCategoryName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !saving && categoryName.trim()) saveCategory(); if (e.key === 'Escape') closeSubcategoryForm(); }} placeholder="Category name" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
+              ) : <>
               <select value={subcategoryCategoryId} onChange={e => setSubcategoryCategoryId(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white outline-none focus:border-gray-400"><option value="">Select category</option>{categories.map(category => <option key={category.niche_id + ':' + category.id} value={category.id}>{category.name}</option>)}</select>
               <input autoFocus value={subcategoryName} onChange={e => setSubcategoryName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !saving && subcategoryName.trim() && subcategoryCategoryId) saveSubcategory(); if (e.key === 'Escape') closeSubcategoryForm(); }} placeholder="Subcategory name" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
+              </>}
             </div>
             <div className="flex justify-end gap-2 mt-5">
               <button onClick={closeSubcategoryForm} className="px-3.5 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={saveSubcategory} disabled={saving || !subcategoryName.trim() || !subcategoryCategoryId} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gray-900 text-white text-xs font-semibold disabled:opacity-40">{saving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{saving ? 'Saving…' : 'Save subcategory'}</button>
+              <button onClick={formType === 'category' ? saveCategory : saveSubcategory} disabled={saving || (formType === 'category' ? !categoryName.trim() : !subcategoryName.trim() || !subcategoryCategoryId)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gray-900 text-white text-xs font-semibold disabled:opacity-40">{saving ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{saving ? 'Saving…' : formType === 'category' ? 'Save category' : 'Save subcategory'}</button>
             </div>
           </div>
         </div>
