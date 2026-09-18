@@ -1030,13 +1030,26 @@ serve(async (req: Request) => {
     }
 
     // ── Pricing & Shipping settings ───────────────────────────────────────
+    // Pricing and shipping settings live in import_admin_credentials so there
+    // is one admin-settings source of truth.
     if (req.method === 'GET' && action === 'admin-pricing-settings') {
       const { data, error } = await supabase
-        .from('import_pricing_settings')
-        .select('id, usd_to_ngn, cny_to_usd, sea_rate_ngn_per_cbm, air_rate_ngn_per_gram, sea_product_allocation_percent, sea_customer_percent, air_credit_enabled, updated_at')
+        .from('import_admin_credentials')
+        .select('usd_to_ngn_rate, cny_to_usd_rate, sea_rate_ngn_per_cbm, flight_rate_ngn_per_gram, sea_shipping_product_allocation_percent, sea_shipping_customer_percent, air_shipping_credit_enabled, updated_at')
         .eq('id', 1).single()
       if (error) return json({ error: error.message }, 500)
-      return json({ settings: data })
+      return json({
+        settings: {
+          usd_to_ngn: Number(data.usd_to_ngn_rate),
+          cny_to_usd: Number(data.cny_to_usd_rate),
+          sea_rate_ngn_per_cbm: Number(data.sea_rate_ngn_per_cbm),
+          air_rate_ngn_per_gram: Number(data.flight_rate_ngn_per_gram),
+          sea_product_allocation_percent: Number(data.sea_shipping_product_allocation_percent),
+          sea_customer_percent: Number(data.sea_shipping_customer_percent),
+          air_credit_enabled: Boolean(data.air_shipping_credit_enabled),
+          updated_at: data.updated_at,
+        },
+      })
     }
 
     if (req.method === 'POST' && action === 'admin-update-pricing-settings') {
@@ -1060,11 +1073,11 @@ serve(async (req: Request) => {
 
       if (usd_to_ngn !== undefined) {
         if (!positive(usd_to_ngn)) return json({ error: 'USD → NGN rate must be greater than 0.' }, 400)
-        updates.usd_to_ngn = round2(Number(usd_to_ngn))
+        updates.usd_to_ngn_rate = round2(Number(usd_to_ngn))
       }
       if (cny_to_usd !== undefined) {
         if (!positive(cny_to_usd)) return json({ error: 'CNY → USD rate must be greater than 0.' }, 400)
-        updates.cny_to_usd = Number(cny_to_usd)
+        updates.cny_to_usd_rate = Number(cny_to_usd)
       }
       if (sea_rate_ngn_per_cbm !== undefined) {
         if (!nonNegative(sea_rate_ngn_per_cbm)) return json({ error: 'Sea rate cannot be negative.' }, 400)
@@ -1072,31 +1085,29 @@ serve(async (req: Request) => {
       }
       if (air_rate_ngn_per_gram !== undefined) {
         if (!nonNegative(air_rate_ngn_per_gram)) return json({ error: 'Air rate cannot be negative.' }, 400)
-        updates.air_rate_ngn_per_gram = Number(air_rate_ngn_per_gram)
+        updates.flight_rate_ngn_per_gram = Number(air_rate_ngn_per_gram)
       }
       if (sea_product_allocation_percent !== undefined) {
         if (!percent(sea_product_allocation_percent)) return json({ error: 'Sea product allocation must be between 0 and 100.' }, 400)
-        updates.sea_product_allocation_percent = Number(sea_product_allocation_percent)
+        updates.sea_shipping_product_allocation_percent = Number(sea_product_allocation_percent)
       }
       if (sea_customer_percent !== undefined) {
         if (!percent(sea_customer_percent)) return json({ error: 'Sea customer percentage must be between 0 and 100.' }, 400)
-        updates.sea_customer_percent = Number(sea_customer_percent)
+        updates.sea_shipping_customer_percent = Number(sea_customer_percent)
       }
       if (air_credit_enabled !== undefined) {
         if (typeof air_credit_enabled !== 'boolean') return json({ error: 'Air credit setting must be true or false.' }, 400)
-        updates.air_credit_enabled = air_credit_enabled
+        updates.air_shipping_credit_enabled = air_credit_enabled
       }
 
-      const nextProductPercent = updates.sea_product_allocation_percent ?? null
-      const nextCustomerPercent = updates.sea_customer_percent ?? null
-      if (nextProductPercent !== null || nextCustomerPercent !== null) {
+      if (updates.sea_shipping_product_allocation_percent !== undefined || updates.sea_shipping_customer_percent !== undefined) {
         const { data: current, error: currentErr } = await supabase
-          .from('import_pricing_settings')
-          .select('sea_product_allocation_percent, sea_customer_percent')
+          .from('import_admin_credentials')
+          .select('sea_shipping_product_allocation_percent, sea_shipping_customer_percent')
           .eq('id', 1).single()
         if (currentErr) return json({ error: currentErr.message }, 500)
-        const productPct = Number(nextProductPercent ?? current.sea_product_allocation_percent)
-        const customerPct = Number(nextCustomerPercent ?? current.sea_customer_percent)
+        const productPct = Number(updates.sea_shipping_product_allocation_percent ?? current.sea_shipping_product_allocation_percent)
+        const customerPct = Number(updates.sea_shipping_customer_percent ?? current.sea_shipping_customer_percent)
         if (Math.abs(productPct + customerPct - 100) > 0.0001) {
           return json({ error: 'Sea product allocation and customer percentage must add up to 100%.' }, 400)
         }
@@ -1105,15 +1116,27 @@ serve(async (req: Request) => {
       updates.updated_at = new Date().toISOString()
 
       const { data, error } = await supabase
-        .from('import_pricing_settings')
+        .from('import_admin_credentials')
         .update(updates)
         .eq('id', 1)
-        .select()
+        .select('usd_to_ngn_rate, cny_to_usd_rate, sea_rate_ngn_per_cbm, flight_rate_ngn_per_gram, sea_shipping_product_allocation_percent, sea_shipping_customer_percent, air_shipping_credit_enabled, updated_at')
         .single()
       if (error) return json({ error: error.message }, 500)
 
       memoryCache.delete('import_pricing_settings')
-      return json({ success: true, settings: data })
+      return json({
+        success: true,
+        settings: {
+          usd_to_ngn: Number(data.usd_to_ngn_rate),
+          cny_to_usd: Number(data.cny_to_usd_rate),
+          sea_rate_ngn_per_cbm: Number(data.sea_rate_ngn_per_cbm),
+          air_rate_ngn_per_gram: Number(data.flight_rate_ngn_per_gram),
+          sea_product_allocation_percent: Number(data.sea_shipping_product_allocation_percent),
+          sea_customer_percent: Number(data.sea_shipping_customer_percent),
+          air_credit_enabled: Boolean(data.air_shipping_credit_enabled),
+          updated_at: data.updated_at,
+        },
+      })
     }
 
     if (req.method === 'POST' && (action === 'add-product' || action === 'update-product')) {
