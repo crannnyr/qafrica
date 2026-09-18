@@ -688,7 +688,7 @@ serve(async (req: Request) => {
         const code = generateOrderCode()
         const { error } = await supabase.from('china_import_orders').insert({
           code, customer_name, customer_whatsapp, items, delivery_type,
-          subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn, total_ngn: totalNgn,
+          subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn, shipping_ngn: shippingNgn, prepaid_shipping_ngn: shippingNgn, total_ngn: totalNgn,
           status: 'pending', payment_status: 'unpaid',
         })
         if (!error) return json({ code })
@@ -805,7 +805,7 @@ serve(async (req: Request) => {
       const itemIds = [...new Set(items.map((i: any) => i.id).filter(Boolean))]
       const { data: itemProducts, error: itemProductsErr } = await supabase
         .from('china_import_products')
-        .select('id, name, price_ngn, variants, ship_only')
+        .select('id, name, price_ngn, variants, ship_only, sea_shipping_customer_ngn, air_shipping_customer_ngn')
         .in('id', itemIds)
       if (itemProductsErr) return json({ error: 'Could not verify item pricing' }, 500)
       const productMap = new Map((itemProducts ?? []).map((p: any) => [p.id, p]))
@@ -829,14 +829,47 @@ serve(async (req: Request) => {
       const pricedItems = items.map((i: any) => {
         const product = productMap.get(i.id)
         if (!product) return null
+        const method = i.shipping_method ?? shipping_method
         const price_ngn = computeItemPriceNgn(product, i.variant_options)
-        return { ...i, price_ngn, shipping_method: i.shipping_method ?? shipping_method }
+        const shippingRateNgn = method === 'flight'
+          ? Number(product.air_shipping_customer_ngn ?? 0)
+          : Number(product.sea_shipping_customer_ngn ?? 0)
+        return {
+          ...i,
+          price_ngn,
+          shipping_method: method,
+          shipping_cost_ngn: round2(Math.max(shippingRateNgn, 0)),
+        }
       })
       if (pricedItems.some((i: any) => i === null)) return json({ error: 'One or more items in your cart are no longer available' }, 400)
 
+      // Shipping is calculated from the product snapshot stored in Supabase,
+      // never from the price/shipping amounts supplied by the browser.
+      const shippingSettingsRes = await supabase
+        .from('import_admin_credentials')
+        .select('charge_shipping_at_checkout, shipping_discount_percent, shipping_discount_min_ngn, bulk_discount_tier1_qty, bulk_discount_tier1_percent, bulk_discount_tier2_qty, bulk_discount_tier2_percent')
+        .eq('id', 1).single()
+      if (shippingSettingsRes.error) return json({ error: 'Could not load shipping settings' }, 500)
+      const shippingSettings = shippingSettingsRes.data
+
       const subtotalNgn = pricedItems.reduce((s: number, i: any) => s + Number(i.price_ngn ?? 0) * Number(i.quantity ?? 0), 0)
+      const cartQty = pricedItems.reduce((s: number, i: any) => s + Number(i.quantity ?? 0), 0)
+      const rawShippingNgn = pricedItems.reduce((s: number, i: any) => s + Number(i.shipping_cost_ngn ?? 0) * Number(i.quantity ?? 0), 0)
+      const discountActive = rawShippingNgn >= Number(shippingSettings.shipping_discount_min_ngn ?? 1600)
+      const effectiveDiscountPercent = discountActive
+        ? Math.min(
+            Number(shippingSettings.shipping_discount_percent ?? 0)
+              + (cartQty >= Number(shippingSettings.bulk_discount_tier1_qty ?? 10) ? Number(shippingSettings.bulk_discount_tier1_percent ?? 5) : 0)
+              + (cartQty >= Number(shippingSettings.bulk_discount_tier2_qty ?? 20) ? Number(shippingSettings.bulk_discount_tier2_percent ?? 5) : 0),
+            100,
+          )
+        : 0
+      const discountedShippingNgn = discountActive
+        ? Math.round(rawShippingNgn * (1 - effectiveDiscountPercent / 100))
+        : rawShippingNgn
+      const shippingNgn = shippingSettings.charge_shipping_at_checkout ? discountedShippingNgn : 0
       const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
-      const totalNgn = subtotalNgn + jumiaFeeNgn
+      const totalNgn = subtotalNgn + jumiaFeeNgn + shippingNgn
 
       const PAYSTACK_MAX_NGN = 50_000
       if (payment_method === 'paystack' && totalNgn > PAYSTACK_MAX_NGN) {
@@ -1010,7 +1043,7 @@ serve(async (req: Request) => {
     if (req.method === 'GET' && action === 'admin-settings') {
       const { data, error } = await supabase
         .from('import_admin_credentials')
-        .select('paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name')
+        .select('paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name, charge_shipping_at_checkout, shipping_discount_percent, shipping_discount_min_ngn, bulk_discount_tier1_qty, bulk_discount_tier1_percent, bulk_discount_tier2_qty, bulk_discount_tier2_percent, paystack_manual_threshold_ngn')
         .eq('id', 1).single()
       if (error) return json({ error: error.message }, 500)
       return json({ settings: data })
