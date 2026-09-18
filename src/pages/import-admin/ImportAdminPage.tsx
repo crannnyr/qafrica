@@ -1794,9 +1794,11 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
                 >
                   <option value="">Select category</option>
-                  {productCategories.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
+                  {[...productCategories]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
                 </select>
               </div>
 
@@ -1809,9 +1811,13 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <option value="">{categoryId ? 'Select subcategory' : 'Select a category first'}</option>
-                  {(productCategories.find(c => c.id === categoryId)?.subcategories ?? []).map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
+                  {[...(productCategories.find(c => c.id === categoryId)?.subcategories ?? [])]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({Number(s.markup_percent ?? 0).toFixed(2)}%)
+                      </option>
+                    ))}
                 </select>
               </div>
 
