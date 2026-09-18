@@ -25,9 +25,10 @@ interface TrackedItem {
   variant_options?: Record<string, string>;
 }
 interface TrackedOrder {
-  code: string; status: string;
+  id: string; code: string; status: string;
   shipping_method: 'flight' | 'sea_freight' | 'mixed' | null;
   shipped_at: string | null; received_at?: string | null; created_at: string;
+  consolidation_billed?: boolean; consolidation_bill_status?: string | null;
   items?: TrackedItem[];
   delivery_mode?: 'home' | 'pickup_station';
   pickup_station_name?: string | null;
@@ -66,7 +67,7 @@ function stageIndexFor(order: TrackedOrder): number {
   if (order.received_at || order.status === 'received') return 6;
   if (order.status === 'clearance_and_closed') return 5;
   if (order.status === 'shipped_and_closed' || order.status === 'to_review' || order.shipped_at) return 4;
-  if (order.status === 'ordered_and_closed' || order.status === 'billed') return 3;
+  if (order.consolidation_billed || order.status === 'ordered_and_closed' || order.status === 'billed') return 3;
   if (order.status === 'ordered') return 2;
   if (order.status === 'confirmed') return 1;
   return 0;
