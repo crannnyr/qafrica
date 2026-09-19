@@ -995,6 +995,70 @@ serve(async (req: Request) => {
       return json({ success: true })
     }
 
+    if (req.method === 'POST' && action === 'admin-session') {
+      const authHeader = req.headers.get('Authorization') ?? ''
+      const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
+      if (!accessToken) return json({ error: 'Authorization required' }, 401)
+
+      const { data: authData, error: authError } = await supabase.auth.getUser(accessToken)
+      const user = authData?.user
+      if (authError || !user) return json({ error: 'Invalid authentication session' }, 401)
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (profileError) return json({ error: 'Could not verify admin account' }, 500)
+      if (profile?.role !== 'admin') return json({ error: 'Import Admin access requires a platform admin account' }, 403)
+
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from('import_admin_user_roles')
+        .select('role_id')
+        .eq('user_id', user.id)
+      if (assignmentsError) return json({ error: 'Could not load Import Admin roles' }, 500)
+
+      const roleIds = (assignments ?? []).map((row: any) => row.role_id).filter(Boolean)
+      if (roleIds.length === 0) return json({ error: 'No Import Admin role has been assigned to this account' }, 403)
+
+      const { data: rolePermissions, error: rolePermissionsError } = await supabase
+        .from('import_admin_role_permissions')
+        .select('permission_id')
+        .in('role_id', roleIds)
+      if (rolePermissionsError) return json({ error: 'Could not load Import Admin permissions' }, 500)
+
+      const permissionIds = Array.from(new Set((rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+      if (permissionIds.length === 0) return json({ error: 'No Import Admin permissions are assigned to this account' }, 403)
+
+      const { data: permissions, error: permissionsError } = await supabase
+        .from('import_admin_permissions')
+        .select('key')
+        .in('id', permissionIds)
+        .eq('key', 'import.admin_access.view')
+        .limit(1)
+      if (permissionsError) return json({ error: 'Could not verify Import Admin access' }, 500)
+      if (!permissions?.length) return json({ error: 'Import Admin access permission is not assigned to this account' }, 403)
+
+      const { data: session, error: sessionErr } = await supabase
+        .from('import_admin_sessions')
+        .insert({
+          user_id: user.id,
+          expires_at: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+        })
+        .select('token')
+        .single()
+      if (sessionErr || !session) return json({ error: 'Could not create Import Admin session' }, 500)
+
+      return json({
+        success: true,
+        token: session.token,
+        manager: {
+          email: user.email ?? null,
+          full_name: profile?.full_name ?? user.email ?? 'Import Admin',
+        },
+      })
+    }
+
     if (req.method === 'POST' && action === 'admin-login') {
       const body = await req.json().catch(() => ({}))
       const { email, password } = body
