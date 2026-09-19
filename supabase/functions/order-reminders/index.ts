@@ -183,8 +183,19 @@ async function sendTemplatedEmail(supabase: any, key: string, to: string, tokens
   if (!tpl) return false
   const subject = renderTemplate(tpl.subject, tokens)
   const html = emailShell(renderTemplate(tpl.body_html, tokens))
-  const res = await supabase.functions.invoke('send-email', { body: { to, subject, html } }).catch(() => null)
+  const res = await supabase.functions.invoke('send-email', {
+    body: { to, subject, html, email_type: key, priority: 1 },
+  }).catch(() => null)
   return !!res && !res.error
+}
+
+function formatDeliveryWindow(minAt: string, maxAt: string): string {
+  const fmt = new Intl.DateTimeFormat('en-NG', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Africa/Lagos',
+  })
+  return `${fmt.format(new Date(minAt))} – ${fmt.format(new Date(maxAt))}`
 }
 
 serve(async (req: Request) => {
@@ -364,6 +375,92 @@ serve(async (req: Request) => {
       }
 
       return json({ success: true, checked: bills?.length ?? 0, reminded, capped_out: capped })
+    }
+
+    // Check paid consolidation/shipping bills whose original delivery estimate
+    // has expired. A delay notice is sent once, and only while the related order
+    // is still not marked received.
+    if (req.method === 'POST' && action === 'run-delivery-estimate-watch') {
+      const { data: bills, error } = await supabase
+        .from('china_import_consolidation_bills')
+        .select('id, user_id, order_id, delivery_estimate_max_at, delivery_delay_notice_at, delivery_delay_email_sent_at')
+        .eq('kind', 'consolidation_shipping')
+        .eq('status', 'paid')
+        .not('delivery_estimate_max_at', 'is', null)
+        .is('delivery_delay_email_sent_at', null)
+        .lte('delivery_estimate_max_at', new Date().toISOString())
+
+      if (error) return json({ error: error.message }, 500)
+
+      let checked = 0, sent = 0, skipped = 0
+
+      for (const bill of (bills ?? [])) {
+        checked++
+
+        let orderCode = 'your order'
+        let receivedAt: string | null = null
+        if (bill.order_id) {
+          const { data: order } = await supabase
+            .from('china_import_orders')
+            .select('code, received_at')
+            .eq('id', bill.order_id)
+            .maybeSingle()
+          orderCode = order?.code ?? orderCode
+          receivedAt = order?.received_at ?? null
+        }
+
+        if (receivedAt) { skipped++; continue }
+
+        // Claim the row before sending so overlapping cron invocations do not
+        // send the same apology twice. If a send fails, the claim is released
+        // so a later run can retry.
+        const claimNow = new Date().toISOString()
+        const { data: claimed } = await supabase
+          .from('china_import_consolidation_bills')
+          .update({ delivery_delay_notice_at: claimNow, updated_at: claimNow })
+          .eq('id', bill.id)
+          .is('delivery_delay_email_sent_at', null)
+          .is('delivery_delay_notice_at', null)
+          .select('id')
+          .maybeSingle()
+
+        if (!claimed) { skipped++; continue }
+
+        const { data: customer } = await supabase
+          .from('customers')
+          .select('email, full_name')
+          .eq('id', bill.user_id)
+          .maybeSingle()
+
+        if (!customer?.email) {
+          await supabase.from('china_import_consolidation_bills')
+            .update({ delivery_delay_notice_at: null, updated_at: new Date().toISOString() })
+            .eq('id', bill.id)
+          skipped++
+          continue
+        }
+
+        const ok = await sendTemplatedEmail(supabase, 'shipment_delivery_delay_apology', customer.email, {
+          customer_name: customer.full_name ?? 'there',
+          order_code: orderCode,
+          discount_min: '10',
+          discount_max: '20',
+        })
+
+        if (ok) {
+          const now = new Date().toISOString()
+          await supabase.from('china_import_consolidation_bills')
+            .update({ delivery_delay_email_sent_at: now, delivery_delay_notice_at: now, updated_at: now })
+            .eq('id', bill.id)
+          sent++
+        } else {
+          await supabase.from('china_import_consolidation_bills')
+            .update({ delivery_delay_notice_at: null, updated_at: new Date().toISOString() })
+            .eq('id', bill.id)
+        }
+      }
+
+      return json({ success: true, checked, sent, skipped })
     }
 
     // Hourly cron, first 24h after a restore. Only ever targets orders with
