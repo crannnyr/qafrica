@@ -3032,11 +3032,11 @@ export default function ImportAdminPage() {
     categories: 'import.categories.view',
   } as const;
 
+  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories'] as const;
+
   const visibleTabs = isLegacyManager
-    ? (['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories'] as const)
-    : (['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories'] as const).filter(
-        t => hasPermission(tabPermissions[t])
-      );
+    ? allTabs
+    : allTabs.filter(t => hasPermission(tabPermissions[t]));
 
   if (isSupabaseAdmin && permissionsLoading) {
     return (
