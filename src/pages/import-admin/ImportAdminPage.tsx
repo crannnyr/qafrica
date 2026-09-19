@@ -223,7 +223,9 @@ function useImportAuth() {
   const token = sessionStorage.getItem('import_manager_token');
   const managerRaw = sessionStorage.getItem('import_manager');
   const manager = managerRaw ? JSON.parse(managerRaw) : null;
-  const [supabaseAdmin, setSupabaseAdmin] = useState(false);
+  const sessionSource = sessionStorage.getItem('import_manager_source');
+  const isBridgedSupabaseSession = sessionSource === 'supabase-rbac';
+  const [supabaseAdmin, setSupabaseAdmin] = useState(isBridgedSupabaseSession);
   const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
@@ -233,7 +235,7 @@ function useImportAuth() {
       if (token && manager) {
         if (!cancelled) {
           setAuthChecked(true);
-          setSupabaseAdmin(false);
+          setSupabaseAdmin(isBridgedSupabaseSession);
         }
         return;
       }
@@ -260,7 +262,34 @@ function useImportAuth() {
           return;
         }
 
-        if (!cancelled) setSupabaseAdmin(true);
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error('Supabase session token unavailable');
+
+        const bridgeRes = await fetch(
+          CONFIG.SUPABASE_URL + '/functions/v1/china-import?action=admin-session',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + accessToken,
+            },
+          },
+        );
+        const bridgeData = await bridgeRes.json().catch(() => ({}));
+        if (!bridgeRes.ok || !bridgeData.token) {
+          throw new Error(bridgeData.error ?? 'Import Admin session could not be created');
+        }
+
+        sessionStorage.setItem('import_manager_token', bridgeData.token);
+        sessionStorage.setItem('import_manager', JSON.stringify(bridgeData.manager ?? { email: user.email ?? null }));
+        sessionStorage.setItem('import_manager_source', 'supabase-rbac');
+
+        if (!cancelled) {
+          setSupabaseAdmin(true);
+          setAuthChecked(true);
+        }
       } catch {
         if (!cancelled) navigate('/importations/admin/login');
       } finally {
@@ -273,20 +302,20 @@ function useImportAuth() {
     return () => {
       cancelled = true;
     };
-  }, [navigate, token, manager]);
+  }, [navigate, token, manager, isBridgedSupabaseSession]);
 
   const logout = async () => {
     if (token) {
-      fetch(`${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=admin-logout`, {
+      fetch(CONFIG.SUPABASE_URL + '/functions/v1/china-import?action=admin-logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: token }),
       }).catch(() => {});
       sessionStorage.removeItem('import_manager_token');
       sessionStorage.removeItem('import_manager');
-    } else if (supabaseAdmin) {
-      await supabase.auth.signOut();
+      sessionStorage.removeItem('import_manager_source');
     }
+    if (supabaseAdmin) await supabase.auth.signOut();
 
     navigate('/importations/admin/login');
   };
@@ -294,7 +323,7 @@ function useImportAuth() {
   return {
     token,
     manager,
-    isLegacyManager: Boolean(token && manager),
+    isLegacyManager: Boolean(token && manager && !isBridgedSupabaseSession),
     isSupabaseAdmin: supabaseAdmin,
     authChecked,
     logout,
