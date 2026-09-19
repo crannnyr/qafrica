@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Eye, EyeOff, Loader } from 'lucide-react';
 
 import CONFIG from '@/lib/config';
+import { supabase } from '@/services/supabase';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 export default function ImportAdminLogin() {
@@ -14,6 +15,7 @@ export default function ImportAdminLogin() {
   const [showPw, setShowPw]     = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError]       = useState('');
+  const [isPlatformLoading, setIsPlatformLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +43,40 @@ export default function ImportAdminLogin() {
     }
   };
 
+  const handlePlatformAdminLogin = async () => {
+    setError('');
+    setIsPlatformLoading(true);
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError || !data.session?.access_token) {
+        setError(authError?.message ?? 'Invalid admin credentials');
+        return;
+      }
+
+      const res = await fetch(`${EDGE_URL}?action=admin-session-from-auth`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${data.session.access_token}`,
+        },
+      });
+      const result = await res.json();
+      if (!res.ok || !result.success) {
+        await supabase.auth.signOut();
+        setError(result.error ?? 'You do not have Import Admin access');
+        return;
+      }
+
+      sessionStorage.setItem('import_manager_token', result.token);
+      sessionStorage.setItem('import_manager', JSON.stringify(result.manager));
+      sessionStorage.setItem('import_auth_mode', 'platform_admin');
+      navigate('/importations/admin');
+    } catch {
+      setError('Connection error. Please try again.');
+    } finally {
+      setIsPlatformLoading(false);
+    }
+  };
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
@@ -100,10 +136,19 @@ export default function ImportAdminLogin() {
 
             <button
               type="submit"
-              disabled={isLoading || !email || !password}
+              disabled={isLoading || isPlatformLoading || !email || !password}
               className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
             >
               {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : 'Sign In'}
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePlatformAdminLogin}
+              disabled={isLoading || isPlatformLoading || !email || !password}
+              className="w-full py-3 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-800 font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              {isPlatformLoading ? <Loader className="w-4 h-4 animate-spin" /> : 'Sign in as Platform Admin'}
             </button>
           </form>
         </div>
