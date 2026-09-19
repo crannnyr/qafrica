@@ -3034,7 +3034,8 @@ export default function ImportAdminPage() {
   // Supabase-admin access is handled separately until the server-side RBAC bridge is added.
   if (!token) return null;
 
--gray-50">
+  return (
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
         <div className="flex items-center justify-between px-4 lg:px-8 py-3 max-w-3xl lg:max-w-6xl mx-auto">
