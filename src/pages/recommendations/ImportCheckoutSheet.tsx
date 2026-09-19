@@ -374,32 +374,23 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     if (forcedSeaFreight && shippingMethod !== 'sea_freight') setShippingMethod('sea_freight');
   }, [forcedSeaFreight, shippingMethod]);
 
-  // Every item defaults to Flight, except sea-only items which lock to Sea —
-  // customer can still switch any non-locked item to Sea afterward.
-  // useEffect(() => {
-  //   if (cart.length <= 1) return;
-  //   setItemShipping(prev => {
-  //     const next = { ...prev };
-  //     let changed = false;
-  //     for (const item of cart) {
-  //       if (item.ship_only) {
-  //         if (next[item.cart_key] !== 'sea_freight') { next[item.cart_key] = 'sea_freight'; changed = true; }
-  //       } else if (!next[item.cart_key]) {
-  //         next[item.cart_key] = 'flight'; changed = true;
-  //       }
-  //     }
-  //     return changed ? next : prev;
-  //   });
-  // }, [cart]);
-
+  // Multi-item carts default every normal item to Air. Sea-only items are locked to Sea.
+  // Existing customer choices are preserved when the cart changes.
   useEffect(() => {
     if (cart.length <= 1) return;
     setItemShipping(prev => {
       const next = { ...prev };
       let changed = false;
       for (const item of cart) {
-        if (item.ship_only && next[item.cart_key] !== 'sea_freight') {
-          next[item.cart_key] = 'sea_freight'; changed = true;
+        const requiredMethod = item.ship_only ? 'sea_freight' : 'flight';
+        if (item.ship_only) {
+          if (next[item.cart_key] !== requiredMethod) {
+            next[item.cart_key] = requiredMethod;
+            changed = true;
+          }
+        } else if (!next[item.cart_key]) {
+          next[item.cart_key] = requiredMethod;
+          changed = true;
         }
       }
       return changed ? next : prev;
@@ -407,6 +398,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   }, [cart]);
 
   const perItemShippingComplete = cart.length <= 1 || cart.every(i => !!itemShipping[i.cart_key]);
+  const missingShippingItems = cart.length > 1 ? cart.filter(i => !itemShipping[i.cart_key]) : [];
   const canSubmit = whatsapp.trim() && cart.length > 0 && addressComplete && perItemShippingComplete &&
     (cart.length > 1 ? true : !!shippingMethod);
 
@@ -708,6 +700,17 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
             </>
           ) : (
             <div className="space-y-2">
+              {missingShippingItems.length > 0 && (
+                <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[11px] font-bold text-amber-800">Select shipping method</p>
+                    <p className="text-[10px] text-amber-700 mt-0.5 leading-relaxed">
+                      Please choose Air or Sea for {missingShippingItems.length === 1 ? 'the item above' : 'each item above'} before continuing.
+                    </p>
+                  </div>
+                </div>
+              )}
               {cart.map(item => {
                 const locked = item.ship_only;
                 const chosen = itemShipping[item.cart_key];
