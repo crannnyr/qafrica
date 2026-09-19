@@ -3000,14 +3000,35 @@ function CustomOrdersManager({ token }: { token: string }) {
 
 export default function ImportAdminPage() {
   useImportPwaManifest();
-  const { token, manager, logout } = useImportAuth();
+  const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
   const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
 
-  if (!token) return null;
+  if (!authChecked) return null;
+  if (!isLegacyManager && !isSupabaseAdmin) return null;
+
+  if (isSupabaseAdmin && !token) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 p-6 text-center">
+          <ShoppingBag className="w-8 h-8 mx-auto mb-3 text-gray-900" />
+          <h1 className="font-bold text-gray-900 text-lg">Import Admin access</h1>
+          <p className="text-sm text-gray-500 mt-2">
+            Your platform admin account is authenticated. Import Admin permissions are being checked before access is enabled.
+          </p>
+          <button
+            onClick={logout}
+            className="mt-5 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
