@@ -521,7 +521,7 @@ export default function ProductDetailPage() {
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">Shipping estimate</p>
               {product.volume_cbm != null && (
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                  <Ship className="w-3.5 h-3.5" /> Sea: {product.volume_cbm} cbm
+                  <Ship className="w-3.5 h-3.5" /> Sea: {product.volume_cbm} vol.
                 </div>
               )}
               {product.weight_grams != null && (
