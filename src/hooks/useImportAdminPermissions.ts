@@ -53,21 +53,46 @@ export function useImportAdminPermissions(): ImportAdminPermissionsState & {
 
       const { data: assignments, error: assignmentsError } = await supabase
         .from('import_admin_user_roles')
-        .select('role_id, import_admin_roles!inner(id, import_admin_role_permissions(permission_id, import_admin_permissions!inner(key)))')
+        .select('role_id')
         .eq('user_id', user.id);
 
       if (assignmentsError) throw assignmentsError;
 
-      const next = new Set<string>();
+      const roleIds = (assignments ?? []).map((assignment) => assignment.role_id);
 
-      for (const assignment of assignments ?? []) {
-        const role = assignment.import_admin_roles as any;
-        for (const rolePermission of role?.import_admin_role_permissions ?? []) {
-          const permission = rolePermission.import_admin_permissions as any;
-          if (permission?.key) next.add(permission.key);
-        }
+      if (roleIds.length === 0) {
+        setPermissions(new Set());
+        return;
       }
 
+      const { data: rolePermissions, error: rolePermissionsError } = await supabase
+        .from('import_admin_role_permissions')
+        .select('permission_id')
+        .in('role_id', roleIds);
+
+      if (rolePermissionsError) throw rolePermissionsError;
+
+      const permissionIds = Array.from(
+        new Set((rolePermissions ?? []).map((rolePermission) => rolePermission.permission_id)),
+      );
+
+      if (permissionIds.length === 0) {
+        setPermissions(new Set());
+        return;
+      }
+
+      const { data: permissionRows, error: permissionsError } = await supabase
+        .from('import_admin_permissions')
+        .select('key')
+        .in('id', permissionIds);
+
+      if (permissionsError) throw permissionsError;
+
+      const next = new Set<string>(
+        (permissionRows ?? [])
+          .map((permission) => permission.key)
+          .filter((key): key is string => Boolean(key)),
+      );
       setPermissions(next);
     } catch (err) {
       console.error('[Import Admin RBAC] Failed to load permissions:', err);
