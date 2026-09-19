@@ -150,23 +150,35 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   }, []);
 
   
-  // ── Per-item shipping method (only surfaced when the cart has 2+ items) ─
+  // ── Per-item shipping method ─────────────────────────────────────────
+  // Each distinct cart item gets its own shipping method. Quantity does not
+  // create another shipping selection: Bag x3 is one cart item, while
+  // Bag x1 + Clothes x1 are two separate items and each gets its own default.
+  //
+  // Normal items default to Air. Sea-only items default to Sea and cannot
+  // switch to Air. State only stores explicit customer choices; the render
+  // fallback below guarantees a default even when a new item is added after
+  // this checkout sheet has already mounted.
   const [itemShipping, setItemShipping] = useState<Record<string, 'flight' | 'sea_freight'>>(() =>
-    cart.length > 1
-      ? Object.fromEntries(cart.map(item => [item.cart_key, item.ship_only ? 'sea_freight' : 'flight'])) as Record<string, 'flight' | 'sea_freight'>
-      : {}
+    Object.fromEntries(
+      cart.map(item => [item.cart_key, item.ship_only ? 'sea_freight' : 'flight'])
+    ) as Record<string, 'flight' | 'sea_freight'>
   );
-  const setItemShippingMethod = (cartKey: string, method: 'flight' | 'sea_freight') =>
+
+  const setItemShippingMethod = (cartKey: string, method: 'flight' | 'sea_freight') => {
     setItemShipping(prev => ({ ...prev, [cartKey]: method }));
+  };
 
   // Compute shipping per item and total
   // The default is derived directly from the cart, not only from React state.
   // This guarantees Air is selected even when a second item is added after
   // this checkout sheet has already mounted.
-  const shippingMethodFor = (item: CartItem): 'flight' | 'sea_freight' | null =>
-    cart.length > 1
-      ? (itemShipping[item.cart_key] ?? (item.ship_only ? 'sea_freight' : 'flight'))
-      : shippingMethod;
+  const shippingMethodFor = (item: CartItem): 'flight' | 'sea_freight' | null => {
+    if (cart.length <= 1) return shippingMethod;
+    // For multiple distinct products, every normal item is Air by default.
+    // Only an explicit customer choice changes it; sea-only items remain Sea.
+    return itemShipping[item.cart_key] ?? (item.ship_only ? 'sea_freight' : 'flight');
+  };
 
   const shippingCostFor = (item: CartItem) => {
     const method = shippingMethodFor(item);
