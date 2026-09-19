@@ -319,6 +319,38 @@ async function requireAdmin(supabase: any, token: unknown): Promise<boolean> {
   return true
 }
 
+async function getPlatformImportAdmin(supabase: any, req: Request): Promise<{ id: string; email: string | null; full_name: string | null } | null> {
+  const authHeader = req.headers.get('Authorization') ?? ''
+  if (!authHeader.startsWith('Bearer ')) return null
+  const accessToken = authHeader.slice(7).trim()
+  if (!accessToken) return null
+
+  const { data: authData, error: authError } = await supabase.auth.getUser(accessToken)
+  if (authError || !authData?.user) return null
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, email, full_name, role')
+    .eq('id', authData.user.id)
+    .eq('role', 'admin')
+    .maybeSingle()
+  if (!profile) return null
+
+  const { data: assignment } = await supabase
+    .from('import_admin_user_roles')
+    .select('role_id')
+    .eq('user_id', profile.id)
+    .limit(1)
+    .maybeSingle()
+  if (!assignment) return null
+
+  return {
+    id: profile.id,
+    email: profile.email ?? authData.user.email ?? null,
+    full_name: profile.full_name ?? null,
+  }
+}
+
 // ── Image optimization ──────────────────────────────────────────────────────────────────────────────────
 const MAX_UPLOAD_WIDTH = 1600
 const WEBP_QUALITY = 82
@@ -993,6 +1025,33 @@ serve(async (req: Request) => {
       await supabase.from('china_import_modal_views')
         .upsert({ viewer_key, viewed_date: today }, { onConflict: 'viewer_key,viewed_date' })
       return json({ success: true })
+    }
+
+    if (req.method === 'POST' && action === 'admin-session-from-auth') {
+      const admin = await getPlatformImportAdmin(supabase, req)
+      if (!admin) return json({ error: 'You do not have Import Admin access' }, 403)
+
+      const { data: session, error: sessionErr } = await supabase
+        .from('import_admin_sessions')
+        .insert({
+          user_id: admin.id,
+          expires_at: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+        })
+        .select('token')
+        .single()
+
+      if (sessionErr || !session) return json({ error: 'Could not create Import Admin session' }, 500)
+
+      return json({
+        success: true,
+        token: session.token,
+        manager: {
+          id: admin.id,
+          email: admin.email,
+          full_name: admin.full_name,
+          auth_type: 'platform_admin',
+        },
+      })
     }
 
     if (req.method === 'POST' && action === 'admin-login') {
