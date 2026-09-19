@@ -11,6 +11,7 @@ import {
 import { compressImage } from '@/lib/imageCompression';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
+import { supabase } from '@/services/supabase';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import ImportAdminAnalytics from './ImportAdminAnalytics';
 import ImportAdminCustomers from './ImportAdminCustomers';
@@ -223,6 +224,7 @@ function useImportAuth() {
   const manager = managerRaw ? JSON.parse(managerRaw) : null;
 
   const logout = () => {
+    const authMode = sessionStorage.getItem('import_auth_mode');
     if (token) {
       fetch(`${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=admin-logout`, {
         method: 'POST',
@@ -232,6 +234,8 @@ function useImportAuth() {
     }
     sessionStorage.removeItem('import_manager_token');
     sessionStorage.removeItem('import_manager');
+    sessionStorage.removeItem('import_auth_mode');
+    if (authMode === 'platform_admin') supabase.auth.signOut().catch(() => {});
     navigate('/importations/admin/login');
   };
 
