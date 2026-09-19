@@ -160,7 +160,13 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     setItemShipping(prev => ({ ...prev, [cartKey]: method }));
 
   // Compute shipping per item and total
-  const shippingMethodFor = (item: CartItem) => cart.length > 1 ? itemShipping[item.cart_key] : shippingMethod;
+  // The default is derived directly from the cart, not only from React state.
+  // This guarantees Air is selected even when a second item is added after
+  // this checkout sheet has already mounted.
+  const shippingMethodFor = (item: CartItem): 'flight' | 'sea_freight' | null =>
+    cart.length > 1
+      ? (itemShipping[item.cart_key] ?? (item.ship_only ? 'sea_freight' : 'flight'))
+      : shippingMethod;
 
   const shippingCostFor = (item: CartItem) => {
     const method = shippingMethodFor(item);
@@ -401,8 +407,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     });
   }, [cart]);
 
-  const perItemShippingComplete = cart.length <= 1 || cart.every(i => !!itemShipping[i.cart_key]);
-  const missingShippingItems = cart.length > 1 ? cart.filter(i => !itemShipping[i.cart_key]) : [];
+  const perItemShippingComplete = cart.length <= 1 || cart.every(i => !!shippingMethodFor(i));
+  const missingShippingItems = cart.length > 1 ? cart.filter(i => !shippingMethodFor(i)) : [];
   const canSubmit = whatsapp.trim() && cart.length > 0 && addressComplete && perItemShippingComplete &&
     (cart.length > 1 ? true : !!shippingMethod);
 
@@ -444,7 +450,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
             id: i.id, name: i.name, price_ngn: i.price_ngn, price_cny: i.price_cny,
             quantity: i.quantity, image_url: i.image_url,
             variant_options: i.variant_selection ?? undefined,
-            shipping_method: cart.length > 1 ? itemShipping[i.cart_key] : shippingMethod,
+            shipping_method: shippingMethodFor(i),
           })),
         }),
       });
@@ -717,7 +723,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
               )}
               {cart.map(item => {
                 const locked = item.ship_only;
-                const chosen = itemShipping[item.cart_key];
+                const chosen = shippingMethodFor(item);
                 return (
                   <div key={item.cart_key} className="flex items-center gap-2.5 p-2.5 rounded-xl border border-gray-100">
                     <img src={item.image_url} alt={item.name} className="w-9 h-9 rounded-lg object-cover flex-shrink-0" />
