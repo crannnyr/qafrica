@@ -374,12 +374,63 @@ async function sendTemplatedEmail(supabase: any, key: string, to: string, tokens
   const subject = renderTemplate(tpl.subject, tokens)
   const html = emailShell(renderTemplate(tpl.body_html, tokens))
   try {
-    const res = await supabase.functions.invoke('send-email', { body: { to, subject, html } })
+    const res = await supabase.functions.invoke('send-email', {
+      body: { to, subject, html, email_type: key, priority: 1 },
+    })
     if (res.error) return { ok: false, reason: res.error.message ?? String(res.error) }
     return { ok: true }
   } catch (e: any) {
     return { ok: false, reason: e?.message ?? String(e) }
   }
+}
+
+async function sendShipmentPaymentDeliveryEstimate(supabase: any, bill: any): Promise<{ ok: boolean; reason?: string }> {
+  if (!bill?.id || bill.kind !== 'consolidation_shipping' || bill.status !== 'paid' || !bill.user_id) {
+    return { ok: false, reason: 'not_eligible' }
+  }
+
+  const { error: initError } = await supabase.rpc('initialize_china_import_delivery_estimate', { p_bill_id: bill.id })
+  if (initError) return { ok: false, reason: initError.message }
+
+  const { data: tracked, error: trackedError } = await supabase
+    .from('china_import_consolidation_bills')
+    .select('id, user_id, order_id, amount_ngn, confirmed_paid_at, delivery_estimate_min_at, delivery_estimate_max_at, delivery_estimate_email_sent_at')
+    .eq('id', bill.id)
+    .maybeSingle()
+  if (trackedError || !tracked) return { ok: false, reason: trackedError?.message ?? 'bill_not_found' }
+  if (tracked.delivery_estimate_email_sent_at) return { ok: true }
+
+  const { data: order } = tracked.order_id
+    ? await supabase.from('china_import_orders').select('code, shipping_method').eq('id', tracked.order_id).maybeSingle()
+    : { data: null }
+
+  const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', tracked.user_id).maybeSingle()
+  if (!customer?.email || !tracked.delivery_estimate_min_at || !tracked.delivery_estimate_max_at) {
+    return { ok: false, reason: 'missing_customer_or_estimate' }
+  }
+
+  const method = order?.shipping_method === 'sea_freight' ? 'Sea Freight' : 'Flight'
+  const fmt = new Intl.DateTimeFormat('en-NG', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Africa/Lagos',
+  })
+  const deliveryWindow = `${fmt.format(new Date(tracked.delivery_estimate_min_at))} – ${fmt.format(new Date(tracked.delivery_estimate_max_at))}`
+
+  const sent = await sendTemplatedEmail(supabase, 'shipment_payment_delivery_estimate', customer.email, {
+    customer_name: customer.full_name ?? 'there',
+    amount_paid: Number(tracked.amount_ngn ?? 0).toLocaleString(),
+    order_code: order?.code ?? 'your order',
+    shipping_method: method,
+    delivery_window: deliveryWindow,
+  })
+  if (sent.ok) {
+    await supabase.from('china_import_consolidation_bills')
+      .update({ delivery_estimate_email_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', bill.id)
+      .is('delivery_estimate_email_sent_at', null)
+  }
+  return sent
 }
 
 async function queueTemplatedEmail(supabase: any, key: string, to: string, tokens: Record<string, string>): Promise<boolean> {
@@ -1636,6 +1687,17 @@ serve(async (req: Request) => {
       if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
       if (!bill_id) return json({ error: 'Missing bill_id' }, 400)
 
+      const { data: existingBill, error: existingBillError } = await supabase
+        .from('china_import_consolidation_bills').select('*').eq('id', bill_id).single()
+      if (existingBillError || !existingBill) return json({ error: 'Bill not found' }, 404)
+
+      if (!cancel && existingBill.status === 'paid') {
+        if (existingBill.kind === 'consolidation_shipping') {
+          await sendShipmentPaymentDeliveryEstimate(supabase, existingBill)
+        }
+        return json({ bill: existingBill })
+      }
+
       const updates: Record<string, unknown> = cancel
         ? { status: 'cancelled' }
         : { status: 'paid', confirmed_paid_at: new Date().toISOString(), reminder_count: 0 }
@@ -1645,12 +1707,16 @@ serve(async (req: Request) => {
       if (error) return json({ error: error.message }, 500)
 
       if (!cancel && data?.user_id) {
-        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', data.user_id).single()
-        if (customer?.email) {
-          await sendTemplatedEmail(supabase, 'bill_payment_confirmed', customer.email, {
-            customer_name: customer.full_name ?? 'there',
-            amount_paid: Number(data.amount_ngn ?? 0).toLocaleString(),
-          })
+        if (data.kind === 'consolidation_shipping') {
+          await sendShipmentPaymentDeliveryEstimate(supabase, data)
+        } else {
+          const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', data.user_id).single()
+          if (customer?.email) {
+            await sendTemplatedEmail(supabase, 'bill_payment_confirmed', customer.email, {
+              customer_name: customer.full_name ?? 'there',
+              amount_paid: Number(data.amount_ngn ?? 0).toLocaleString(),
+            })
+          }
         }
       }
 
@@ -2528,12 +2594,16 @@ serve(async (req: Request) => {
         .eq('id', bill_id).select().single()
       if (updateErr) return json({ error: updateErr.message }, 500)
 
-      const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', customer_id).single()
-      if (customer?.email) {
-        await sendTemplatedEmail(supabase, 'bill_payment_confirmed', customer.email, {
-          customer_name: customer.full_name ?? 'there',
-          amount_paid: Number(bill.amount_ngn ?? 0).toLocaleString(),
-        })
+      if (updated?.kind === 'consolidation_shipping') {
+        await sendShipmentPaymentDeliveryEstimate(supabase, updated)
+      } else {
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', customer_id).single()
+        if (customer?.email) {
+          await sendTemplatedEmail(supabase, 'bill_payment_confirmed', customer.email, {
+            customer_name: customer.full_name ?? 'there',
+            amount_paid: Number(bill.amount_ngn ?? 0).toLocaleString(),
+          })
+        }
       }
 
       return json({ success: true, bill: updated })
