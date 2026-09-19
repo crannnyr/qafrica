@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard',         path: '/admin' },
   { icon: Users,           label: 'Users',             path: '/admin/users' },
+  { icon: Shield,          label: 'Import Admin Access', path: '/admin/import-admin-access' },
   { icon: Store,           label: 'Stores',            path: '/admin/stores' },
   { icon: Package,         label: 'Products',          path: '/admin/products' },
   { icon: ShoppingCart,    label: 'Orders',            path: '/admin/orders' },

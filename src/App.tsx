@@ -107,6 +107,7 @@ const UniversalCheckoutPage = lazy(() => import('@/pages/customer/UniversalCheck
 const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'));
 const AdminDashboard = lazy(() => import('@/pages/admin/AdminDashboard'));
 const AdminUsers = lazy(() => import('@/pages/admin/AdminUsers'));
+const ImportAdminAccess = lazy(() => import('@/pages/admin/ImportAdminAccess'));
 const AdminStores = lazy(() => import('@/pages/admin/AdminStores'));
 const AdminProducts = lazy(() => import('@/pages/admin/AdminProducts'));
 const AdminOrders = lazy(() => import('@/pages/admin/AdminOrders'));
@@ -421,6 +422,7 @@ function App() {
           }>
             <Route index element={<AdminDashboard />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="import-admin-access" element={<ImportAdminAccess />} />
             <Route path="stores" element={<AdminStores />} />
             <Route path="products" element={<AdminProducts />} />
             <Route path="orders" element={<AdminOrders />} />
