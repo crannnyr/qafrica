@@ -11,6 +11,7 @@ import {
 import { compressImage } from '@/lib/imageCompression';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
+import { supabase } from '@/services/supabase';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import ImportAdminAnalytics from './ImportAdminAnalytics';
 import ImportAdminCustomers from './ImportAdminCustomers';
@@ -221,25 +222,82 @@ function useImportAuth() {
   const token = sessionStorage.getItem('import_manager_token');
   const managerRaw = sessionStorage.getItem('import_manager');
   const manager = managerRaw ? JSON.parse(managerRaw) : null;
+  const [supabaseAdmin, setSupabaseAdmin] = useState(false);
+  const [authChecked, setAuthChecked] = useState(false);
 
-  const logout = () => {
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkAuth = async () => {
+      if (token && manager) {
+        if (!cancelled) {
+          setAuthChecked(true);
+          setSupabaseAdmin(false);
+        }
+        return;
+      }
+
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) throw error;
+
+        if (!user) {
+          if (!cancelled) navigate('/importations/admin/login');
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+
+        if (profile?.role !== 'admin') {
+          if (!cancelled) navigate('/importations/admin/login');
+          return;
+        }
+
+        if (!cancelled) setSupabaseAdmin(true);
+      } catch {
+        if (!cancelled) navigate('/importations/admin/login');
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    };
+
+    void checkAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, token, manager]);
+
+  const logout = async () => {
     if (token) {
       fetch(`${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=admin-logout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: token }),
       }).catch(() => {});
+      sessionStorage.removeItem('import_manager_token');
+      sessionStorage.removeItem('import_manager');
+    } else if (supabaseAdmin) {
+      await supabase.auth.signOut();
     }
-    sessionStorage.removeItem('import_manager_token');
-    sessionStorage.removeItem('import_manager');
+
     navigate('/importations/admin/login');
   };
 
-  useEffect(() => {
-    if (!token || !manager) navigate('/importations/admin/login');
-  }, []);
-
-  return { token, manager, logout };
+  return {
+    token,
+    manager,
+    isLegacyManager: Boolean(token && manager),
+    isSupabaseAdmin: supabaseAdmin,
+    authChecked,
+    logout,
+  };
 }
 
 // ── Divider ───────────────────────────────────────────────────────────────────
