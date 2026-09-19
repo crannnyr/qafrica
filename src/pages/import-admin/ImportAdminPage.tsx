@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { supabase } from '@/services/supabase';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
+import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import ImportAdminAnalytics from './ImportAdminAnalytics';
 import ImportAdminCustomers from './ImportAdminCustomers';
 import { CustomerDetail } from './ImportAdminCustomers';
@@ -3001,6 +3002,7 @@ function CustomOrdersManager({ token }: { token: string }) {
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
+  const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions();
   const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
@@ -3009,6 +3011,67 @@ export default function ImportAdminPage() {
 
   if (!authChecked) return null;
   if (!isLegacyManager && !isSupabaseAdmin) return null;
+
+  const tabPermissions = {
+    analytics: 'import.analytics.view',
+    'confirmed-payments': 'import.confirmed_payments.view',
+    messages: 'import.messages.view',
+    broadcast: 'import.broadcast.view',
+    orders: 'import.orders.view',
+    'total-orders': 'import.total_orders.view',
+    products: 'import.products.view',
+    trending: 'import.trending.view',
+    clients: 'import.clients.view',
+    questions: 'import.questions.view',
+    refunds: 'import.refunds.view',
+    'paystack-transactions': 'import.paystack_transactions.view',
+    'timed-out': 'import.timed_out.view',
+    settings: 'import.settings.view',
+    'pricing-shipping': 'import.pricing_shipping.view',
+    'custom-orders': 'import.custom_orders.view',
+    categories: 'import.categories.view',
+  } as const;
+
+  const visibleTabs = isLegacyManager
+    ? (['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories'] as const)
+    : (['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories'] as const).filter(
+        t => hasPermission(tabPermissions[t])
+      );
+
+  if (isSupabaseAdmin && permissionsLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 p-6 text-center">
+          <ShoppingBag className="w-8 h-8 mx-auto mb-3 text-gray-900" />
+          <h1 className="font-bold text-gray-900 text-lg">Checking Import Admin access</h1>
+          <p className="text-sm text-gray-500 mt-2">Loading your assigned Import Admin permissions…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSupabaseAdmin && !permissionsLoading && visibleTabs.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 p-6 text-center">
+          <ShoppingBag className="w-8 h-8 mx-auto mb-3 text-gray-900" />
+          <h1 className="font-bold text-gray-900 text-lg">No Import Admin permissions</h1>
+          <p className="text-sm text-gray-500 mt-2">
+            Your platform admin account is authenticated, but no Import Admin role has been assigned to it yet.
+          </p>
+          {permissionsError && (
+            <p className="text-xs text-red-500 mt-3">{permissionsError}</p>
+          )}
+          <button
+            onClick={logout}
+            className="mt-5 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (isSupabaseAdmin && !token) {
     return (
@@ -3061,7 +3124,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories'] as const).map(t => (
+          {visibleTabs.map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
