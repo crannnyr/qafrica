@@ -151,7 +151,11 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
   
   // ── Per-item shipping method (only surfaced when the cart has 2+ items) ─
-  const [itemShipping, setItemShipping] = useState<Record<string, 'flight' | 'sea_freight'>>({});
+  const [itemShipping, setItemShipping] = useState<Record<string, 'flight' | 'sea_freight'>>(() =>
+    cart.length > 1
+      ? Object.fromEntries(cart.map(item => [item.cart_key, item.ship_only ? 'sea_freight' : 'flight'])) as Record<string, 'flight' | 'sea_freight'>
+      : {}
+  );
   const setItemShippingMethod = (cartKey: string, method: 'flight' | 'sea_freight') =>
     setItemShipping(prev => ({ ...prev, [cartKey]: method }));
 
@@ -735,17 +739,19 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                         onClick={() => !locked && setItemShippingMethod(item.cart_key, 'flight')}
                         disabled={locked}
                         title={locked ? 'Ships by sea only' : undefined}
-                        className={`flex flex-col items-center justify-center gap-0.5 w-9 h-9 rounded-lg border-2 transition-colors ${locked ? 'border-gray-100 opacity-30 cursor-not-allowed' : chosen === 'flight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}
+                        aria-pressed={chosen === 'flight'}
+                        className={`flex flex-col items-center justify-center gap-0.5 w-10 h-10 rounded-lg border-2 transition-colors ${locked ? 'border-gray-100 opacity-30 cursor-not-allowed' : chosen === 'flight' ? 'border-gray-900 bg-gray-100 ring-1 ring-gray-900' : 'border-gray-100 bg-white'}`}
                       >
                         <Plane className="w-3 h-3 text-gray-700" />
-                        <span className="text-[8px] font-bold text-gray-500 leading-none">Air</span>
+                        <span className={`text-[8px] font-bold leading-none ${chosen === 'flight' ? 'text-gray-900' : 'text-gray-500'}`}>Air{chosen === 'flight' ? ' ✓' : ''}</span>
                       </button>
                       <button
                         onClick={() => setItemShippingMethod(item.cart_key, 'sea_freight')}
-                        className={`flex flex-col items-center justify-center gap-0.5 w-9 h-9 rounded-lg border-2 transition-colors ${chosen === 'sea_freight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}
+                        aria-pressed={chosen === 'sea_freight'}
+                        className={`flex flex-col items-center justify-center gap-0.5 w-10 h-10 rounded-lg border-2 transition-colors ${chosen === 'sea_freight' ? 'border-gray-900 bg-gray-100 ring-1 ring-gray-900' : 'border-gray-100 bg-white'}`}
                       >
                         <Ship className="w-3 h-3 text-gray-700" />
-                        <span className="text-[8px] font-bold text-gray-500 leading-none">Sea</span>
+                        <span className={`text-[8px] font-bold leading-none ${chosen === 'sea_freight' ? 'text-gray-900' : 'text-gray-500'}`}>Sea{chosen === 'sea_freight' ? ' ✓' : ''}</span>
                       </button>
                     </div>
                   </div>
