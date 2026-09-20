@@ -11,7 +11,6 @@ import {
 import { compressImage } from '@/lib/imageCompression';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
-import { supabase } from '@/services/supabase';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import ImportAdminAnalytics from './ImportAdminAnalytics';
@@ -3374,7 +3373,7 @@ export default function ImportAdminPage() {
         ) : tab === 'categories' ? (
           <CategoryManager token={token} />
         ) : tab === 'admin-access' ? (
-          <ImportAdminAccessManager />
+          <ImportAdminAccessManager token={token} canManage={hasPermission('import.admin_access.manage')} />
         ) : tab === 'settings' ? (
           <SettingsManager token={token} />
         ) : tab === 'pricing-shipping' ? (
