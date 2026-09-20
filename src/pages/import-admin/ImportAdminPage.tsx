@@ -3103,7 +3103,7 @@ function CustomOrdersManager({ token }: { token: string }) {
 export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
-  const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions();
+  const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(token);
   const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
@@ -3136,11 +3136,9 @@ export default function ImportAdminPage() {
 
   const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access'] as const;
 
-  const visibleTabs = isLegacyManager
-    ? allTabs
-    : allTabs.filter(t => hasPermission(tabPermissions[t]));
+  const visibleTabs = allTabs.filter(t => hasPermission(tabPermissions[t]));
 
-  if (isSupabaseAdmin && permissionsLoading) {
+  if (permissionsLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 p-6 text-center">
@@ -3152,7 +3150,7 @@ export default function ImportAdminPage() {
     );
   }
 
-  if (isSupabaseAdmin && !permissionsLoading && visibleTabs.length === 0) {
+  if (!permissionsLoading && visibleTabs.length === 0) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
         <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 p-6 text-center">
