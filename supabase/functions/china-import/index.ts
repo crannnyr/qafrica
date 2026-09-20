@@ -733,6 +733,77 @@ serve(async (req: Request) => {
       })
     }
 
+    // ── Legacy Import Manager permissions ─────────────────────────────────────
+    // Import Admin does not use Supabase Auth. The manager token identifies the
+    // legacy session, and permissions are resolved from manager -> roles -> permissions.
+    if (req.method === 'POST' && action === 'admin-permissions') {
+      const { manager_token } = await req.json().catch(() => ({}))
+      if (!manager_token || typeof manager_token !== 'string') {
+        return json({ error: 'Missing manager token' }, 401)
+      }
+
+      const { data: session, error: sessionError } = await supabase
+        .from('import_admin_sessions')
+        .select('token, manager_id, expires_at')
+        .eq('token', manager_token)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+
+      if (sessionError || !session?.manager_id) {
+        return json({ error: 'Invalid or expired admin session' }, 401)
+      }
+
+      const { data: manager, error: managerError } = await supabase
+        .from('import_admin_managers')
+        .select('id, email, full_name, is_active')
+        .eq('id', session.manager_id)
+        .maybeSingle()
+
+      if (managerError || !manager || !manager.is_active || !manager.email.endsWith('@qafrica.store')) {
+        return json({ error: 'Invalid or inactive admin manager' }, 401)
+      }
+
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from('import_admin_manager_roles')
+        .select('role_id')
+        .eq('manager_id', manager.id)
+
+      if (assignmentsError) return json({ error: 'Could not load admin roles' }, 500)
+
+      const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
+      const permissionRows = roleIds.length
+        ? await supabase
+            .from('import_admin_role_permissions')
+            .select('permission_id')
+            .in('role_id', roleIds)
+        : { data: [], error: null }
+
+      if (permissionRows.error) return json({ error: 'Could not load admin permissions' }, 500)
+
+      const permissionIds = Array.from(new Set((permissionRows.data ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+      const permissions = permissionIds.length
+        ? await supabase
+            .from('import_admin_permissions')
+            .select('key')
+            .in('id', permissionIds)
+        : { data: [], error: null }
+
+      if (permissions.error) return json({ error: 'Could not load admin permissions' }, 500)
+
+      await supabase.from('import_admin_sessions')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('token', manager_token)
+
+      return json({
+        manager: { email: manager.email, full_name: manager.full_name ?? manager.email },
+        permissions: Array.from(new Set(
+          (permissions.data ?? [])
+            .map((permission: any) => permission.key)
+            .filter((key: any): key is string => typeof key === 'string' && key.length > 0),
+        )),
+      })
+    }
+
     if (req.method === 'POST' && action === 'admin-products') {
       const { manager_token } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token), 'import.products.view')) return json({ error: 'Unauthorized' }, 401)
