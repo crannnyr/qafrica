@@ -806,7 +806,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-products') {
       const { manager_token } = await req.json().catch(() => ({}))
-      if (!(await requireAdmin(supabase, manager_token), 'import.products.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.products.view')) return json({ error: 'Unauthorized' }, 401)
 
       // Admin is the only surface that sees source_url.
       const { data, error } = await supabase
@@ -1289,7 +1289,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-update-settings') {
       const { manager_token, paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.settings.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.settings.update')) return json({ error: 'Unauthorized' }, 401)
 
       const updates: Record<string, unknown> = {}
       if (typeof paystack_enabled === 'boolean') updates.paystack_enabled = paystack_enabled
@@ -1341,7 +1341,7 @@ serve(async (req: Request) => {
         air_credit_enabled,
       } = await req.json()
 
-      if (!(await requireAdmin(supabase, manager_token), 'import.pricing_shipping.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update')) return json({ error: 'Unauthorized' }, 401)
 
       const updates: Record<string, unknown> = {}
       const positive = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v > 0
@@ -1423,7 +1423,7 @@ serve(async (req: Request) => {
       const volumeCbm = body.volume_cbm == null || body.volume_cbm === '' ? 0 : Number(body.volume_cbm)
       const weightGrams = body.weight_grams == null || body.weight_grams === '' ? 0 : Number(body.weight_grams)
 
-      if (!(await requireAdmin(supabase, manager_token), 'import.products.create')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.products.create')) return json({ error: 'Unauthorized' }, 401)
       if (!name || !Number.isFinite(originalPriceUsd) || originalPriceUsd <= 0 || !image_urls?.length) {
         return json({ error: 'Product name, original USD price and at least one image are required' }, 400)
       }
@@ -1519,7 +1519,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'delete-product') {
       const { manager_token, id } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.products.delete')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.products.delete')) return json({ error: 'Unauthorized' }, 401)
       if (!id) return json({ error: 'Missing id' }, 400)
       const { error } = await supabase.from('china_import_products').delete().eq('id', id)
       if (error) return json({ error: error.message }, 500)
@@ -1529,7 +1529,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'upload-image') {
       const { manager_token, image_base64, extension } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.products.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.products.update')) return json({ error: 'Unauthorized' }, 401)
       if (!image_base64) return json({ error: 'Missing image data' }, 400)
 
       const rawBytes = Uint8Array.from(atob(image_base64), c => c.charCodeAt(0))
@@ -1547,7 +1547,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'load-code') {
       const { code, manager_token } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.orders.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.orders.view')) return json({ error: 'Unauthorized' }, 401)
       if (!code) return json({ error: 'Missing code' }, 400)
       const { data, error } = await supabase.from('china_import_orders').select('*').eq('code', code).single()
       if (error || !data) return json({ error: 'Order not found' }, 404)
@@ -1556,7 +1556,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'update-order') {
       const { manager_token, id, status, shipping_ngn, admin_note, payment_status } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.orders.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.orders.update')) return json({ error: 'Unauthorized' }, 401)
       if (!id) return json({ error: 'Missing order id' }, 400)
 
       let wasAlreadyPaid = false
@@ -1588,7 +1588,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'all-orders') {
       const { manager_token, date_from, date_to, payment_status, status } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.orders.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.orders.view')) return json({ error: 'Unauthorized' }, 401)
 
       const buildQuery = (from: number, to: number) => {
         let q = supabase.from('china_import_orders')
@@ -1618,7 +1618,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-analytics') {
       const { manager_token, date_from, date_to } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.analytics.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.analytics.view')) return json({ error: 'Unauthorized' }, 401)
 
       const { data: analyticsJson, error: analyticsErr } = await supabase.rpc('get_import_analytics', {
         p_date_from: date_from ?? null,
@@ -1642,7 +1642,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-customers') {
       const { manager_token, search } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.clients.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.clients.view')) return json({ error: 'Unauthorized' }, 401)
 
       const buildCustQuery = (from: number, to: number) => {
         let q = supabase.from('customers')
@@ -1716,7 +1716,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-toggle-favorite') {
       const { manager_token, customer_id } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.clients.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.clients.update')) return json({ error: 'Unauthorized' }, 401)
       if (!customer_id) return json({ error: 'Missing customer_id' }, 400)
 
       const { data: existing } = await supabase
@@ -1735,7 +1735,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-customer-detail') {
       const { manager_token, customer_id } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.clients.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.clients.view')) return json({ error: 'Unauthorized' }, 401)
       if (!customer_id) return json({ error: 'Missing customer_id' }, 400)
 
       const [{ data: customer, error: custErr }, { data: orders }, { data: bills }, { data: favorite }, { data: failedOrders }] = await Promise.all([
@@ -1827,7 +1827,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-create-bill') {
       const { manager_token, user_id, order_id, amount_ngn, reason, kind } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.confirmed_payments.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.update')) return json({ error: 'Unauthorized' }, 401)
       if (!user_id) return json({ error: 'Missing user_id' }, 400)
       const amount = Number(amount_ngn)
       if (!amount || amount <= 0) return json({ error: 'Invalid amount_ngn' }, 400)
@@ -1856,7 +1856,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-all-bills') {
       const { manager_token, status } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.confirmed_payments.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.view')) return json({ error: 'Unauthorized' }, 401)
 
       let query = supabase
         .from('china_import_consolidation_bills')
@@ -1871,7 +1871,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-confirm-bill') {
       const { manager_token, bill_id, cancel } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.confirmed_payments.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.update')) return json({ error: 'Unauthorized' }, 401)
       if (!bill_id) return json({ error: 'Missing bill_id' }, 400)
 
       const updates: Record<string, unknown> = cancel
@@ -1917,7 +1917,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-questions') {
       const { manager_token, status } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.questions.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.questions.view')) return json({ error: 'Unauthorized' }, 401)
 
       let query = supabase
         .from('china_import_product_questions')
@@ -1932,7 +1932,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-reply-question') {
       const { manager_token, question_id, reply, template } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.questions.reply')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.questions.reply')) return json({ error: 'Unauthorized' }, 401)
       if (!question_id || !reply || !reply.trim()) return json({ error: 'Missing question_id or reply' }, 400)
 
       const { data: q, error: findErr } = await supabase
@@ -1979,7 +1979,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-merge-into-batch') {
       const { manager_token, order_ids, target_batch_key } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
       if (!Array.isArray(order_ids) || order_ids.length === 0) return json({ error: 'Missing order_ids' }, 400)
       if (!target_batch_key) return json({ error: 'Missing target_batch_key' }, 400)
 
@@ -2003,7 +2003,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-close-group') {
       const { manager_token, order_ids } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
       if (!Array.isArray(order_ids) || order_ids.length === 0) return json({ error: 'Missing order_ids' }, 400)
 
       const stagedAt = new Date().toISOString()
@@ -2022,7 +2022,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-send-confirmed-message') {
       const { manager_token, template } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.messages.send')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.messages.send')) return json({ error: 'Unauthorized' }, 401)
       if (!['consolidation', 'last_call'].includes(template)) return json({ error: 'Invalid template' }, 400)
 
       const { data: orders, error } = await supabase
@@ -2065,7 +2065,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-send-shipped-message') {
       const { manager_token, order_ids } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.messages.send')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.messages.send')) return json({ error: 'Unauthorized' }, 401)
       if (!Array.isArray(order_ids) || order_ids.length === 0) return json({ error: 'Missing order_ids' }, 400)
 
       const { data: orders, error } = await supabase
@@ -2137,7 +2137,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-broadcast-audience-count') {
       const { manager_token } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.broadcast.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.broadcast.view')) return json({ error: 'Unauthorized' }, 401)
 
       const { count, error } = await supabase
         .from('customers')
@@ -2150,7 +2150,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-send-broadcast') {
       const { manager_token, subject, html } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.broadcast.send')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.broadcast.send')) return json({ error: 'Unauthorized' }, 401)
       if (!subject || typeof subject !== 'string' || !subject.trim()) return json({ error: 'Missing subject' }, 400)
       if (!html || typeof html !== 'string' || !html.trim()) return json({ error: 'Missing html body' }, 400)
 
@@ -2203,7 +2203,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-get-templates') {
       const { manager_token } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.messages.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.messages.view')) return json({ error: 'Unauthorized' }, 401)
       const { data, error } = await supabase.from('import_message_templates').select('*').order('key')
       if (error) return json({ error: error.message }, 500)
       return json({ templates: data ?? [] })
@@ -2211,7 +2211,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-update-template') {
       const { manager_token, key, subject, body_html } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.messages.send')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.messages.send')) return json({ error: 'Unauthorized' }, 401)
       if (!key || !subject || !body_html) return json({ error: 'Missing key, subject, or body_html' }, 400)
       const { data, error } = await supabase
         .from('import_message_templates')
@@ -2260,7 +2260,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-batch-item-bills') {
       const { manager_token, batch_key } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.confirmed_payments.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.view')) return json({ error: 'Unauthorized' }, 401)
       if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
       const [{ data: items }, { data: statuses }] = await Promise.all([
         supabase.from('import_batch_item_bills').select('*').eq('batch_key', batch_key),
@@ -2271,7 +2271,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-batch-set-item-price') {
       const { manager_token, batch_key, product_id, product_name, unit_amount_ngn, kind } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.pricing_shipping.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update')) return json({ error: 'Unauthorized' }, 401)
       if (!batch_key || !product_id || !product_name || typeof unit_amount_ngn !== 'number') return json({ error: 'Missing fields' }, 400)
       const billKind = kind === 'clearance' ? 'clearance' : 'consolidation_shipping'
 
@@ -2299,7 +2299,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-batch-toggle-audit') {
       const { manager_token, id } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.confirmed_payments.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.update')) return json({ error: 'Unauthorized' }, 401)
       if (!id) return json({ error: 'Missing id' }, 400)
       const { data: row } = await supabase.from('import_batch_item_bills').select('audit_status').eq('id', id).single()
       if (!row) return json({ error: 'Not found' }, 404)
@@ -2310,7 +2310,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-batch-breakdown') {
       const { manager_token, batch_key } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.total_orders.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.view')) return json({ error: 'Unauthorized' }, 401)
       if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
 
       const { data, error } = await supabase.rpc('get_batch_product_breakdown', { p_batch_key: batch_key })
@@ -2328,7 +2328,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-batch-close-ordered') {
       const { manager_token, batch_key } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
       if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
 
       const result = await closeBatchBilling(supabase, batch_key, 'consolidation_shipping', 'ordered_and_closed', 'ordered_closed_at')
@@ -2338,7 +2338,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-batch-mark-shipped') {
       const { manager_token, batch_key, shipping_method_final } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
       if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
 
       const { data: billStatus } = await supabase.from('import_batch_bill_status').select('status').eq('batch_key', batch_key).eq('kind', 'consolidation_shipping').maybeSingle()
@@ -2394,7 +2394,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-batch-close-clearance') {
       const { manager_token, batch_key } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage')) return json({ error: 'Unauthorized' }, 401)
       if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
 
       const batchId = await resolveBatchId(supabase, batch_key)
@@ -2408,7 +2408,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-mark-received') {
       const { manager_token, order_id } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.orders.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.orders.update')) return json({ error: 'Unauthorized' }, 401)
       if (!order_id) return json({ error: 'Missing order_id' }, 400)
 
       const { data: order, error: orderErr } = await supabase.from('china_import_orders').select('id, status, user_id, code, customer_name').eq('id', order_id).single()
@@ -2452,7 +2452,7 @@ serve(async (req: Request) => {
     // variant_options when present) inside the order's items array.
     if (req.method === 'POST' && action === 'admin-set-item-shipping-method') {
       const { manager_token, order_id, product_id, variant_options, new_method } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.pricing_shipping.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update')) return json({ error: 'Unauthorized' }, 401)
       if (!order_id || !product_id) return json({ error: 'Missing order_id or product_id' }, 400)
       if (!['flight', 'sea_freight'].includes(new_method)) return json({ error: 'Invalid new_method' }, 400)
 
@@ -2518,7 +2518,7 @@ serve(async (req: Request) => {
     // silently disagree with an already-sent bill otherwise.
     if (req.method === 'POST' && action === 'admin-set-item-variant') {
       const { manager_token, order_id, product_id, old_variant_options, new_variant_options } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.products.update')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.products.update')) return json({ error: 'Unauthorized' }, 401)
       if (!order_id || !product_id || !new_variant_options) return json({ error: 'Missing order_id, product_id, or new_variant_options' }, 400)
 
       const { data: order, error: orderErr } = await supabase
@@ -2593,7 +2593,7 @@ serve(async (req: Request) => {
     // actions in order-reminders).
     if (req.method === 'POST' && action === 'admin-failed-orders') {
       const { manager_token, search } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.timed_out.view')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.timed_out.view')) return json({ error: 'Unauthorized' }, 401)
 
       let query = supabase
         .from('china_import_failed_orders')
@@ -2614,7 +2614,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-restore-failed-order') {
       const { manager_token, failed_order_id } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token), 'import.timed_out.manage')) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.timed_out.manage')) return json({ error: 'Unauthorized' }, 401)
       if (!failed_order_id) return json({ error: 'Missing failed_order_id' }, 400)
 
       const { data: failed, error: findErr } = await supabase
