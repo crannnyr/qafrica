@@ -335,6 +335,9 @@ function ImportAdminAccessManager() {
   const [admins, setAdmins] = useState<Array<{ id: string; full_name: string | null; email: string | null }>>([]);
   const [roles, setRoles] = useState<Array<{ id: string; name: string; description: string | null }>>([]);
   const [assignments, setAssignments] = useState<Array<{ user_id: string; role_id: string }>>([]);
+  const [selectedRoles, setSelectedRoles] = useState<Record<string, string>>({});
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [removingKey, setRemovingKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -365,13 +368,59 @@ function ImportAdminAccessManager() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const assignRole = async (adminId: string) => {
+    const roleId = selectedRoles[adminId];
+    if (!roleId) return;
+
+    if (assignments.some(a => a.user_id === adminId && a.role_id === roleId)) {
+      setError('That role is already assigned to this admin.');
+      return;
+    }
+
+    setSavingUserId(adminId);
+    setError('');
+    try {
+      const { error: insertError } = await supabase
+        .from('import_admin_user_roles')
+        .insert({ user_id: adminId, role_id: roleId });
+      if (insertError) throw insertError;
+
+      setAssignments(prev => [...prev, { user_id: adminId, role_id: roleId }]);
+      setSelectedRoles(prev => ({ ...prev, [adminId]: '' }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not assign Import Admin role');
+    } finally {
+      setSavingUserId(null);
+    }
+  };
+
+  const removeRole = async (adminId: string, roleId: string) => {
+    const key = adminId + ':' + roleId;
+    setRemovingKey(key);
+    setError('');
+    try {
+      const { error: deleteError } = await supabase
+        .from('import_admin_user_roles')
+        .delete()
+        .eq('user_id', adminId)
+        .eq('role_id', roleId);
+      if (deleteError) throw deleteError;
+
+      setAssignments(prev => prev.filter(a => !(a.user_id === adminId && a.role_id === roleId)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove Import Admin role');
+    } finally {
+      setRemovingKey(null);
+    }
+  };
+
   if (loading) return <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">Loading Admin Access…</div>;
 
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl border border-gray-100 p-5">
         <p className="font-bold text-gray-900 text-sm">Admin Access</p>
-        <p className="text-[11px] text-gray-400 mt-1">View platform admins and their current Import Admin roles.</p>
+        <p className="text-[11px] text-gray-400 mt-1">View platform admins and assign or remove their Import Admin roles.</p>
         <button onClick={() => void load()} className="mt-3 text-xs font-semibold text-gray-600 hover:text-gray-900">Refresh</button>
       </div>
       {error && <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-4 py-3">{error}</div>}
@@ -381,15 +430,56 @@ function ImportAdminAccessManager() {
           <div className="divide-y divide-gray-100">
             {admins.map(admin => {
               const assigned = assignments.filter(a => a.user_id === admin.id);
+              const availableRoles = roles.filter(role => !assigned.some(a => a.role_id === role.id));
+              const selectedRoleId = selectedRoles[admin.id] ?? '';
               return (
                 <div key={admin.id} className="px-4 py-4">
                   <p className="text-sm font-semibold text-gray-900">{admin.full_name || admin.email || 'Unnamed admin'}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{admin.email || admin.id}</p>
+
                   <div className="flex flex-wrap gap-1.5 mt-3">
                     {assigned.length ? assigned.map(a => {
                       const role = roles.find(r => r.id === a.role_id);
-                      return <span key={a.role_id} className="px-2.5 py-1 rounded-lg bg-gray-100 text-[10px] font-semibold text-gray-600">{role?.name || 'Unknown role'}</span>;
+                      const removeKey = admin.id + ':' + a.role_id;
+                      return (
+                        <span key={a.role_id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-[10px] font-semibold text-gray-600">
+                          {role?.name || 'Unknown role'}
+                          <button
+                            type="button"
+                            onClick={() => void removeRole(admin.id, a.role_id)}
+                            disabled={removingKey === removeKey}
+                            className="text-gray-400 hover:text-red-500 disabled:opacity-40"
+                            aria-label={`Remove ${role?.name || 'role'} from ${admin.email || 'admin'}`}
+                          >
+                            {removingKey === removeKey ? '…' : '×'}
+                          </button>
+                        </span>
+                      );
                     }) : <span className="text-[11px] text-gray-400">No Import Admin role assigned</span>}
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-3">
+                    <select
+                      value={selectedRoleId}
+                      onChange={e => setSelectedRoles(prev => ({ ...prev, [admin.id]: e.target.value }))}
+                      disabled={!availableRoles.length || savingUserId === admin.id}
+                      className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-700"
+                    >
+                      <option value="">Select a role to assign…</option>
+                      {availableRoles.map(role => (
+                        <option key={role.id} value={role.id}>
+                          {role.name}{role.description ? ` — ${role.description}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void assignRole(admin.id)}
+                      disabled={!selectedRoleId || savingUserId === admin.id}
+                      className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-xs font-semibold"
+                    >
+                      {savingUserId === admin.id ? 'Assigning…' : 'Assign'}
+                    </button>
                   </div>
                 </div>
               );
@@ -400,7 +490,6 @@ function ImportAdminAccessManager() {
     </div>
   );
 }
-
 function Divider() {
   return <div className="h-px bg-gray-100 my-1" />;
 }
