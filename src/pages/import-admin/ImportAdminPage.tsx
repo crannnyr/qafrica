@@ -331,6 +331,76 @@ function useImportAuth() {
 }
 
 // ── Divider ───────────────────────────────────────────────────────────────────
+function ImportAdminAccessManager() {
+  const [admins, setAdmins] = useState<Array<{ id: string; full_name: string | null; email: string | null }>>([]);
+  const [roles, setRoles] = useState<Array<{ id: string; name: string; description: string | null }>>([]);
+  const [assignments, setAssignments] = useState<Array<{ user_id: string; role_id: string }>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [{ data: adminRows, error: adminError }, { data: roleRows, error: roleError }] = await Promise.all([
+        supabase.from('profiles').select('id, full_name, email').eq('role', 'admin').order('full_name'),
+        supabase.from('import_admin_roles').select('id, name, description').order('name'),
+      ]);
+      if (adminError) throw adminError;
+      if (roleError) throw roleError;
+      const adminIds = (adminRows ?? []).map(row => row.id);
+      const { data: assignmentRows, error: assignmentError } = adminIds.length
+        ? await supabase.from('import_admin_user_roles').select('user_id, role_id').in('user_id', adminIds)
+        : { data: [], error: null };
+      if (assignmentError) throw assignmentError;
+      setAdmins(adminRows ?? []);
+      setRoles(roleRows ?? []);
+      setAssignments(assignmentRows ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load Admin Access');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  if (loading) return <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">Loading Admin Access…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+        <p className="font-bold text-gray-900 text-sm">Admin Access</p>
+        <p className="text-[11px] text-gray-400 mt-1">View platform admins and their current Import Admin roles.</p>
+        <button onClick={() => void load()} className="mt-3 text-xs font-semibold text-gray-600 hover:text-gray-900">Refresh</button>
+      </div>
+      {error && <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-4 py-3">{error}</div>}
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 text-[10px] font-bold uppercase tracking-wide text-gray-400">Platform Admins</div>
+        {admins.length === 0 ? <div className="p-6 text-sm text-gray-400 text-center">No platform admins found.</div> : (
+          <div className="divide-y divide-gray-100">
+            {admins.map(admin => {
+              const assigned = assignments.filter(a => a.user_id === admin.id);
+              return (
+                <div key={admin.id} className="px-4 py-4">
+                  <p className="text-sm font-semibold text-gray-900">{admin.full_name || admin.email || 'Unnamed admin'}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{admin.email || admin.id}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {assigned.length ? assigned.map(a => {
+                      const role = roles.find(r => r.id === a.role_id);
+                      return <span key={a.role_id} className="px-2.5 py-1 rounded-lg bg-gray-100 text-[10px] font-semibold text-gray-600">{role?.name || 'Unknown role'}</span>;
+                    }) : <span className="text-[11px] text-gray-400">No Import Admin role assigned</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Divider() {
   return <div className="h-px bg-gray-100 my-1" />;
 }
