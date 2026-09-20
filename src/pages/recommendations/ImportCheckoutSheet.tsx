@@ -180,6 +180,34 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     return itemShipping[item.cart_key] ?? (item.ship_only ? 'sea_freight' : 'flight');
   };
 
+  const getDeliveryEstimate = (method: 'flight' | 'sea_freight') => {
+    const start = new Date();
+    const minDate = new Date(start);
+    const maxDate = new Date(start);
+    const minDays = method === 'sea_freight' ? 63 : 23;
+    const maxDays = method === 'sea_freight' ? 93 : 33;
+    minDate.setDate(minDate.getDate() + minDays);
+    maxDate.setDate(maxDate.getDate() + maxDays);
+
+    const fmtDate = (date: Date) => date.toLocaleDateString('en-NG', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'Africa/Lagos',
+    });
+
+    return `${fmtDate(minDate)} – ${fmtDate(maxDate)}`;
+  };
+
+  const selectedDeliveryMethods = Array.from(
+    new Set(cart.map(item => shippingMethodFor(item)).filter(Boolean))
+  ) as Array<'flight' | 'sea_freight'>;
+
+  const deliveryEstimateText = selectedDeliveryMethods.map(method => ({
+    method,
+    window: getDeliveryEstimate(method),
+  }));
+
   const shippingCostFor = (item: CartItem) => {
     const method = shippingMethodFor(item);
     if (!method) return 0;
@@ -784,6 +812,27 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
             </div>
           )}
         </div>
+
+        {deliveryEstimateText.length > 0 && (
+          <div className="bg-orange-50 border border-orange-100 rounded-xl px-3.5 py-3 mb-4">
+            <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-1.5">
+              Expected delivery
+            </p>
+            <p className="text-[11px] text-orange-800 leading-relaxed mb-2">
+              Estimated from the date your payment is confirmed. Includes the 3-day processing period.
+            </p>
+            <div className="space-y-1">
+              {deliveryEstimateText.map(({ method, window }) => (
+                <div key={method} className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-semibold text-gray-700">
+                    {method === 'sea_freight' ? 'Sea freight' : 'Flight'}
+                  </span>
+                  <span className="font-bold text-gray-900 text-right">{window}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Delivery address / pickup station — only required when shipping directly to the customer */}
           <div>
