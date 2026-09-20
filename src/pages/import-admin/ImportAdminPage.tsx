@@ -340,6 +340,8 @@ function ImportAdminAccessManager() {
   const [removingKey, setRemovingKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { hasPermission } = useImportAdminPermissions();
+  const canManageRoles = hasPermission('import.admin_access.manage');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -369,6 +371,7 @@ function ImportAdminAccessManager() {
   useEffect(() => { void load(); }, [load]);
 
   const assignRole = async (adminId: string) => {
+    if (!canManageRoles) return;
     const roleId = selectedRoles[adminId];
     if (!roleId) return;
 
@@ -395,6 +398,7 @@ function ImportAdminAccessManager() {
   };
 
   const removeRole = async (adminId: string, roleId: string) => {
+    if (!canManageRoles) return;
     const key = adminId + ':' + roleId;
     setRemovingKey(key);
     setError('');
@@ -420,7 +424,8 @@ function ImportAdminAccessManager() {
     <div className="space-y-4">
       <div className="bg-white rounded-2xl border border-gray-100 p-5">
         <p className="font-bold text-gray-900 text-sm">Admin Access</p>
-        <p className="text-[11px] text-gray-400 mt-1">View platform admins and assign or remove their Import Admin roles.</p>
+        <p className="text-[11px] text-gray-400 mt-1">View platform admins and manage their Import Admin roles.</p>
+        {!canManageRoles && <p className="text-[11px] text-amber-600 mt-2">You can view assignments, but you do not have permission to change them.</p>}
         <button onClick={() => void load()} className="mt-3 text-xs font-semibold text-gray-600 hover:text-gray-900">Refresh</button>
       </div>
       {error && <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-4 py-3">{error}</div>}
@@ -447,7 +452,7 @@ function ImportAdminAccessManager() {
                           <button
                             type="button"
                             onClick={() => void removeRole(admin.id, a.role_id)}
-                            disabled={removingKey === removeKey}
+                            disabled={!canManageRoles || removingKey === removeKey}
                             className="text-gray-400 hover:text-red-500 disabled:opacity-40"
                             aria-label={`Remove ${role?.name || 'role'} from ${admin.email || 'admin'}`}
                           >
@@ -462,7 +467,7 @@ function ImportAdminAccessManager() {
                     <select
                       value={selectedRoleId}
                       onChange={e => setSelectedRoles(prev => ({ ...prev, [admin.id]: e.target.value }))}
-                      disabled={!availableRoles.length || savingUserId === admin.id}
+                      disabled={!canManageRoles || !availableRoles.length || savingUserId === admin.id}
                       className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-700"
                     >
                       <option value="">Select a role to assign…</option>
@@ -475,7 +480,7 @@ function ImportAdminAccessManager() {
                     <button
                       type="button"
                       onClick={() => void assignRole(admin.id)}
-                      disabled={!selectedRoleId || savingUserId === admin.id}
+                      disabled={!canManageRoles || !selectedRoleId || savingUserId === admin.id}
                       className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-xs font-semibold"
                     >
                       {savingUserId === admin.id ? 'Assigning…' : 'Assign'}
