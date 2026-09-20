@@ -11,7 +11,9 @@ import {
 import { compressImage } from '@/lib/imageCompression';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
+import { supabase } from '@/services/supabase';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
+import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import ImportAdminAnalytics from './ImportAdminAnalytics';
 import ImportAdminCustomers from './ImportAdminCustomers';
 import { CustomerDetail } from './ImportAdminCustomers';
@@ -221,28 +223,278 @@ function useImportAuth() {
   const token = sessionStorage.getItem('import_manager_token');
   const managerRaw = sessionStorage.getItem('import_manager');
   const manager = managerRaw ? JSON.parse(managerRaw) : null;
+  const sessionSource = sessionStorage.getItem('import_manager_source');
+  const isBridgedSupabaseSession = sessionSource === 'supabase-rbac';
+  const [supabaseAdmin, setSupabaseAdmin] = useState(isBridgedSupabaseSession);
+  const [authChecked, setAuthChecked] = useState(false);
 
-  const logout = () => {
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkAuth = async () => {
+      if (token && manager) {
+        if (!cancelled) {
+          setAuthChecked(true);
+          setSupabaseAdmin(isBridgedSupabaseSession);
+        }
+        return;
+      }
+
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        if (error) throw error;
+
+        if (!user) {
+          if (!cancelled) navigate('/importations/admin/login');
+          return;
+        }
+
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profileError) throw profileError;
+
+        if (profile?.role !== 'admin') {
+          if (!cancelled) navigate('/importations/admin/login');
+          return;
+        }
+
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) throw new Error('Supabase session token unavailable');
+
+        const bridgeRes = await fetch(
+          CONFIG.SUPABASE_URL + '/functions/v1/china-import?action=admin-session',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer ' + accessToken,
+            },
+          },
+        );
+        const bridgeData = await bridgeRes.json().catch(() => ({}));
+        if (!bridgeRes.ok || !bridgeData.token) {
+          throw new Error(bridgeData.error ?? 'Import Admin session could not be created');
+        }
+
+        sessionStorage.setItem('import_manager_token', bridgeData.token);
+        sessionStorage.setItem('import_manager', JSON.stringify(bridgeData.manager ?? { email: user.email ?? null }));
+        sessionStorage.setItem('import_manager_source', 'supabase-rbac');
+
+        if (!cancelled) {
+          setSupabaseAdmin(true);
+          setAuthChecked(true);
+        }
+      } catch {
+        if (!cancelled) navigate('/importations/admin/login');
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    };
+
+    void checkAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate, token, manager, isBridgedSupabaseSession]);
+
+  const logout = async () => {
     if (token) {
-      fetch(`${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=admin-logout`, {
+      fetch(CONFIG.SUPABASE_URL + '/functions/v1/china-import?action=admin-logout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: token }),
       }).catch(() => {});
+      sessionStorage.removeItem('import_manager_token');
+      sessionStorage.removeItem('import_manager');
+      sessionStorage.removeItem('import_manager_source');
     }
-    sessionStorage.removeItem('import_manager_token');
-    sessionStorage.removeItem('import_manager');
+    if (supabaseAdmin) await supabase.auth.signOut();
+
     navigate('/importations/admin/login');
   };
 
-  useEffect(() => {
-    if (!token || !manager) navigate('/importations/admin/login');
-  }, []);
-
-  return { token, manager, logout };
+  return {
+    token,
+    manager,
+    isLegacyManager: Boolean(token && manager && !isBridgedSupabaseSession),
+    isSupabaseAdmin: supabaseAdmin,
+    authChecked,
+    logout,
+  };
 }
 
 // ── Divider ───────────────────────────────────────────────────────────────────
+function ImportAdminAccessManager() {
+  const [admins, setAdmins] = useState<Array<{ id: string; full_name: string | null; email: string | null }>>([]);
+  const [roles, setRoles] = useState<Array<{ id: string; name: string; description: string | null }>>([]);
+  const [assignments, setAssignments] = useState<Array<{ user_id: string; role_id: string }>>([]);
+  const [selectedRoles, setSelectedRoles] = useState<Record<string, string>>({});
+  const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [removingKey, setRemovingKey] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const { hasPermission } = useImportAdminPermissions();
+  const canManageRoles = hasPermission('import.admin_access.manage');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [{ data: adminRows, error: adminError }, { data: roleRows, error: roleError }] = await Promise.all([
+        supabase.from('profiles').select('id, full_name, email').eq('role', 'admin').order('full_name'),
+        supabase.from('import_admin_roles').select('id, name, description').order('name'),
+      ]);
+      if (adminError) throw adminError;
+      if (roleError) throw roleError;
+      const adminIds = (adminRows ?? []).map(row => row.id);
+      const { data: assignmentRows, error: assignmentError } = adminIds.length
+        ? await supabase.from('import_admin_user_roles').select('user_id, role_id').in('user_id', adminIds)
+        : { data: [], error: null };
+      if (assignmentError) throw assignmentError;
+      setAdmins(adminRows ?? []);
+      setRoles(roleRows ?? []);
+      setAssignments(assignmentRows ?? []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load Admin Access');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const assignRole = async (adminId: string) => {
+    if (!canManageRoles) return;
+    const roleId = selectedRoles[adminId];
+    if (!roleId) return;
+
+    if (assignments.some(a => a.user_id === adminId && a.role_id === roleId)) {
+      setError('That role is already assigned to this admin.');
+      return;
+    }
+
+    setSavingUserId(adminId);
+    setError('');
+    try {
+      const { error: insertError } = await supabase
+        .from('import_admin_user_roles')
+        .insert({ user_id: adminId, role_id: roleId });
+      if (insertError) throw insertError;
+
+      setAssignments(prev => [...prev, { user_id: adminId, role_id: roleId }]);
+      setSelectedRoles(prev => ({ ...prev, [adminId]: '' }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not assign Import Admin role');
+    } finally {
+      setSavingUserId(null);
+    }
+  };
+
+  const removeRole = async (adminId: string, roleId: string) => {
+    if (!canManageRoles) return;
+    const key = adminId + ':' + roleId;
+    setRemovingKey(key);
+    setError('');
+    try {
+      const { error: deleteError } = await supabase
+        .from('import_admin_user_roles')
+        .delete()
+        .eq('user_id', adminId)
+        .eq('role_id', roleId);
+      if (deleteError) throw deleteError;
+
+      setAssignments(prev => prev.filter(a => !(a.user_id === adminId && a.role_id === roleId)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove Import Admin role');
+    } finally {
+      setRemovingKey(null);
+    }
+  };
+
+  if (loading) return <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">Loading Admin Access…</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 p-5">
+        <p className="font-bold text-gray-900 text-sm">Admin Access</p>
+        <p className="text-[11px] text-gray-400 mt-1">View platform admins and manage their Import Admin roles.</p>
+        {!canManageRoles && <p className="text-[11px] text-amber-600 mt-2">You can view assignments, but you do not have permission to change them.</p>}
+        <button onClick={() => void load()} className="mt-3 text-xs font-semibold text-gray-600 hover:text-gray-900">Refresh</button>
+      </div>
+      {error && <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-4 py-3">{error}</div>}
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 text-[10px] font-bold uppercase tracking-wide text-gray-400">Platform Admins</div>
+        {admins.length === 0 ? <div className="p-6 text-sm text-gray-400 text-center">No platform admins found.</div> : (
+          <div className="divide-y divide-gray-100">
+            {admins.map(admin => {
+              const assigned = assignments.filter(a => a.user_id === admin.id);
+              const availableRoles = roles.filter(role => !assigned.some(a => a.role_id === role.id));
+              const selectedRoleId = selectedRoles[admin.id] ?? '';
+              return (
+                <div key={admin.id} className="px-4 py-4">
+                  <p className="text-sm font-semibold text-gray-900">{admin.full_name || admin.email || 'Unnamed admin'}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">{admin.email || admin.id}</p>
+
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {assigned.length ? assigned.map(a => {
+                      const role = roles.find(r => r.id === a.role_id);
+                      const removeKey = admin.id + ':' + a.role_id;
+                      return (
+                        <span key={a.role_id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-[10px] font-semibold text-gray-600">
+                          {role?.name || 'Unknown role'}
+                          <button
+                            type="button"
+                            onClick={() => void removeRole(admin.id, a.role_id)}
+                            disabled={!canManageRoles || removingKey === removeKey}
+                            className="text-gray-400 hover:text-red-500 disabled:opacity-40"
+                            aria-label={`Remove ${role?.name || 'role'} from ${admin.email || 'admin'}`}
+                          >
+                            {removingKey === removeKey ? '…' : '×'}
+                          </button>
+                        </span>
+                      );
+                    }) : <span className="text-[11px] text-gray-400">No Import Admin role assigned</span>}
+                  </div>
+
+                  <div className="flex items-center gap-2 mt-3">
+                    <select
+                      value={selectedRoleId}
+                      onChange={e => setSelectedRoles(prev => ({ ...prev, [admin.id]: e.target.value }))}
+                      disabled={!canManageRoles || !availableRoles.length || savingUserId === admin.id}
+                      className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs text-gray-700"
+                    >
+                      <option value="">Select a role to assign…</option>
+                      {availableRoles.map(role => (
+                        <option key={role.id} value={role.id}>
+                          {role.name}{role.description ? ` — ${role.description}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => void assignRole(admin.id)}
+                      disabled={!canManageRoles || !selectedRoleId || savingUserId === admin.id}
+                      className="px-3 py-2 rounded-lg bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-xs font-semibold"
+                    >
+                      {savingUserId === admin.id ? 'Assigning…' : 'Assign'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 function Divider() {
   return <div className="h-px bg-gray-100 my-1" />;
 }
@@ -2942,13 +3194,101 @@ function CustomOrdersManager({ token }: { token: string }) {
 
 export default function ImportAdminPage() {
   useImportPwaManifest();
-  const { token, manager, logout } = useImportAuth();
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories'>('analytics');
+  const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
+  const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions();
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
 
+  if (!authChecked) return null;
+  if (!isLegacyManager && !isSupabaseAdmin) return null;
+
+  const tabPermissions = {
+    analytics: 'import.analytics.view',
+    'confirmed-payments': 'import.confirmed_payments.view',
+    messages: 'import.messages.view',
+    broadcast: 'import.broadcast.view',
+    orders: 'import.orders.view',
+    'total-orders': 'import.total_orders.view',
+    products: 'import.products.view',
+    trending: 'import.trending.view',
+    clients: 'import.clients.view',
+    questions: 'import.questions.view',
+    refunds: 'import.refunds.view',
+    'paystack-transactions': 'import.paystack_transactions.view',
+    'timed-out': 'import.timed_out.view',
+    settings: 'import.settings.view',
+    'pricing-shipping': 'import.pricing_shipping.view',
+    'custom-orders': 'import.custom_orders.view',
+    categories: 'import.categories.view',
+    'admin-access': 'import.admin_access.view',
+  } as const;
+
+  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access'] as const;
+
+  const visibleTabs = isLegacyManager
+    ? allTabs
+    : allTabs.filter(t => hasPermission(tabPermissions[t]));
+
+  if (isSupabaseAdmin && permissionsLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 p-6 text-center">
+          <ShoppingBag className="w-8 h-8 mx-auto mb-3 text-gray-900" />
+          <h1 className="font-bold text-gray-900 text-lg">Checking Import Admin access</h1>
+          <p className="text-sm text-gray-500 mt-2">Loading your assigned Import Admin permissions…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSupabaseAdmin && !permissionsLoading && visibleTabs.length === 0) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 p-6 text-center">
+          <ShoppingBag className="w-8 h-8 mx-auto mb-3 text-gray-900" />
+          <h1 className="font-bold text-gray-900 text-lg">No Import Admin permissions</h1>
+          <p className="text-sm text-gray-500 mt-2">
+            Your platform admin account is authenticated, but no Import Admin role has been assigned to it yet.
+          </p>
+          {permissionsError && (
+            <p className="text-xs text-red-500 mt-3">{permissionsError}</p>
+          )}
+          <button
+            onClick={logout}
+            className="mt-5 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSupabaseAdmin && !token) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-md bg-white rounded-2xl border border-gray-100 p-6 text-center">
+          <ShoppingBag className="w-8 h-8 mx-auto mb-3 text-gray-900" />
+          <h1 className="font-bold text-gray-900 text-lg">Import Admin access</h1>
+          <p className="text-sm text-gray-500 mt-2">
+            Your platform admin account is authenticated. Import Admin permissions are being checked before access is enabled.
+          </p>
+          <button
+            onClick={logout}
+            className="mt-5 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // All functional Import Admin panels still use the legacy manager token.
+  // Supabase-admin access is handled separately until the server-side RBAC bridge is added.
   if (!token) return null;
 
   return (
@@ -2978,7 +3318,7 @@ export default function ImportAdminPage() {
       <div className="max-w-3xl lg:max-w-6xl mx-auto px-4 lg:px-8 py-5 space-y-4">
         {/* Tabs */}
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 overflow-x-auto">
-          {(['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories'] as const).map(t => (
+          {visibleTabs.map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -2988,7 +3328,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
             </button>
           ))}
         </div>
@@ -3022,6 +3362,8 @@ export default function ImportAdminPage() {
           <TimedOutOrdersManager token={token} />
         ) : tab === 'categories' ? (
           <CategoryManager token={token} />
+        ) : tab === 'admin-access' ? (
+          <ImportAdminAccessManager />
         ) : tab === 'settings' ? (
           <SettingsManager token={token} />
         ) : tab === 'pricing-shipping' ? (

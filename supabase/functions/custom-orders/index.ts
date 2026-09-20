@@ -23,15 +23,55 @@ function json(body: unknown, status = 200) {
   })
 }
 
-async function requireAdmin(supabase: any, token: unknown): Promise<boolean> {
+async function hasImportPermission(supabase: any, userId: string, permissionKey: string): Promise<boolean> {
+  const { data: assignments, error: assignmentsError } = await supabase
+    .from('import_admin_user_roles')
+    .select('role_id')
+    .eq('user_id', userId)
+  if (assignmentsError) return false
+
+  const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
+  if (roleIds.length === 0) return false
+
+  const { data: rolePermissions, error: rolePermissionsError } = await supabase
+    .from('import_admin_role_permissions')
+    .select('permission_id')
+    .in('role_id', roleIds)
+  if (rolePermissionsError) return false
+
+  const permissionIds = Array.from(new Set((rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+  if (permissionIds.length === 0) return false
+
+  const { data: permission, error: permissionError } = await supabase
+    .from('import_admin_permissions')
+    .select('id')
+    .in('id', permissionIds)
+    .eq('key', permissionKey)
+    .limit(1)
+    .maybeSingle()
+
+  return !permissionError && !!permission
+}
+
+async function requireAdmin(supabase: any, token: unknown, permissionKey?: string): Promise<boolean> {
   if (!token || typeof token !== 'string') return false
   const { data, error } = await supabase
     .from('import_admin_sessions')
-    .select('token')
+    .select('token, user_id')
     .eq('token', token)
     .gt('expires_at', new Date().toISOString())
     .maybeSingle()
-  return !error && !!data
+  if (error || !data) return false
+
+  supabase.from('import_admin_sessions')
+    .update({ last_used_at: new Date().toISOString() })
+    .eq('token', token)
+    .then(() => {})
+
+  if (!data.user_id) return true
+  if (!permissionKey) return false
+
+  return hasImportPermission(supabase, data.user_id, permissionKey)
 }
 
 function emailShell(bodyHtml: string) {
@@ -119,7 +159,7 @@ serve(async (req: Request) => {
     // ── Admin: list requests (optionally filtered by status) ──────────────
     if (action === 'admin-list-requests') {
       const { manager_token, status } = body
-      if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.custom_orders.view'))) return json({ error: 'Unauthorized' }, 401)
 
       let query = supabase
         .from('custom_order_requests')
@@ -143,7 +183,7 @@ serve(async (req: Request) => {
     // ── Admin: attach/update a store product link for one item ────────────
     if (action === 'admin-set-item-link') {
       const { manager_token, item_id, product_url, product_name } = body
-      if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.custom_orders.update'))) return json({ error: 'Unauthorized' }, 401)
       if (!item_id) return json({ error: 'Missing item_id' }, 400)
 
       let cleanUrl: string | null = null
@@ -176,7 +216,7 @@ serve(async (req: Request) => {
     // ── Admin: mark a request ready — requires every item linked first ────
     if (action === 'admin-mark-ready') {
       const { manager_token, request_id } = body
-      if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.custom_orders.approve'))) return json({ error: 'Unauthorized' }, 401)
       if (!request_id) return json({ error: 'Missing request_id' }, 400)
 
       const { data: items } = await supabase.from('custom_order_items').select('id, product_url').eq('request_id', request_id)

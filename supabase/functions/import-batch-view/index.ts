@@ -32,16 +32,60 @@ function json(body: unknown, status = 200) {
   })
 }
 
-async function requireAdmin(supabase: any, token: unknown): Promise<boolean> {
+
+async function hasImportPermission(supabase: any, userId: string, permissionKey: string): Promise<boolean> {
+  const { data: assignments, error: assignmentsError } = await supabase
+    .from('import_admin_user_roles')
+    .select('role_id')
+    .eq('user_id', userId)
+  if (assignmentsError) return false
+
+  const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
+  if (roleIds.length === 0) return false
+
+  const { data: rolePermissions, error: rolePermissionsError } = await supabase
+    .from('import_admin_role_permissions')
+    .select('permission_id')
+    .in('role_id', roleIds)
+  if (rolePermissionsError) return false
+
+  const permissionIds = Array.from(new Set((rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+  if (permissionIds.length === 0) return false
+
+  const { data: permission, error: permissionError } = await supabase
+    .from('import_admin_permissions')
+    .select('id')
+    .in('id', permissionIds)
+    .eq('key', permissionKey)
+    .limit(1)
+    .maybeSingle()
+
+  return !permissionError && !!permission
+}
+
+async function requireAdmin(supabase: any, token: unknown, permissionKey?: string): Promise<boolean> {
   if (!token || typeof token !== 'string') return false
   const { data, error } = await supabase
     .from('import_admin_sessions')
-    .select('token')
+    .select('token, user_id')
     .eq('token', token)
     .gt('expires_at', new Date().toISOString())
     .maybeSingle()
-  return !error && !!data
+  if (error || !data) return false
+
+  supabase.from('import_admin_sessions')
+    .update({ last_used_at: new Date().toISOString() })
+    .eq('token', token)
+    .then(() => {})
+
+  // Legacy Import Manager sessions predate RBAC and retain their existing
+  // full-access behavior. Bridged Supabase Admin sessions carry user_id.
+  if (!data.user_id) return true
+  if (!permissionKey) return false
+
+  return hasImportPermission(supabase, data.user_id, permissionKey)
 }
+
 
 function emailShell(bodyHtml: string) {
   return `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
@@ -136,6 +180,43 @@ serve(async (req: Request) => {
 
   if (!(await requireAdmin(supabase, body.manager_token))) {
     return json({ error: 'Unauthorized' }, 401)
+  }
+
+  if (action === 'customer-breakdown') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.total_orders.view'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'set-customer-price') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'delete-customer-price') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'set-admin-note') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.confirmed_payments.update'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'sourcing-totals') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.total_orders.view'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'sourcing-product-breakdown') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.total_orders.view'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'ship') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.total_orders.manage'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'mark-received') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.orders.update'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'cancel-bill') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.confirmed_payments.update'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'add-adjustment') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.confirmed_payments.update'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'delete-adjustment') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.confirmed_payments.update'))) return json({ error: 'Forbidden' }, 403)
+  }
+  if (action === 'close-billing') {
+    if (!(await requireAdmin(supabase, body.manager_token, 'import.total_orders.manage'))) return json({ error: 'Forbidden' }, 403)
   }
 
   const batchKey = body.batch_key
