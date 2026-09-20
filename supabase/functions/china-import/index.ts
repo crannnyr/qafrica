@@ -306,6 +306,36 @@ function jsonCached(body: unknown, maxAgeSeconds: number) {
 }
 
 // ── Admin session validation ──────────────────────────────────────────────────────────
+async function hasManagerImportPermission(supabase: any, managerId: string, permissionKey: string): Promise<boolean> {
+  const { data: assignments, error: assignmentsError } = await supabase
+    .from('import_admin_manager_roles')
+    .select('role_id')
+    .eq('manager_id', managerId)
+  if (assignmentsError) return false
+
+  const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
+  if (roleIds.length === 0) return false
+
+  const { data: rolePermissions, error: rolePermissionsError } = await supabase
+    .from('import_admin_role_permissions')
+    .select('permission_id')
+    .in('role_id', roleIds)
+  if (rolePermissionsError) return false
+
+  const permissionIds = Array.from(new Set((rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+  if (permissionIds.length === 0) return false
+
+  const { data: permission, error: permissionError } = await supabase
+    .from('import_admin_permissions')
+    .select('id')
+    .in('id', permissionIds)
+    .eq('key', permissionKey)
+    .limit(1)
+    .maybeSingle()
+
+  return !permissionError && !!permission
+}
+
 async function hasImportPermission(supabase: any, userId: string, permissionKey: string): Promise<boolean> {
   const { data: assignments, error: assignmentsError } = await supabase
     .from('import_admin_user_roles')
@@ -338,12 +368,14 @@ async function hasImportPermission(supabase: any, userId: string, permissionKey:
 
 async function requireAdmin(supabase: any, token: unknown, permissionKey?: string): Promise<boolean> {
   if (!token || typeof token !== 'string') return false
+
   const { data, error } = await supabase
     .from('import_admin_sessions')
-    .select('token, user_id')
+    .select('token, manager_id, user_id')
     .eq('token', token)
     .gt('expires_at', new Date().toISOString())
     .maybeSingle()
+
   if (error || !data) return false
 
   supabase.from('import_admin_sessions')
@@ -351,12 +383,22 @@ async function requireAdmin(supabase: any, token: unknown, permissionKey?: strin
     .eq('token', token)
     .then(() => {})
 
-  // Legacy Import Manager sessions predate RBAC and retain their existing
-  // full-access behavior. Bridged Supabase Admin sessions carry user_id.
-  if (!data.user_id) return true
   if (!permissionKey) return false
 
-  return hasImportPermission(supabase, data.user_id, permissionKey)
+  // New legacy Import Manager sessions are authorized through the
+  // manager-specific RBAC mapping. They do not use Supabase Auth.
+  if (data.manager_id) {
+    return hasManagerImportPermission(supabase, data.manager_id, permissionKey)
+  }
+
+  // Temporary compatibility for sessions created before legacy RBAC was
+  // attached. These sessions expire naturally; no new legacy session uses
+  // this fallback.
+  if (data.user_id) {
+    return hasImportPermission(supabase, data.user_id, permissionKey)
+  }
+
+  return false
 }
 
 // ── Image optimization ──────────────────────────────────────────────────────────────────────────────────
