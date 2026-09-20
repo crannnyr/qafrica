@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ShoppingBag, Eye, EyeOff, Loader } from 'lucide-react';
 
 import CONFIG from '@/lib/config';
+import { supabase } from '@/services/supabase';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 export default function ImportAdminLogin() {
@@ -20,17 +21,36 @@ export default function ImportAdminLogin() {
     setError('');
     setIsLoading(true);
     try {
+      // Supabase Auth accounts (including granular Import Admin users) use
+      // their normal Supabase email/password. Legacy Import Manager accounts
+      // continue through the existing custom-session login below.
+      const normalizedEmail = email.trim().toLowerCase();
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+
+      if (!authError && authData.session) {
+        sessionStorage.removeItem('import_manager_token');
+        sessionStorage.removeItem('import_manager');
+        sessionStorage.setItem('import_manager_source', 'supabase-rbac');
+        navigate('/importations/admin');
+        return;
+      }
+
       const res = await fetch(`${EDGE_URL}?action=admin-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
-        setError(data.error ?? 'Invalid credentials');
+        setError(data.error ?? authError?.message ?? 'Invalid credentials');
         return;
       }
-      // Persist token and manager info
+
+      // Persist legacy Import Manager token and manager info.
+      sessionStorage.removeItem('import_manager_source');
       sessionStorage.setItem('import_manager_token', data.token);
       sessionStorage.setItem('import_manager', JSON.stringify(data.manager));
       navigate('/importations/admin');
