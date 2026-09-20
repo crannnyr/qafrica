@@ -7,7 +7,7 @@ import {
   Plus, Trash2, Edit2, Check, ChevronDown, ChevronUp,
   Upload, Loader, TrendingUp, AlertCircle, ExternalLink, X,
   Info, CheckCircle2, Send,
-} from 'lucide-react';
+} from 'lucide-react'; 
 import { compressImage } from '@/lib/imageCompression';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
