@@ -42,7 +42,7 @@ export default function CategoryManager({ token }: Props) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${CATEGORY_EDGE_URL}?action=list`);
+      const res = await fetch(`${CATEGORY_EDGE_URL}?action=list&manager_token=${encodeURIComponent(token)}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not load categories');
       setCategories(data.categories ?? []);
