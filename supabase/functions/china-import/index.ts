@@ -1101,8 +1101,22 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-login') {
       const body = await req.json().catch(() => ({}))
-      const { email, password } = body
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+      const { password } = body
+
+      if (!email || !email.endsWith('@qafrica.store')) {
+        return json({ error: 'Use your @qafrica.store admin email.' }, 403)
+      }
       if (!password) return json({ error: 'Password required' }, 400)
+
+      const { data: manager, error: managerError } = await supabase
+        .from('import_admin_managers')
+        .select('id, email, full_name, is_active')
+        .eq('email', email)
+        .maybeSingle()
+
+      if (managerError) return json({ error: 'Login check failed' }, 500)
+      if (!manager || !manager.is_active) return json({ error: 'Invalid credentials' }, 401)
 
       const { data: creds } = await supabase
         .from('import_admin_credentials')
@@ -1131,11 +1145,18 @@ serve(async (req: Request) => {
 
       const { data: session, error: sessionErr } = await supabase
         .from('import_admin_sessions')
-        .insert({ expires_at: new Date(Date.now() + 24 * 60 * 60_000).toISOString() })
+        .insert({
+          manager_id: manager.id,
+          expires_at: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+        })
         .select('token').single()
       if (sessionErr || !session) return json({ error: 'Login failed — could not create session' }, 500)
 
-      return json({ success: true, token: session.token, manager: { email: email ?? null } })
+      return json({
+        success: true,
+        token: session.token,
+        manager: { email: manager.email, full_name: manager.full_name ?? manager.email },
+      })
     }
 
     if (req.method === 'POST' && action === 'admin-logout') {
