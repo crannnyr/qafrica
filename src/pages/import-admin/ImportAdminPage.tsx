@@ -3032,7 +3032,7 @@ export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
   const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions();
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -3059,9 +3059,10 @@ export default function ImportAdminPage() {
     'pricing-shipping': 'import.pricing_shipping.view',
     'custom-orders': 'import.custom_orders.view',
     categories: 'import.categories.view',
+    'admin-access': 'import.admin_access.view',
   } as const;
 
-  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories'] as const;
+  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access'] as const;
 
   const visibleTabs = isLegacyManager
     ? allTabs
@@ -3163,7 +3164,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
             </button>
           ))}
         </div>
@@ -3197,6 +3198,11 @@ export default function ImportAdminPage() {
           <TimedOutOrdersManager token={token} />
         ) : tab === 'categories' ? (
           <CategoryManager token={token} />
+        ) : tab === 'admin-access' ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-6">
+            <p className="font-bold text-gray-900 text-sm">Admin Access</p>
+            <p className="text-[11px] text-gray-400 mt-1">Import Admin role management will be connected here next.</p>
+          </div>
         ) : tab === 'settings' ? (
           <SettingsManager token={token} />
         ) : tab === 'pricing-shipping' ? (
