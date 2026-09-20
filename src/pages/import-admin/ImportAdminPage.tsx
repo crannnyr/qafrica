@@ -305,73 +305,204 @@ function useImportAuth() {
 }
 
 // ── Divider ───────────────────────────────────────────────────────────────────
-function ImportAdminAccessManager() {
-  const [admins, setAdmins] = useState<Array<{ id: string; full_name: string | null; email: string | null }>>([]);
-  const [roles, setRoles] = useState<Array<{ id: string; name: string; description: string | null }>>([]);
-  const [assignments, setAssignments] = useState<Array<{ user_id: string; role_id: string }>>([]);
+function ImportAdminAccessManager({ token, canManage }: { token: string; canManage: boolean }) {
+  type Role = { id: string; key: string; name: string; description: string | null; is_system: boolean };
+  type Manager = {
+    id: string;
+    email: string;
+    full_name: string | null;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+    roles: Role[];
+  };
+
+  const [managers, setManagers] = useState<Manager[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [{ data: adminRows, error: adminError }, { data: roleRows, error: roleError }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email').eq('role', 'admin').order('full_name'),
-        supabase.from('import_admin_roles').select('id, name, description').order('name'),
-      ]);
-      if (adminError) throw adminError;
-      if (roleError) throw roleError;
-
-      const adminIds = (adminRows ?? []).map(row => row.id);
-      const { data: assignmentRows, error: assignmentError } = adminIds.length
-        ? await supabase.from('import_admin_user_roles').select('user_id, role_id').in('user_id', adminIds)
-        : { data: [], error: null };
-      if (assignmentError) throw assignmentError;
-
-      setAdmins(adminRows ?? []);
-      setRoles(roleRows ?? []);
-      setAssignments(assignmentRows ?? []);
+      const res = await fetch(`${EDGE_URL}?action=admin-list-managers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Could not load Import Managers');
+      }
+      setManagers(data.managers ?? []);
+      setRoles(data.roles ?? []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load Admin Access');
+      setError(e instanceof Error ? e.message : 'Could not load Import Managers');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => { void load(); }, [load]);
 
-  if (loading) return <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">Loading Admin Access…</div>;
+  const assignRole = async (managerId: string, roleId: string) => {
+    if (!roleId || !canManage) return;
+    const key = `assign:${managerId}:${roleId}`;
+    setActing(key);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-assign-manager-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, manager_id: managerId, role_id: roleId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not assign role');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not assign role');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const removeRole = async (managerId: string, roleId: string) => {
+    if (!canManage) return;
+    const key = `remove:${managerId}:${roleId}`;
+    setActing(key);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-remove-manager-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, manager_id: managerId, role_id: roleId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not remove role');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove role');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  if (loading) {
+    return <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">Loading Import Managers…</div>;
+  }
 
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl border border-gray-100 p-5">
-        <p className="font-bold text-gray-900 text-sm">Admin Access</p>
-        <p className="text-[11px] text-gray-400 mt-1">View platform admins and their current Import Admin roles.</p>
-        <button onClick={() => void load()} className="mt-3 text-xs font-semibold text-gray-600 hover:text-gray-900">Refresh</button>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-bold text-gray-900 text-sm">Admin Access</p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              Manage legacy Import Manager identities and their Import Admin roles. Only @qafrica.store managers are supported.
+            </p>
+          </div>
+          <button
+            onClick={() => void load()}
+            className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh
+          </button>
+        </div>
+        {!canManage && (
+          <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2 text-[11px] text-amber-700">
+            You can view manager access, but you do not have permission to change roles.
+          </div>
+        )}
       </div>
-      {error && <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-4 py-3">{error}</div>}
+
+      {error && (
+        <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-4 py-3">
+          {error}
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 text-[10px] font-bold uppercase tracking-wide text-gray-400">Platform Admins</div>
-        {admins.length === 0 ? <div className="p-6 text-sm text-gray-400 text-center">No platform admins found.</div> : (
+        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 text-[10px] font-bold uppercase tracking-wide text-gray-400">
+          Legacy Import Managers
+        </div>
+
+        {managers.length === 0 ? (
+          <div className="p-6 text-sm text-gray-400 text-center">No Import Managers found.</div>
+        ) : (
           <div className="divide-y divide-gray-100">
-            {admins.map(admin => {
-              const assigned = assignments.filter(a => a.user_id === admin.id);
+            {managers.map(manager => {
+              const assignedIds = new Set(manager.roles.map(role => role.id));
+              const availableRoles = roles.filter(role => !assignedIds.has(role.id));
+
               return (
-                <div key={admin.id} className="px-4 py-4">
-                  <p className="text-sm font-semibold text-gray-900">{admin.full_name || admin.email || 'Unnamed admin'}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{admin.email || admin.id}</p>
-                  <div className="flex flex-wrap gap-1.5 mt-3">
-                    {assigned.length ? assigned.map(a => {
-                      const role = roles.find(r => r.id === a.role_id);
-                      return <span key={a.role_id} className="px-2.5 py-1 rounded-lg bg-gray-100 text-[10px] font-semibold text-gray-600">{role?.name || 'Unknown role'}</span>;
-                    }) : <span className="text-[11px] text-gray-400">No Import Admin role assigned</span>}
+                <div key={manager.id} className="px-4 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900">
+                        {manager.full_name || manager.email}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">{manager.email}</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${manager.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                      {manager.is_active ? 'Active' : 'Inactive'}
+                    </span>
                   </div>
+
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {manager.roles.length ? manager.roles.map(role => (
+                      <span key={role.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-[10px] font-semibold text-gray-600">
+                        {role.name}
+                        {canManage && (
+                          <button
+                            type="button"
+                            onClick={() => void removeRole(manager.id, role.id)}
+                            disabled={acting === `remove:${manager.id}:${role.id}`}
+                            className="text-gray-400 hover:text-red-500 disabled:opacity-40"
+                            aria-label={`Remove ${role.name}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </span>
+                    )) : (
+                      <span className="text-[11px] text-red-500">No Import Admin role assigned</span>
+                    )}
+                  </div>
+
+                  {canManage && availableRoles.length > 0 && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <select
+                        defaultValue=""
+                        onChange={e => {
+                          const roleId = e.target.value;
+                          e.target.value = '';
+                          if (roleId) void assignRole(manager.id, roleId);
+                        }}
+                        disabled={acting?.startsWith(`assign:${manager.id}:`) ?? false}
+                        className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+                      >
+                        <option value="">Assign another role…</option>
+                        {availableRoles.map(role => (
+                          <option key={role.id} value={role.id}>{role.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
+      </div>
+
+      <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-[11px] text-blue-700">
+        <p className="font-bold mb-1">Legacy manager authentication</p>
+        <p>
+          Import Admin login is handled by the legacy manager session. This screen does not use Supabase Auth users or the old platform-admin role assignments.
+        </p>
       </div>
     </div>
   );
