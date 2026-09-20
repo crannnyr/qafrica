@@ -12,14 +12,46 @@ const clean = (v: unknown) => typeof v === 'string' ? v.trim() : ''
 const sort = (v: unknown) => Number.isFinite(Number(v)) ? Math.trunc(Number(v)) : 0
 const slugify = (v: string) => v.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 
-async function requireAdmin(db: any, token: unknown) {
+async function hasImportPermission(db: any, userId: string, permissionKey: string): Promise<boolean> {
+  const { data: assignments, error: assignmentsError } = await db
+    .from('import_admin_user_roles')
+    .select('role_id')
+    .eq('user_id', userId)
+  if (assignmentsError) return false
+
+  const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
+  if (roleIds.length === 0) return false
+
+  const { data: rolePermissions, error: rolePermissionsError } = await db
+    .from('import_admin_role_permissions')
+    .select('permission_id')
+    .in('role_id', roleIds)
+  if (rolePermissionsError) return false
+
+  const permissionIds = Array.from(new Set((rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+  if (permissionIds.length === 0) return false
+
+  const { data: permission, error: permissionError } = await db
+    .from('import_admin_permissions')
+    .select('id')
+    .in('id', permissionIds)
+    .eq('key', permissionKey)
+    .limit(1)
+    .maybeSingle()
+
+  return !permissionError && !!permission
+}
+
+async function requireAdmin(db: any, token: unknown, permissionKey?: string) {
   const t = clean(token)
   if (!t) return false
-  const { data, error } = await db.from('import_admin_sessions').select('token')
+  const { data, error } = await db.from('import_admin_sessions').select('token,user_id')
     .eq('token', t).gt('expires_at', new Date().toISOString()).maybeSingle()
   if (error || !data) return false
   await db.from('import_admin_sessions').update({ last_used_at: new Date().toISOString() }).eq('token', t)
-  return true
+  if (!data.user_id) return true
+  if (!permissionKey) return false
+  return hasImportPermission(db, data.user_id, permissionKey)
 }
 
 serve(async (req) => {
@@ -28,6 +60,8 @@ serve(async (req) => {
   const action = new URL(req.url).searchParams.get('action') ?? 'list'
   try {
     if (req.method === 'GET' && action === 'list') {
+      const token = new URL(req.url).searchParams.get('manager_token')
+      if (!(await requireAdmin(db, token, 'import.categories.view'))) return json({ error: 'Unauthorized' }, 401)
       const { data: categories, error: ce } = await db.from('niche_categories')
         .select('id,niche_id,name,sort_order').order('name').order('niche_id').order('sort_order')
       if (ce) return json({ error: ce.message, categories: [] }, 500)
@@ -43,6 +77,8 @@ serve(async (req) => {
     if (!(await requireAdmin(db, body.manager_token))) return json({ error: 'Unauthorized' }, 401)
 
     if (action === 'save-category') {
+      const permission = clean(body.id) ? 'import.categories.update' : 'import.categories.create'
+      if (!(await requireAdmin(db, body.manager_token, permission))) return json({ error: 'Forbidden' }, 403)
       const name = clean(body.name), niche_id = clean(body.niche_id), id = clean(body.id) || slugify(name)
       if (!name || !niche_id || !id) return json({ error: 'Category name, niche_id and a valid category id are required' }, 400)
       const { data, error } = await db.from('niche_categories')
@@ -53,6 +89,8 @@ serve(async (req) => {
     }
 
     if (action === 'save-subcategory') {
+      const permission = clean(body.id) ? 'import.categories.update' : 'import.categories.create'
+      if (!(await requireAdmin(db, body.manager_token, permission))) return json({ error: 'Forbidden' }, 403)
       const name = clean(body.name), category_id = clean(body.category_id), niche_id = clean(body.niche_id)
       const markup_percent = Number(body.markup_percent ?? 0)
       if (!name || !category_id || !niche_id) return json({ error: 'Niche, category and subcategory name are required' }, 400)
@@ -70,6 +108,7 @@ serve(async (req) => {
     }
 
     if (action === 'delete-category') {
+      if (!(await requireAdmin(db, body.manager_token, 'import.categories.delete'))) return json({ error: 'Forbidden' }, 403)
       const id = clean(body.id), niche_id = clean(body.niche_id)
       if (!id || !niche_id) return json({ error: 'Category id and niche_id are required' }, 400)
       const { error } = await db.from('niche_categories').delete().eq('id', id).eq('niche_id', niche_id)
@@ -78,6 +117,7 @@ serve(async (req) => {
     }
 
     if (action === 'delete-subcategory') {
+      if (!(await requireAdmin(db, body.manager_token, 'import.categories.delete'))) return json({ error: 'Forbidden' }, 403)
       const id = clean(body.id)
       if (!id) return json({ error: 'Subcategory id is required' }, 400)
       const { error } = await db.from('niche_subcategories').delete().eq('id', id)
