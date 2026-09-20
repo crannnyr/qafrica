@@ -3269,10 +3269,7 @@ export default function ImportAdminPage() {
         ) : tab === 'categories' ? (
           <CategoryManager token={token} />
         ) : tab === 'admin-access' ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-6">
-            <p className="font-bold text-gray-900 text-sm">Admin Access</p>
-            <p className="text-[11px] text-gray-400 mt-1">Import Admin role management will be connected here next.</p>
-          </div>
+          <ImportAdminAccessManager />
         ) : tab === 'settings' ? (
           <SettingsManager token={token} />
         ) : tab === 'pricing-shipping' ? (
