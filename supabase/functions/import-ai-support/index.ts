@@ -79,7 +79,7 @@ const adminTools = [
 
 async function fetchLegalPage(url:string) {
   const r = await fetch(url, { headers: { 'Accept': 'text/html,text/plain;q=0.9' } });
-  if (!r.ok) throw new Error(`Terms of Service could not be fetched (HTTP ${r.status})`);
+  if (!r.ok) throw new Error('Official policy page could not be fetched');
   const html = await r.text();
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
@@ -94,9 +94,26 @@ async function fetchLegalPage(url:string) {
   return { url, text:text.slice(0,20000) };
 }
 
+async function getImportTerms(s:any) {
+  const {data,error}=await s.from('legal_documents').select('content,updated_at').eq('type','import_terms').maybeSingle();
+  if(error) throw error;
+  if(!data?.content) throw new Error('Current Import Terms are unavailable');
+  const text=String(data.content)
+    .replace(/<script[\s\S]*?<\/script>/gi,' ')
+    .replace(/<style[\s\S]*?<\/style>/gi,' ')
+    .replace(/<[^>]+>/g,' ')
+    .replace(/&nbsp;/gi,' ')
+    .replace(/&amp;/gi,'&')
+    .replace(/&lt;/gi,'<')
+    .replace(/&gt;/gi,'>')
+    .replace(/\s+/g,' ')
+    .trim();
+  return {url:'https://qafrica.store/import-terms',updated_at:data.updated_at,text:text.slice(0,20000)};
+}
+
 async function customerTool(s:any, req:Request, name:string, a:any) {
   if (name === 'get_terms_of_service') return await fetchLegalPage('https://qafrica.store/terms-of-service')
-  if (name === 'get_import_terms') return await fetchLegalPage('https://qafrica.store/import-terms')
+  if (name === 'get_import_terms') return await getImportTerms(s)
   const id = await customerId(s, req)
   if (name === 'get_my_profile') {
     const {data,error}=await s.from('customers').select('id,email,full_name,phone,avatar_url,is_verified,created_at,updated_at,signup_source,username,terms_accepted_at,terms_version,import_default_delivery_mode,import_default_pickup_station_id').eq('id',id).single(); if(error)throw error; return data
