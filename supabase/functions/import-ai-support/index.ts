@@ -189,7 +189,7 @@ async function customerTool(s:any, req:Request, name:string, a:any) {
     return {refunds:data??[]};
   }
   if (name === 'get_my_bills') {
-    const {data,error}=await s.from('china_import_consolidation_bills').select('id,order_id,amount_ngn,reason,kind,bank_account_number,bank_name,bank_account_name,status,line_items,created_at,customer_marked_paid_at,confirmed_paid_at,delivery_estimate_start_at,delivery_estimate_min_at,delivery_estimate_max_at').eq('user_id',id).order('created_at',{ascending:false}).limit(100); if(error)throw error; return {bills:data??[]}
+    const {data,error}=await s.from('china_import_consolidation_bills').select('id,order_id,amount_ngn,reason,kind,bank_account_number,bank_name,bank_account_name,status,line_items,created_at,customer_marked_paid_at,confirmed_paid_at,delivery_estimate_start_at,delivery_estimate_min_at,delivery_estimate_max_at').eq('user_id',id).eq('kind','consolidation_shipping').order('created_at',{ascending:false}).limit(100); if(error)throw error; return {bills:data??[]}
   }
   if (name === 'get_my_addresses') {
     const [{data:addresses,error:ae},{data:defaults,error:de}]=await Promise.all([
