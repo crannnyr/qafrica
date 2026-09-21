@@ -238,8 +238,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   // Paystack / manual selection
   // Paystack remains available only below the configured threshold.
   // At or above the threshold, manual bank transfer is required.
-  const paystackAllowed = total < shippingSettings.paystackManualThresholdNgn;
-  const manualAllowed = manualTransferEnabled;
+  const paystackAllowed = manualTransferEnabled && total < shippingSettings.paystackManualThresholdNgn;
+  const manualAllowed = manualTransferEnabled && total >= shippingSettings.paystackManualThresholdNgn;
 
   useEffect(() => {
     if (!paystackAllowed && manualAllowed && paymentMethod === 'paystack') {
