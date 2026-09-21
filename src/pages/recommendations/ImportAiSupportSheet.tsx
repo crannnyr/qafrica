@@ -51,7 +51,7 @@ export default function ImportAiSupportSheet({
           Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ actor: 'customer', message }),
+        body: JSON.stringify({ actor: 'customer', message, messages }),
       });
 
       const data = await res.json().catch(() => ({}));
