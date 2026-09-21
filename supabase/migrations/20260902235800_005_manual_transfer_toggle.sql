@@ -8,8 +8,8 @@ comment on column import_admin_credentials.manual_transfer_enabled is 'When fals
 
 update import_admin_credentials set manual_transfer_enabled = true where id = 1;
 
--- Normalize the live configured threshold used by import checkout.
--- Paystack is available only below this amount; orders at/above use manual transfer.
+-- Normalize the import checkout threshold to ₦100,000.
+-- Paystack is allowed below the threshold; at or above it, manual transfer is required.
 update import_admin_credentials
 set paystack_manual_threshold_ngn = 100000,
     manual_transfer_enabled = true
