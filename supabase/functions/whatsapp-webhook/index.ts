@@ -85,6 +85,14 @@ async function requestEmailVerification(s:any, conversation:any, email:string) {
 
   // Do not reveal whether the address exists. If it does, issue a code.
   if (customer) {
+    const { count: recentCount, error: rateError } = await s.from('import_ai_whatsapp_verification_codes')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', conversation.id)
+      .gte('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
+    if (rateError) throw rateError
+    if ((recentCount ?? 0) >= 3) {
+      return 'You have requested several verification codes recently. Please wait a little before requesting another code.'
+    }
     await s.from('import_ai_whatsapp_verification_codes')
       .delete().eq('conversation_id', conversation.id).is('consumed_at', null)
 
