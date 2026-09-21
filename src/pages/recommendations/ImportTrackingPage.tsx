@@ -44,8 +44,8 @@ const STAGES = [
   { key: 'ordered', label: 'Order Placed', description: 'Your items have been placed with the supplier.', icon: ShoppingCart, color: 'violet' },
   { key: 'ordered_and_closed', label: 'At Consolidation Warehouse', description: 'Your consolidation & shipping bill has been raised and your order is at the warehouse stage.', icon: Warehouse, color: 'amber' },
   { key: 'shipped_and_closed', label: 'Shipped to Nigeria', description: 'Your shipment has left the consolidation warehouse and is on its way to Nigeria.', icon: PlaneTakeoff, color: 'emerald' },
-  { key: 'clearance_and_closed', label: 'Nigeria Clearance', description: 'Your shipment has arrived in Nigeria and is going through the clearance stage.', icon: ShieldCheck, color: 'orange' },
-  { key: 'received', label: 'Received', description: 'Your order has been received and is ready for the final delivery or pickup step.', icon: PackageCheck, color: 'teal' },
+  { key: 'clearance_and_closed', label: 'Received at QAfrica HQ', description: 'Your shipment has arrived at QAfrica HQ in Nigeria and is being prepared for final delivery or pickup.', icon: ShieldCheck, color: 'orange' },
+  { key: 'received', label: 'Delivered', description: 'Your order has been delivered successfully.', icon: PackageCheck, color: 'teal' },
 ] as const;
 
 const STAGE_CLASSES: Record<string, { dot: string; ring: string; line: string; text: string }> = {
