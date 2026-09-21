@@ -79,14 +79,14 @@ async function getTermsOfService() {
   if (!r.ok) throw new Error(`Terms of Service could not be fetched (HTTP ${r.status})`);
   const html = await r.text();
   const text = html
-    .replace(/<script[\\s\\S]*?<\\/script>/gi, ' ')
-    .replace(/<style[\\s\\S]*?<\\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
-    .replace(/\\s+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
   return { url:'https://qafrica.store/terms-of-service', text:text.slice(0,20000) };
 }
