@@ -7,3 +7,10 @@ alter table import_admin_credentials
 comment on column import_admin_credentials.manual_transfer_enabled is 'When false, manual bank-transfer is blocked at checkout. When true, it is available where the checkout payment rules permit it.';
 
 update import_admin_credentials set manual_transfer_enabled = true where id = 1;
+
+-- Normalize the live configured threshold used by import checkout.
+-- Paystack is available only below this amount; orders at/above use manual transfer.
+update import_admin_credentials
+set paystack_manual_threshold_ngn = 100000,
+    manual_transfer_enabled = true
+where id = 1;
