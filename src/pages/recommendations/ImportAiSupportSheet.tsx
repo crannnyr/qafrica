@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Send, X, Loader2, MessageCircle } from 'lucide-react';
+import { Bot, Send, X, Loader2, MessageCircle, Headset } from 'lucide-react';
 import { supabase } from '@/services';
 import CONFIG from '@/lib/config';
 
 const AI_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-ai-support`;
+const HUMAN_SUPPORT_URL = 'https://wa.me/447404707531?text=Hi%20QAFRICA%20support%2C%20I%20need%20help%20with%20my%20import%20order.';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -132,6 +133,18 @@ export default function ImportAiSupportSheet({
                 </div>
               )}
               <div ref={endRef} />
+            </div>
+
+            <div className="px-3 pt-2 bg-white border-t border-gray-100">
+              <a
+                href={HUMAN_SUPPORT_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-2 text-xs font-semibold"
+              >
+                <Headset className="w-3.5 h-3.5" />
+                Talk to a human on WhatsApp
+              </a>
             </div>
 
             <form
