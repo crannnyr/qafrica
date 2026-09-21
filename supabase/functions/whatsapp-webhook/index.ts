@@ -277,8 +277,18 @@ async function handleText(s:any, waId:string, phone:string, messageId:string, te
   })).filter((m:any) => m.content !== normalized)
 
   const actor = conversation.customer_id ? 'customer' : 'guest'
-  const answer = await callAi(actor, conversation.customer_id, normalized, history)
-  if (!answer) throw new Error('AI returned an empty response')
+  let answer = ''
+  try {
+    answer = await callAi(actor, conversation.customer_id, normalized, history)
+    if (!answer) throw new Error('AI returned an empty response')
+  } catch (error) {
+    console.error('[whatsapp-webhook] AI processing failed', JSON.stringify({
+      conversation_id: conversation.id,
+      stage: 'call-ai',
+      error: error instanceof Error ? error.message : String(error),
+    }))
+    answer = 'I received your message, but QAfrica AI support is temporarily unavailable. Please try again shortly, or reply HUMAN if you want a support agent to take over this WhatsApp conversation.'
+  }
 
   await sendText(phone, answer)
   await s.from('import_ai_whatsapp_messages').insert({
@@ -305,18 +315,23 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
   const raw = await req.text()
+  let stage = 'received'
   try {
+    stage = 'signature'
     if (!(await verifySignature(raw, req.headers.get('x-hub-signature-256')))) {
       return json({ error: 'Invalid webhook signature' }, 401)
     }
+    stage = 'parse'
     const payload = JSON.parse(raw)
     if (payload?.object !== 'whatsapp_business_account') return json({ received: true })
 
+    stage = 'database-client'
     const s = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
+    stage = 'messages'
     for (const entry of payload.entry ?? []) {
       for (const change of entry.changes ?? []) {
         if (change.field !== 'messages') continue
@@ -326,6 +341,7 @@ Deno.serve(async (req: Request) => {
             if (message.from) await sendText(message.from, 'I can currently process text messages. Please send your question as text.')
             continue
           }
+          stage = 'handle-text'
           await handleText(
             s,
             String(message.from),
