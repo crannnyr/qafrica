@@ -61,12 +61,12 @@ export default function ImportAiSupportSheet({
 
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: String(data?.answer || 'I could not find an answer for that yet. Please try another question.').replace(/\*\*(.*?)\*\*/gg, '$1'),
+        content: String(data?.answer || 'I could not find an answer for that yet. Please try another question.').replace(/\*\*(.*?)\*\*/g, '$1'),
       }]);
     } catch (error) {
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: (error instanceof Error ? error.message : 'AI support is temporarily unavailable.').replace(/\*\*(.*?)\*\*/gg, '$1'),
+        content: (error instanceof Error ? error.message : 'AI support is temporarily unavailable.').replace(/\*\*(.*?)\*\*/g, '$1'),
       }]);
     } finally {
       setLoading(false);
