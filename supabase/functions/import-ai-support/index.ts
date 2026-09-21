@@ -252,10 +252,18 @@ async function getImportTerms(s:any) {
   return {url:'https://qafrica.store/import-terms',updated_at:data.updated_at,text:text.slice(0,20000)};
 }
 
-async function customerTool(s:any, req:Request, name:string, a:any) {
+async function customerTool(s:any, req:Request, actor:Actor, name:string, a:any) {
   if (name === 'get_terms_of_service') return await fetchLegalPage('https://qafrica.store/terms-of-service')
   if (name === 'get_import_terms') return await getImportTerms(s)
-  const id = await customerId(s, req)
+  const id = actor === 'customer' ? await customerId(s, req) : null
+  if (actor === 'guest' && name === 'search_products') {
+    const q=clean(a.query,120), limit=Math.min(Math.max(Number(a.limit??8),1),8)
+    let query=s.from('china_import_products').select('id,name,description,image_url,image_urls,price_ngn,category,is_active,has_variants,variants,delivery_time,moq,is_trending,ship_only,volume_cbm,weight_grams,sea_shipping_cost_ngn,flight_shipping_cost_ngn').eq('is_active',true).ilike('name',`%${q}%`).order('is_trending',{ascending:false}).order('sort_order',{ascending:true}).limit(limit)
+    if(a.category) query=query.ilike('category',`%${clean(a.category,80)}%`)
+    const {data,error}=await query
+    if(error) throw error
+    return {products:data??[]}
+  }
   if (name === 'get_my_profile') {
     const {data,error}=await s.from('customers').select('id,email,full_name,phone,avatar_url,is_verified,created_at,updated_at,signup_source,username,terms_accepted_at,terms_version,import_default_delivery_mode,import_default_pickup_station_id').eq('id',id).single(); if(error)throw error; return data
   }
@@ -447,7 +455,7 @@ serve(async(req:Request)=>{
       for(const c of calls){
         let a:any={};try{a=JSON.parse(c.arguments||'{}')}catch{a={}}
         let result:any
-        try{result=actor==='admin'?await adminTool(s,token!,c.name,a):await customerTool(s,req,c.name,a)}catch(e){result={error:e instanceof Error?e.message:'Tool execution failed'}}
+        try{result=actor==='admin'?await adminTool(s,token!,c.name,a):await customerTool(s,req,actor,c.name,a)}catch(e){result={error:e instanceof Error?e.message:'Tool execution failed'}}
         input.push({type:'function_call_output',call_id:c.call_id,output:JSON.stringify(result)})
       }
     }
