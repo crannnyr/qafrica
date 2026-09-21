@@ -441,7 +441,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
           <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6">
             <h3 className="font-bold text-gray-900 mb-1">Cancel order {cancellingOrder.code}</h3>
             <p className="text-xs text-gray-400 mb-4">
-              This removes the order entirely and starts a refund for the customer if it was paid.
+              This keeps the order in your records as cancelled and starts the refund process if it was paid.
             </p>
 
             <div className="flex flex-wrap gap-1.5 mb-3">
