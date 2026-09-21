@@ -1024,9 +1024,34 @@ serve(async (req: Request) => {
       const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
       const totalNgn = subtotalNgn + jumiaFeeNgn + shippingNgn
 
-      const PAYSTACK_MAX_NGN = 50_000
-      if (payment_method === 'paystack' && totalNgn > PAYSTACK_MAX_NGN) {
-        return json({ error: `Orders over ₦${PAYSTACK_MAX_NGN.toLocaleString()} must be paid via manual bank transfer.` }, 409)
+      // Payment threshold: Paystack is available only below the configured
+      // threshold; at or above it, manual bank transfer is required.
+      const { data: paymentSettings, error: paymentSettingsErr } = await supabase
+        .from('import_admin_credentials')
+        .select('paystack_enabled, manual_transfer_enabled, paystack_manual_threshold_ngn')
+        .eq('id', 1).single()
+      if (paymentSettingsErr) return json({ error: 'Could not load payment settings' }, 500)
+
+      const paystackManualThresholdNgn = Number(paymentSettings?.paystack_manual_threshold_ngn ?? 100_000)
+      const paystackEnabled = paymentSettings?.paystack_enabled ?? true
+      const manualTransferEnabled = paymentSettings?.manual_transfer_enabled ?? true
+
+      if (payment_method === 'paystack') {
+        if (!paystackEnabled) {
+          return json({ error: 'Paystack is currently unavailable. Please use manual bank transfer.' }, 409)
+        }
+        if (totalNgn >= paystackManualThresholdNgn) {
+          return json({ error: `Orders of ₦${paystackManualThresholdNgn.toLocaleString()} or more must be paid via manual bank transfer.` }, 409)
+        }
+      }
+
+      if (payment_method === 'manual') {
+        if (!manualTransferEnabled) {
+          return json({ error: 'Manual bank transfer is currently inactive.' }, 409)
+        }
+        if (totalNgn < paystackManualThresholdNgn) {
+          return json({ error: `Manual bank transfer is available for orders of ₦${paystackManualThresholdNgn.toLocaleString()} or more only.` }, 409)
+        }
       }
 
       const itemSignature = (arr: any[]) =>
