@@ -164,7 +164,7 @@ async function getConversation(s: any, waId: string) {
 
 async function callAi(actor:'customer'|'guest', customerId:string|null, message:string, history:any[]) {
   const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/import-ai-support`
-  const secret = Deno.env.get('IMPORT_AI_INTERNAL_SECRET') ?? ''
+  const secret = Deno.env.get('IMPORT_AI_INTERNAL_SECRET') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   if (!secret) throw new Error('IMPORT_AI_INTERNAL_SECRET is not configured')
 
   const response = await fetch(url, {
