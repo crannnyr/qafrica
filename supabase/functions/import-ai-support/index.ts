@@ -58,6 +58,7 @@ const customerTools = [
   { type:'function', name:'get_my_orders', description:'Get only the authenticated customer import orders.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'track_my_order', description:'Track one of the authenticated customer orders by order code.', parameters:{type:'object',properties:{code:{type:'string'}},required:['code'],additionalProperties:false}},
   { type:'function', name:'get_my_bills', description:'Get the authenticated customer consolidation and clearance bills.', parameters:{type:'object',properties:{},additionalProperties:false}},
+  { type:'function', name:'get_my_refunds', description:'Get refund records belonging only to the authenticated customer, including refund status and verified refund details.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'get_my_addresses', description:'Get the authenticated customer import address book and defaults.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'search_products', description:'Search active QAfrica import products. Never expose supplier source URLs.', parameters:{type:'object',properties:{query:{type:'string'},category:{type:'string'},limit:{type:'integer',minimum:1,maximum:8}},required:['query'],additionalProperties:false}},
   { type:'function', name:'submit_product_question', description:'Submit a product question only when the customer explicitly asks to send it to QAfrica support.', parameters:{type:'object',properties:{product_id:{type:'string'},question:{type:'string',maxLength:1000}},required:['product_id','question'],additionalProperties:false}},
@@ -82,6 +83,13 @@ async function customerTool(s:any, req:Request, name:string, a:any) {
   if (name === 'track_my_order') {
     const {data,error}=await s.from('china_import_orders').select('id,code,status,payment_status,payment_method,total_ngn,items,created_at,delivery_mode,pickup_station_name,pickup_station_address,shipping_method,delivery_address,shipped_at,received_at').eq('user_id',id).eq('code',clean(a.code,80)).maybeSingle(); if(error)throw error
     if(!data)return {found:false}; const {data:bill}=await s.from('china_import_consolidation_bills').select('id,status,kind,amount_ngn,delivery_estimate_start_at,delivery_estimate_min_at,delivery_estimate_max_at').eq('user_id',id).eq('order_id',data.id).order('created_at',{ascending:false}).limit(1).maybeSingle(); return {found:true,order:data,latest_bill:bill??null}
+  }
+  if (name === 'get_my_refunds') {
+    const {data,error}=await s.from('china_import_refunds')
+      .select('id,original_order_id,code,total_ngn,cancel_reason,status,cancellation_type,refund_amount_ngn,cancellation_fee_ngn,refund_policy,refund_method,payment_method,payment_reference,bank_details_submitted_at,paid_at,cancelled_at,created_at,paystack_refund_status,paystack_refunded_at,refund_error,billing_bill_id')
+      .eq('user_id',id).order('created_at',{ascending:false}).limit(50);
+    if(error)throw error;
+    return {refunds:data??[]};
   }
   if (name === 'get_my_bills') {
     const {data,error}=await s.from('china_import_consolidation_bills').select('id,order_id,amount_ngn,reason,kind,bank_account_number,bank_name,bank_account_name,status,line_items,created_at,customer_marked_paid_at,confirmed_paid_at,delivery_estimate_start_at,delivery_estimate_min_at,delivery_estimate_max_at').eq('user_id',id).order('created_at',{ascending:false}).limit(100); if(error)throw error; return {bills:data??[]}
@@ -163,7 +171,7 @@ async function openai(key:string,input:any[],tools:any[]) {
 }
 const textOut=(r:any)=>r.output_text??(r.output??[]).filter((x:any)=>x.type==='message').flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('')
 
-function prompt(actor:Actor){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
+function prompt(actor:Actor){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). If a customer uses an ambiguous word such as "reactive" or "reactivate", use the surrounding conversation to understand whether they mean reactivating an order; if still unclear, ask a short clarification instead of guessing a different topic such as materials or chemicals. You currently have read-only support tools: never promise to reactivate, cancel, change, or otherwise modify an order. If asked to reactivate an order, explain that you can check its status and relevant records but cannot reactivate it through this support chat. ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
 
 serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:CORS});if(req.method!=='POST')return json({error:'Method not allowed'},405)
