@@ -1,8 +1,8 @@
 // src/pages/recommendations/RetryPaymentSheet.tsx
 // Opened when a customer taps a "To Pay" order. Shows the exact items on
-// that order (with a link back to each product), and retries payment using
-// the order's ORIGINAL method — never creates a new order, always resumes
-// this exact one.
+// that order (with a link back to each product), and retries payment.
+// Payment routing follows the ₦100,000 threshold: below it uses Paystack;
+// at or above it uses manual bank transfer.
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -42,16 +42,23 @@ export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: 
   const [bank, setBank] = useState<any>(null);
   const [showManualFlow, setShowManualFlow] = useState(false);
 
-  // Only fetch bank details if this order was a manual-transfer order.
+  const useManualTransfer = order.total_ngn >= 100_000;
+  const usePaystack = !useManualTransfer;
+
+  // Fetch bank details only when the order must use manual transfer.
   useEffect(() => {
-    if (order.payment_method !== 'manual') return;
+    if (!useManualTransfer) return;
     fetch(`${EDGE_URL}?action=admin-settings`)
       .then(r => r.json())
       .then(d => setBank(d.settings))
       .catch(() => {});
-  }, [order.payment_method]);
+  }, [useManualTransfer]);
 
   const retryPaystack = async () => {
+    if (!usePaystack) {
+      setError('Orders of ₦100,000 or more must be paid via manual bank transfer.');
+      return;
+    }
     setIsProcessing(true);
     setError('');
     try {
@@ -87,6 +94,9 @@ export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: 
   };
 
   const confirmManualPaid = async () => {
+    if (!useManualTransfer) {
+      throw new Error('Manual bank transfer is available for orders of ₦100,000 or more only.');
+    }
     const res = await fetch(`${EDGE_URL}?action=checkout-mark-paid-claim`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -97,7 +107,7 @@ export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: 
     onPaid();
   };
 
-  if (showManualFlow && bank) {
+  if (showManualFlow && bank && useManualTransfer) {
     return (
       <ManualPaymentFlow
         amountLabel={fmt(order.total_ngn)}
@@ -160,14 +170,14 @@ export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: 
 
         {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
 
-        {order.payment_method === 'paystack' ? (
+        {usePaystack ? (
           <button
             onClick={retryPaystack}
             disabled={isProcessing}
             className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
           >
             {isProcessing && <Loader className="w-4 h-4 animate-spin" />}
-            Retry payment with Paystack
+            Pay with Paystack
           </button>
         ) : (
           <button
