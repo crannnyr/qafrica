@@ -78,14 +78,27 @@ export default function ImportAiSupportSheet({
   return (
     <>
       {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          className="fixed bottom-24 right-4 lg:bottom-6 lg:right-6 z-30 flex items-center gap-2 rounded-full bg-gray-900 text-white px-4 py-3 shadow-xl hover:bg-gray-800 transition-colors"
-          aria-label="Open QAfrica AI support"
-        >
-          <MessageCircle className="w-4 h-4" />
-          <span className="text-xs font-bold">AI Support</span>
-        </button>
+        <div className="fixed bottom-24 right-4 lg:bottom-6 lg:right-6 z-30 flex flex-col items-end gap-2">
+          <button
+            onClick={() => setOpen(true)}
+            className="flex items-center gap-2 rounded-full bg-gray-900 text-white px-4 py-3 shadow-xl hover:bg-gray-800 transition-colors"
+            aria-label="Open QAfrica AI support"
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span className="text-xs font-bold">AI Support</span>
+          </button>
+
+          <a
+            href={WHATSAPP_AI_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 rounded-full border border-green-200 bg-white text-green-700 px-4 py-3 shadow-lg hover:bg-green-50 transition-colors"
+            aria-label="Open QAfrica WhatsApp AI"
+          >
+            <MessageCircle className="w-4 h-4" />
+            <span className="text-xs font-bold">WhatsApp AI</span>
+          </a>
+        </div>
       )}
 
       {open && (
@@ -134,28 +147,6 @@ export default function ImportAiSupportSheet({
                 </div>
               )}
               <div ref={endRef} />
-            </div>
-
-            <div className="px-3 pt-2 bg-white border-t border-gray-100 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <a
-                  href={WHATSAPP_AI_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full rounded-xl border border-green-200 bg-green-50 hover:bg-green-100 text-green-700 px-3 py-2 text-xs font-semibold"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  WhatsApp AI
-                </a>
-                <button
-                  type="button"
-                  onClick={() => document.getElementById('qafrica-ai-support-input')?.focus()}
-                  className="flex items-center justify-center gap-2 w-full rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-2 text-xs font-semibold"
-                >
-                  <Bot className="w-3.5 h-3.5" />
-                  Site AI
-                </button>
-              </div>
             </div>
 
             <form
