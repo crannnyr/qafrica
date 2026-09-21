@@ -29,7 +29,7 @@ const FAQS = [
   },
   {
     q: 'What are the fees involved?',
-    a: 'Your item price already includes our markup. Separately, once your batch closes, you\'ll get a consolidation & shipping bill, and later a clearance fee once the shipment reaches Nigeria and clears customs. Both are shown with a full breakdown in your dashboard before you pay.',
+    a: 'Your item price already includes our markup. Separately, once your batch closes, you\'ll get a consolidation & shipping bill. If any additional charge applies to your order, it will be shown in your dashboard before you pay; there is not a separate customer-facing clearance bill in the current import flow.',
   },
   {
     q: 'What if something goes wrong with my order?',
