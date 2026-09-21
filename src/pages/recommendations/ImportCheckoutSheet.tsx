@@ -21,9 +21,8 @@ import ImportQtyControl from '@/components/ImportQtyControl';
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const STATIONS_REST_URL = `${CONFIG.SUPABASE_URL}/rest/v1/pickup_stations`;
 const SHIPPING_BLOG_SLUG = 'why-shipping-costs-so-much-and-how-we-fix-it';
-// Orders over this amount can't go through Paystack — manual bank transfer
-// only. Mirrors the same cap enforced server-side in checkout-init.
-// const PAYSTACK_MAX_NGN = 50_000;
+// Orders at or above the configured threshold must use manual bank transfer.
+// The same rule is enforced server-side in checkout-init.
 
 interface DeliveryAddress {
   name: string;
@@ -236,13 +235,18 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
   const total = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
 
-  // Paystack & Manual Option
-  const paystackAllowed = total <= shippingSettings.paystackManualThresholdNgn;
-  const manualAllowed = total > shippingSettings.paystackManualThresholdNgn;
-  
+  // Paystack / manual selection
+  // Paystack remains available only below the configured threshold.
+  // At or above the threshold, manual bank transfer is required.
+  const paystackAllowed = total < shippingSettings.paystackManualThresholdNgn;
+  const manualAllowed = manualTransferEnabled || total >= shippingSettings.paystackManualThresholdNgn;
+
   useEffect(() => {
-    if (!paystackAllowed && paymentMethod === 'paystack') setPaymentMethod('manual');
-    if (!manualAllowed && paymentMethod === 'manual') setPaymentMethod('paystack');
+    if (!paystackAllowed && manualAllowed && paymentMethod === 'paystack') {
+      setPaymentMethod('manual');
+    } else if (!manualAllowed && paystackAllowed && paymentMethod === 'manual') {
+      setPaymentMethod('paystack');
+    }
   }, [paystackAllowed, manualAllowed, paymentMethod]);
 
   // Delivery address — only required when delivery === 'to_me'
