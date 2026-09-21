@@ -66,8 +66,12 @@ async function sendText(to: string, body: string) {
   })
   const result = await response.json().catch(() => ({}))
   if (!response.ok) {
-    console.error('[whatsapp-webhook] send failed', JSON.stringify(result))
-    throw new Error('WhatsApp message could not be sent')
+    console.error('[whatsapp-webhook] send failed', JSON.stringify({
+      to,
+      status: response.status,
+      error: result?.error ?? result,
+    }))
+    throw new Error(String(result?.error?.message || 'WhatsApp message could not be sent'))
   }
   return result
 }
@@ -261,10 +265,16 @@ async function handleText(s:any, waId:string, phone:string, messageId:string, te
     return
   }
 
-  await s.from('import_ai_whatsapp_messages').insert({
+  const { error: inboundError } = await s.from('import_ai_whatsapp_messages').insert({
     conversation_id: conversation.id, direction: 'inbound', sender_type: 'customer',
     body: normalized, whatsapp_message_id: messageId,
   })
+  if (inboundError) throw inboundError
+  console.log('[whatsapp-webhook] inbound message recorded', JSON.stringify({
+    conversation_id: conversation.id,
+    wa_id: waId,
+    message_id: messageId,
+  }))
 
   const { data: prior, error: pe } = await s.from('import_ai_whatsapp_messages')
     .select('direction,sender_type,body,created_at')
@@ -318,11 +328,17 @@ Deno.serve(async (req: Request) => {
   let stage = 'received'
   try {
     stage = 'signature'
-    if (!(await verifySignature(raw, req.headers.get('x-hub-signature-256')))) {
+    const signatureValid = await verifySignature(raw, req.headers.get('x-hub-signature-256'))
+    console.log('[whatsapp-webhook] signature', JSON.stringify({ valid: signatureValid }))
+    if (!signatureValid) {
       return json({ error: 'Invalid webhook signature' }, 401)
     }
     stage = 'parse'
     const payload = JSON.parse(raw)
+    console.log('[whatsapp-webhook] payload parsed', JSON.stringify({
+      object: payload?.object,
+      entry_count: Array.isArray(payload?.entry) ? payload.entry.length : 0,
+    }))
     if (payload?.object !== 'whatsapp_business_account') return json({ received: true })
 
     stage = 'database-client'
@@ -342,6 +358,11 @@ Deno.serve(async (req: Request) => {
             continue
           }
           stage = 'handle-text'
+          console.log('[whatsapp-webhook] inbound text received', JSON.stringify({
+            wa_id: String(message.from),
+            message_id: String(message.id ?? ''),
+            text_length: String(message.text?.body ?? '').length,
+          }))
           await handleText(
             s,
             String(message.from),
@@ -355,7 +376,10 @@ Deno.serve(async (req: Request) => {
 
     return json({ received: true })
   } catch (error) {
-    console.error('[whatsapp-webhook]', error)
-    return json({ received: true })
+    console.error('[whatsapp-webhook] processing failed', JSON.stringify({
+      stage,
+      error: error instanceof Error ? error.message : String(error),
+    }))
+    return json({ received: false, error: 'Webhook processing failed', stage }, 500)
   }
 })
