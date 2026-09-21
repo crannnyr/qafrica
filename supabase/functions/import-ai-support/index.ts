@@ -31,7 +31,7 @@ function makeLinkCode() {
 
 async function customerId(s: any, req: Request) {
   const internal = req.headers.get('x-import-ai-internal-secret')
-  const expected = Deno.env.get('IMPORT_AI_INTERNAL_SECRET') ?? ''
+  const expected = Deno.env.get('IMPORT_AI_INTERNAL_SECRET') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   const internalCustomer = req.headers.get('x-import-ai-customer-id')
   if (expected && internal && internal === expected && internalCustomer) {
     const { data, error } = await s.from('customers').select('id').eq('id', internalCustomer).maybeSingle()
@@ -61,6 +61,104 @@ async function createWhatsappLink(s:any, req:Request) {
   })
   if (error) throw error
   return { success:true, code, expires_at:expiresAt, instruction:'Send this code to the QAfrica WhatsApp test number within 10 minutes.' }
+}
+
+async function sendWhatsAppText(to: string, body: string) {
+  const token = Deno.env.get('WHATSAPP_ACCESS_TOKEN') ?? ''
+  const phoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') ?? ''
+  const version = Deno.env.get('WHATSAPP_GRAPH_VERSION') ?? 'v26.0'
+  if (!token || !phoneNumberId) throw new Error('WhatsApp sending credentials are not configured')
+  const response = await fetch(`https://graph.facebook.com/${version}/${phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'text',
+      text: { preview_url: false, body: body.slice(0, 4096) },
+    }),
+  })
+  const result = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error('WhatsApp message could not be sent')
+  return result
+}
+
+async function adminSupportAction(s:any, token:string, action:string, body:any) {
+  if (action === 'list_support_conversations') {
+    await requireAdmin(s, token, 'import.messages.view')
+    const { data, error } = await s.from('import_ai_whatsapp_conversations')
+      .select('id,wa_id,customer_id,status,last_inbound_at,last_outbound_at,created_at,updated_at,customers(id,full_name,email,phone)')
+      .in('status', ['human_requested','human_assigned','human_active'])
+      .order('updated_at', { ascending: false }).limit(100)
+    if (error) throw error
+    return { conversations: data ?? [] }
+  }
+
+  if (action === 'get_support_conversation') {
+    await requireAdmin(s, token, 'import.messages.view')
+    const id = clean(body.conversation_id, 80)
+    if (!id) throw new Error('conversation_id is required')
+    const { data: conversation, error: ce } = await s.from('import_ai_whatsapp_conversations')
+      .select('id,wa_id,customer_id,status,last_inbound_at,last_outbound_at,created_at,updated_at,customers(id,full_name,email,phone)')
+      .eq('id', id).maybeSingle()
+    if (ce) throw ce
+    if (!conversation) throw new Error('Conversation not found')
+    const { data: messages, error: me } = await s.from('import_ai_whatsapp_messages')
+      .select('id,direction,sender_type,body,whatsapp_message_id,created_at')
+      .eq('conversation_id', id).order('created_at', { ascending: true }).limit(200)
+    if (me) throw me
+    return { conversation, messages: messages ?? [] }
+  }
+
+  if (action === 'take_support_conversation') {
+    await requireAdmin(s, token, 'import.messages.send')
+    const id = clean(body.conversation_id, 80)
+    const { data, error } = await s.from('import_ai_whatsapp_conversations')
+      .update({ status: 'human_active', updated_at: new Date().toISOString() })
+      .eq('id', id).in('status', ['human_requested','human_assigned','human_active'])
+      .select('id,status').maybeSingle()
+    if (error) throw error
+    if (!data) throw new Error('Conversation is no longer waiting for human support')
+    return { conversation: data }
+  }
+
+  if (action === 'return_support_to_ai') {
+    await requireAdmin(s, token, 'import.messages.send')
+    const id = clean(body.conversation_id, 80)
+    const { data, error } = await s.from('import_ai_whatsapp_conversations')
+      .update({ status: 'returned_to_ai', updated_at: new Date().toISOString() })
+      .eq('id', id).in('status', ['human_requested','human_assigned','human_active'])
+      .select('id,status').maybeSingle()
+    if (error) throw error
+    if (!data) throw new Error('Conversation is no longer with human support')
+    return { conversation: data }
+  }
+
+  if (action === 'send_human_message') {
+    await requireAdmin(s, token, 'import.messages.send')
+    const id = clean(body.conversation_id, 80)
+    const message = clean(body.message, 4000)
+    if (!id || !message) throw new Error('conversation_id and message are required')
+    const { data: conversation, error: ce } = await s.from('import_ai_whatsapp_conversations')
+      .select('id,wa_id,status').eq('id', id).maybeSingle()
+    if (ce) throw ce
+    if (!conversation) throw new Error('Conversation not found')
+    if (!['human_requested','human_assigned','human_active'].includes(conversation.status)) {
+      throw new Error('Conversation is not currently with human support')
+    }
+    await sendWhatsAppText(conversation.wa_id, message)
+    const { data: saved, error: me } = await s.from('import_ai_whatsapp_messages').insert({
+      conversation_id: id, direction: 'outbound', sender_type: 'human', body: message
+    }).select('id,direction,sender_type,body,created_at').single()
+    if (me) throw me
+    await s.from('import_ai_whatsapp_conversations').update({
+      status: 'human_active', last_outbound_at: new Date().toISOString(), updated_at: new Date().toISOString()
+    }).eq('id', id)
+    return { message: saved }
+  }
+
+  throw new Error('Unknown support action')
 }
 
 async function requireAdmin(s: any, token: unknown, permission: string) {
@@ -319,9 +417,9 @@ serve(async(req:Request)=>{
   const s=createClient(Deno.env.get('SUPABASE_URL')??'',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')??'')
   let body:any;try{body=await req.json()}catch{return json({error:'Invalid JSON body'},400)}
   const actor:Actor=body.actor==='admin'?'admin':'customer'
-  if (body.action === 'create_whatsapp_link') {
-    if (actor !== 'customer') return json({error:'Invalid action'},400)
-    try { return json(await createWhatsappLink(s, req)) } catch(e) { return json({error:e instanceof Error?e.message:'Could not create WhatsApp link'},400) }
+  if (actor === 'admin' && body.action) {
+    try { return json(await adminSupportAction(s, clean(body.manager_token, 500), String(body.action), body)) }
+    catch(e) { return json({error:e instanceof Error?e.message:'Support action failed'},400) }
   }
   const key=Deno.env.get('OPENAI_API_KEY');if(!key)return json({error:'AI support is not configured: OPENAI_API_KEY is missing'},503)
   const message=clean(body.message,4000);if(!message)return json({error:'message is required'},400)
