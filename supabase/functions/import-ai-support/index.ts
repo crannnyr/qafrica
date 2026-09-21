@@ -17,7 +17,28 @@ const bearer = (req: Request) => {
   return h.startsWith('Bearer ') ? h.slice(7) : null
 }
 
+async function sha256(value: string) {
+  const bytes = new TextEncoder().encode(value)
+  const digest = await crypto.subtle.digest('SHA-256', bytes)
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
+function makeLinkCode() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const bytes = crypto.getRandomValues(new Uint8Array(8))
+  return Array.from(bytes, b => alphabet[b % alphabet.length]).join('')
+}
+
 async function customerId(s: any, req: Request) {
+  const internal = req.headers.get('x-import-ai-internal-secret')
+  const expected = Deno.env.get('IMPORT_AI_INTERNAL_SECRET') ?? ''
+  const internalCustomer = req.headers.get('x-import-ai-customer-id')
+  if (expected && internal && internal === expected && internalCustomer) {
+    const { data, error } = await s.from('customers').select('id').eq('id', internalCustomer).maybeSingle()
+    if (error || !data) throw new Error('WhatsApp customer is not an import customer')
+    return data.id
+  }
+
   const token = bearer(req)
   if (!token) throw new Error('Customer authentication required')
   const { data: auth, error } = await s.auth.getUser(token)
@@ -25,6 +46,21 @@ async function customerId(s: any, req: Request) {
   const { data, error: ce } = await s.from('customers').select('id').eq('id', auth.user.id).maybeSingle()
   if (ce || !data) throw new Error('Authenticated user is not an import customer')
   return data.id
+}
+
+async function createWhatsappLink(s:any, req:Request) {
+  const id = await customerId(s, req)
+  const code = makeLinkCode()
+  const codeHash = await sha256(code)
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+  await s.from('import_ai_whatsapp_links').delete().eq('customer_id', id).is('linked_at', null)
+  const { error } = await s.from('import_ai_whatsapp_links').insert({
+    customer_id: id,
+    code_hash: codeHash,
+    expires_at: expiresAt
+  })
+  if (error) throw error
+  return { success:true, code, expires_at:expiresAt, instruction:'Send this code to the QAfrica WhatsApp test number within 10 minutes.' }
 }
 
 async function requireAdmin(s: any, token: unknown, permission: string) {
@@ -276,14 +312,19 @@ async function openai(key:string,input:any[],tools:any[]) {
 }
 const textOut=(r:any)=>r.output_text??(r.output??[]).filter((x:any)=>x.type==='message').flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('')
 
-function prompt(actor:Actor){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). Do not use Markdown bold syntax (double asterisks) in customer-facing answers; write order codes, names, amounts and statuses as normal text. For general QAfrica account/platform rules, use get_terms_of_service. For import-order policy questions such as refunds, cancellations, billing, shipping, delivery, pickup, defects, or damaged items, use get_import_terms and rely on its current text rather than guessing. When counting a customer’s orders or listing their order codes, check both get_my_orders and get_my_failed_orders so expired/removed orders are not omitted. Treat failed/expired records as separate from currently active orders. If the customer asks for “my order code” and there is more than one record, list the codes with their current/expired status instead of arbitrarily choosing one. If a customer uses an ambiguous word such as "reactive" or "reactivate", use the surrounding conversation to understand whether they mean reactivating an order; if still unclear, ask a short clarification instead of guessing a different topic such as materials or chemicals. Ask focused follow-up questions whenever the customer’s request is missing information needed to answer safely or accurately. Use the conversation history before asking for information the customer has already provided. Examples: if a cancellation/refund request has no identifiable order, ask for the order code; if multiple orders could match, ask which order; if a payment problem depends on how they paid, ask whether they used Paystack or manual transfer; if the customer asks for an arrival time but no order can be identified, ask which order. Do not ask a question when the available records already provide enough information to answer. You currently have read-only support tools: never promise to reactivate, cancel, change, or otherwise modify an order. If the customer explicitly asks for a human agent, tell them they can use the "Talk to a human on WhatsApp" option in the AI Support panel; do not claim that you have transferred the chat yourself. If asked to reactivate an order, explain that you can check its status and relevant records but cannot reactivate it through this support chat. For any specific order lifecycle, delivery timing, payment-confirmation, shipping-fee, cancellation/refund, or "where is my order" question, use get_my_order_context with the order code when available; do not rely on generic lifecycle knowledge when customer-specific records exist. Explain the customer-facing tracking stages using the verified stage returned by the tool. A consolidation & shipping bill is the customer-facing post-order bill. Do not tell customers they need a separate clearance bill. If a sea_freight order has no recorded delivery estimate yet, you may explain the general sea-freight window as 60–90 days from ship date, but never turn that general window into a promised arrival date. For expected delivery, prefer the recorded delivery_estimate fields from the bill. The checkout flow states that expected delivery is estimated from the date payment is confirmed and includes the 3-day processing period; use this only as a general explanation when it matches the order context. ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
+function prompt(actor:Actor, channel='website'){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). Do not use Markdown bold syntax (double asterisks) in customer-facing answers; write order codes, names, amounts and statuses as normal text. For general QAfrica account/platform rules, use get_terms_of_service. For import-order policy questions such as refunds, cancellations, billing, shipping, delivery, pickup, defects, or damaged items, use get_import_terms and rely on its current text rather than guessing. When counting a customer’s orders or listing their order codes, check both get_my_orders and get_my_failed_orders so expired/removed orders are not omitted. Treat failed/expired records as separate from currently active orders. If the customer asks for “my order code” and there is more than one record, list the codes with their current/expired status instead of arbitrarily choosing one. If a customer uses an ambiguous word such as "reactive" or "reactivate", use the surrounding conversation to understand whether they mean reactivating an order; if still unclear, ask a short clarification instead of guessing a different topic such as materials or chemicals. Ask focused follow-up questions whenever the customer’s request is missing information needed to answer safely or accurately. Use the conversation history before asking for information the customer has already provided. Examples: if a cancellation/refund request has no identifiable order, ask for the order code; if multiple orders could match, ask which order; if a payment problem depends on how they paid, ask whether they used Paystack or manual transfer; if the customer asks for an arrival time but no order can be identified, ask which order. Do not ask a question when the available records already provide enough information to answer. You currently have read-only support tools: never promise to reactivate, cancel, change, or otherwise modify an order. If the customer explicitly asks for a human agent, tell them they can use the "Talk to a human on WhatsApp" option in the AI Support panel; do not claim that you have transferred the chat yourself. If asked to reactivate an order, explain that you can check its status and relevant records but cannot reactivate it through this support chat. For any specific order lifecycle, delivery timing, payment-confirmation, shipping-fee, cancellation/refund, or "where is my order" question, use get_my_order_context with the order code when available; do not rely on generic lifecycle knowledge when customer-specific records exist. Explain the customer-facing tracking stages using the verified stage returned by the tool. A consolidation & shipping bill is the customer-facing post-order bill. Do not tell customers they need a separate clearance bill. If a sea_freight order has no recorded delivery estimate yet, you may explain the general sea-freight window as 60–90 days from ship date, but never turn that general window into a promised arrival date. For expected delivery, prefer the recorded delivery_estimate fields from the bill. The checkout flow states that expected delivery is estimated from the date payment is confirmed and includes the 3-day processing period; use this only as a general explanation when it matches the order context. ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
 
 serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:CORS});if(req.method!=='POST')return json({error:'Method not allowed'},405)
-  const key=Deno.env.get('OPENAI_API_KEY');if(!key)return json({error:'AI support is not configured: OPENAI_API_KEY is missing'},503)
   const s=createClient(Deno.env.get('SUPABASE_URL')??'',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')??'')
   let body:any;try{body=await req.json()}catch{return json({error:'Invalid JSON body'},400)}
-  const message=clean(body.message,4000);const actor:Actor=body.actor==='admin'?'admin':'customer';if(!message)return json({error:'message is required'},400)
+  const actor:Actor=body.actor==='admin'?'admin':'customer'
+  if (body.action === 'create_whatsapp_link') {
+    if (actor !== 'customer') return json({error:'Invalid action'},400)
+    try { return json(await createWhatsappLink(s, req)) } catch(e) { return json({error:e instanceof Error?e.message:'Could not create WhatsApp link'},400) }
+  }
+  const key=Deno.env.get('OPENAI_API_KEY');if(!key)return json({error:'AI support is not configured: OPENAI_API_KEY is missing'},503)
+  const message=clean(body.message,4000);if(!message)return json({error:'message is required'},400)
   const token=actor==='admin'?clean(body.manager_token,500):null
   const history = Array.isArray(body.messages)
     ? body.messages
@@ -294,7 +335,7 @@ serve(async(req:Request)=>{
   try{
     if(actor==='admin')await requireAdmin(s,token,'import.clients.view')
     const tools=actor==='admin'?adminTools:customerTools
-    let input:any[]=[{role:'system',content:prompt(actor)},...history,{role:'user',content:message}]
+    let input:any[]=[{role:'system',content:prompt(actor, clean(body.channel,40) || 'website')},...history,{role:'user',content:message}]
     for(let turn=0;turn<5;turn++){
       const r=await openai(key,input,tools);const calls=(r.output??[]).filter((x:any)=>x.type==='function_call')
       if(!calls.length)return json({answer:textOut(r),model:MODEL})
