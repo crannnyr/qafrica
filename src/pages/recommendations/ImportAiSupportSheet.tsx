@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Send, X, Loader2, MessageCircle, Headset } from 'lucide-react';
+import { Bot, Send, X, Loader2, MessageCircle } from 'lucide-react';
 import { supabase } from '@/services';
 import CONFIG from '@/lib/config';
 
 const AI_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-ai-support`;
-const HUMAN_SUPPORT_URL = 'https://wa.me/447404707531?text=Hi%20QAFRICA%20support%2C%20I%20need%20help%20with%20my%20import%20order.';
+const WHATSAPP_AI_URL = 'https://wa.me/15551529049?text=Hi%20QAfrica%20AI%2C%20I%20need%20help%20with%20my%20import.';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -19,41 +19,12 @@ export default function ImportAiSupportSheet({
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [linking, setLinking] = useState(false);
-  const [whatsappCode, setWhatsappCode] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const connectWhatsApp = async () => {
-    if (!isAuthenticated || linking) return;
-    setLinking(true);
-    setWhatsappCode(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) throw new Error('Please sign in again.');
-      const res = await fetch(AI_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ actor: 'customer', action: 'create_whatsapp_link' }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Could not create a WhatsApp link code.');
-      setWhatsappCode(String(data.code || ''));
-    } catch (error) {
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: error instanceof Error ? error.message : 'Could not create a WhatsApp link code.',
-      }]);
-    } finally {
-      setLinking(false);
-    }
-  };
 
   const ask = async () => {
     const message = input.trim();
@@ -166,31 +137,25 @@ export default function ImportAiSupportSheet({
             </div>
 
             <div className="px-3 pt-2 bg-white border-t border-gray-100 space-y-2">
-              <button
-                type="button"
-                onClick={() => void connectWhatsApp()}
-                disabled={linking || !isAuthenticated}
-                className="flex items-center justify-center gap-2 w-full rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-2 text-xs font-semibold disabled:opacity-50"
-              >
-                {linking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
-                Connect WhatsApp
-              </button>
-              {whatsappCode && (
-                <div className="rounded-xl border border-orange-200 bg-white px-3 py-2">
-                  <p className="text-[10px] text-gray-500">Send this code to the QAfrica WhatsApp test number within 10 minutes:</p>
-                  <p className="mt-1 text-center text-lg font-black tracking-[0.25em] text-gray-900">{whatsappCode}</p>
-                  <p className="mt-1 text-[10px] text-gray-500 text-center">Send it as: LINK {whatsappCode}</p>
-                </div>
-              )}
-              <a
-                href={HUMAN_SUPPORT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-2 text-xs font-semibold"
-              >
-                <Headset className="w-3.5 h-3.5" />
-                Talk to a human on WhatsApp
-              </a>
+              <div className="grid grid-cols-2 gap-2">
+                <a
+                  href={WHATSAPP_AI_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full rounded-xl border border-green-200 bg-green-50 hover:bg-green-100 text-green-700 px-3 py-2 text-xs font-semibold"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" />
+                  WhatsApp AI
+                </a>
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('qafrica-ai-support-input')?.focus()}
+                  className="flex items-center justify-center gap-2 w-full rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-2 text-xs font-semibold"
+                >
+                  <Bot className="w-3.5 h-3.5" />
+                  Site AI
+                </button>
+              </div>
             </div>
 
             <form
@@ -209,6 +174,7 @@ export default function ImportAiSupportSheet({
                 placeholder={isAuthenticated ? 'Ask about your import…' : 'Sign in to use AI support'}
                 rows={1}
                 maxLength={4000}
+                id="qafrica-ai-support-input"
                 className="flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-xs outline-none focus:border-gray-400"
               />
               <button
