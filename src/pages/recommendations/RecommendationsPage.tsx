@@ -17,6 +17,7 @@ import PriceBandRow from './PriceBandRow';
 import DailyPromoModal from './DailyPromoModal';
 import ImportAuthSheet from './ImportAuthSheet';
 import ImportCheckoutSheet from './ImportCheckoutSheet';
+import ImportAiSupportSheet from './ImportAiSupportSheet';
 import ImportQtyControl from '@/components/ImportQtyControl';
 import OpticsviewMergerNotice from './OpticsviewMergerNotice';
 
@@ -783,6 +784,8 @@ export default function RecommendationsPage() {
           />
         )}
       </AnimatePresence>
+      <ImportAiSupportSheet isAuthenticated={isAuthenticated} onRequireAuth={() => setShowAuth(true)} />
+
     </div>
   );
 }
