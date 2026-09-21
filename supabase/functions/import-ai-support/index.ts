@@ -54,7 +54,8 @@ async function requireAdmin(s: any, token: unknown, permission: string) {
 }
 
 const customerTools = [
-  { type:'function', name:'get_terms_of_service', description:'Fetch QAfrica’s current official Terms of Service from https://qafrica.store/terms-of-service. Use this for questions about account terms, ordering terms, cancellations, refunds, customer responsibilities, or other policy language. This tool only reads the fixed official URL.', parameters:{type:'object',properties:{},additionalProperties:false}},
+  { type:'function', name:'get_terms_of_service', description:'Fetch QAfrica’s current general Terms of Service from https://qafrica.store/terms-of-service. Use this for general account/platform terms. This tool only reads the fixed official URL.', parameters:{type:'object',properties:{},additionalProperties:false}},
+  { type:'function', name:'get_import_terms', description:'Fetch QAfrica’s current Import Terms & Conditions from https://qafrica.store/import-terms. Use this for import-order questions about cancellations, refunds, billing stages, shipping timelines, delivery, pickup, defects, damaged items, or customer responsibilities. This tool only reads the fixed official URL.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'get_my_profile', description:'Get the authenticated import customer profile.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'get_my_orders', description:'Get only the authenticated customer import orders.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'track_my_order', description:'Track one of the authenticated customer orders by order code.', parameters:{type:'object',properties:{code:{type:'string'}},required:['code'],additionalProperties:false}},
@@ -65,7 +66,8 @@ const customerTools = [
   { type:'function', name:'submit_product_question', description:'Submit a product question only when the customer explicitly asks to send it to QAfrica support.', parameters:{type:'object',properties:{product_id:{type:'string'},question:{type:'string',maxLength:1000}},required:['product_id','question'],additionalProperties:false}},
 ]
 const adminTools = [
-  { type:'function', name:'get_terms_of_service', description:'Fetch QAfrica’s current official Terms of Service from https://qafrica.store/terms-of-service. Use this for questions about account terms, ordering terms, cancellations, refunds, customer responsibilities, or other policy language. This tool only reads the fixed official URL.', parameters:{type:'object',properties:{},additionalProperties:false}},
+  { type:'function', name:'get_terms_of_service', description:'Fetch QAfrica’s current general Terms of Service from https://qafrica.store/terms-of-service. Use this for general account/platform terms. This tool only reads the fixed official URL.', parameters:{type:'object',properties:{},additionalProperties:false}},
+  { type:'function', name:'get_import_terms', description:'Fetch QAfrica’s current Import Terms & Conditions from https://qafrica.store/import-terms. Use this for import-order questions about cancellations, refunds, billing stages, shipping timelines, delivery, pickup, defects, damaged items, or customer responsibilities. This tool only reads the fixed official URL.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'search_customers', description:'Search import customers and their order summary. Requires import.clients.view.', parameters:{type:'object',properties:{search:{type:'string'},limit:{type:'integer',minimum:1,maximum:25}},additionalProperties:false}},
   { type:'function', name:'get_customer_detail', description:'Get one import customer, orders, bills and failed orders. Requires import.clients.view.', parameters:{type:'object',properties:{customer_id:{type:'string'}},required:['customer_id'],additionalProperties:false}},
   { type:'function', name:'get_import_analytics', description:'Get the existing import analytics RPC output. Requires import.analytics.view.', parameters:{type:'object',properties:{date_from:{type:'string'},date_to:{type:'string'}},additionalProperties:false}},
@@ -74,8 +76,8 @@ const adminTools = [
   { type:'function', name:'get_failed_orders', description:'List unrecovered timed-out import orders. Requires import.timed_out.view.', parameters:{type:'object',properties:{search:{type:'string'},limit:{type:'integer',minimum:1,maximum:50}},additionalProperties:false}},
 ]
 
-async function getTermsOfService() {
-  const r = await fetch('https://qafrica.store/terms-of-service', { headers: { 'Accept': 'text/html,text/plain;q=0.9' } });
+async function fetchLegalPage(url:string) {
+  const r = await fetch(url, { headers: { 'Accept': 'text/html,text/plain;q=0.9' } });
   if (!r.ok) throw new Error(`Terms of Service could not be fetched (HTTP ${r.status})`);
   const html = await r.text();
   const text = html
@@ -88,11 +90,12 @@ async function getTermsOfService() {
     .replace(/&gt;/gi, '>')
     .replace(/\s+/g, ' ')
     .trim();
-  return { url:'https://qafrica.store/terms-of-service', text:text.slice(0,20000) };
+  return { url, text:text.slice(0,20000) };
 }
 
 async function customerTool(s:any, req:Request, name:string, a:any) {
-  if (name === 'get_terms_of_service') return await getTermsOfService()
+  if (name === 'get_terms_of_service') return await fetchLegalPage('https://qafrica.store/terms-of-service')
+  if (name === 'get_import_terms') return await fetchLegalPage('https://qafrica.store/import-terms')
   const id = await customerId(s, req)
   if (name === 'get_my_profile') {
     const {data,error}=await s.from('customers').select('id,email,full_name,phone,avatar_url,is_verified,created_at,updated_at,signup_source,username,terms_accepted_at,terms_version,import_default_delivery_mode,import_default_pickup_station_id').eq('id',id).single(); if(error)throw error; return data
@@ -135,7 +138,8 @@ async function customerTool(s:any, req:Request, name:string, a:any) {
 }
 
 async function adminTool(s:any, token:string, name:string, a:any) {
-  if (name === 'get_terms_of_service') return await getTermsOfService()
+  if (name === 'get_terms_of_service') return await fetchLegalPage('https://qafrica.store/terms-of-service')
+  if (name === 'get_import_terms') return await fetchLegalPage('https://qafrica.store/import-terms')
   if(name==='search_customers'){
     await requireAdmin(s,token,'import.clients.view'); const search=clean(a.search,120),limit=Math.min(Math.max(Number(a.limit??25),1),25)
     let q=s.from('customers').select('id,full_name,email,phone,avatar_url,created_at').eq('signup_source','importation').order('created_at',{ascending:false}).limit(limit)
@@ -192,7 +196,7 @@ async function openai(key:string,input:any[],tools:any[]) {
 }
 const textOut=(r:any)=>r.output_text??(r.output??[]).filter((x:any)=>x.type==='message').flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('')
 
-function prompt(actor:Actor){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). Do not use Markdown bold syntax (double asterisks) in customer-facing answers; write order codes, names, amounts and statuses as normal text. When a question concerns QAfrica rules or policy, use get_terms_of_service and rely on its current text rather than guessing. If a customer uses an ambiguous word such as "reactive" or "reactivate", use the surrounding conversation to understand whether they mean reactivating an order; if still unclear, ask a short clarification instead of guessing a different topic such as materials or chemicals. You currently have read-only support tools: never promise to reactivate, cancel, change, or otherwise modify an order. If asked to reactivate an order, explain that you can check its status and relevant records but cannot reactivate it through this support chat. ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
+function prompt(actor:Actor){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). Do not use Markdown bold syntax (double asterisks) in customer-facing answers; write order codes, names, amounts and statuses as normal text. For general QAfrica account/platform rules, use get_terms_of_service. For import-order policy questions such as refunds, cancellations, billing, shipping, delivery, pickup, defects, or damaged items, use get_import_terms and rely on its current text rather than guessing. If a customer uses an ambiguous word such as "reactive" or "reactivate", use the surrounding conversation to understand whether they mean reactivating an order; if still unclear, ask a short clarification instead of guessing a different topic such as materials or chemicals. You currently have read-only support tools: never promise to reactivate, cancel, change, or otherwise modify an order. If asked to reactivate an order, explain that you can check its status and relevant records but cannot reactivate it through this support chat. ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
 
 serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:CORS});if(req.method!=='POST')return json({error:'Method not allowed'},405)
