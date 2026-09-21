@@ -13,9 +13,10 @@ import ImportForgotPasswordSheet from './ImportForgotPasswordSheet';
 
 const IMPORT_TERMS_VERSION = '2026-08-30';
 
-export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const { login, signup } = useCustomerAuthStore();
-  const [mode, setMode] = useState<'signup' | 'login'>('signup');
+export default function ImportAuthSheet({ onClose, onSuccess, oauthCompleting = false }: { onClose: () => void; onSuccess: () => void; oauthCompleting?: boolean }) {
+  const { login, loginWithGoogle, signup, customer, updateProfile } = useCustomerAuthStore();
+  const [mode, setMode] = useState<'signup' | 'login'>(oauthCompleting ? 'signup' : 'signup');
+  const [isCompletingOAuth, setIsCompletingOAuth] = useState(oauthCompleting);
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
@@ -26,6 +27,17 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+  useEffect(() => {
+    if (oauthCompleting && customer) {
+      setIsCompletingOAuth(true);
+      setFullName(customer.full_name || '');
+      setEmail(customer.email || '');
+      setPhone(customer.phone || '');
+      setUsername(customer.username || '');
+      setAgreedToTerms(!!customer.terms_accepted_at);
+    }
+  }, [oauthCompleting, customer]);
   const usernameCheckTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -48,6 +60,38 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isCompletingOAuth) {
+      if (!fullName || !username || !phone) {
+        toast.error('Please complete your name, username and phone number');
+        return;
+      }
+      if (usernameStatus === 'taken' || usernameStatus === 'invalid') {
+        toast.error(usernameStatus === 'taken' ? 'That username is already taken' : 'Please enter a valid username');
+        return;
+      }
+      if (!agreedToTerms) {
+        toast.error('Please agree to the Import Terms & Conditions to continue');
+        return;
+      }
+      setIsLoading(true);
+      const result = await updateProfile({
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        username: username.trim(),
+        signup_source: 'importation',
+        terms_accepted_at: new Date().toISOString(),
+        terms_version: IMPORT_TERMS_VERSION,
+      });
+      setIsLoading(false);
+      if (result.success) {
+        localStorage.removeItem('qafrica_import_oauth_intent');
+        toast.success('Account completed — welcome to QAFRICA Import!');
+        onSuccess();
+      } else {
+        toast.error(result.error || 'Could not complete your account');
+      }
+      return;
+    }
     if (!email || !password || (mode === 'signup' && (!fullName || !username))) {
       toast.error('Please fill in all required fields');
       return;
@@ -105,25 +149,25 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
       >
         <div className="flex items-center justify-between mb-1">
           <h2 className="font-bold text-gray-900 text-lg">
-            {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+            {isCompletingOAuth ? 'Complete your account' : mode === 'signup' ? 'Create your account' : 'Welcome back'}
           </h2>
           <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
         <p className="text-gray-400 text-xs mb-5">
-          {mode === 'signup' ? 'Sign up to check out — takes under a minute.' : 'Sign in to continue checkout.'}
+          {isCompletingOAuth ? 'Just a few details are needed before you can continue.' : mode === 'signup' ? 'Sign up to check out — takes under a minute.' : 'Sign in to continue checkout.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          {mode === 'signup' && (
+          {(mode === 'signup' || isCompletingOAuth) && (
             <input
               type="text" placeholder="Full name" value={fullName}
               onChange={e => setFullName(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none"
             />
           )}
-          {mode === 'signup' && (
+          {(mode === 'signup' || isCompletingOAuth) && (
             <div className="relative">
               <input
                 type="text" placeholder="Username" value={username}
@@ -143,19 +187,19 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
               )}
             </div>
           )}
-          <input
+          {!isCompletingOAuth && <input
             type="email" placeholder="Email address" value={email}
             onChange={e => setEmail(e.target.value)}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none"
-          />
-          {mode === 'signup' && (
+          />}
+          {(mode === 'signup' || isCompletingOAuth) && (
             <input
               type="tel" placeholder="Phone number" value={phone}
               onChange={e => setPhone(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none"
             />
           )}
-          <div className="relative">
+          {!isCompletingOAuth && <div className="relative">
             <input
               type={showPassword ? 'text' : 'password'} placeholder="Password" value={password}
               onChange={e => setPassword(e.target.value)}
@@ -164,9 +208,9 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
             <button type="button" onClick={() => setShowPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
-          </div>
+          </div>}
 
-          {mode === 'login' && (
+          {mode === 'login' && !isCompletingOAuth && (
             <button
               type="button"
               onClick={() => setShowForgotPassword(true)}
@@ -176,7 +220,7 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
             </button>
           )}
 
-          {mode === 'signup' && (
+          {(mode === 'signup' || isCompletingOAuth) && (
             <label className="flex items-start gap-2.5 pt-1 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -201,22 +245,48 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
             type="submit"
             disabled={
               isLoading ||
-              (mode === 'signup' && (!agreedToTerms || usernameStatus === 'taken' || usernameStatus === 'invalid'))
+              ((mode === 'signup' || isCompletingOAuth) && (!agreedToTerms || usernameStatus === 'taken' || usernameStatus === 'invalid'))
             }
             className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
           >
             {isLoading && <Loader className="w-4 h-4 animate-spin" />}
-            {mode === 'signup' ? 'Create account & continue' : 'Sign in & continue'}
+            {isCompletingOAuth ? 'Complete account & continue' : mode === 'signup' ? 'Create account & continue' : 'Sign in & continue'}
           </button>
         </form>
 
-        <button
+        {!isCompletingOAuth && <button
           onClick={() => setMode(m => (m === 'signup' ? 'login' : 'signup'))}
           className="w-full text-center text-xs text-gray-400 font-medium mt-4"
         >
           {mode === 'signup' ? 'Already have an account? ' : "Don't have an account? "}
           <span className="text-orange-500 font-semibold">{mode === 'signup' ? 'Sign in' : 'Sign up'}</span>
-        </button>
+        </button>}
+
+        {!isCompletingOAuth && (
+          <>
+            <div className="flex items-center gap-3 my-4">
+              <div className="h-px bg-gray-100 flex-1" />
+              <span className="text-[10px] text-gray-300 font-medium">OR</span>
+              <div className="h-px bg-gray-100 flex-1" />
+            </div>
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={async () => {
+                setIsLoading(true);
+                const result = await loginWithGoogle('/recommendations');
+                if (!result.success) {
+                  setIsLoading(false);
+                  toast.error(result.error || 'Google sign-in failed');
+                }
+              }}
+              className="w-full py-3 border border-gray-200 hover:bg-gray-50 disabled:opacity-40 text-gray-700 font-semibold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              <span className="font-bold text-base">G</span>
+              Continue with Google
+            </button>
+          </>
+        )}
       </motion.div>
 
       {showForgotPassword && (

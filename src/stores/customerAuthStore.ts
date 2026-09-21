@@ -14,6 +14,7 @@ interface CustomerAuthState {
   // Actions
   setCustomer: (customer: Customer | null) => void;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  loginWithGoogle: (redirectPath?: string) => Promise<{ success: boolean; error?: string }>;
   signup: (
     email: string,
     password: string,
@@ -104,6 +105,34 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
           return { success: false, error: 'Login failed' };
         } catch (err) {
           const message = err instanceof Error ? err.message : 'Login failed';
+          set({ isLoading: false, error: message });
+          return { success: false, error: message };
+        }
+      },
+
+      loginWithGoogle: async (redirectPath = '/recommendations') => {
+        set({ isLoading: true, error: null });
+        try {
+          // Preserve the import checkout intent across the OAuth redirect.
+          localStorage.setItem('qafrica_import_oauth_intent', '1');
+
+          const redirectTo = `${window.location.origin}${redirectPath}?oauth=google`;
+          const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: { redirectTo },
+          });
+
+          if (error) {
+            localStorage.removeItem('qafrica_import_oauth_intent');
+            set({ isLoading: false, error: error.message });
+            return { success: false, error: error.message };
+          }
+
+          // Browser redirects to Google; this normally never executes.
+          return { success: true };
+        } catch (err) {
+          localStorage.removeItem('qafrica_import_oauth_intent');
+          const message = err instanceof Error ? err.message : 'Google sign-in failed';
           set({ isLoading: false, error: message });
           return { success: false, error: message };
         }

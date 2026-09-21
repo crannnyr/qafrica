@@ -367,7 +367,7 @@ function ProductCard({
 export default function RecommendationsPage() {
   useImportPwaManifest();
   const navigate = useNavigate();
-  const { customer, isAuthenticated, logout } = useCustomerAuthStore();
+  const { customer, isAuthenticated, logout, fetchProfile } = useCustomerAuthStore();
   const { isSaved, toggleSave } = useSavedItems();
 
   const [products, setProducts] = useState<ImportProduct[]>([]);
@@ -391,8 +391,43 @@ export default function RecommendationsPage() {
   const storeSetQuantity = useImportCartStore(s => s.setQuantity);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [oauthCompleting, setOauthCompleting] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [usdRate, setUsdRate] = useState(0);
+
+  // Resume the recommendations checkout flow after Google redirects back.
+  // Supabase restores the browser session automatically; fetch the customer row
+  // and either continue checkout or collect the import-specific fields that
+  // Google cannot provide (username, phone and explicit terms acceptance).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('oauth') !== 'google' || localStorage.getItem('qafrica_import_oauth_intent') !== '1') return;
+
+    const finishGoogleAuth = async () => {
+      await fetchProfile();
+      const state = useCustomerAuthStore.getState();
+      const currentCustomer = state.customer;
+
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
+
+      if (!currentCustomer) {
+        localStorage.removeItem('qafrica_import_oauth_intent');
+        return;
+      }
+
+      const profileComplete = !!currentCustomer.username && !!currentCustomer.phone && !!currentCustomer.terms_accepted_at;
+      if (!profileComplete) {
+        setOauthCompleting(true);
+        setShowAuth(true);
+        return;
+      }
+
+      localStorage.removeItem('qafrica_import_oauth_intent');
+      if (state.isAuthenticated && cart.length > 0) setShowCheckout(true);
+    };
+
+    finishGoogleAuth();
+  }, [fetchProfile, cart.length]);
 
   // Cart is now shared via useImportCartStore, so it stays in sync with the
   // product detail page automatically — no more passing it through router
@@ -766,8 +801,9 @@ export default function RecommendationsPage() {
       <AnimatePresence>
         {showAuth && (
           <ImportAuthSheet
-            onClose={() => setShowAuth(false)}
-            onSuccess={() => { setShowAuth(false); if (cartCount > 0) setShowCheckout(true); }}
+            oauthCompleting={oauthCompleting}
+            onClose={() => { setShowAuth(false); setOauthCompleting(false); }}
+            onSuccess={() => { setShowAuth(false); setOauthCompleting(false); if (cartCount > 0) setShowCheckout(true); }}
           />
         )}
       </AnimatePresence>
