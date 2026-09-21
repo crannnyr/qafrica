@@ -79,6 +79,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const seaOnlyItems = cart.filter(i => i.ship_only);
   const forcedSeaFreight = cart.length === 1 && seaOnlyItems.length > 0;
   const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'manual'>('paystack');
+  const [paystackEnabled, setPaystackEnabled] = useState(true);
   const [manualTransferEnabled, setManualTransferEnabled] = useState(true);
   const [whatsapp, setWhatsapp] = useState(customer.phone ?? '');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -130,6 +131,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       .then(res => res.json())
       .then(data => {
         if (!data.settings) return;
+        if (typeof data.settings.paystack_enabled === 'boolean') {
+          setPaystackEnabled(data.settings.paystack_enabled);
+        }
         if (typeof data.settings.manual_transfer_enabled === 'boolean') {
           setManualTransferEnabled(data.settings.manual_transfer_enabled);
           if (!data.settings.manual_transfer_enabled) setPaymentMethod('paystack');
@@ -238,7 +242,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   // Paystack / manual selection
   // Paystack remains available only below the configured threshold.
   // At or above the threshold, manual bank transfer is required.
-  const paystackAllowed = manualTransferEnabled && total < shippingSettings.paystackManualThresholdNgn;
+  const paystackAllowed = paystackEnabled && total < shippingSettings.paystackManualThresholdNgn;
   const manualAllowed = manualTransferEnabled && total >= shippingSettings.paystackManualThresholdNgn;
 
   useEffect(() => {
@@ -1020,8 +1024,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
               </div>
             </button>
             <button
+              disabled={!manualAllowed}
               onClick={() => {
-                if (!manualTransferEnabled) return;
+                if (!manualTransferEnabled || !manualAllowed) return;
                 if (!manualAllowed) {
                   setError(`Manual bank transfer isn't available for orders under ${fmt(shippingSettings.paystackManualThresholdNgn)}. Please pay with card instead.`);
                   return;
