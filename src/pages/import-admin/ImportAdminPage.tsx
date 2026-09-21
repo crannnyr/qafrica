@@ -62,7 +62,7 @@ interface ImportOrder {
   jumia_fee_ngn: number;
   shipping_ngn: number | null;
   total_ngn: number;
-  status: 'pending' | 'confirmed' | 'billed' | 'to_review';
+  status: 'pending' | 'confirmed' | 'billed' | 'to_review' | 'cancelled' | 'refunded';
   payment_status: 'unpaid' | 'awaiting_confirmation' | 'paid' | 'failed';
   payment_method: 'paystack' | 'manual' | null;
   manual_sender_name?: string | null;
@@ -187,6 +187,8 @@ const STATUS_LABELS: Record<string, string> = {
   confirmed: 'Confirmed',
   billed: 'Billed — fee due',
   to_review: 'To Review',
+  cancelled: 'Cancelled',
+  refunded: 'Refunded',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -194,6 +196,8 @@ const STATUS_COLORS: Record<string, string> = {
   confirmed: 'bg-sky-50 text-sky-700',
   billed: 'bg-rose-50 text-rose-700',
   to_review: 'bg-emerald-50 text-emerald-700',
+  cancelled: 'bg-gray-100 text-gray-500',
+  refunded: 'bg-blue-50 text-blue-700',
 };
 
 // Simplified pipeline: pending -> confirmed -> billed -> to_review. Folded
