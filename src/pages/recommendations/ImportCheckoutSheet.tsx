@@ -407,18 +407,6 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     );
   };
 
-  // const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
-  // const jumiaFee = delivery === 'to_qafrica' ? cart.reduce((s, i) => s + 200 * i.quantity, 0) : 0;
-  // const total = subtotal + jumiaFee;
-  // const paystackAllowed = total <= PAYSTACK_MAX_NGN;
-
-  // Orders over the Paystack cap must go manual — force the switch (and
-  // back, if the cart shrinks below the cap again) rather than leaving the
-  // customer stuck on a now-disabled option.
-  // useEffect(() => {
-  //   if (!paystackAllowed && paymentMethod === 'paystack') setPaymentMethod('manual');
-  //}, [paystackAllowed, paymentMethod]);
-
   const addressComplete = deliveryMode === 'pickup_station'
   ? !!(address.name.trim() && address.phone.trim() && selectedStationId)
   : (address.name.trim() && address.phone.trim() && address.address_line1.trim() &&
