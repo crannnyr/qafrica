@@ -196,7 +196,13 @@ async function adminTool(s:any, token:string, name:string, a:any) {
 
 async function openai(key:string,input:any[],tools:any[]) {
   const r=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model:MODEL,input,tools})})
-  const b=await r.json();if(!r.ok)throw new Error(b?.error?.message??'OpenAI request failed');return b
+  const b=await r.json().catch(()=>({}))
+  if(!r.ok){
+    if(r.status===429) throw new Error('AI support is temporarily at its usage limit. Please try again later.')
+    if(r.status===401||r.status===403) throw new Error('AI support is temporarily unavailable. Please try again later.')
+    throw new Error('AI support is temporarily unavailable. Please try again later.')
+  }
+  return b
 }
 const textOut=(r:any)=>r.output_text??(r.output??[]).filter((x:any)=>x.type==='message').flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('')
 
