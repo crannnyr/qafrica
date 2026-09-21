@@ -60,7 +60,8 @@ const customerTools = [
   { type:'function', name:'get_my_orders', description:'Get authenticated customer import orders that currently exist in china_import_orders.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'get_my_failed_orders', description:'Get authenticated customer import orders that expired or were removed after payment confirmation timed out. These are the same expired/removed orders shown in the customer dashboard. Use this when the customer asks how many orders they have, asks for all order codes, or asks about an expired/removed order.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'track_my_order', description:'Track one of the authenticated customer orders by order code.', parameters:{type:'object',properties:{code:{type:'string'}},required:['code'],additionalProperties:false}},
-  { type:'function', name:'get_my_bills', description:'Get the authenticated customer consolidation and clearance bills.', parameters:{type:'object',properties:{},additionalProperties:false}},
+  { type:'function', name:'get_my_order_context', description:'Get the complete customer-safe lifecycle context for one authenticated order: current customer-facing stage, payment state, shipping method, key timestamps, the customer-facing consolidation & shipping bill and its recorded delivery estimate, plus matching refund or expired-order records. Use this for questions about where an order is, what happens next, when it should arrive, whether payment was confirmed, shipping fees, cancellation/refund status, or a specific order code.', parameters:{type:'object',properties:{code:{type:'string'}},required:['code'],additionalProperties:false}},
+  { type:'function', name:'get_my_bills', description:'Get the authenticated customer consolidation & shipping bills. Do not treat internal clearance records as a separate customer-facing bill.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'get_my_refunds', description:'Get refund records belonging only to the authenticated customer, including refund status and verified refund details.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'get_my_addresses', description:'Get the authenticated customer import address book and defaults.', parameters:{type:'object',properties:{},additionalProperties:false}},
   { type:'function', name:'search_products', description:'Search active QAfrica import products. Never expose supplier source URLs.', parameters:{type:'object',properties:{query:{type:'string'},category:{type:'string'},limit:{type:'integer',minimum:1,maximum:8}},required:['query'],additionalProperties:false}},
@@ -127,6 +128,58 @@ async function customerTool(s:any, req:Request, name:string, a:any) {
   if (name === 'track_my_order') {
     const {data,error}=await s.from('china_import_orders').select('id,code,status,payment_status,payment_method,total_ngn,items,created_at,delivery_mode,pickup_station_name,pickup_station_address,shipping_method,delivery_address,shipped_at,received_at').eq('user_id',id).eq('code',clean(a.code,80)).maybeSingle(); if(error)throw error
     if(!data)return {found:false}; const {data:bill}=await s.from('china_import_consolidation_bills').select('id,status,kind,amount_ngn,delivery_estimate_start_at,delivery_estimate_min_at,delivery_estimate_max_at').eq('user_id',id).eq('order_id',data.id).order('created_at',{ascending:false}).limit(1).maybeSingle(); return {found:true,order:data,latest_bill:bill??null}
+  }
+  if (name === 'get_my_order_context') {
+    const code = clean(a.code, 80);
+    const {data:order,error} = await s.from('china_import_orders')
+      .select('id,code,status,payment_status,payment_method,total_ngn,items,created_at,paid_at,staged_at,shipped_at,received_at,delivery_mode,pickup_station_name,pickup_station_address,shipping_method,delivery_address,prepaid_shipping_ngn,restored_at,restored_from_failed_order_id')
+      .eq('user_id',id).eq('code',code).maybeSingle();
+    if(error) throw error;
+    if(!order) {
+      const {data:failed,error:fe}=await s.from('china_import_failed_orders')
+        .select('id,code,items,total_ngn,delivery_type,order_created_at,failed_at,restored_at,restored_order_id')
+        .eq('user_id',id).eq('code',code).maybeSingle();
+      if(fe) throw fe;
+      return {found:false, expired_order:failed??null};
+    }
+
+    const [{data:bills,error:be},{data:refunds,error:re}] = await Promise.all([
+      s.from('china_import_consolidation_bills')
+        .select('id,order_id,amount_ngn,reason,status,line_items,created_at,customer_marked_paid_at,confirmed_paid_at,delivery_estimate_start_at,delivery_estimate_min_at,delivery_estimate_max_at,delivery_delay_notice_at')
+        .eq('user_id',id).eq('order_id',order.id).eq('kind','consolidation_shipping').order('created_at',{ascending:false}).limit(10),
+      s.from('china_import_refunds')
+        .select('id,original_order_id,code,total_ngn,cancel_reason,status,cancellation_type,refund_amount_ngn,cancellation_fee_ngn,refund_policy,refund_method,payment_method,payment_reference,bank_details_submitted_at,paid_at,cancelled_at,created_at,paystack_refund_status,paystack_refunded_at,refund_error,billing_bill_id')
+        .eq('user_id',id).eq('original_order_id',order.id).order('created_at',{ascending:false}).limit(20)
+    ]);
+    if(be) throw be; if(re) throw re;
+
+    const stageMap:any = {
+      pending:{label:'Order Received',description:'Your order has been received and is being processed.'},
+      confirmed:{label:'Order Confirmed',description:'Your payment/order details have been confirmed.'},
+      billed:{label:'At Consolidation Warehouse',description:'Your consolidation & shipping bill has been raised and your order is at the warehouse stage.'},
+      to_review:{label:'Shipped to Nigeria',description:'Your shipment has left the consolidation warehouse and is on its way to Nigeria.'},
+      ordered:{label:'Order Placed',description:'Your items have been placed with the supplier.'},
+      ordered_and_closed:{label:'At Consolidation Warehouse',description:'Your consolidation & shipping bill has been raised and your order is at the warehouse stage.'},
+      shipped_and_closed:{label:'Shipped to Nigeria',description:'Your shipment has left the consolidation warehouse and is on its way to Nigeria.'},
+      clearance_and_closed:{label:'Nigeria Clearance',description:'Your shipment has arrived in Nigeria and is going through the clearance stage.'},
+      received:{label:'Received',description:'Your order has been received and is ready for the final delivery or pickup step.'}
+    };
+    const stage = stageMap[order.status] ?? {label:order.status,description:'Current order stage recorded by QAfrica.'};
+    const latestBill = (bills??[])[0] ?? null;
+    const estimate = latestBill ? {
+      start_at: latestBill.delivery_estimate_start_at,
+      min_at: latestBill.delivery_estimate_min_at,
+      max_at: latestBill.delivery_estimate_max_at,
+      delay_notice_at: latestBill.delivery_delay_notice_at
+    } : null;
+    return {
+      found:true,
+      order,
+      customer_facing_stage:stage,
+      consolidation_shipping_bill:latestBill,
+      delivery_estimate:estimate,
+      refunds:refunds??[]
+    };
   }
   if (name === 'get_my_refunds') {
     const {data,error}=await s.from('china_import_refunds')
@@ -223,7 +276,7 @@ async function openai(key:string,input:any[],tools:any[]) {
 }
 const textOut=(r:any)=>r.output_text??(r.output??[]).filter((x:any)=>x.type==='message').flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('')
 
-function prompt(actor:Actor){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). Do not use Markdown bold syntax (double asterisks) in customer-facing answers; write order codes, names, amounts and statuses as normal text. For general QAfrica account/platform rules, use get_terms_of_service. For import-order policy questions such as refunds, cancellations, billing, shipping, delivery, pickup, defects, or damaged items, use get_import_terms and rely on its current text rather than guessing. When counting a customer’s orders or listing their order codes, check both get_my_orders and get_my_failed_orders so expired/removed orders are not omitted. Treat failed/expired records as separate from currently active orders. If the customer asks for “my order code” and there is more than one record, list the codes with their current/expired status instead of arbitrarily choosing one. If a customer uses an ambiguous word such as "reactive" or "reactivate", use the surrounding conversation to understand whether they mean reactivating an order; if still unclear, ask a short clarification instead of guessing a different topic such as materials or chemicals. You currently have read-only support tools: never promise to reactivate, cancel, change, or otherwise modify an order. If asked to reactivate an order, explain that you can check its status and relevant records but cannot reactivate it through this support chat. ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
+function prompt(actor:Actor){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). Do not use Markdown bold syntax (double asterisks) in customer-facing answers; write order codes, names, amounts and statuses as normal text. For general QAfrica account/platform rules, use get_terms_of_service. For import-order policy questions such as refunds, cancellations, billing, shipping, delivery, pickup, defects, or damaged items, use get_import_terms and rely on its current text rather than guessing. When counting a customer’s orders or listing their order codes, check both get_my_orders and get_my_failed_orders so expired/removed orders are not omitted. Treat failed/expired records as separate from currently active orders. If the customer asks for “my order code” and there is more than one record, list the codes with their current/expired status instead of arbitrarily choosing one. If a customer uses an ambiguous word such as "reactive" or "reactivate", use the surrounding conversation to understand whether they mean reactivating an order; if still unclear, ask a short clarification instead of guessing a different topic such as materials or chemicals. You currently have read-only support tools: never promise to reactivate, cancel, change, or otherwise modify an order. If asked to reactivate an order, explain that you can check its status and relevant records but cannot reactivate it through this support chat. For any specific order lifecycle, delivery timing, payment-confirmation, shipping-fee, cancellation/refund, or "where is my order" question, use get_my_order_context with the order code when available; do not rely on generic lifecycle knowledge when customer-specific records exist. Explain the customer-facing tracking stages using the verified stage returned by the tool. A consolidation & shipping bill is the customer-facing post-order bill. Do not tell customers they need a separate clearance bill. If a sea_freight order has no recorded delivery estimate yet, you may explain the general sea-freight window as 60–90 days from ship date, but never turn that general window into a promised arrival date. For expected delivery, prefer the recorded delivery_estimate fields from the bill. The checkout flow states that expected delivery is estimated from the date payment is confirmed and includes the 3-day processing period; use this only as a general explanation when it matches the order context. ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
 
 serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:CORS});if(req.method!=='POST')return json({error:'Method not allowed'},405)
