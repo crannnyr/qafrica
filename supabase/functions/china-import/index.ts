@@ -314,15 +314,27 @@ async function hasManagerImportPermission(supabase: any, managerId: string, perm
   if (assignmentsError) return false
 
   const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
-  if (roleIds.length === 0) return false
+  const rolePermissionIds: string[] = []
 
-  const { data: rolePermissions, error: rolePermissionsError } = await supabase
-    .from('import_admin_role_permissions')
+  if (roleIds.length > 0) {
+    const { data: rolePermissions, error: rolePermissionsError } = await supabase
+      .from('import_admin_role_permissions')
+      .select('permission_id')
+      .in('role_id', roleIds)
+    if (rolePermissionsError) return false
+    rolePermissionIds.push(...(rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean))
+  }
+
+  const { data: directPermissions, error: directPermissionsError } = await supabase
+    .from('import_admin_manager_permissions')
     .select('permission_id')
-    .in('role_id', roleIds)
-  if (rolePermissionsError) return false
+    .eq('manager_id', managerId)
+  if (directPermissionsError) return false
 
-  const permissionIds = Array.from(new Set((rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+  const permissionIds = Array.from(new Set([
+    ...rolePermissionIds,
+    ...(directPermissions ?? []).map((row: any) => row.permission_id).filter(Boolean),
+  ]))
   if (permissionIds.length === 0) return false
 
   const { data: permission, error: permissionError } = await supabase
@@ -1257,29 +1269,39 @@ serve(async (req: Request) => {
       if (!manager || !manager.is_active) return json({ error: 'Invalid credentials' }, 401)
 
       const { data: creds } = await supabase
-        .from('import_admin_credentials')
+        .from('import_admin_manager_credentials')
         .select('failed_attempts, locked_until')
-        .eq('id', 1).single()
+        .eq('manager_id', manager.id)
+        .maybeSingle()
 
-      if (creds?.locked_until && new Date(creds.locked_until) > new Date()) {
+      if (!creds) {
+        return json({ error: 'This Import Admin does not have a password set. Ask a Super Admin to reset it.' }, 401)
+      }
+
+      if (creds.locked_until && new Date(creds.locked_until) > new Date()) {
         const minutesLeft = Math.ceil((new Date(creds.locked_until).getTime() - Date.now()) / 60000)
         return json({ error: `Too many failed attempts. Try again in ${minutesLeft} minute(s).` }, 429)
       }
 
-      const { data: isValid, error } = await supabase.rpc('verify_import_admin_password', { p_password: password })
+      const { data: isValid, error } = await supabase.rpc('verify_import_manager_password', {
+        p_manager_id: manager.id,
+        p_password: password,
+      })
       if (error) return json({ error: 'Login check failed' }, 500)
 
       if (!isValid) {
-        const attempts = (creds?.failed_attempts ?? 0) + 1
+        const attempts = (creds.failed_attempts ?? 0) + 1
         const lockout = attempts >= 5
-        await supabase.from('import_admin_credentials').update({
+        await supabase.from('import_admin_manager_credentials').update({
           failed_attempts: attempts,
           locked_until: lockout ? new Date(Date.now() + 15 * 60_000).toISOString() : null,
-        }).eq('id', 1)
+        }).eq('manager_id', manager.id)
         return json({ error: lockout ? 'Too many failed attempts. Try again in 15 minutes.' : 'Invalid credentials' }, lockout ? 429 : 401)
       }
 
-      await supabase.from('import_admin_credentials').update({ failed_attempts: 0, locked_until: null }).eq('id', 1)
+      await supabase.from('import_admin_manager_credentials')
+        .update({ failed_attempts: 0, locked_until: null })
+        .eq('manager_id', manager.id)
 
       const { data: session, error: sessionErr } = await supabase
         .from('import_admin_sessions')
@@ -1297,6 +1319,30 @@ serve(async (req: Request) => {
       })
     }
 
+    if (req.method === 'POST' && action === 'admin-reset-manager-password') {
+      const { manager_token, manager_id, password } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!manager_id || typeof password !== 'string' || password.length < 8) {
+        return json({ error: 'Password must be at least 8 characters.' }, 400)
+      }
+
+      const { data: targetManager } = await supabase
+        .from('import_admin_managers')
+        .select('id, is_active, email')
+        .eq('id', manager_id)
+        .maybeSingle()
+      if (!targetManager || !targetManager.is_active || !targetManager.email.endsWith('@qafrica.store')) {
+        return json({ error: 'Import Manager not found or inactive' }, 404)
+      }
+
+      const { data: ok, error } = await supabase.rpc('set_import_manager_password', {
+        p_manager_id: manager_id,
+        p_password: password,
+      })
+      if (error || !ok) return json({ error: error?.message ?? 'Could not reset password.' }, 500)
+      return json({ success: true })
+    }
+
     if (req.method === 'POST' && action === 'admin-logout') {
       const { manager_token } = await req.json().catch(() => ({}))
       if (manager_token) await supabase.from('import_admin_sessions').delete().eq('token', manager_token)
@@ -1306,7 +1352,7 @@ serve(async (req: Request) => {
 
     // ── Create a legacy Import Manager ─────────────────────────────────────
     if (req.method === 'POST' && action === 'admin-create-manager') {
-      const { manager_token, email, full_name, role_id } = await req.json().catch(() => ({}))
+      const { manager_token, email, full_name, role_id, password, permission_ids } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
         return json({ error: 'Unauthorized' }, 401)
       }
@@ -1319,6 +1365,12 @@ serve(async (req: Request) => {
       }
       if (!cleanName) return json({ error: 'Full name is required.' }, 400)
       if (!role_id) return json({ error: 'Select an Import Admin role.' }, 400)
+      if (typeof password !== 'string' || password.length < 8) {
+        return json({ error: 'Password must be at least 8 characters.' }, 400)
+      }
+      const requestedPermissionIds = Array.isArray(permission_ids)
+        ? Array.from(new Set(permission_ids.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)))
+        : []
 
       const { data: role, error: roleError } = await supabase
         .from('import_admin_roles')
@@ -1349,6 +1401,15 @@ serve(async (req: Request) => {
 
       if (managerError) return json({ error: managerError.message }, 500)
 
+      const { data: passwordSet, error: passwordError } = await supabase.rpc('set_import_manager_password', {
+        p_manager_id: manager.id,
+        p_password: password,
+      })
+      if (passwordError || !passwordSet) {
+        await supabase.from('import_admin_managers').delete().eq('id', manager.id)
+        return json({ error: passwordError?.message ?? 'Could not set admin password.' }, 500)
+      }
+
       const { error: assignmentError } = await supabase
         .from('import_admin_manager_roles')
         .insert({
@@ -1357,8 +1418,35 @@ serve(async (req: Request) => {
         })
 
       if (assignmentError) {
+        await supabase.from('import_admin_manager_credentials').delete().eq('manager_id', manager.id)
         await supabase.from('import_admin_managers').delete().eq('id', manager.id)
         return json({ error: assignmentError.message }, 500)
+      }
+
+      if (requestedPermissionIds.length > 0) {
+        const { data: validPermissions, error: permissionsError } = await supabase
+          .from('import_admin_permissions')
+          .select('id')
+          .in('id', requestedPermissionIds)
+
+        if (permissionsError) {
+          await supabase.from('import_admin_managers').delete().eq('id', manager.id)
+          return json({ error: permissionsError.message }, 500)
+        }
+
+        const validIds = (validPermissions ?? []).map((p: any) => p.id)
+        if (validIds.length > 0) {
+          const { error: directPermissionError } = await supabase
+            .from('import_admin_manager_permissions')
+            .insert(validIds.map((permissionId: string) => ({
+              manager_id: manager.id,
+              permission_id: permissionId,
+            })))
+          if (directPermissionError) {
+            await supabase.from('import_admin_managers').delete().eq('id', manager.id)
+            return json({ error: directPermissionError.message }, 500)
+          }
+        }
       }
 
       return json({
@@ -1399,15 +1487,101 @@ serve(async (req: Request) => {
       if (assignmentsError) return json({ error: assignmentsError.message }, 500)
 
       const roleMap = new Map((roles ?? []).map((role: any) => [role.id, role]))
-      const managersWithRoles = (managers ?? []).map((manager: any) => ({
-        ...manager,
-        roles: (assignments ?? [])
-          .filter((assignment: any) => assignment.manager_id === manager.id)
-          .map((assignment: any) => roleMap.get(assignment.role_id))
-          .filter(Boolean),
-      }))
+      const { data: directPermissionAssignments, error: directPermissionAssignmentsError } = managerIds.length
+        ? await supabase
+            .from('import_admin_manager_permissions')
+            .select('manager_id, permission_id')
+            .in('manager_id', managerIds)
+        : { data: [], error: null }
 
-      return json({ managers: managersWithRoles, roles: roles ?? [] })
+      if (directPermissionAssignmentsError) return json({ error: directPermissionAssignmentsError.message }, 500)
+
+      const allPermissionIds = Array.from(new Set([
+        ...(directPermissionAssignments ?? []).map((row: any) => row.permission_id).filter(Boolean),
+        ...(assignments ?? []).map((assignment: any) => assignment.role_id).filter(Boolean),
+      ]))
+
+      const { data: permissions, error: permissionsError } = await supabase
+        .from('import_admin_permissions')
+        .select('id, key, name, section, action, description')
+        .order('section', { ascending: true })
+        .order('name', { ascending: true })
+
+      if (permissionsError) return json({ error: permissionsError.message }, 500)
+
+      const rolePermissionRows = assignments?.length
+        ? await supabase
+            .from('import_admin_role_permissions')
+            .select('role_id, permission_id')
+            .in('role_id', Array.from(new Set((assignments ?? []).map((a: any) => a.role_id).filter(Boolean))))
+        : { data: [], error: null }
+
+      if (rolePermissionRows.error) return json({ error: rolePermissionRows.error.message }, 500)
+
+      const permissionMap = new Map((permissions ?? []).map((permission: any) => [permission.id, permission]))
+      const rolePermissionMap = new Map<string, string[]>() 
+      for (const row of rolePermissionRows.data ?? []) {
+        const current = rolePermissionMap.get(row.role_id) ?? []
+        current.push(row.permission_id)
+        rolePermissionMap.set(row.role_id, current)
+      }
+
+      const managersWithRoles = (managers ?? []).map((manager: any) => {
+        const managerRoleIds = (assignments ?? [])
+          .filter((assignment: any) => assignment.manager_id === manager.id)
+          .map((assignment: any) => assignment.role_id)
+        const effectivePermissionIds = new Set<string>()
+        for (const roleId of managerRoleIds) {
+          for (const permissionId of rolePermissionMap.get(roleId) ?? []) effectivePermissionIds.add(permissionId)
+        }
+        for (const row of directPermissionAssignments ?? []) {
+          if (row.manager_id === manager.id) effectivePermissionIds.add(row.permission_id)
+        }
+        return {
+          ...manager,
+          roles: managerRoleIds.map((roleId: string) => roleMap.get(roleId)).filter(Boolean),
+          permissions: Array.from(effectivePermissionIds).map(id => permissionMap.get(id)).filter(Boolean),
+          direct_permission_ids: (directPermissionAssignments ?? [])
+            .filter((row: any) => row.manager_id === manager.id)
+            .map((row: any) => row.permission_id),
+        }
+      })
+
+      return json({ managers: managersWithRoles, roles: roles ?? [], permissions: permissions ?? [] })
+    }
+
+    if (req.method === 'POST' && action === 'admin-assign-manager-permission') {
+      const { manager_token, manager_id, permission_id } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!manager_id || !permission_id) return json({ error: 'Missing manager_id or permission_id' }, 400)
+
+      const { data: permission, error: permissionError } = await supabase
+        .from('import_admin_permissions')
+        .select('id, key, name, section, action, description')
+        .eq('id', permission_id)
+        .maybeSingle()
+      if (permissionError) return json({ error: permissionError.message }, 500)
+      if (!permission) return json({ error: 'Permission not found' }, 404)
+
+      const { error } = await supabase
+        .from('import_admin_manager_permissions')
+        .upsert({ manager_id, permission_id }, { onConflict: 'manager_id,permission_id' })
+      if (error) return json({ error: error.message }, 500)
+      return json({ success: true, permission })
+    }
+
+    if (req.method === 'POST' && action === 'admin-remove-manager-permission') {
+      const { manager_token, manager_id, permission_id } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!manager_id || !permission_id) return json({ error: 'Missing manager_id or permission_id' }, 400)
+
+      const { error } = await supabase
+        .from('import_admin_manager_permissions')
+        .delete()
+        .eq('manager_id', manager_id)
+        .eq('permission_id', permission_id)
+      if (error) return json({ error: error.message }, 500)
+      return json({ success: true })
     }
 
     if (req.method === 'POST' && action === 'admin-assign-manager-role') {
