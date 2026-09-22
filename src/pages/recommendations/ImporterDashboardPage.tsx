@@ -18,6 +18,7 @@ import { fallbackAvatarColor, initialsFrom } from '@/lib/avatarFallback';
 import { AvatarImage } from '@/lib/presetAvatars';
 import { fmt } from './RecommendationsPage';
 import ImportSettingsSheet from './ImportSettingsSheet';
+import ImportAiSupportSheet from './ImportAiSupportSheet';
 import SavedItemsSheet from './SavedItemsSheet';
 import WhyTrustUsSheet from './WhyTrustUsSheet';
 import HelpCenterSheet from './HelpCenterSheet';
@@ -152,6 +153,7 @@ export default function ImporterDashboardPage() {
   const [showTrackOrder, setShowTrackOrder] = useState(false);
   const [showAvatar, setShowAvatar] = useState(false);
   const [showConfirmEmail, setShowConfirmEmail] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
   const [retryOrder, setRetryOrder] = useState<DashboardOrder | null>(null);
   const [isPayingBill, setIsPayingBill] = useState(false);
   const [infoBillKind, setInfoBillKind] = useState<'consolidation_shipping' | 'clearance' | null>(null);
@@ -468,6 +470,13 @@ export default function ImporterDashboardPage() {
                 <Navigation className="w-4 h-4 text-gray-400" />
               </div>
               <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Track</span>
+            </button>
+
+            <button onClick={() => setShowSupport(true)} className="flex flex-col items-center gap-1.5">
+              <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center">
+                <Headset className="w-4 h-4 text-gray-400" />
+              </div>
+              <span className="text-[10px] font-medium text-gray-500 text-center leading-tight">Support</span>
             </button>
           </div>
         </div>
@@ -872,6 +881,7 @@ export default function ImporterDashboardPage() {
         )}
       </div>
 
+      <ImportAiSupportSheet isAuthenticated={true} onRequireAuth={() => {}} showTrigger={false} open={showSupport} onOpenChange={setShowSupport} />
       {showSettings && <ImportSettingsSheet onClose={() => setShowSettings(false)} />}
       {showSaved && <SavedItemsSheet onClose={() => setShowSaved(false)} />}
       {showWhyTrustUs && <WhyTrustUsSheet onClose={() => setShowWhyTrustUs(false)} />}

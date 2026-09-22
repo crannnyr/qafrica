@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { supabase } from '@/services';
 
 // ── Types (mirrors RecommendationsPage's local types, kept here so both
 // RecommendationsPage and ProductDetailPage share one cart instead of each
@@ -61,11 +62,13 @@ interface ImportCartState {
   setQuantity: (cartKey: string, quantity: number, moq: number) => void;
   removeItem: (cartKey: string) => void;
   clearCart: () => void;
+  syncWithServer: (customerId: string) => Promise<void>;
+  saveToServer: (customerId: string) => Promise<void>;
 }
 
 export const useImportCartStore = create<ImportCartState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       cart: [],
 
       addToCart: (product, quantity, priceNgn, variantSelection) => {
@@ -124,6 +127,37 @@ export const useImportCartStore = create<ImportCartState>()(
       },
 
       clearCart: () => set({ cart: [] }),
+
+      syncWithServer: async (customerId) => {
+        try {
+          const { data, error } = await supabase
+            .from('import_customer_carts')
+            .select('items')
+            .eq('customer_id', customerId)
+            .maybeSingle();
+          if (!error && data?.items && Array.isArray(data.items)) {
+            set({ cart: data.items as ImportCartItem[] });
+          }
+        } catch (err) {
+          console.error('Failed to sync import cart:', err);
+        }
+      },
+
+      saveToServer: async (customerId) => {
+        try {
+          const { cart } = get();
+          const { error } = await supabase
+            .from('import_customer_carts')
+            .upsert({
+              customer_id: customerId,
+              items: cart,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'customer_id' });
+          if (error) console.error('Failed to save import cart:', error);
+        } catch (err) {
+          console.error('Failed to save import cart:', err);
+        }
+      },
     }),
     { name: 'qafrica-import-cart' }
   )
