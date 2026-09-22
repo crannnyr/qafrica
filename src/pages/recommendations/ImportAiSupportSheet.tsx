@@ -3,6 +3,9 @@ import { motion } from 'framer-motion';
 import { Headset, Send, X } from 'lucide-react';
 import { supabase } from '@/services';
 import CONFIG from '@/lib/config';
+import { useCustomerAuthStore } from '@/stores';
+import { AvatarImage } from '@/lib/presetAvatars';
+import { fallbackAvatarColor, initialsFrom } from '@/lib/avatarFallback';
 
 const AI_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-ai-support`;
 const WHATSAPP_URL = 'https://wa.me/2347015470881?text=Hi%20QAfrica%20support%2C%20I%20need%20help%20with%20my%20import%20order.';
@@ -44,10 +47,14 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const { customer } = useCustomerAuthStore();
   const [viewport, setViewport] = useState<{ height: number; top: number } | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
   const storageKey = customerId ? `qafrica_support_chat_${customerId}` : null;
+  const customerAvatarUrl = customer?.avatar_url ?? null;
+  const customerInitials = initialsFrom(customer?.full_name);
+  const customerAvatarBg = fallbackAvatarColor(customer?.id ?? customerId ?? 'support');
   const INACTIVITY_MS = 30 * 60 * 1000;
 
   useEffect(() => {
@@ -212,9 +219,35 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
             </header>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
               {messages.length === 0 && <div className="bg-white border border-gray-100 rounded-xl p-3"><p className="text-xs font-bold text-gray-800 mb-1">How can I help?</p><p className="text-[11px] leading-relaxed text-gray-500">Ask about your import orders, tracking, bills, saved addresses, or products.</p></div>}
-              {messages.map((m, i) => <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}><div className={m.role === 'user' ? 'max-w-[85%] rounded-2xl rounded-br-md bg-gray-900 text-white px-3 py-2' : 'max-w-[85%] rounded-2xl rounded-bl-md bg-white border border-gray-100 text-gray-700 px-3 py-2'}><p className="text-xs whitespace-pre-wrap leading-relaxed">{m.content}</p></div></div>)}
+              {messages.map((m, i) => {
+                const isCustomer = m.role === 'user';
+                return (
+                  <div key={i} className={isCustomer ? 'flex justify-end items-end gap-2' : 'flex justify-start items-end gap-2'}>
+                    {!isCustomer && (
+                      <div className="w-7 h-7 shrink-0 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-sm overflow-hidden" aria-hidden="true">
+                        <Headset className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                    <div className={isCustomer ? 'max-w-[78%] rounded-2xl rounded-br-md bg-gray-900 text-white px-3 py-2' : 'max-w-[78%] rounded-2xl rounded-bl-md bg-white border border-gray-100 text-gray-700 px-3 py-2'}>
+                      <p className="text-xs whitespace-pre-wrap leading-relaxed">{m.content}</p>
+                    </div>
+                    {isCustomer && (
+                      <div className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center overflow-hidden border border-white shadow-sm" style={{ backgroundColor: customerAvatarUrl ? undefined : customerAvatarBg }} aria-label="Your profile picture">
+                        {customerAvatarUrl ? (
+                          <AvatarImage avatarUrl={customerAvatarUrl} className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="text-white text-[10px] font-bold">{customerInitials}</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {loading && (
-                <div className="flex justify-start">
+                <div className="flex justify-start items-end gap-2">
+                  <div className="w-7 h-7 shrink-0 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-sm overflow-hidden" aria-hidden="true">
+                    <Headset className="w-3.5 h-3.5" />
+                  </div>
                   <div className="relative overflow-hidden bg-white border border-gray-100 rounded-2xl rounded-bl-md px-3 py-2.5 shadow-sm animate-pulse" aria-label="QAfrica Support is typing">
                     <div className="relative flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
