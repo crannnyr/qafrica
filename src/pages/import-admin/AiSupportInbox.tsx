@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { MessageCircle, RefreshCw, Send, UserRound, CheckCircle2, Bot, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { MessageCircle, RefreshCw, Send, UserRound, CheckCircle2, Bot, Loader2, Bell, Volume2, VolumeX } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
 const AI_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-ai-support`;
@@ -32,6 +32,16 @@ export default function AiSupportInbox({ token }: { token: string }) {
   const [detailLoading, setDetailLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    try { return localStorage.getItem('qafrica_ai_support_alert_sound') !== 'off'; }
+    catch { return true; }
+  });
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>(
+    () => typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported'
+  );
+  const knownStatusesRef = useRef<Record<string, string>>({});
+  const initializedAlertsRef = useRef(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const call = useCallback(async (action: string, extra: Record<string, unknown> = {}) => {
     const res = await fetch(AI_URL, {
@@ -44,15 +54,108 @@ export default function AiSupportInbox({ token }: { token: string }) {
     return data;
   }, [token]);
 
+  const playAlertSound = useCallback(() => {
+    if (!soundEnabled || typeof window === 'undefined') return;
+    try {
+      const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = audioContextRef.current ?? new AudioCtx();
+      audioContextRef.current = ctx;
+      if (ctx.state === 'suspended') void ctx.resume();
+      const now = ctx.currentTime;
+      [0, 0.14, 0.28].forEach((offset, index) => {
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = [740, 880, 1040][index];
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.12, now + offset + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.11);
+        oscillator.connect(gain);
+        gain.connect(ctx.destination);
+        oscillator.start(now + offset);
+        oscillator.stop(now + offset + 0.12);
+      });
+    } catch {}
+  }, [soundEnabled]);
+
+  const showAdminNotification = useCallback(async (conversation: Conversation) => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    const name = conversation.customers?.full_name || 'WhatsApp customer';
+    const body = name + ' requested human support on WhatsApp.';
+    try {
+      const registration = await navigator.serviceWorker?.getRegistration();
+      if (registration) {
+        await registration.showNotification('QAfrica AI Support', {
+          body,
+          tag: 'qafrica-human-' + conversation.id,
+          renotify: true,
+          data: { conversationId: conversation.id },
+        });
+      } else {
+        const notification = new Notification('QAfrica AI Support', {
+          body,
+          tag: 'qafrica-human-' + conversation.id,
+        });
+        notification.onclick = () => window.focus();
+      }
+    } catch {}
+  }, []);
+
+  const enableAlerts = useCallback(async () => {
+    playAlertSound();
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
+        const permission = Notification.permission === 'default'
+          ? await Notification.requestPermission()
+          : Notification.permission;
+        setNotificationPermission(permission);
+      } catch {
+        setNotificationPermission(Notification.permission);
+      }
+    }
+    setSoundEnabled(true);
+    try { localStorage.setItem('qafrica_ai_support_alert_sound', 'on'); } catch {}
+  }, [playAlertSound]);
+
+  const toggleSound = useCallback(() => {
+    setSoundEnabled(current => {
+      const next = !current;
+      try { localStorage.setItem('qafrica_ai_support_alert_sound', next ? 'on' : 'off'); } catch {}
+      return next;
+    });
+  }, []);
+
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
     setError('');
     try {
       const data = await call('list_support_conversations');
-      setConversations(data.conversations ?? []);
+      const nextConversations: Conversation[] = data.conversations ?? [];
+
+      if (!initializedAlertsRef.current) {
+        const baseline: Record<string, string> = {};
+        nextConversations.forEach(c => { baseline[c.id] = c.status; });
+        knownStatusesRef.current = baseline;
+        initializedAlertsRef.current = true;
+      } else {
+        nextConversations.forEach(conversation => {
+          const previousStatus = knownStatusesRef.current[conversation.id];
+          if (conversation.status === 'human_requested' && previousStatus !== 'human_requested') {
+            playAlertSound();
+            void showAdminNotification(conversation);
+          }
+        });
+        const nextStatuses: Record<string, string> = {};
+        nextConversations.forEach(c => { nextStatuses[c.id] = c.status; });
+        knownStatusesRef.current = nextStatuses;
+      }
+
+      setConversations(nextConversations);
       setSelected(current => {
         if (!current) return current;
-        return (data.conversations ?? []).find((x: Conversation) => x.id === current.id) ?? current;
+        return nextConversations.find((x: Conversation) => x.id === current.id) ?? current;
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load support conversations');
@@ -125,11 +228,29 @@ export default function AiSupportInbox({ token }: { token: string }) {
         <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
           <div>
             <p className="font-bold text-gray-900">AI Support Inbox</p>
-            <p className="text-[11px] text-gray-400">WhatsApp human handoffs</p>
+            <p className="text-[11px] text-gray-400">WhatsApp human handoffs · alerts when a customer requests a human</p>
           </div>
-          <button onClick={() => void load()} className="p-2 rounded-lg hover:bg-gray-50" aria-label="Refresh">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => void enableAlerts()}
+              className="px-2.5 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 text-[10px] font-semibold text-gray-600 flex items-center gap-1.5"
+              title="Enable sound and browser alerts for new human support requests"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              {notificationPermission === 'granted' && soundEnabled ? 'Alerts on' : 'Enable alerts'}
+            </button>
+            <button
+              onClick={toggleSound}
+              className="p-2 rounded-lg hover:bg-gray-50 text-gray-500"
+              aria-label={soundEnabled ? 'Mute support alert sound' : 'Enable support alert sound'}
+              title={soundEnabled ? 'Mute sound' : 'Enable sound'}
+            >
+              {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </button>
+            <button onClick={() => void load()} className="p-2 rounded-lg hover:bg-gray-50" aria-label="Refresh">
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
         <div className="divide-y divide-gray-50 max-h-[570px] overflow-y-auto">
           {conversations.length === 0 && !loading && (
@@ -151,7 +272,12 @@ export default function AiSupportInbox({ token }: { token: string }) {
                 </div>
               </div>
               <div className="mt-2 flex items-center justify-between">
-                <span className="text-[10px] uppercase tracking-wide text-orange-600 font-semibold">{c.status.replaceAll('_', ' ')}</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="text-[10px] uppercase tracking-wide text-orange-600 font-semibold">{c.status.replaceAll('_', ' ')}</span>
+                  {c.status === 'human_requested' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" aria-label="Needs human attention" />
+                  )}
+                </span>
                 <span className="text-[10px] text-gray-400">{c.last_inbound_at ? new Date(c.last_inbound_at).toLocaleTimeString() : ''}</span>
               </div>
             </button>
