@@ -47,6 +47,8 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [customerId, setCustomerId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [humanStatus, setHumanStatus] = useState<'ai' | 'human_requested' | 'human_assigned' | 'human_active' | 'returned_to_ai' | null>(null);
   const { customer } = useCustomerAuthStore();
   const [viewport, setViewport] = useState<{ height: number; top: number } | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -77,6 +79,29 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
       visualViewport.removeEventListener('scroll', updateViewport);
     };
   }, []);
+
+  useEffect(() => {
+    if (!open || !isAuthenticated) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) return;
+        const res = await fetch(AI_URL, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ actor: 'customer', channel: 'website', message: 'load_support_state' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok) return;
+        if (data.conversation_id) setConversationId(data.conversation_id);
+        if (data.status) setHumanStatus(data.status);
+      } catch {
+        // Server state is optional until the first real support message.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, isAuthenticated]);
 
   useEffect(() => {
     if (!open) return;
@@ -175,17 +200,64 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
       const res = await fetch(AI_URL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actor: 'customer', message, messages }),
+        body: JSON.stringify({
+          actor: 'customer',
+          channel: 'website',
+          conversation_id: conversationId,
+          message,
+          messages,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || 'Support is temporarily unavailable.');
-      setMessages(prev => [...prev, { role: 'assistant', content: String(data?.answer || 'I could not find an answer for that yet.').replace(/\*\*(.*?)\*\*/g, '$1') }]);
+      if (data.conversation_id) setConversationId(data.conversation_id);
+      if (data.status) setHumanStatus(data.status);
+      if (data.human_active) {
+        setMessages(prev => [...prev, { role: 'assistant', content: 'Your conversation is currently with a QAfrica Support agent. Your next messages will be delivered to the agent here.' }]);
+      } else if (data.answer) {
+        setMessages(prev => [...prev, { role: 'assistant', content: String(data.answer).replace(/\\*\\*(.*?)\\*\\*/g, '$1') }]);
+      }
       touchChat();
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', content: (error instanceof Error ? error.message : 'Support is temporarily unavailable.').replace(/\*\*(.*?)\*\*/g, '$1') }]);
+      setMessages(prev => [...prev, { role: 'assistant', content: (error instanceof Error ? error.message : 'Support is temporarily unavailable.').replace(/\\*\\*(.*?)\\*\\*/g, '$1') }]);
       touchChat();
     } finally { setLoading(false); }
   };
+
+  useEffect(() => {
+    if (!open || !conversationId) return;
+    const channel = supabase
+      .channel(`qafrica-website-support-${conversationId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'import_ai_whatsapp_messages', filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          const row = payload.new as { id?: string; sender_type?: string; body?: string; direction?: string };
+          if (row.sender_type !== 'human' || !row.body) return;
+          setMessages(prev => [...prev, { role: 'assistant', content: row.body || '' }]);
+        }
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [open, conversationId]);
+
+  useEffect(() => {
+    if (!open || !conversationId) return;
+    const channel = supabase
+      .channel(`qafrica-website-support-status-${conversationId}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'import_ai_whatsapp_conversations', filter: `id=eq.${conversationId}` },
+        (payload) => {
+          const row = payload.new as { status?: typeof humanStatus };
+          if (row.status) setHumanStatus(row.status);
+        }
+      )
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [open, conversationId]);
+
+
 
   return (
     <>
@@ -259,7 +331,17 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
               )}
               <div ref={endRef} />
             </div>
-            <form onSubmit={e => { e.preventDefault(); void ask(); }} className="flex items-end gap-2 p-3 border-t border-gray-100 bg-white">
+            {(humanStatus === 'human_requested' || humanStatus === 'human_assigned') && (
+              <div className="px-4 py-2.5 bg-amber-50 border-t border-amber-100 text-[11px] text-amber-800">
+                Your request has been sent to a QAfrica Support agent. You can keep messaging here.
+              </div>
+            )}
+            {humanStatus === 'human_active' && (
+              <div className="px-4 py-2.5 bg-emerald-50 border-t border-emerald-100 text-[11px] text-emerald-800">
+                You are chatting with a QAfrica Support agent.
+              </div>
+            )}
+                        <form onSubmit={e => { e.preventDefault(); void ask(); }} className="flex items-end gap-2 p-3 border-t border-gray-100 bg-white">
               <textarea value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void ask(); } }} placeholder={isAuthenticated ? 'Ask about your import…' : 'Sign in to contact support'} rows={1} maxLength={4000} className="flex-1 resize-none rounded-xl border border-gray-200 px-3 py-2 text-base sm:text-xs outline-none focus:border-gray-400" />
               <button type="submit" disabled={!input.trim() || loading} className="w-9 h-9 rounded-xl bg-orange-500 text-white flex items-center justify-center disabled:opacity-40" aria-label="Send message"><SendIcon /></button>
             </form>
