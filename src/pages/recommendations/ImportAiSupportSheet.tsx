@@ -4,7 +4,7 @@ import { supabase } from '@/services';
 import CONFIG from '@/lib/config';
 
 const AI_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-ai-support`;
-const WHATSAPP_AI_URL = 'https://wa.me/15551529049?text=Hi%20QAfrica%20AI%2C%20I%20need%20help%20with%20my%20import.';
+const WHATSAPP_AI_URL = 'https://wa.me/2347015470881?text=Hi%20QAfrica%20AI%2C%20I%20need%20help%20with%20my%20import.';
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
