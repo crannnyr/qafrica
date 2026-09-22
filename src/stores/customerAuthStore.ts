@@ -200,37 +200,78 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
 
       fetchProfile: async () => {
         try {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (!user) return;
+          // Wait for Supabase Auth to finish loading the persisted browser
+          // session before deciding whether the customer is signed in.
+          // getSession() also refreshes an expired access token when the
+          // refresh token is still valid.
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
 
-          // ROLE GUARD: if this is a store owner session, clear customer state
-          // only — do NOT call signOut, as that would destroy their active
-          // Supabase session (both stores share one client)
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-          if (profileData?.role === 'store_owner' || profileData?.role === 'admin') {
-            set({ customer: null, isAuthenticated: false });
+          if (sessionError) {
+            console.error('Failed to restore customer session:', sessionError);
             return;
           }
 
-          const { data, error } = await supabase
+          // No stored session means the customer really is signed out.
+          // Do not call signOut here: this client is shared with the store-owner
+          // auth flow.
+          if (!session?.user) {
+            set({ customer: null, addresses: [], isAuthenticated: false });
+            return;
+          }
+
+          // getUser verifies the session with Supabase Auth after getSession()
+          // has restored it, avoiding a profile lookup during auth startup.
+          const { data: { user }, error: userError } = await supabase.auth.getUser();
+          if (userError || !user) {
+            console.error('Failed to verify customer session:', userError);
+            return;
+          }
+
+          // Customers live in the customers table. Check that first so a
+          // transient profiles/RLS lookup cannot make a valid customer appear
+          // logged out.
+          const { data: customerData, error: customerError } = await supabase
             .from('customers')
             .select('*')
             .eq('id', user.id)
-            .single();
+            .maybeSingle();
 
-          if (data && !error) {
-            set({ customer: data as Customer, isAuthenticated: true });
-            get().fetchAddresses();
-          } else {
-            set({ customer: null, isAuthenticated: false });
+          if (customerError) {
+            // Preserve the existing authenticated state on transient database
+            // or RLS/network errors. A failed profile request is not a logout.
+            console.error('Failed to restore customer profile:', customerError);
+            return;
           }
+
+          if (customerData) {
+            set({ customer: customerData as Customer, isAuthenticated: true });
+            get().fetchAddresses();
+            return;
+          }
+
+          // No customer row: this may be a store-owner/admin session. Clear
+          // customer UI state only; never sign out the shared Supabase client.
+          const { data: profileData, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (profileError) {
+            console.error('Failed to inspect account role:', profileError);
+            return;
+          }
+
+          if (profileData?.role === 'store_owner' || profileData?.role === 'admin' || profileData?.role === 'staff') {
+            set({ customer: null, addresses: [], isAuthenticated: false });
+            return;
+          }
+
+          // Auth session exists but there is no customer profile. Treat this
+          // as a missing customer account, not as a Supabase sign-out.
+          set({ customer: null, addresses: [], isAuthenticated: false });
         } catch (err) {
-          console.error('Failed to fetch customer profile:', err);
+          console.error('Failed to restore customer session:', err);
         }
       },
 
