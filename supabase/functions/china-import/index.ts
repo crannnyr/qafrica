@@ -1304,6 +1304,69 @@ serve(async (req: Request) => {
     }
 
 
+    // ── Create a legacy Import Manager ─────────────────────────────────────
+    if (req.method === 'POST' && action === 'admin-create-manager') {
+      const { manager_token, email, full_name, role_id } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
+        return json({ error: 'Unauthorized' }, 401)
+      }
+
+      const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
+      const cleanName = typeof full_name === 'string' ? full_name.trim() : ''
+
+      if (!cleanEmail || !cleanEmail.endsWith('@qafrica.store')) {
+        return json({ error: 'Admin email must use @qafrica.store.' }, 400)
+      }
+      if (!cleanName) return json({ error: 'Full name is required.' }, 400)
+      if (!role_id) return json({ error: 'Select an Import Admin role.' }, 400)
+
+      const { data: role, error: roleError } = await supabase
+        .from('import_admin_roles')
+        .select('id, key, name, description, is_system')
+        .eq('id', role_id)
+        .maybeSingle()
+
+      if (roleError) return json({ error: roleError.message }, 500)
+      if (!role) return json({ error: 'Selected role was not found.' }, 404)
+
+      const { data: existing } = await supabase
+        .from('import_admin_managers')
+        .select('id')
+        .eq('email', cleanEmail)
+        .maybeSingle()
+
+      if (existing) return json({ error: 'An Import Manager with this email already exists.' }, 409)
+
+      const { data: manager, error: managerError } = await supabase
+        .from('import_admin_managers')
+        .insert({
+          email: cleanEmail,
+          full_name: cleanName,
+          is_active: true,
+        })
+        .select('id, email, full_name, is_active, created_at, updated_at')
+        .single()
+
+      if (managerError) return json({ error: managerError.message }, 500)
+
+      const { error: assignmentError } = await supabase
+        .from('import_admin_manager_roles')
+        .insert({
+          manager_id: manager.id,
+          role_id: role.id,
+        })
+
+      if (assignmentError) {
+        await supabase.from('import_admin_managers').delete().eq('id', manager.id)
+        return json({ error: assignmentError.message }, 500)
+      }
+
+      return json({
+        success: true,
+        manager: { ...manager, roles: [role] },
+      })
+    }
+
     // ── Legacy Import Manager access administration ─────────────────────────
     if (req.method === 'POST' && action === 'admin-list-managers') {
       const { manager_token } = await req.json().catch(() => ({}))
