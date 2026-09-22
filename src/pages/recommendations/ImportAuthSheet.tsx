@@ -14,7 +14,7 @@ import ImportForgotPasswordSheet from './ImportForgotPasswordSheet';
 const IMPORT_TERMS_VERSION = '2026-08-30';
 
 export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const { login, signup } = useCustomerAuthStore();
+  const { login, signup, loginWithGoogle } = useCustomerAuthStore();
   const [mode, setMode] = useState<'signup' | 'login'>('signup');
   const [fullName, setFullName] = useState('');
   const [username, setUsername] = useState('');
@@ -114,6 +114,29 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
         <p className="text-gray-400 text-xs mb-5">
           {mode === 'signup' ? 'Sign up to check out — takes under a minute.' : 'Sign in to continue checkout.'}
         </p>
+
+        <button
+          type="button"
+          disabled={isLoading}
+          onClick={async () => {
+            setIsLoading(true);
+            const result = await loginWithGoogle('/recommendations');
+            if (!result.success) {
+              setIsLoading(false);
+              toast.error(result.error || 'Google sign-in failed');
+            }
+          }}
+          className="w-full py-3.5 border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-800 font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
+        >
+          <span className="text-base font-bold">G</span>
+          Continue with Google
+        </button>
+
+        <div className="flex items-center gap-3 py-1">
+          <div className="h-px bg-gray-100 flex-1" />
+          <span className="text-[10px] text-gray-300 uppercase tracking-wider">or</span>
+          <div className="h-px bg-gray-100 flex-1" />
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           {mode === 'signup' && (
