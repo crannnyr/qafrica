@@ -9,26 +9,6 @@ const WHATSAPP_URL = 'https://wa.me/2347015470881?text=Hi%20QAfrica%20support%2C
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
 
-function SupportAvatar({ role, avatarUrl, initials }: { role: ChatMessage['role']; avatarUrl?: string | null; initials?: string }) {
-  if (role === 'assistant') {
-    return (
-      <div className="shrink-0 w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center shadow-sm">
-        <Headset className="w-3.5 h-3.5" />
-      </div>
-    );
-  }
-
-  if (avatarUrl) {
-    return <img src={avatarUrl} alt="Your profile" className="shrink-0 w-7 h-7 rounded-full object-cover border border-gray-200" />;
-  }
-
-  return (
-    <div className="shrink-0 w-7 h-7 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center text-[10px] font-bold border border-gray-300">
-      {initials || 'You'}
-    </div>
-  );
-}
-
 function WhatsAppMark({ className = 'w-6 h-6' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true" focusable="false">
@@ -64,8 +44,6 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [customerId, setCustomerId] = useState<string | null>(null);
-  const [customerAvatarUrl, setCustomerAvatarUrl] = useState<string | null>(null);
-  const [customerInitials, setCustomerInitials] = useState('You');
   const [viewport, setViewport] = useState<{ height: number; top: number } | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
@@ -108,24 +86,11 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
 
   useEffect(() => {
     let cancelled = false;
-    void supabase.auth.getSession().then(async ({ data: { session } }) => {
+    void supabase.auth.getSession().then(({ data: { session } }) => {
       if (cancelled) return;
-      const user = session?.user ?? null;
-      const id = user?.id ?? null;
+      const id = session?.user?.id ?? null;
       setCustomerId(id);
       if (!id) return;
-
-      const { data: customer } = await supabase
-        .from('customers')
-        .select('avatar_url, full_name')
-        .eq('id', id)
-        .maybeSingle();
-
-      setCustomerAvatarUrl(customer?.avatar_url ?? null);
-      setCustomerInitials(
-        customer?.full_name?.trim().split(/\s+/).filter(Boolean).slice(0, 2)
-          .map(part => part[0].toUpperCase()).join('') || 'You'
-      );
       try {
         const raw = localStorage.getItem(`qafrica_support_chat_${id}`);
         if (!raw) return;
@@ -180,9 +145,9 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
       const raw = localStorage.getItem(storageKey);
       const saved = raw ? JSON.parse(raw) : {};
       localStorage.setItem(storageKey, JSON.stringify({
-        ...saved,
         messages,
         lastActivityAt: Date.now(),
+        ...saved,
       }));
     } catch {
       // Ignore storage failures.
@@ -247,18 +212,9 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
             </header>
             <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
               {messages.length === 0 && <div className="bg-white border border-gray-100 rounded-xl p-3"><p className="text-xs font-bold text-gray-800 mb-1">How can I help?</p><p className="text-[11px] leading-relaxed text-gray-500">Ask about your import orders, tracking, bills, saved addresses, or products.</p></div>}
-              {messages.map((m, i) => (
-                <div key={i} className={m.role === 'user' ? 'flex justify-end items-end gap-2' : 'flex justify-start items-end gap-2'}>
-                  {m.role === 'assistant' && <SupportAvatar role="assistant" />}
-                  <div className={m.role === 'user' ? 'max-w-[78%] rounded-2xl rounded-br-md bg-gray-900 text-white px-3 py-2' : 'max-w-[78%] rounded-2xl rounded-bl-md bg-white border border-gray-100 text-gray-700 px-3 py-2'}>
-                    <p className="text-xs whitespace-pre-wrap leading-relaxed">{m.content}</p>
-                  </div>
-                  {m.role === 'user' && <SupportAvatar role="user" avatarUrl={customerAvatarUrl} initials={customerInitials} />}
-                </div>
-              ))}
+              {messages.map((m, i) => <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}><div className={m.role === 'user' ? 'max-w-[85%] rounded-2xl rounded-br-md bg-gray-900 text-white px-3 py-2' : 'max-w-[85%] rounded-2xl rounded-bl-md bg-white border border-gray-100 text-gray-700 px-3 py-2'}><p className="text-xs whitespace-pre-wrap leading-relaxed">{m.content}</p></div></div>)}
               {loading && (
-                <div className="flex justify-start items-end gap-2">
-                  <SupportAvatar role="assistant" />
+                <div className="flex justify-start">
                   <div className="relative overflow-hidden bg-white border border-gray-100 rounded-2xl rounded-bl-md px-3 py-2.5 shadow-sm animate-pulse" aria-label="QAfrica Support is typing">
                     <div className="relative flex items-center gap-1">
                       <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
