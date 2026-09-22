@@ -370,11 +370,18 @@ export default function RecommendationsPage() {
   const navigate = useNavigate();
   const { customer, isAuthenticated, logout, fetchProfile } = useCustomerAuthStore();
 
-  // OAuth returns to this page with a Supabase session already established.
-  // Hydrate the customer store so the UI reflects the Google login immediately.
+  // Keep customer UI state synchronized with the Supabase session.
+  // Do not clear local customer state just because the profile request is
+  // briefly unavailable while the client restores/refreshes a persisted token.
   useEffect(() => {
-    void (async () => {
+    let cancelled = false;
+
+    const hydrateCustomer = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (cancelled || !session?.user) return;
       await fetchProfile();
+
+      if (cancelled) return;
 
       const rawTerms = localStorage.getItem('qafrica-import-google-terms');
       if (!rawTerms) return;
@@ -404,7 +411,22 @@ export default function RecommendationsPage() {
       } catch (err) {
         console.error('Failed to process Google Import terms:', err);
       }
-    })();
+    };
+
+    void hydrateCustomer();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        useCustomerAuthStore.getState().setCustomer(null);
+        return;
+      }
+      void hydrateCustomer();
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
   }, [fetchProfile]);
   const { isSaved, toggleSave } = useSavedItems();
 
