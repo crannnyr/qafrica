@@ -95,8 +95,14 @@ interface Refund {
   code: string;
   items: Array<{ id: string; name: string; price_ngn: number; quantity: number; image_url?: string }>;
   total_ngn: number;
+  refund_amount_ngn: number;
+  cancellation_fee_ngn: number;
+  refund_policy?: string | null;
   cancel_reason: string;
   status: 'pending' | 'submitted' | 'paid';
+  payment_method: 'paystack' | 'manual' | null;
+  paystack_refund_status?: string | null;
+  paystack_refund_id?: string | null;
   bank_account_number: string | null;
   bank_account_name: string | null;
   bank_name: string | null;
@@ -725,9 +731,19 @@ export default function ImporterDashboardPage() {
                       ))}
                     </div>
 
-                    <p className="text-sm font-bold text-gray-900 mb-3">Refund amount: {fmt(r.total_ngn)}</p>
+                    <div className="bg-gray-50 rounded-xl px-3 py-2.5 mb-3 space-y-1">
+                      <div className="flex items-center justify-between text-xs"><span className="text-gray-500">Original amount</span><span className="font-semibold text-gray-800">{fmt(r.total_ngn)}</span></div>
+                      {Number(r.cancellation_fee_ngn ?? 0) > 0 && <div className="flex items-center justify-between text-xs"><span className="text-gray-500">Cancellation fee</span><span className="font-semibold text-red-600">-{fmt(r.cancellation_fee_ngn)}</span></div>}
+                      <div className="border-t border-gray-200 pt-1 flex items-center justify-between"><span className="text-sm font-bold text-gray-900">Refund amount</span><span className="text-sm font-black text-gray-900">{fmt(r.refund_amount_ngn)}</span></div>
+                    </div>
 
-                    {r.status === 'pending' && (
+                    {r.status === 'pending' && r.payment_method === 'paystack' && (
+                      <div className="bg-blue-50 rounded-xl px-3 py-2.5 text-[11px] text-blue-700">
+                        Your refund will be returned through the original Paystack payment method. No bank details are required.
+                      </div>
+                    )}
+
+                    {r.status === 'pending' && r.payment_method === 'manual' && (
                       <>
                         <button
                           onClick={() => { setRefundBankForm(r); setBankFormData({ bank_account_number: '', bank_account_name: '', bank_name: '' }); }}
@@ -742,7 +758,15 @@ export default function ImporterDashboardPage() {
                       </>
                     )}
 
-                    {r.status === 'submitted' && r.bank_account_number && (
+                    {r.status === 'submitted' && r.payment_method === 'paystack' && (
+                      <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700 space-y-1">
+                        <p className="font-semibold">Paystack refund submitted</p>
+                        <p>Your refund is being returned through your original payment method.</p>
+                        {r.paystack_refund_status && <p className="text-[11px]">Status: {r.paystack_refund_status}</p>}
+                      </div>
+                    )}
+
+                    {r.status === 'submitted' && r.payment_method === 'manual' && r.bank_account_number && (
                       <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-600 space-y-0.5">
                         <p className="font-semibold text-gray-800">{r.bank_account_name}</p>
                         <p>{r.bank_account_number} · {r.bank_name}</p>
