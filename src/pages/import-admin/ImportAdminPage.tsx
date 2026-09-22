@@ -310,6 +310,7 @@ function useImportAuth() {
 // ── Divider ───────────────────────────────────────────────────────────────────
 function ImportAdminAccessManager({ token, canManage }: { token: string; canManage: boolean }) {
   type Role = { id: string; key: string; name: string; description: string | null; is_system: boolean };
+  type Permission = { id: string; key: string; name: string; section: string; action: string; description: string | null };
   type Manager = {
     id: string;
     email: string;
@@ -318,10 +319,13 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
     created_at: string;
     updated_at: string;
     roles: Role[];
+    permissions: Permission[];
+    direct_permission_ids: string[];
   };
 
   const [managers, setManagers] = useState<Manager[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -329,6 +333,10 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
   const [newRoleId, setNewRoleId] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [newPermissionIds, setNewPermissionIds] = useState<string[]>([]);
+  const [resetManagerId, setResetManagerId] = useState<string | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -345,6 +353,7 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       }
       setManagers(data.managers ?? []);
       setRoles(data.roles ?? []);
+      setPermissions(data.permissions ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load Import Managers');
     } finally {
@@ -395,6 +404,67 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       setActing(null);
     }
   };
+  const assignPermission = async (managerId: string, permissionId: string) => {
+    if (!canManage || !permissionId) return;
+    setActing(`permission-add:${managerId}:${permissionId}`);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-assign-manager-permission`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, manager_id: managerId, permission_id: permissionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not assign permission');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not assign permission');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const removePermission = async (managerId: string, permissionId: string) => {
+    if (!canManage) return;
+    setActing(`permission-remove:${managerId}:${permissionId}`);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-remove-manager-permission`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, manager_id: managerId, permission_id: permissionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not remove permission');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not remove permission');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const resetManagerPassword = async (managerId: string) => {
+    if (!canManage || resetPassword.length < 8) return;
+    setActing(`password:${managerId}`);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-reset-manager-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, manager_id: managerId, password: resetPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not reset password');
+      setResetManagerId(null);
+      setResetPassword('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not reset password');
+    } finally {
+      setActing(null);
+    }
+  };
+
   const createManager = async () => {
     if (!canManage) return;
     setActing('create');
@@ -408,6 +478,8 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
           email: newEmail,
           full_name: newName,
           role_id: newRoleId,
+          password: newPassword,
+          permission_ids: newPermissionIds,
         }),
       });
       const data = await res.json();
@@ -415,6 +487,8 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       setNewEmail('');
       setNewName('');
       setNewRoleId('');
+      setNewPassword('');
+      setNewPermissionIds([]);
       setShowAddForm(false);
       await load();
     } catch (e) {
@@ -483,6 +557,13 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
                 type="email"
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
               />
+              <input
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="Temporary password (minimum 8 characters)"
+                type="password"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+              />
               <select
                 value={newRoleId}
                 onChange={e => setNewRoleId(e.target.value)}
@@ -493,10 +574,25 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
                   <option key={role.id} value={role.id}>{role.name}</option>
                 ))}
               </select>
+              <div className="rounded-lg border border-gray-200 bg-white p-3">
+                <p className="text-[10px] font-bold text-gray-500 mb-2">Optional direct permissions</p>
+                <div className="max-h-48 overflow-y-auto space-y-1.5">
+                  {permissions.map(permission => (
+                    <label key={permission.id} className="flex items-start gap-2 text-[10px] text-gray-600">
+                      <input
+                        type="checkbox"
+                        checked={newPermissionIds.includes(permission.id)}
+                        onChange={e => setNewPermissionIds(ids => e.target.checked ? [...ids, permission.id] : ids.filter(id => id !== permission.id))}
+                      />
+                      <span><b>{permission.name}</b><span className="text-gray-400"> — {permission.key}</span></span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={() => void createManager()}
-                disabled={acting === 'create' || !newName.trim() || !newEmail.trim() || !newRoleId}
+                disabled={acting === 'create' || !newName.trim() || !newEmail.trim() || !newRoleId || newPassword.length < 8}
                 className="w-full py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-xs font-bold"
               >
                 {acting === 'create' ? 'Adding…' : 'Add Admin'}
@@ -577,6 +673,89 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
                           <option key={role.id} value={role.id}>{role.name}</option>
                         ))}
                       </select>
+                    </div>
+                  )}
+
+                  <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                      Effective permissions ({manager.permissions?.length ?? 0})
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {(manager.permissions ?? []).map(permission => {
+                        const isDirect = manager.direct_permission_ids?.includes(permission.id);
+                        return (
+                          <span key={permission.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-gray-100 text-[9px] text-gray-600">
+                            {permission.name}
+                            {canManage && isDirect && (
+                              <button
+                                type="button"
+                                onClick={() => void removePermission(manager.id, permission.id)}
+                                disabled={acting === `permission-remove:${manager.id}:${permission.id}`}
+                                className="text-gray-400 hover:text-red-500 disabled:opacity-40"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {canManage && (
+                      <div className="mt-2 flex gap-2">
+                        <select
+                          defaultValue=""
+                          onChange={e => {
+                            const permissionId = e.target.value;
+                            e.target.value = '';
+                            if (permissionId) void assignPermission(manager.id, permissionId);
+                          }}
+                          className="flex-1 px-2.5 py-2 rounded-lg border border-gray-200 text-[10px] bg-white"
+                        >
+                          <option value="">Add direct permission…</option>
+                          {permissions.filter(p => !manager.direct_permission_ids?.includes(p.id)).map(permission => (
+                            <option key={permission.id} value={permission.id}>{permission.name} — {permission.section}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {canManage && (
+                    <div className="mt-3">
+                      {resetManagerId === manager.id ? (
+                        <div className="flex gap-2">
+                          <input
+                            value={resetPassword}
+                            onChange={e => setResetPassword(e.target.value)}
+                            type="password"
+                            placeholder="New password (8+ characters)"
+                            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void resetManagerPassword(manager.id)}
+                            disabled={acting === `password:${manager.id}` || resetPassword.length < 8}
+                            className="px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40"
+                          >
+                            Reset
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setResetManagerId(null); setResetPassword(''); }}
+                            className="px-3 py-2 rounded-lg border border-gray-200 text-[10px] font-semibold"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setResetManagerId(manager.id); setResetPassword(''); }}
+                          className="text-[10px] font-semibold text-gray-500 hover:text-gray-900"
+                        >
+                          Reset password
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
