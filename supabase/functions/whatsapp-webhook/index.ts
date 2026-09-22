@@ -117,7 +117,7 @@ async function requestEmailVerification(s:any, conversation:any, email:string) {
         to: normalized,
         subject: 'Your QAfrica WhatsApp verification code',
         html: emailHtml,
-        email_type: 'generic',
+        email_type: 'email_verification',
         priority: 1,
       },
     })
