@@ -119,18 +119,17 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
           type="button"
           disabled={isLoading}
           onClick={async () => {
-            // Google OAuth must never be disabled by the separate
-            // email/password terms checkbox. The agreement text below this
-            // button makes the terms clear before the user continues.
-            // OAuth redirects away from this page, so preserve the agreement
-            // through the callback.
-            localStorage.setItem(
-              'qafrica-import-google-terms',
-              JSON.stringify({
-                acceptedAt: new Date().toISOString(),
-                version: IMPORT_TERMS_VERSION,
-              })
-            );
+            // Google sign-in does not require a terms agreement.
+            // Only a new Google signup needs the Import agreement recorded.
+            if (mode === 'signup') {
+              localStorage.setItem(
+                'qafrica-import-google-terms',
+                JSON.stringify({
+                  acceptedAt: new Date().toISOString(),
+                  version: IMPORT_TERMS_VERSION,
+                })
+              );
+            }
             setIsLoading(true);
             const result = await loginWithGoogle('/recommendations');
             if (!result.success) {
