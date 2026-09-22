@@ -108,7 +108,7 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
 
   useEffect(() => {
     let cancelled = false;
-    void supabase.auth.getSession().then(({ data: { session } }) => {
+    void supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (cancelled) return;
       const user = session?.user ?? null;
       const id = user?.id ?? null;
@@ -180,9 +180,9 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
       const raw = localStorage.getItem(storageKey);
       const saved = raw ? JSON.parse(raw) : {};
       localStorage.setItem(storageKey, JSON.stringify({
+        ...saved,
         messages,
         lastActivityAt: Date.now(),
-        ...saved,
       }));
     } catch {
       // Ignore storage failures.
