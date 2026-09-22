@@ -77,6 +77,19 @@ export default function ImportAiSupportSheet({
   return (
     <>
       {!open && (
+        <a
+          href={HUMAN_SUPPORT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="fixed bottom-[4.5rem] right-4 lg:bottom-[5.5rem] lg:right-6 z-30 flex items-center gap-2 rounded-full bg-green-600 text-white px-4 py-3 shadow-xl hover:bg-green-700 transition-colors"
+          aria-label="Open QAfrica WhatsApp support"
+        >
+          <Headset className="w-4 h-4" />
+          <span className="text-xs font-bold">WhatsApp</span>
+        </a>
+      )}
+
+      {!open && (
         <button
           onClick={() => setOpen(true)}
           className="fixed bottom-24 right-4 lg:bottom-6 lg:right-6 z-30 flex items-center gap-2 rounded-full bg-gray-900 text-white px-4 py-3 shadow-xl hover:bg-gray-800 transition-colors"
@@ -135,17 +148,6 @@ export default function ImportAiSupportSheet({
               <div ref={endRef} />
             </div>
 
-            <div className="px-3 pt-2 bg-white border-t border-gray-100">
-              <a
-                href={HUMAN_SUPPORT_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 px-3 py-2 text-xs font-semibold"
-              >
-                <Headset className="w-3.5 h-3.5" />
-                Talk to a human on WhatsApp
-              </a>
-            </div>
 
             <form
               onSubmit={e => { e.preventDefault(); void ask(); }}
