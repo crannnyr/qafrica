@@ -68,7 +68,7 @@ interface ImportCartState {
 
 export const useImportCartStore = create<ImportCartState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       cart: [],
 
       addToCart: (product, quantity, priceNgn, variantSelection) => {
