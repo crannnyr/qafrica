@@ -117,14 +117,13 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
 
         <button
           type="button"
-          disabled={isLoading || !agreedToTerms}
+          disabled={isLoading}
           onClick={async () => {
-            if (!agreedToTerms) {
-              toast.error('Please agree to the Import Terms & Conditions to continue');
-              return;
-            }
-            // OAuth redirects away from this page, so preserve the customer's
-            // explicit Import terms acceptance until the callback returns.
+            // Google OAuth must never be disabled by the separate
+            // email/password terms checkbox. The agreement text below this
+            // button makes the terms clear before the user continues.
+            // OAuth redirects away from this page, so preserve the agreement
+            // through the callback.
             localStorage.setItem(
               'qafrica-import-google-terms',
               JSON.stringify({
@@ -149,6 +148,16 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
           </svg>
           Continue with Google
         </button>
+        <p className="text-[10px] text-gray-400 text-center leading-snug mt-2 mb-2">
+          By continuing with Google, you agree to the{' '}
+          <Link to="/import-terms" target="_blank" className="text-orange-500 font-semibold hover:underline">
+            Import Terms &amp; Conditions
+          </Link>{' '}
+          and{' '}
+          <Link to="/terms-of-service" target="_blank" className="text-orange-500 font-semibold hover:underline">
+            Terms of Service
+          </Link>.
+        </p>
 
         <div className="flex items-center gap-3 py-1">
           <div className="h-px bg-gray-100 flex-1" />
