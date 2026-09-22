@@ -117,8 +117,21 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
 
         <button
           type="button"
-          disabled={isLoading}
+          disabled={isLoading || !agreedToTerms}
           onClick={async () => {
+            if (!agreedToTerms) {
+              toast.error('Please agree to the Import Terms & Conditions to continue');
+              return;
+            }
+            // OAuth redirects away from this page, so preserve the customer's
+            // explicit Import terms acceptance until the callback returns.
+            localStorage.setItem(
+              'qafrica-import-google-terms',
+              JSON.stringify({
+                acceptedAt: new Date().toISOString(),
+                version: IMPORT_TERMS_VERSION,
+              })
+            );
             setIsLoading(true);
             const result = await loginWithGoogle('/recommendations');
             if (!result.success) {
