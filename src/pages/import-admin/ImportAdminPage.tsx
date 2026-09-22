@@ -27,6 +27,7 @@ import RefundsManager from './RefundsManager';
 import AdminOrderReceiptSheet from './AdminOrderReceiptSheet';
 import PaystackTransactions from './PaystackTransactions';
 import CategoryManager from './CategoryManager';
+import AiSupportInbox, { AiSupportAlertMonitor } from './AiSupportInbox';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const IMPORT_ADMIN_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-admin-orders`;
@@ -3675,7 +3676,7 @@ export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
   const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(token);
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access' | 'ai-support'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -3703,9 +3704,10 @@ export default function ImportAdminPage() {
     'custom-orders': 'import.custom_orders.view',
     categories: 'import.categories.view',
     'admin-access': 'import.admin_access.view',
+    'ai-support': 'import.messages.view',
   } as const;
 
-  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access'] as const;
+  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access', 'ai-support'] as const;
 
   const visibleTabs = allTabs.filter(t => hasPermission(tabPermissions[t]));
 
@@ -3770,6 +3772,7 @@ export default function ImportAdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <AiSupportAlertMonitor token={token} enabled={hasPermission('import.messages.view')} />
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
         <div className="flex items-center justify-between px-4 lg:px-8 py-3 max-w-3xl lg:max-w-6xl mx-auto">
@@ -3805,7 +3808,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'ai-support' ? 'AI Support' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
             </button>
           ))}
         </div>
@@ -3841,6 +3844,8 @@ export default function ImportAdminPage() {
           <CategoryManager token={token} />
         ) : tab === 'admin-access' ? (
           <ImportAdminAccessManager token={token} canManage={hasPermission('import.admin_access.manage')} />
+        ) : tab === 'ai-support' ? (
+          <AiSupportInbox token={token} />
         ) : tab === 'settings' ? (
           <SettingsManager token={token} />
         ) : tab === 'pricing-shipping' ? (
