@@ -90,7 +90,7 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
         const res = await fetch(AI_URL, {
           method: 'POST',
           headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actor: 'customer', channel: 'website', message: 'load_support_state' }),
+          body: JSON.stringify({ actor: 'customer', channel: 'website', action: 'get_state' }),
         });
         const data = await res.json().catch(() => ({}));
         if (cancelled || !res.ok) return;
