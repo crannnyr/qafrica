@@ -103,6 +103,7 @@ export default function ImportAiSupportSheet({ isAuthenticated, onRequireAuth, s
     return () => { cancelled = true; };
   }, [open, isAuthenticated]);
 
+
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
