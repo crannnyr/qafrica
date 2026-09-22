@@ -856,6 +856,31 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
               </div>
 
               {canManage && (
+                <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => void updateManagerStatus(manager, !manager.is_active)}
+                    disabled={acting === `status:${manager.id}`}
+                    className={`text-[10px] font-semibold disabled:opacity-40 ${manager.is_active ? 'text-amber-600 hover:text-amber-800' : 'text-emerald-600 hover:text-emerald-800'}`}
+                  >
+                    {acting === `status:${manager.id}`
+                      ? 'Updating…'
+                      : manager.is_active ? 'Deactivate admin' : 'Reactivate admin'}
+                  </button>
+                  {manager.email !== 'import@qafrica.store' && (
+                    <button
+                      type="button"
+                      onClick={() => void deleteManager(manager)}
+                      disabled={acting === `delete:${manager.id}`}
+                      className="text-[10px] font-semibold text-red-600 hover:text-red-800 disabled:opacity-40"
+                    >
+                      {acting === `delete:${manager.id}` ? 'Deleting…' : 'Delete admin'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {canManage && (
                 <div className="mt-3">
                   {resetManagerId === manager.id ? (
                     <div className="flex gap-2">
