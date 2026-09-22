@@ -526,7 +526,7 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not update admin status');
-      await load();
+      setManagers(current => current.map(item => item.id === manager.id ? { ...item, is_active: isActive } : item));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not update admin status');
     } finally {
@@ -554,7 +554,7 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not delete Import Manager');
       if (editingManagerId === manager.id) setEditingManagerId(null);
-      await load();
+      setManagers(current => current.filter(item => item.id !== manager.id));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete Import Manager');
     } finally {
@@ -1997,7 +1997,6 @@ function BillCustomerModal({
               placeholder="e.g. 5000"
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none mb-3"
             />
-
             <label className="text-xs font-semibold text-gray-700 mb-1.5 block">Reason</label>
             <input
               type="text"
