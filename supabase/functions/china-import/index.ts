@@ -1303,6 +1303,121 @@ serve(async (req: Request) => {
       return json({ success: true })
     }
 
+
+    // ── Legacy Import Manager access administration ─────────────────────────
+    if (req.method === 'POST' && action === 'admin-list-managers') {
+      const { manager_token } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.view'))) {
+        return json({ error: 'Unauthorized' }, 401)
+      }
+
+      const { data: managers, error: managersError } = await supabase
+        .from('import_admin_managers')
+        .select('id, email, full_name, is_active, created_at, updated_at')
+        .order('created_at', { ascending: true })
+
+      if (managersError) return json({ error: managersError.message }, 500)
+
+      const { data: roles, error: rolesError } = await supabase
+        .from('import_admin_roles')
+        .select('id, key, name, description, is_system')
+        .order('name', { ascending: true })
+
+      if (rolesError) return json({ error: rolesError.message }, 500)
+
+      const managerIds = (managers ?? []).map((manager: any) => manager.id).filter(Boolean)
+      const { data: assignments, error: assignmentsError } = managerIds.length
+        ? await supabase
+            .from('import_admin_manager_roles')
+            .select('manager_id, role_id')
+            .in('manager_id', managerIds)
+        : { data: [], error: null }
+
+      if (assignmentsError) return json({ error: assignmentsError.message }, 500)
+
+      const roleMap = new Map((roles ?? []).map((role: any) => [role.id, role]))
+      const managersWithRoles = (managers ?? []).map((manager: any) => ({
+        ...manager,
+        roles: (assignments ?? [])
+          .filter((assignment: any) => assignment.manager_id === manager.id)
+          .map((assignment: any) => roleMap.get(assignment.role_id))
+          .filter(Boolean),
+      }))
+
+      return json({ managers: managersWithRoles, roles: roles ?? [] })
+    }
+
+    if (req.method === 'POST' && action === 'admin-assign-manager-role') {
+      const { manager_token, manager_id, role_id } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
+        return json({ error: 'Unauthorized' }, 401)
+      }
+      if (!manager_id || !role_id) return json({ error: 'Missing manager_id or role_id' }, 400)
+
+      const { data: targetManager, error: targetManagerError } = await supabase
+        .from('import_admin_managers')
+        .select('id, email, is_active')
+        .eq('id', manager_id)
+        .maybeSingle()
+
+      if (targetManagerError) return json({ error: targetManagerError.message }, 500)
+      if (!targetManager || !targetManager.is_active || !targetManager.email.endsWith('@qafrica.store')) {
+        return json({ error: 'Import Manager not found or inactive' }, 404)
+      }
+
+      const { data: role, error: roleError } = await supabase
+        .from('import_admin_roles')
+        .select('id, key, name, description, is_system')
+        .eq('id', role_id)
+        .maybeSingle()
+
+      if (roleError) return json({ error: roleError.message }, 500)
+      if (!role) return json({ error: 'Role not found' }, 404)
+
+      const { error: upsertError } = await supabase
+        .from('import_admin_manager_roles')
+        .upsert({ manager_id, role_id }, { onConflict: 'manager_id,role_id' })
+
+      if (upsertError) return json({ error: upsertError.message }, 500)
+      return json({ success: true, manager_id, role })
+    }
+
+    if (req.method === 'POST' && action === 'admin-remove-manager-role') {
+      const { manager_token, manager_id, role_id } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
+        return json({ error: 'Unauthorized' }, 401)
+      }
+      if (!manager_id || !role_id) return json({ error: 'Missing manager_id or role_id' }, 400)
+
+      const { data: session } = await supabase
+        .from('import_admin_sessions')
+        .select('manager_id')
+        .eq('token', manager_token)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+
+      if (session?.manager_id === manager_id) {
+        const { count, error: countError } = await supabase
+          .from('import_admin_manager_roles')
+          .select('*', { count: 'exact', head: true })
+          .eq('manager_id', manager_id)
+
+        if (countError) return json({ error: countError.message }, 500)
+        if ((count ?? 0) <= 1) {
+          return json({ error: 'You cannot remove the last role from your own Import Manager account.' }, 400)
+        }
+      }
+
+      const { error: deleteError } = await supabase
+        .from('import_admin_manager_roles')
+        .delete()
+        .eq('manager_id', manager_id)
+        .eq('role_id', role_id)
+
+      if (deleteError) return json({ error: deleteError.message }, 500)
+      return json({ success: true })
+    }
+
     if (req.method === 'GET' && action === 'admin-settings') {
       const { data, error } = await supabase
         .from('import_admin_credentials')
