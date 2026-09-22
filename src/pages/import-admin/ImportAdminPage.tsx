@@ -325,6 +325,10 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newRoleId, setNewRoleId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -391,6 +395,35 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       setActing(null);
     }
   };
+  const createManager = async () => {
+    if (!canManage) return;
+    setActing('create');
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-create-manager`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_token: token,
+          email: newEmail,
+          full_name: newName,
+          role_id: newRoleId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not add Import Manager');
+      setNewEmail('');
+      setNewName('');
+      setNewRoleId('');
+      setShowAddForm(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not add Import Manager');
+    } finally {
+      setActing(null);
+    }
+  };
+
 
   if (loading) {
     return <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">Loading Import Managers…</div>;
@@ -406,17 +439,69 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
               Manage legacy Import Manager identities and their Import Admin roles. Only @qafrica.store managers are supported.
             </p>
           </div>
-          <button
-            onClick={() => void load()}
-            className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            {canManage && (
+              <button
+                onClick={() => setShowAddForm(v => !v)}
+                className="flex items-center gap-1.5 text-xs font-semibold bg-gray-900 text-white hover:bg-gray-700 px-3 py-2 rounded-lg"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {showAddForm ? 'Close' : 'Add Admin'}
+              </button>
+            )}
+            <button
+              onClick={() => void load()}
+              className="flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Refresh
+            </button>
+          </div>
         </div>
         {!canManage && (
           <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2 text-[11px] text-amber-700">
             You can view manager access, but you do not have permission to change roles.
+          </div>
+        )}
+        {canManage && showAddForm && (
+          <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
+            <p className="text-xs font-bold text-gray-900">Add Import Admin</p>
+            <p className="text-[10px] text-gray-400 mt-1">
+              Use a @qafrica.store email and assign the role this admin should have.
+            </p>
+            <div className="grid gap-2 mt-3">
+              <input
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                placeholder="Full name"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+              />
+              <input
+                value={newEmail}
+                onChange={e => setNewEmail(e.target.value)}
+                placeholder="admin@qafrica.store"
+                type="email"
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+              />
+              <select
+                value={newRoleId}
+                onChange={e => setNewRoleId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+              >
+                <option value="">Select Import Admin role…</option>
+                {roles.map(role => (
+                  <option key={role.id} value={role.id}>{role.name}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => void createManager()}
+                disabled={acting === 'create' || !newName.trim() || !newEmail.trim() || !newRoleId}
+                className="w-full py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-xs font-bold"
+              >
+                {acting === 'create' ? 'Adding…' : 'Add Admin'}
+              </button>
+            </div>
           </div>
         )}
       </div>
