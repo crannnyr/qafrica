@@ -291,32 +291,6 @@ async function getOrCreateWebsiteConversation(s:any, req:Request) {
   return data
 }
 
-async function appendSupportMessage(s:any, conversationId:string, direction:'inbound'|'outbound', senderType:'customer'|'ai'|'human', body:string) {
-  const { data, error } = await s.from('import_ai_whatsapp_messages')
-    .insert({ conversation_id:conversationId, direction, sender_type:senderType, body, metadata:{ channel:'website' } })
-    .select('id,direction,sender_type,body,created_at')
-    .single()
-  if (error) throw error
-  return data
-}
-
-async function getOrCreateWebsiteConversation(s:any, req:Request) {
-  const id = await customerId(s, req)
-  const { data: existing, error } = await s.from('import_ai_whatsapp_conversations')
-    .select('id,status')
-    .eq('customer_id', id)
-    .eq('channel','website')
-    .maybeSingle()
-  if (error) throw error
-  if (existing) return existing
-  const { data, error: insertError } = await s.from('import_ai_whatsapp_conversations')
-    .insert({ customer_id:id, wa_id:`web:${id}`, channel:'website', status:'ai' })
-    .select('id,status')
-    .single()
-  if (insertError) throw insertError
-  return data
-}
-
 async function appendSupportMessage(s:any, conversationId:string, direction:'inbound'|'outbound', senderType:'customer'|'ai'|'human', body:string, metadata:any = {channel:'website'}) {
   const { data, error } = await s.from('import_ai_whatsapp_messages')
     .insert({ conversation_id:conversationId, direction, sender_type:senderType, body, metadata })
