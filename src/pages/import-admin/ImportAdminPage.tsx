@@ -3820,8 +3820,6 @@ export default function ImportAdminPage() {
           <ConfirmedOrderMessagingManager token={token} />
         ) : tab === 'ai-support' ? (
           <AiSupportInbox token={token} />
-        ) : tab === 'ai-support' ? (
-          <AiSupportInbox token={token} />
         ) : tab === 'broadcast' ? (
           <BroadcastEmailManager token={token} />
         ) : tab === 'orders' ? (
