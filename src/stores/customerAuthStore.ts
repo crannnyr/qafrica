@@ -113,7 +113,13 @@ export const useCustomerAuthStore = create<CustomerAuthState>()(
       loginWithGoogle: async (redirectPath = '/recommendations') => {
         set({ isLoading: true, error: null });
         try {
-          const redirectTo = new URL(redirectPath, window.location.origin);
+          // PR #12 test target: keep the OAuth return URL on the Netlify preview
+          // so the PKCE state created in this browser stays on the same origin.
+          const redirectOrigin =
+            window.location.hostname === 'deploy-preview-12--qafrica.netlify.app'
+              ? 'https://deploy-preview-12--qafrica.netlify.app'
+              : window.location.origin;
+          const redirectTo = new URL(redirectPath, redirectOrigin);
           redirectTo.searchParams.set('oauth', 'google');
           const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
