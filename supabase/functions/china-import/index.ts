@@ -314,33 +314,34 @@ async function hasManagerImportPermission(supabase: any, managerId: string, perm
   if (assignmentsError) return false
 
   const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
-  const rolePermissionIds: string[] = []
+  if (roleIds.length === 0) return false
 
-  if (roleIds.length > 0) {
-    const { data: rolePermissions, error: rolePermissionsError } = await supabase
-      .from('import_admin_role_permissions')
-      .select('permission_id')
-      .in('role_id', roleIds)
-    if (rolePermissionsError) return false
-    rolePermissionIds.push(...(rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean))
-  }
+  const { data: rolePermissions, error: rolePermissionsError } = await supabase
+    .from('import_admin_role_permissions')
+    .select('permission_id')
+    .in('role_id', roleIds)
+  if (rolePermissionsError) return false
 
-  const { data: directPermissions, error: directPermissionsError } = await supabase
-    .from('import_admin_manager_permissions')
+  const rolePermissionIds = Array.from(new Set(
+    (rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)
+  ))
+
+  const { data: deniedPermissions, error: deniedPermissionsError } = await supabase
+    .from('import_admin_manager_denied_permissions')
     .select('permission_id')
     .eq('manager_id', managerId)
-  if (directPermissionsError) return false
+  if (deniedPermissionsError) return false
 
-  const permissionIds = Array.from(new Set([
-    ...rolePermissionIds,
-    ...(directPermissions ?? []).map((row: any) => row.permission_id).filter(Boolean),
-  ]))
-  if (permissionIds.length === 0) return false
+  const deniedIds = new Set(
+    (deniedPermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)
+  )
+  const effectivePermissionIds = rolePermissionIds.filter((id: string) => !deniedIds.has(id))
+  if (effectivePermissionIds.length === 0) return false
 
   const { data: permission, error: permissionError } = await supabase
     .from('import_admin_permissions')
     .select('id')
-    .in('id', permissionIds)
+    .in('id', effectivePermissionIds)
     .eq('key', permissionKey)
     .limit(1)
     .maybeSingle()
@@ -1352,34 +1353,66 @@ serve(async (req: Request) => {
 
     // ── Create a legacy Import Manager ─────────────────────────────────────
     if (req.method === 'POST' && action === 'admin-create-manager') {
-      const { manager_token, email, full_name, role_id, password, permission_ids } = await req.json().catch(() => ({}))
+      const { manager_token, email, full_name, role_id, role_ids, password, permission_ids } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
         return json({ error: 'Unauthorized' }, 401)
       }
 
       const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
       const cleanName = typeof full_name === 'string' ? full_name.trim() : ''
+      const requestedRoleIds = Array.from(new Set(
+        (Array.isArray(role_ids) ? role_ids : [role_id])
+          .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+      ))
 
-      if (!cleanEmail || !cleanEmail.endsWith('@qafrica.store')) {
+      if (!cleanEmail || !/^([a-z0-9._%+-]+)@qafrica\\.store$/.test(cleanEmail)) {
         return json({ error: 'Admin email must use @qafrica.store.' }, 400)
       }
       if (!cleanName) return json({ error: 'Full name is required.' }, 400)
-      if (!role_id) return json({ error: 'Select an Import Admin role.' }, 400)
+      if (requestedRoleIds.length === 0) return json({ error: 'Select at least one Import Admin role.' }, 400)
       if (typeof password !== 'string' || password.length < 8) {
         return json({ error: 'Password must be at least 8 characters.' }, 400)
       }
+
       const requestedPermissionIds = Array.isArray(permission_ids)
         ? Array.from(new Set(permission_ids.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)))
-        : []
+        : null
 
-      const { data: role, error: roleError } = await supabase
+      const { data: selectedRoles, error: rolesError } = await supabase
         .from('import_admin_roles')
         .select('id, key, name, description, is_system')
-        .eq('id', role_id)
-        .maybeSingle()
+        .in('id', requestedRoleIds)
 
-      if (roleError) return json({ error: roleError.message }, 500)
-      if (!role) return json({ error: 'Selected role was not found.' }, 404)
+      if (rolesError) return json({ error: rolesError.message }, 500)
+      if ((selectedRoles ?? []).length !== requestedRoleIds.length) {
+        return json({ error: 'One or more selected roles were not found.' }, 404)
+      }
+
+      const { data: rolePermissionRows, error: rolePermissionError } = await supabase
+        .from('import_admin_role_permissions')
+        .select('role_id, permission_id')
+        .in('role_id', requestedRoleIds)
+
+      if (rolePermissionError) return json({ error: rolePermissionError.message }, 500)
+
+      const rolePermissionIds = Array.from(new Set(
+        (rolePermissionRows ?? []).map((row: any) => row.permission_id).filter(Boolean)
+      ))
+
+      const effectivePermissionIds = requestedPermissionIds === null
+        ? rolePermissionIds
+        : requestedPermissionIds
+
+      const invalidSelectedPermission = effectivePermissionIds.find(
+        (permissionId: string) => !rolePermissionIds.includes(permissionId)
+      )
+      if (invalidSelectedPermission) {
+        return json({ error: 'Every selected permission must come from one of the selected roles.' }, 400)
+      }
+
+      const deniedPermissionIds = rolePermissionIds.filter(
+        (permissionId: string) => !effectivePermissionIds.includes(permissionId)
+      )
 
       const { data: existing } = await supabase
         .from('import_admin_managers')
@@ -1401,57 +1434,56 @@ serve(async (req: Request) => {
 
       if (managerError) return json({ error: managerError.message }, 500)
 
+      const cleanupManager = async () => {
+        await supabase.from('import_admin_manager_denied_permissions').delete().eq('manager_id', manager.id)
+        await supabase.from('import_admin_manager_roles').delete().eq('manager_id', manager.id)
+        await supabase.from('import_admin_manager_credentials').delete().eq('manager_id', manager.id)
+        await supabase.from('import_admin_managers').delete().eq('id', manager.id)
+      }
+
       const { data: passwordSet, error: passwordError } = await supabase.rpc('set_import_manager_password', {
         p_manager_id: manager.id,
         p_password: password,
       })
       if (passwordError || !passwordSet) {
-        await supabase.from('import_admin_managers').delete().eq('id', manager.id)
+        await cleanupManager()
         return json({ error: passwordError?.message ?? 'Could not set admin password.' }, 500)
       }
 
       const { error: assignmentError } = await supabase
         .from('import_admin_manager_roles')
-        .insert({
+        .insert(requestedRoleIds.map((selectedRoleId: string) => ({
           manager_id: manager.id,
-          role_id: role.id,
-        })
+          role_id: selectedRoleId,
+        })))
 
       if (assignmentError) {
-        await supabase.from('import_admin_manager_credentials').delete().eq('manager_id', manager.id)
-        await supabase.from('import_admin_managers').delete().eq('id', manager.id)
+        await cleanupManager()
         return json({ error: assignmentError.message }, 500)
       }
 
-      if (requestedPermissionIds.length > 0) {
-        const { data: validPermissions, error: permissionsError } = await supabase
-          .from('import_admin_permissions')
-          .select('id')
-          .in('id', requestedPermissionIds)
+      if (deniedPermissionIds.length > 0) {
+        const { error: deniedError } = await supabase
+          .from('import_admin_manager_denied_permissions')
+          .insert(deniedPermissionIds.map((permissionId: string) => ({
+            manager_id: manager.id,
+            permission_id: permissionId,
+          })))
 
-        if (permissionsError) {
-          await supabase.from('import_admin_managers').delete().eq('id', manager.id)
-          return json({ error: permissionsError.message }, 500)
-        }
-
-        const validIds = (validPermissions ?? []).map((p: any) => p.id)
-        if (validIds.length > 0) {
-          const { error: directPermissionError } = await supabase
-            .from('import_admin_manager_permissions')
-            .insert(validIds.map((permissionId: string) => ({
-              manager_id: manager.id,
-              permission_id: permissionId,
-            })))
-          if (directPermissionError) {
-            await supabase.from('import_admin_managers').delete().eq('id', manager.id)
-            return json({ error: directPermissionError.message }, 500)
-          }
+        if (deniedError) {
+          await cleanupManager()
+          return json({ error: deniedError.message }, 500)
         }
       }
 
       return json({
         success: true,
-        manager: { ...manager, roles: [role] },
+        manager: {
+          ...manager,
+          roles: selectedRoles ?? [],
+          permission_ids: effectivePermissionIds,
+          denied_permission_ids: deniedPermissionIds,
+        },
       })
     }
 
@@ -1476,6 +1508,14 @@ serve(async (req: Request) => {
 
       if (rolesError) return json({ error: rolesError.message }, 500)
 
+      const { data: permissions, error: permissionsError } = await supabase
+        .from('import_admin_permissions')
+        .select('id, key, name, section, action, description')
+        .order('section', { ascending: true })
+        .order('name', { ascending: true })
+
+      if (permissionsError) return json({ error: permissionsError.message }, 500)
+
       const managerIds = (managers ?? []).map((manager: any) => manager.id).filter(Boolean)
       const { data: assignments, error: assignmentsError } = managerIds.length
         ? await supabase
@@ -1486,41 +1526,30 @@ serve(async (req: Request) => {
 
       if (assignmentsError) return json({ error: assignmentsError.message }, 500)
 
-      const roleMap = new Map((roles ?? []).map((role: any) => [role.id, role]))
-      const { data: directPermissionAssignments, error: directPermissionAssignmentsError } = managerIds.length
+      const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
+      const { data: rolePermissionRows, error: rolePermissionError } = roleIds.length
         ? await supabase
-            .from('import_admin_manager_permissions')
+            .from('import_admin_role_permissions')
+            .select('role_id, permission_id')
+            .in('role_id', roleIds)
+        : { data: [], error: null }
+
+      if (rolePermissionError) return json({ error: rolePermissionError.message }, 500)
+
+      const { data: deniedAssignments, error: deniedAssignmentsError } = managerIds.length
+        ? await supabase
+            .from('import_admin_manager_denied_permissions')
             .select('manager_id, permission_id')
             .in('manager_id', managerIds)
         : { data: [], error: null }
 
-      if (directPermissionAssignmentsError) return json({ error: directPermissionAssignmentsError.message }, 500)
-
-      const allPermissionIds = Array.from(new Set([
-        ...(directPermissionAssignments ?? []).map((row: any) => row.permission_id).filter(Boolean),
-        ...(assignments ?? []).map((assignment: any) => assignment.role_id).filter(Boolean),
-      ]))
-
-      const { data: permissions, error: permissionsError } = await supabase
-        .from('import_admin_permissions')
-        .select('id, key, name, section, action, description')
-        .order('section', { ascending: true })
-        .order('name', { ascending: true })
-
-      if (permissionsError) return json({ error: permissionsError.message }, 500)
-
-      const rolePermissionRows = assignments?.length
-        ? await supabase
-            .from('import_admin_role_permissions')
-            .select('role_id, permission_id')
-            .in('role_id', Array.from(new Set((assignments ?? []).map((a: any) => a.role_id).filter(Boolean))))
-        : { data: [], error: null }
-
-      if (rolePermissionRows.error) return json({ error: rolePermissionRows.error.message }, 500)
+      if (deniedAssignmentsError) return json({ error: deniedAssignmentsError.message }, 500)
 
       const permissionMap = new Map((permissions ?? []).map((permission: any) => [permission.id, permission]))
-      const rolePermissionMap = new Map<string, string[]>() 
-      for (const row of rolePermissionRows.data ?? []) {
+      const roleMap = new Map((roles ?? []).map((role: any) => [role.id, role]))
+      const rolePermissionMap = new Map<string, string[]>()
+
+      for (const row of rolePermissionRows ?? []) {
         const current = rolePermissionMap.get(row.role_id) ?? []
         current.push(row.permission_id)
         rolePermissionMap.set(row.role_id, current)
@@ -1530,24 +1559,137 @@ serve(async (req: Request) => {
         const managerRoleIds = (assignments ?? [])
           .filter((assignment: any) => assignment.manager_id === manager.id)
           .map((assignment: any) => assignment.role_id)
-        const effectivePermissionIds = new Set<string>()
+
+        const deniedPermissionIds = (deniedAssignments ?? [])
+          .filter((row: any) => row.manager_id === manager.id)
+          .map((row: any) => row.permission_id)
+
+        const deniedSet = new Set(deniedPermissionIds)
+        const rolePermissionIds = new Set<string>()
         for (const roleId of managerRoleIds) {
-          for (const permissionId of rolePermissionMap.get(roleId) ?? []) effectivePermissionIds.add(permissionId)
+          for (const permissionId of rolePermissionMap.get(roleId) ?? []) {
+            rolePermissionIds.add(permissionId)
+          }
         }
-        for (const row of directPermissionAssignments ?? []) {
-          if (row.manager_id === manager.id) effectivePermissionIds.add(row.permission_id)
-        }
+
+        const effectivePermissionIds = Array.from(rolePermissionIds).filter(id => !deniedSet.has(id))
+        const managerRoles = managerRoleIds
+          .map((roleId: string) => {
+            const role = roleMap.get(roleId)
+            if (!role) return null
+            return {
+              ...role,
+              permission_ids: rolePermissionMap.get(roleId) ?? [],
+            }
+          })
+          .filter(Boolean)
+
         return {
           ...manager,
-          roles: managerRoleIds.map((roleId: string) => roleMap.get(roleId)).filter(Boolean),
-          permissions: Array.from(effectivePermissionIds).map(id => permissionMap.get(id)).filter(Boolean),
-          direct_permission_ids: (directPermissionAssignments ?? [])
-            .filter((row: any) => row.manager_id === manager.id)
-            .map((row: any) => row.permission_id),
+          roles: managerRoles,
+          permissions: effectivePermissionIds.map(id => permissionMap.get(id)).filter(Boolean),
+          denied_permission_ids: deniedPermissionIds,
         }
       })
 
-      return json({ managers: managersWithRoles, roles: roles ?? [], permissions: permissions ?? [] })
+      const rolesWithPermissions = (roles ?? []).map((role: any) => ({
+        ...role,
+        permission_ids: rolePermissionMap.get(role.id) ?? [],
+      }))
+
+      return json({
+        managers: managersWithRoles,
+        roles: rolesWithPermissions,
+        permissions: permissions ?? [],
+      })
+    }
+
+    if (req.method === 'POST' && action === 'admin-update-manager-permissions') {
+      const { manager_token, manager_id, permission_ids } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
+        return json({ error: 'Unauthorized' }, 401)
+      }
+      if (!manager_id || !Array.isArray(permission_ids)) {
+        return json({ error: 'manager_id and permission_ids are required.' }, 400)
+      }
+
+      const selectedPermissionIds = Array.from(new Set(
+        permission_ids.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+      ))
+
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from('import_admin_manager_roles')
+        .select('role_id')
+        .eq('manager_id', manager_id)
+
+      if (assignmentsError) return json({ error: assignmentsError.message }, 500)
+      const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
+      if (roleIds.length === 0) return json({ error: 'The manager must have at least one role.' }, 400)
+
+      const { data: rolePermissionRows, error: rolePermissionError } = await supabase
+        .from('import_admin_role_permissions')
+        .select('permission_id')
+        .in('role_id', roleIds)
+
+      if (rolePermissionError) return json({ error: rolePermissionError.message }, 500)
+
+      const rolePermissionIds = Array.from(new Set(
+        (rolePermissionRows ?? []).map((row: any) => row.permission_id).filter(Boolean)
+      ))
+
+      const invalidPermissionId = selectedPermissionIds.find(
+        (permissionId: string) => !rolePermissionIds.includes(permissionId)
+      )
+      if (invalidPermissionId) {
+        return json({ error: 'A selected permission is not provided by any of this manager’s roles.' }, 400)
+      }
+
+      const { data: managePermission, error: managePermissionError } = await supabase
+        .from('import_admin_permissions')
+        .select('id')
+        .eq('key', 'import.admin_access.manage')
+        .maybeSingle()
+
+      if (managePermissionError) return json({ error: managePermissionError.message }, 500)
+
+      const { data: session } = await supabase
+        .from('import_admin_sessions')
+        .select('manager_id')
+        .eq('token', manager_token)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+
+      if (session?.manager_id === manager_id && managePermission && !selectedPermissionIds.includes(managePermission.id)) {
+        return json({ error: 'You cannot remove Import Admin access management from your own account.' }, 400)
+      }
+
+      const deniedPermissionIds = rolePermissionIds.filter(
+        (permissionId: string) => !selectedPermissionIds.includes(permissionId)
+      )
+
+      const { error: clearError } = await supabase
+        .from('import_admin_manager_denied_permissions')
+        .delete()
+        .eq('manager_id', manager_id)
+
+      if (clearError) return json({ error: clearError.message }, 500)
+
+      if (deniedPermissionIds.length > 0) {
+        const { error: insertError } = await supabase
+          .from('import_admin_manager_denied_permissions')
+          .insert(deniedPermissionIds.map((permissionId: string) => ({
+            manager_id,
+            permission_id: permissionId,
+          })))
+
+        if (insertError) return json({ error: insertError.message }, 500)
+      }
+
+      return json({
+        success: true,
+        permission_ids: selectedPermissionIds,
+        denied_permission_ids: deniedPermissionIds,
+      })
     }
 
     if (req.method === 'POST' && action === 'admin-assign-manager-permission') {
