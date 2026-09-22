@@ -396,7 +396,7 @@ async function customerTool(s:any, req:Request, actor:Actor, name:string, a:any,
   if (name === 'get_terms_of_service') return await fetchLegalPage('https://qafrica.store/terms-of-service')
   if (name === 'get_import_terms') return await getImportTerms(s)
   const id = actor === 'customer' ? await customerId(s, req) : null
-  if (name === 'request_human_support') return await requestHumanSupport(s, req, actor, context.channel === 'whatsapp' ? context.conversationId : null, clean(a.reason,300))
+  if (name === 'request_human_support') return await requestHumanSupport(s, req, actor, context.conversationId, clean(a.reason,300), context.channel)
   if (actor === 'guest' && name === 'search_products') {
     const q=clean(a.query,120), limit=Math.min(Math.max(Number(a.limit??8),1),8)
     let query=s.from('china_import_products').select('id,name,description,image_url,image_urls,price_ngn,category,is_active,has_variants,variants,delivery_time,moq,is_trending,ship_only,volume_cbm,weight_grams,sea_shipping_cost_ngn,flight_shipping_cost_ngn').eq('is_active',true).ilike('name',`%${q}%`).order('is_trending',{ascending:false}).order('sort_order',{ascending:true}).limit(limit)
@@ -596,10 +596,25 @@ serve(async(req:Request)=>{
     try { return json(await adminSupportAction(s, clean(body.manager_token, 500), String(body.action), body)) }
     catch(e) { return json({error:e instanceof Error?e.message:'Support action failed'},400) }
   }
-  const key=Deno.env.get('OPENAI_API_KEY');if(!key)return json({error:'AI support is not configured: OPENAI_API_KEY is missing'},503)
-  const message=clean(body.message,4000);if(!message)return json({error:'message is required'},400)
   const channel=clean(body.channel,40) || 'website'
   const conversationId=clean(body.conversation_id,80) || null
+  if (actor==='customer' && channel==='website' && body.action==='get_state') {
+    try {
+      const id = await customerId(s, req)
+      const websiteConversation = await s.from('import_ai_whatsapp_conversations')
+        .select('id,status')
+        .eq('customer_id',id).eq('channel','website').maybeSingle()
+      if (websiteConversation.error) throw websiteConversation.error
+      return json({
+        conversation_id: websiteConversation.data?.id ?? null,
+        status: websiteConversation.data?.status ?? 'ai'
+      })
+    } catch(e) {
+      return json({error:e instanceof Error?e.message:'Could not load support state'},400)
+    }
+  }
+  const key=Deno.env.get('OPENAI_API_KEY');if(!key)return json({error:'AI support is not configured: OPENAI_API_KEY is missing'},503)
+  const message=clean(body.message,4000);if(!message)return json({error:'message is required'},400)
   const isNewConversation=channel==='whatsapp' && body.is_new_conversation===true
   const token=actor==='admin'?clean(body.manager_token,500):null
   const history = Array.isArray(body.messages)
