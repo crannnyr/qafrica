@@ -3676,7 +3676,7 @@ export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
   const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(token);
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access' | 'ai-support'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -3704,6 +3704,7 @@ export default function ImportAdminPage() {
     'custom-orders': 'import.custom_orders.view',
     categories: 'import.categories.view',
     'admin-access': 'import.admin_access.view',
+    'ai-support': 'import.messages.view',
   } as const;
 
   const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access', 'ai-support'] as const;
@@ -3817,6 +3818,8 @@ export default function ImportAdminPage() {
           <ConfirmedPaymentsManager token={token} />
         ) : tab === 'messages' ? (
           <ConfirmedOrderMessagingManager token={token} />
+        ) : tab === 'ai-support' ? (
+          <AiSupportInbox token={token} />
         ) : tab === 'ai-support' ? (
           <AiSupportInbox token={token} />
         ) : tab === 'broadcast' ? (
