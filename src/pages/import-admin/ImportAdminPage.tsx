@@ -474,6 +474,62 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
     }
   };
 
+  const updateManagerStatus = async (manager: Manager, isActive: boolean) => {
+    if (!canManage) return;
+    if (manager.email === 'import@qafrica.store' && !isActive) {
+      setError('The primary import@qafrica.store Super Admin account cannot be deactivated here.');
+      return;
+    }
+    setActing(`status:${manager.id}`);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-set-manager-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_token: token,
+          manager_id: manager.id,
+          is_active: isActive,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not update admin status');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update admin status');
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const deleteManager = async (manager: Manager) => {
+    if (!canManage) return;
+    if (manager.email === 'import@qafrica.store') {
+      setError('The primary import@qafrica.store Super Admin account cannot be deleted here.');
+      return;
+    }
+    const confirmed = window.confirm(`Delete ${manager.email}? This permanently removes the Import Manager account, roles, permissions, and password.\n\nUse Deactivate instead if you may need the account later.`);
+    if (!confirmed) return;
+
+    setActing(`delete:${manager.id}`);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-delete-manager`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, manager_id: manager.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not delete Import Manager');
+      if (editingManagerId === manager.id) setEditingManagerId(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete Import Manager');
+    } finally {
+      setActing(null);
+    }
+  };
+
   const resetManagerPassword = async (managerId: string) => {
     if (!canManage || resetPassword.length < 8) return;
     setActing(`password:${managerId}`);
