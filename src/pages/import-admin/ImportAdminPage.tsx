@@ -22,6 +22,7 @@ import TotalOrdersView from './TotalOrdersView';
 import TrendingManager from './TrendingManager';
 import ConfirmedPaymentsManager from './ConfirmedPaymentsManager';
 import ConfirmedOrderMessagingManager from './ConfirmedOrderMessagingManager';
+import AiSupportInbox from './AiSupportInbox';
 import BroadcastEmailManager from './BroadcastEmailManager';
 import RefundsManager from './RefundsManager';
 import AdminOrderReceiptSheet from './AdminOrderReceiptSheet';
@@ -3675,7 +3676,7 @@ export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
   const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(token);
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access' | 'ai-support'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -3703,9 +3704,10 @@ export default function ImportAdminPage() {
     'custom-orders': 'import.custom_orders.view',
     categories: 'import.categories.view',
     'admin-access': 'import.admin_access.view',
+    'ai-support': 'import.messages.view',
   } as const;
 
-  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access'] as const;
+  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access', 'ai-support'] as const;
 
   const visibleTabs = allTabs.filter(t => hasPermission(tabPermissions[t]));
 
@@ -3805,7 +3807,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t === 'ai-support' ? 'AI Support' : t}
             </button>
           ))}
         </div>
@@ -3816,6 +3818,8 @@ export default function ImportAdminPage() {
           <ConfirmedPaymentsManager token={token} />
         ) : tab === 'messages' ? (
           <ConfirmedOrderMessagingManager token={token} />
+        ) : tab === 'ai-support' ? (
+          <AiSupportInbox token={token} />
         ) : tab === 'broadcast' ? (
           <BroadcastEmailManager token={token} />
         ) : tab === 'orders' ? (
