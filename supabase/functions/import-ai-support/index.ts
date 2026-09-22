@@ -88,7 +88,7 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
   if (action === 'list_support_conversations') {
     await requireAdmin(s, token, 'import.messages.view')
     const { data, error } = await s.from('import_ai_whatsapp_conversations')
-      .select('id,wa_id,customer_id,status,last_inbound_at,last_outbound_at,created_at,updated_at,customers(id,full_name,email,phone)')
+      .select('id,wa_id,channel,customer_id,status,last_inbound_at,last_outbound_at,human_requested_at,human_assigned_at,human_agent_id,created_at,updated_at,customers(id,full_name,email,phone,avatar_url)')
       .in('status', ['human_requested','human_assigned','human_active'])
       .order('updated_at', { ascending: false }).limit(100)
     if (error) throw error
@@ -100,24 +100,25 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
     const id = clean(body.conversation_id, 80)
     if (!id) throw new Error('conversation_id is required')
     const { data: conversation, error: ce } = await s.from('import_ai_whatsapp_conversations')
-      .select('id,wa_id,customer_id,status,last_inbound_at,last_outbound_at,created_at,updated_at,customers(id,full_name,email,phone)')
+      .select('id,wa_id,channel,customer_id,status,last_inbound_at,last_outbound_at,human_requested_at,human_assigned_at,human_agent_id,created_at,updated_at,customers(id,full_name,email,phone,avatar_url)')
       .eq('id', id).maybeSingle()
     if (ce) throw ce
     if (!conversation) throw new Error('Conversation not found')
     const { data: messages, error: me } = await s.from('import_ai_whatsapp_messages')
-      .select('id,direction,sender_type,body,whatsapp_message_id,created_at')
-      .eq('conversation_id', id).order('created_at', { ascending: true }).limit(200)
+      .select('id,direction,sender_type,body,whatsapp_message_id,metadata,created_at')
+      .eq('conversation_id', id).order('created_at', { ascending: true }).limit(300)
     if (me) throw me
     return { conversation, messages: messages ?? [] }
   }
 
   if (action === 'take_support_conversation') {
-    await requireAdmin(s, token, 'import.messages.send')
+    const managerId = await requireAdmin(s, token, 'import.messages.send')
     const id = clean(body.conversation_id, 80)
+    const now = new Date().toISOString()
     const { data, error } = await s.from('import_ai_whatsapp_conversations')
-      .update({ status: 'human_active', updated_at: new Date().toISOString() })
+      .update({ status: 'human_active', human_assigned_at:now, human_agent_id:managerId, updated_at: now })
       .eq('id', id).in('status', ['human_requested','human_assigned','human_active'])
-      .select('id,status').maybeSingle()
+      .select('id,status,channel,human_agent_id').maybeSingle()
     if (error) throw error
     if (!data) throw new Error('Conversation is no longer waiting for human support')
     return { conversation: data }
@@ -127,9 +128,9 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
     await requireAdmin(s, token, 'import.messages.send')
     const id = clean(body.conversation_id, 80)
     const { data, error } = await s.from('import_ai_whatsapp_conversations')
-      .update({ status: 'returned_to_ai', updated_at: new Date().toISOString() })
+      .update({ status: 'returned_to_ai', human_agent_id: null, updated_at: new Date().toISOString() })
       .eq('id', id).in('status', ['human_requested','human_assigned','human_active'])
-      .select('id,status').maybeSingle()
+      .select('id,status,channel').maybeSingle()
     if (error) throw error
     if (!data) throw new Error('Conversation is no longer with human support')
     return { conversation: data }
@@ -141,21 +142,27 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
     const message = clean(body.message, 4000)
     if (!id || !message) throw new Error('conversation_id and message are required')
     const { data: conversation, error: ce } = await s.from('import_ai_whatsapp_conversations')
-      .select('id,wa_id,status').eq('id', id).maybeSingle()
+      .select('id,wa_id,channel,status').eq('id', id).maybeSingle()
     if (ce) throw ce
     if (!conversation) throw new Error('Conversation not found')
     if (!['human_requested','human_assigned','human_active'].includes(conversation.status)) {
       throw new Error('Conversation is not currently with human support')
     }
-    await sendWhatsAppText(conversation.wa_id, message)
+
+    if (conversation.channel === 'whatsapp') {
+      await sendWhatsAppText(conversation.wa_id, message)
+    }
+
     const { data: saved, error: me } = await s.from('import_ai_whatsapp_messages').insert({
-      conversation_id: id, direction: 'outbound', sender_type: 'human', body: message
-    }).select('id,direction,sender_type,body,created_at').single()
+      conversation_id: id, direction: 'outbound', sender_type: 'human', body: message,
+      metadata: { channel: conversation.channel, delivery: conversation.channel === 'website' ? 'realtime' : 'whatsapp' }
+    }).select('id,direction,sender_type,body,metadata,created_at').single()
     if (me) throw me
+
     await s.from('import_ai_whatsapp_conversations').update({
       status: 'human_active', last_outbound_at: new Date().toISOString(), updated_at: new Date().toISOString()
     }).eq('id', id)
-    return { message: saved }
+    return { message: saved, channel: conversation.channel }
   }
 
   throw new Error('Unknown support action')
@@ -210,7 +217,7 @@ const customerTools = [
 const requestHumanSupportTool = {
   type:'function',
   name:'request_human_support',
-  description:'Request a human QAfrica support agent to take over the same WhatsApp conversation. Use this when the customer explicitly asks for a human, when a payment dispute or account issue cannot be verified with the available tools, when the customer needs an action you cannot perform, or when a genuine issue remains unresolved after focused troubleshooting. This tool is only available on WhatsApp.',
+  description:'Request a human QAfrica support agent to take over the same support conversation. Use this when the customer explicitly asks for a human, when a payment dispute or account issue cannot be verified with the available tools, when the customer needs an action you cannot perform, or when a genuine issue remains unresolved after focused troubleshooting. On the website this hands the current authenticated website chat to the Import Admin support inbox; on WhatsApp it hands over the current WhatsApp conversation.',
   parameters:{type:'object',properties:{reason:{type:'string',maxLength:300}},required:['reason'],additionalProperties:false}
 }
 const whatsappCustomerTools = [...customerTools, requestHumanSupportTool]
@@ -266,32 +273,94 @@ async function getImportTerms(s:any) {
   return {url:'https://qafrica.store/import-terms',updated_at:data.updated_at,text:text.slice(0,20000)};
 }
 
-async function requestHumanSupport(s:any, req:Request, actor:Actor, conversationId:string|null, reason:string) {
-  if (actor !== 'customer') throw new Error('Human handoff is only available to authenticated customers')
-  if (!conversationId) throw new Error('WhatsApp conversation context is required for human handoff')
+async function getOrCreateWebsiteConversation(s:any, req:Request) {
   const id = await customerId(s, req)
-  const { data: conversation, error } = await s.from('import_ai_whatsapp_conversations')
-    .select('id,customer_id,status')
-    .eq('id', conversationId)
+  const { data: existing, error } = await s.from('import_ai_whatsapp_conversations')
+    .select('id,status')
+    .eq('customer_id', id)
+    .eq('channel','website')
     .maybeSingle()
   if (error) throw error
-  if (!conversation) throw new Error('WhatsApp conversation not found')
-  if (conversation.customer_id !== id) throw new Error('WhatsApp conversation does not belong to this customer')
+  if (existing) return existing
+  const { data, error: insertError } = await s.from('import_ai_whatsapp_conversations')
+    .insert({ customer_id:id, wa_id:`web:${id}`, channel:'website', status:'ai' })
+    .select('id,status')
+    .single()
+  if (insertError) throw insertError
+  return data
+}
+
+async function appendSupportMessage(s:any, conversationId:string, direction:'inbound'|'outbound', senderType:'customer'|'ai'|'human', body:string) {
+  const { data, error } = await s.from('import_ai_whatsapp_messages')
+    .insert({ conversation_id:conversationId, direction, sender_type:senderType, body, metadata:{ channel:'website' } })
+    .select('id,direction,sender_type,body,created_at')
+    .single()
+  if (error) throw error
+  return data
+}
+
+async function getOrCreateWebsiteConversation(s:any, req:Request) {
+  const id = await customerId(s, req)
+  const { data: existing, error } = await s.from('import_ai_whatsapp_conversations')
+    .select('id,status')
+    .eq('customer_id', id)
+    .eq('channel','website')
+    .maybeSingle()
+  if (error) throw error
+  if (existing) return existing
+  const { data, error: insertError } = await s.from('import_ai_whatsapp_conversations')
+    .insert({ customer_id:id, wa_id:`web:${id}`, channel:'website', status:'ai' })
+    .select('id,status')
+    .single()
+  if (insertError) throw insertError
+  return data
+}
+
+async function appendSupportMessage(s:any, conversationId:string, direction:'inbound'|'outbound', senderType:'customer'|'ai'|'human', body:string, metadata:any = {channel:'website'}) {
+  const { data, error } = await s.from('import_ai_whatsapp_messages')
+    .insert({ conversation_id:conversationId, direction, sender_type:senderType, body, metadata })
+    .select('id,direction,sender_type,body,metadata,created_at')
+    .single()
+  if (error) throw error
+  return data
+}
+
+async function requestHumanSupport(s:any, req:Request, actor:Actor, conversationId:string|null, reason:string, channel='whatsapp') {
+  if (actor !== 'customer') throw new Error('Human handoff is only available to authenticated customers')
+  const id = await customerId(s, req)
+  let targetId = conversationId
+  if (channel === 'website') {
+    if (!targetId) targetId = (await getOrCreateWebsiteConversation(s, req)).id
+  } else if (!targetId) {
+    throw new Error('WhatsApp conversation context is required for human handoff')
+  }
+
+  const { data: conversation, error } = await s.from('import_ai_whatsapp_conversations')
+    .select('id,customer_id,status,channel')
+    .eq('id', targetId).maybeSingle()
+  if (error) throw error
+  if (!conversation) throw new Error(channel === 'website' ? 'Website support conversation not found' : 'WhatsApp conversation not found')
+  if (conversation.customer_id !== id) throw new Error('Support conversation does not belong to this customer')
   if (['human_requested','human_assigned','human_active'].includes(conversation.status)) {
-    return { success:true, status:conversation.status, already_with_human:true }
+    return { success:true, status:conversation.status, already_with_human:true, conversation_id:targetId, channel:conversation.channel }
   }
   if (!['ai','returned_to_ai'].includes(conversation.status)) {
     throw new Error('This conversation cannot be handed to human support from its current state')
   }
-  const { data, error: updateError } = await s.from('import_ai_whatsapp_conversations')
-    .update({ status:'human_requested', updated_at:new Date().toISOString() })
-    .eq('id', conversationId)
-    .select('id,status')
-    .single()
-  if (updateError) throw updateError
-  return { success:true, status:data.status, reason:clean(reason,300) }
-}
 
+  const now = new Date().toISOString()
+  const { data, error: updateError } = await s.from('import_ai_whatsapp_conversations')
+    .update({ status:'human_requested', human_requested_at:now, updated_at:now })
+    .eq('id', targetId).select('id,status,channel').single()
+  if (updateError) throw updateError
+
+  await appendSupportMessage(
+    s, targetId, 'inbound', 'customer',
+    'Customer requested human support.' + (reason ? ' Reason: ' + clean(reason,300) : ''),
+    { channel:conversation.channel, event:'human_request' }
+  )
+  return { success:true, status:data.status, reason:clean(reason,300), conversation_id:targetId, channel:data.channel }
+}
 
 function importCartKey(productId:string, selection?:Record<string,string>) {
   if (!selection || Object.keys(selection).length === 0) return productId;
@@ -516,7 +585,7 @@ async function openai(key:string,input:any[],tools:any[]) {
 }
 const textOut=(r:any)=>r.output_text??(r.output??[]).filter((x:any)=>x.type==='message').flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('')
 
-function prompt(actor:Actor, channel='website', isNewConversation=false){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). Do not use Markdown bold syntax (double asterisks) in customer-facing answers; write order codes, names, amounts and statuses as normal text. For general QAfrica account/platform rules, use get_terms_of_service. For import-order policy questions such as refunds, cancellations, billing, shipping, delivery, pickup, defects, or damaged items, use get_import_terms and rely on its current text rather than guessing. When counting a customer’s orders or listing their order codes, check both get_my_orders and get_my_failed_orders so expired/removed orders are not omitted. Treat failed/expired records as separate from currently active orders. If the customer asks for “my order code” and there is more than one record, list the codes with their current/expired status instead of arbitrarily choosing one. If a customer uses an ambiguous word such as "reactive" or "reactivate", use the surrounding conversation to understand whether they mean reactivating an order; if still unclear, ask a short clarification instead of guessing a different topic such as materials or chemicals. Ask focused follow-up questions whenever the customer’s request is missing information needed to answer safely or accurately. Use the conversation history before asking for information the customer has already provided. Examples: if a cancellation/refund request has no identifiable order, ask for the order code; if multiple orders could match, ask which order; if a payment problem depends on how they paid, ask whether they used Paystack or manual transfer; if the customer asks for an arrival time but no order can be identified, ask which order. Do not ask a question when the available records already provide enough information to answer. You can also manage the authenticated customer's import cart with controlled cart tools. Only add, update, remove, or clear cart items when the customer explicitly asks to do so. If a customer only shares a product URL or asks for product information, inspect the product first and do not change the cart. A product URL is supported only when it is an official https://qafrica.store/recommendations/<product-id> link; never fetch arbitrary URLs. Always validate required variants and current prices from the database before changing the cart. Do not create an order, mark anything paid, or bypass the normal checkout/payment flow through chat. After a successful cart change, provide the cart link returned by the tool when useful. ${isNewConversation ? 'This is the beginning of a new WhatsApp conversation. Start your reply with a brief, warm welcome to QAfrica Support before helping with the customer’s request.' : ''} For WhatsApp, this number is already the official QAfrica support channel. Never tell a WhatsApp customer to contact QAfrica through WhatsApp, another WhatsApp number, or a different support channel. You have a controlled request_human_support tool on WhatsApp. Use it automatically when the customer explicitly asks for a human/agent, when a payment dispute or account issue cannot be verified with the available tools, when the customer needs an action you cannot perform, or when a genuine issue remains unresolved after focused troubleshooting. Do not escalate ordinary questions that you can answer from verified data. After the handoff tool succeeds, tell the customer warmly that you are handing this same conversation to QAfrica Support and that they do not need to contact another number. Do not claim a human has already joined unless the conversation state confirms it. If asked to reactivate an order, explain that you can check its status and relevant records but cannot reactivate it through this support chat. For any specific order lifecycle, delivery timing, payment-confirmation, shipping-fee, cancellation/refund, or "where is my order" question, use get_my_order_context with the order code when available; do not rely on generic lifecycle knowledge when customer-specific records exist. Explain the customer-facing tracking stages using the verified stage returned by the tool. A consolidation & shipping bill is the customer-facing post-order bill. Do not tell customers they need a separate clearance bill. If a sea_freight order has no recorded delivery estimate yet, you may explain the general sea-freight window as 60–90 days from ship date, but never turn that general window into a promised arrival date. For expected delivery, prefer the recorded delivery_estimate fields from the bill. The checkout flow states that expected delivery is estimated from the date payment is confirmed and includes the 3-day processing period; use this only as a general explanation when it matches the order context. ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':actor==='guest'?'You are assisting an unverified WhatsApp user. You may answer general QAfrica/import questions and search public import products, but you must not reveal or infer private customer information. If the user asks about their own order, bill, payment, refund, address, saved data, or other account-specific information, ask them to send the email address used for their QAfrica import account so the WhatsApp verification flow can send a one-time code. Do not ask for the code yourself unless the WhatsApp system has already sent one.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
+function prompt(actor:Actor, channel='website', isNewConversation=false){return `You are QAfrica Import Support. Use only verified tool data. Never invent order status, prices, payment status, customer details, delivery dates or policy. If data is missing, say so. Do not expose internal IDs, supplier URLs, admin notes or session tokens to customers. Do not claim an action happened unless a tool says success. Currency is NGN (₦). Do not use Markdown bold syntax (double asterisks) in customer-facing answers; write order codes, names, amounts and statuses as normal text. For general QAfrica account/platform rules, use get_terms_of_service. For import-order policy questions such as refunds, cancellations, billing, shipping, delivery, pickup, defects, or damaged items, use get_import_terms and rely on its current text rather than guessing. When counting a customer’s orders or listing their order codes, check both get_my_orders and get_my_failed_orders so expired/removed orders are not omitted. Treat failed/expired records as separate from currently active orders. If the customer asks for “my order code” and there is more than one record, list the codes with their current/expired status instead of arbitrarily choosing one. If a customer uses an ambiguous word such as "reactive" or "reactivate", use the surrounding conversation to understand whether they mean reactivating an order; if still unclear, ask a short clarification instead of guessing a different topic such as materials or chemicals. Ask focused follow-up questions whenever the customer’s request is missing information needed to answer safely or accurately. Use the conversation history before asking for information the customer has already provided. Examples: if a cancellation/refund request has no identifiable order, ask for the order code; if multiple orders could match, ask which order; if a payment problem depends on how they paid, ask whether they used Paystack or manual transfer; if the customer asks for an arrival time but no order can be identified, ask which order. Do not ask a question when the available records already provide enough information to answer. You can also manage the authenticated customer's import cart with controlled cart tools. Only add, update, remove, or clear cart items when the customer explicitly asks to do so. If a customer only shares a product URL or asks for product information, inspect the product first and do not change the cart. A product URL is supported only when it is an official https://qafrica.store/recommendations/<product-id> link; never fetch arbitrary URLs. Always validate required variants and current prices from the database before changing the cart. Do not create an order, mark anything paid, or bypass the normal checkout/payment flow through chat. After a successful cart change, provide the cart link returned by the tool when useful. ${isNewConversation ? 'This is the beginning of a new WhatsApp conversation. Start your reply with a brief, warm welcome to QAfrica Support before helping with the customer’s request.' : ''} For WhatsApp, this number is already the official QAfrica support channel. Never tell a WhatsApp customer to contact QAfrica through WhatsApp, another WhatsApp number, or a different support channel. You have a controlled request_human_support tool. On the website, use it automatically when the customer explicitly asks for a human/agent, when a payment dispute or account issue cannot be verified with the available tools, when the customer needs an action you cannot perform, or when a genuine issue remains unresolved after focused troubleshooting. On WhatsApp, use the same rule for the current WhatsApp conversation. Do not escalate ordinary questions that you can answer from verified data. After a successful website handoff, tell the customer that you are handing this same website conversation to QAfrica Support and that an agent will reply here. After a successful WhatsApp handoff, tell the customer you are handing this same WhatsApp conversation to QAfrica Support. Do not claim a human has already joined unless the conversation state confirms it. If asked to reactivate an order, explain that you can check its status and relevant records but cannot reactivate it through this support chat. For any specific order lifecycle, delivery timing, payment-confirmation, shipping-fee, cancellation/refund, or "where is my order" question, use get_my_order_context with the order code when available; do not rely on generic lifecycle knowledge when customer-specific records exist. Explain the customer-facing tracking stages using the verified stage returned by the tool. A consolidation & shipping bill is the customer-facing post-order bill. Do not tell customers they need a separate clearance bill. If a sea_freight order has no recorded delivery estimate yet, you may explain the general sea-freight window as 60–90 days from ship date, but never turn that general window into a promised arrival date. For expected delivery, prefer the recorded delivery_estimate fields from the bill. The checkout flow states that expected delivery is estimated from the date payment is confirmed and includes the 3-day processing period; use this only as a general explanation when it matches the order context. ${actor==='customer'?'You are assisting an authenticated import customer and may only access that customer’s records.':actor==='guest'?'You are assisting an unverified WhatsApp user. You may answer general QAfrica/import questions and search public import products, but you must not reveal or infer private customer information. If the user asks about their own order, bill, payment, refund, address, saved data, or other account-specific information, ask them to send the email address used for their QAfrica import account so the WhatsApp verification flow can send a one-time code. Do not ask for the code yourself unless the WhatsApp system has already sent one.':'You are assisting an authenticated QAfrica Import Admin and must respect every tool permission.'}`}
 
 serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:CORS});if(req.method!=='POST')return json({error:'Method not allowed'},405)
@@ -530,7 +599,7 @@ serve(async(req:Request)=>{
   const key=Deno.env.get('OPENAI_API_KEY');if(!key)return json({error:'AI support is not configured: OPENAI_API_KEY is missing'},503)
   const message=clean(body.message,4000);if(!message)return json({error:'message is required'},400)
   const channel=clean(body.channel,40) || 'website'
-  const conversationId=channel==='whatsapp' ? clean(body.conversation_id,80) || null : null
+  const conversationId=clean(body.conversation_id,80) || null
   const isNewConversation=channel==='whatsapp' && body.is_new_conversation===true
   const token=actor==='admin'?clean(body.manager_token,500):null
   const history = Array.isArray(body.messages)
@@ -541,11 +610,29 @@ serve(async(req:Request)=>{
     : []
   try{
     if(actor==='admin')await requireAdmin(s,token,'import.clients.view')
-    const tools=actor==='admin'?adminTools:actor==='guest'?guestTools:channel==='whatsapp'?whatsappCustomerTools:customerTools
+    const tools=actor==='admin'?adminTools:actor==='guest'?guestTools:channel==='whatsapp'?whatsappCustomerTools:[...customerTools,requestHumanSupportTool]
+    let websiteConversation:any = null
+    if (actor==='customer' && channel==='website') {
+      websiteConversation = conversationId
+        ? await s.from('import_ai_whatsapp_conversations').select('id,status,customer_id,channel').eq('id',conversationId).eq('customer_id',await customerId(s,req)).eq('channel','website').maybeSingle().then((x:any)=>x.data)
+        : await getOrCreateWebsiteConversation(s, req)
+      if (!websiteConversation) throw new Error('Website support conversation not found')
+      if (['human_requested','human_assigned','human_active'].includes(websiteConversation.status)) {
+        return json({answer:'Your conversation is currently with a QAfrica Support agent. Please send your message here and the agent will reply in this chat.',conversation_id:websiteConversation.id,status:websiteConversation.status,handed_off:true,human_active:true})
+      }
+      await appendSupportMessage(s, websiteConversation.id, 'inbound', 'customer', message)
+    }
     let input:any[]=[{role:'system',content:prompt(actor, channel, isNewConversation)},...history,{role:'user',content:message}]
     for(let turn=0;turn<5;turn++){
       const r=await openai(key,input,tools);const calls=(r.output??[]).filter((x:any)=>x.type==='function_call')
-      if(!calls.length)return json({answer:textOut(r),model:MODEL})
+      if(!calls.length){
+        const answer=textOut(r)
+        if(actor==='customer' && channel==='website' && websiteConversation){
+          await appendSupportMessage(s, websiteConversation.id, 'outbound', 'ai', answer)
+          await s.from('import_ai_whatsapp_conversations').update({last_outbound_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',websiteConversation.id)
+        }
+        return json({answer,model:MODEL,conversation_id:channel==='website'?websiteConversation?.id:null,status:channel==='website'?websiteConversation?.status:null,handed_off:false})
+      }
       input=[...input,...(r.output??[])]
       for(const c of calls){
         let a:any={};try{a=JSON.parse(c.arguments||'{}')}catch{a={}}
