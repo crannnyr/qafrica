@@ -367,7 +367,13 @@ function ProductCard({
 export default function RecommendationsPage() {
   useImportPwaManifest();
   const navigate = useNavigate();
-  const { customer, isAuthenticated, logout } = useCustomerAuthStore();
+  const { customer, isAuthenticated, logout, fetchProfile } = useCustomerAuthStore();
+
+  // OAuth returns to this page with a Supabase session already established.
+  // Hydrate the customer store so the UI reflects the Google login immediately.
+  useEffect(() => {
+    void fetchProfile();
+  }, [fetchProfile]);
   const { isSaved, toggleSave } = useSavedItems();
 
   const [products, setProducts] = useState<ImportProduct[]>([]);
