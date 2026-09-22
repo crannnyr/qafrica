@@ -18,6 +18,7 @@ import PriceBandRow from './PriceBandRow';
 import DailyPromoModal from './DailyPromoModal';
 import ImportAuthSheet from './ImportAuthSheet';
 import ImportCheckoutSheet from './ImportCheckoutSheet';
+import { WhatsAppFloatingButton } from './ImportAiSupportSheet';
 import ImportQtyControl from '@/components/ImportQtyControl';
 import OpticsviewMergerNotice from './OpticsviewMergerNotice';
 
@@ -427,6 +428,9 @@ export default function RecommendationsPage() {
   const storeAddOne = useImportCartStore(s => s.addOne);
   const storeRemoveOne = useImportCartStore(s => s.removeOne);
   const storeSetQuantity = useImportCartStore(s => s.setQuantity);
+  const syncImportCart = useImportCartStore(s => s.syncWithServer);
+  const saveImportCart = useImportCartStore(s => s.saveToServer);
+  const [cartSyncedCustomerId, setCartSyncedCustomerId] = useState<string | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
@@ -435,6 +439,25 @@ export default function RecommendationsPage() {
   // Cart is now shared via useImportCartStore, so it stays in sync with the
   // product detail page automatically — no more passing it through router
   // state on navigation.
+
+  useEffect(() => {
+    const customerId = customer?.id ?? null;
+    if (!customerId) {
+      setCartSyncedCustomerId(null);
+      return;
+    }
+    let cancelled = false;
+    setCartSyncedCustomerId(null);
+    void syncImportCart(customerId).then(() => {
+      if (!cancelled) setCartSyncedCustomerId(customerId);
+    });
+    return () => { cancelled = true; };
+  }, [customer?.id, syncImportCart]);
+
+  useEffect(() => {
+    if (!customer?.id || cartSyncedCustomerId !== customer.id) return;
+    void saveImportCart(customer.id);
+  }, [cart, customer?.id, cartSyncedCustomerId, saveImportCart]);
 
   // Category taxonomy — fetched once. Parent groupings (Fashion,
   // Electronics, etc) with their leaf subcategories nested inside.
@@ -821,6 +844,7 @@ export default function RecommendationsPage() {
           />
         )}
       </AnimatePresence>
+      <WhatsAppFloatingButton />
     </div>
   );
 }
