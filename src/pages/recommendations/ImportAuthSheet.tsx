@@ -128,7 +128,12 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
           }}
           className="w-full py-3.5 border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-800 font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
         >
-          <span className="text-base font-bold">G</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="#4285F4" d="M21.35 12.27c0-.7-.06-1.37-.18-2H12v3.79h5.22a4.46 4.46 0 0 1-1.94 2.93v2.43h3.14c1.84-1.69 2.93-4.18 2.93-7.15Z"/>
+            <path fill="#34A853" d="M12 21.73c2.63 0 4.84-.87 6.45-2.31l-3.14-2.43c-.87.58-1.98.92-3.31.92-2.54 0-4.69-1.72-5.46-4.03H3.3v2.5A9.74 9.74 0 0 0 12 21.73Z"/>
+            <path fill="#FBBC05" d="M6.54 13.88A5.85 5.85 0 0 1 6.23 12c0-.65.11-1.28.31-1.88v-2.5H3.3A9.74 9.74 0 0 0 2.27 12c0 1.57.38 3.05 1.03 4.38l3.24-2.5Z"/>
+            <path fill="#EA4335" d="M12 6.09c1.43 0 2.71.49 3.72 1.46l2.79-2.79C16.84 3.23 14.63 2.27 12 2.27A9.74 9.74 0 0 0 3.3 7.62l3.24 2.5C6.85 7.81 9 6.09 12 6.09Z"/>
+          </svg>
           Continue with Google
         </button>
 
