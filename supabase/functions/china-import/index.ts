@@ -1761,6 +1761,100 @@ serve(async (req: Request) => {
       return json({ success: true, manager_id, role })
     }
 
+    if (req.method === 'POST' && action === 'admin-set-manager-status') {
+      const { manager_token, manager_id, is_active } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
+        return json({ error: 'Unauthorized' }, 401)
+      }
+      if (!manager_id || typeof is_active !== 'boolean') {
+        return json({ error: 'manager_id and is_active are required.' }, 400)
+      }
+
+      const { data: session } = await supabase
+        .from('import_admin_sessions')
+        .select('manager_id')
+        .eq('token', manager_token)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+
+      if (session?.manager_id === manager_id && !is_active) {
+        return json({ error: 'You cannot deactivate your own Import Manager account.' }, 400)
+      }
+
+      const { data: targetManager, error: targetError } = await supabase
+        .from('import_admin_managers')
+        .select('id, email, is_active')
+        .eq('id', manager_id)
+        .maybeSingle()
+
+      if (targetError) return json({ error: targetError.message }, 500)
+      if (!targetManager || !targetManager.email.endsWith('@qafrica.store')) {
+        return json({ error: 'Import Manager not found.' }, 404)
+      }
+
+      const { error: updateError } = await supabase
+        .from('import_admin_managers')
+        .update({ is_active })
+        .eq('id', manager_id)
+
+      if (updateError) return json({ error: updateError.message }, 500)
+
+      if (!is_active) {
+        await supabase
+          .from('import_admin_sessions')
+          .delete()
+          .eq('manager_id', manager_id)
+      }
+
+      return json({ success: true, manager_id, is_active })
+    }
+
+    if (req.method === 'POST' && action === 'admin-delete-manager') {
+      const { manager_token, manager_id } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
+        return json({ error: 'Unauthorized' }, 401)
+      }
+      if (!manager_id) return json({ error: 'manager_id is required.' }, 400)
+
+      const { data: session } = await supabase
+        .from('import_admin_sessions')
+        .select('manager_id')
+        .eq('token', manager_token)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+
+      if (session?.manager_id === manager_id) {
+        return json({ error: 'You cannot delete your own Import Manager account.' }, 400)
+      }
+
+      const { data: targetManager, error: targetError } = await supabase
+        .from('import_admin_managers')
+        .select('id, email')
+        .eq('id', manager_id)
+        .maybeSingle()
+
+      if (targetError) return json({ error: targetError.message }, 500)
+      if (!targetManager || !targetManager.email.endsWith('@qafrica.store')) {
+        return json({ error: 'Import Manager not found.' }, 404)
+      }
+      if (targetManager.email === 'import@qafrica.store') {
+        return json({ error: 'The primary import@qafrica.store Super Admin account cannot be deleted.' }, 400)
+      }
+
+      await supabase
+        .from('import_admin_sessions')
+        .delete()
+        .eq('manager_id', manager_id)
+
+      const { error: deleteError } = await supabase
+        .from('import_admin_managers')
+        .delete()
+        .eq('id', manager_id)
+
+      if (deleteError) return json({ error: deleteError.message }, 500)
+      return json({ success: true, manager_id })
+    }
+
     if (req.method === 'POST' && action === 'admin-remove-manager-role') {
       const { manager_token, manager_id, role_id } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
