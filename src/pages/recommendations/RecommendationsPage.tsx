@@ -10,6 +10,7 @@ import CONFIG from '@/lib/config';
 import { formatSoldCount } from '@/lib/utils';
 import { useCustomerAuthStore } from '@/stores';
 import { useImportCartStore, buildImportCartKey } from '@/stores/importCartStore';
+import { supabase } from '@/services';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { useSavedItems } from './useSavedItems';
 import AnnouncementBanner from './AnnouncementBanner';
@@ -367,7 +368,44 @@ function ProductCard({
 export default function RecommendationsPage() {
   useImportPwaManifest();
   const navigate = useNavigate();
-  const { customer, isAuthenticated, logout } = useCustomerAuthStore();
+  const { customer, isAuthenticated, logout, fetchProfile } = useCustomerAuthStore();
+
+  // OAuth returns to this page with a Supabase session already established.
+  // Hydrate the customer store so the UI reflects the Google login immediately.
+  useEffect(() => {
+    void (async () => {
+      await fetchProfile();
+
+      const rawTerms = localStorage.getItem('qafrica-import-google-terms');
+      if (!rawTerms) return;
+
+      try {
+        const terms = JSON.parse(rawTerms) as { acceptedAt?: string; version?: string };
+        if (!terms.acceptedAt || !terms.version) return;
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { error } = await supabase
+          .from('customers')
+          .update({
+            signup_source: 'importation',
+            terms_accepted_at: terms.acceptedAt,
+            terms_version: terms.version,
+          })
+          .eq('id', user.id);
+
+        if (!error) {
+          localStorage.removeItem('qafrica-import-google-terms');
+          await fetchProfile();
+        } else {
+          console.error('Failed to save Google Import terms:', error);
+        }
+      } catch (err) {
+        console.error('Failed to process Google Import terms:', err);
+      }
+    })();
+  }, [fetchProfile]);
   const { isSaved, toggleSave } = useSavedItems();
 
   const [products, setProducts] = useState<ImportProduct[]>([]);
