@@ -147,16 +147,6 @@ export default function ImportAuthSheet({ onClose, onSuccess }: { onClose: () =>
           </svg>
           Continue with Google
         </button>
-        <p className="text-[10px] text-gray-400 text-center leading-snug mt-2 mb-2">
-          By continuing with Google, you agree to the{' '}
-          <Link to="/import-terms" target="_blank" className="text-orange-500 font-semibold hover:underline">
-            Import Terms &amp; Conditions
-          </Link>{' '}
-          and{' '}
-          <Link to="/terms-of-service" target="_blank" className="text-orange-500 font-semibold hover:underline">
-            Terms of Service
-          </Link>.
-        </p>
 
         <div className="flex items-center gap-3 py-1">
           <div className="h-px bg-gray-100 flex-1" />
