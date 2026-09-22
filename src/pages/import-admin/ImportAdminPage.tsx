@@ -309,8 +309,22 @@ function useImportAuth() {
 
 // ── Divider ───────────────────────────────────────────────────────────────────
 function ImportAdminAccessManager({ token, canManage }: { token: string; canManage: boolean }) {
-  type Role = { id: string; key: string; name: string; description: string | null; is_system: boolean };
-  type Permission = { id: string; key: string; name: string; section: string; action: string; description: string | null };
+  type Permission = {
+    id: string;
+    key: string;
+    name: string;
+    section: string;
+    action: string;
+    description: string | null;
+  };
+  type Role = {
+    id: string;
+    key: string;
+    name: string;
+    description: string | null;
+    is_system: boolean;
+    permission_ids?: string[];
+  };
   type Manager = {
     id: string;
     email: string;
@@ -320,7 +334,7 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
     updated_at: string;
     roles: Role[];
     permissions: Permission[];
-    direct_permission_ids: string[];
+    denied_permission_ids: string[];
   };
 
   const [managers, setManagers] = useState<Manager[]>([]);
@@ -332,9 +346,11 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
   const [showAddForm, setShowAddForm] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
-  const [newRoleId, setNewRoleId] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [newRoleIds, setNewRoleIds] = useState<string[]>([]);
   const [newPermissionIds, setNewPermissionIds] = useState<string[]>([]);
+  const [editingManagerId, setEditingManagerId] = useState<string | null>(null);
+  const [editingPermissionIds, setEditingPermissionIds] = useState<string[]>([]);
   const [resetManagerId, setResetManagerId] = useState<string | null>(null);
   const [resetPassword, setResetPassword] = useState('');
 
@@ -348,9 +364,7 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
         body: JSON.stringify({ manager_token: token }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? 'Could not load Import Managers');
-      }
+      if (!res.ok) throw new Error(data.error ?? 'Could not load Import Managers');
       setManagers(data.managers ?? []);
       setRoles(data.roles ?? []);
       setPermissions(data.permissions ?? []);
@@ -362,6 +376,28 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
   }, [token]);
 
   useEffect(() => { void load(); }, [load]);
+
+  const rolePermissionIds = (roleIds: string[]) => {
+    const ids = new Set<string>();
+    for (const role of roles) {
+      if (roleIds.includes(role.id)) {
+        for (const permissionId of role.permission_ids ?? []) ids.add(permissionId);
+      }
+    }
+    return Array.from(ids);
+  };
+
+  const toggleNewRole = (roleId: string, checked: boolean) => {
+    const nextRoleIds = checked
+      ? Array.from(new Set([...newRoleIds, roleId]))
+      : newRoleIds.filter(id => id !== roleId);
+
+    const nextRolePermissionIds = rolePermissionIds(nextRoleIds);
+    setNewRoleIds(nextRoleIds);
+    setNewPermissionIds(current => current.filter(id => nextRolePermissionIds.includes(id)).concat(
+      nextRolePermissionIds.filter(id => !current.includes(id))
+    ));
+  };
 
   const assignRole = async (managerId: string, roleId: string) => {
     if (!roleId || !canManage) return;
@@ -404,41 +440,35 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       setActing(null);
     }
   };
-  const assignPermission = async (managerId: string, permissionId: string) => {
-    if (!canManage || !permissionId) return;
-    setActing(`permission-add:${managerId}:${permissionId}`);
-    setError('');
-    try {
-      const res = await fetch(`${EDGE_URL}?action=admin-assign-manager-permission`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, manager_id: managerId, permission_id: permissionId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Could not assign permission');
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not assign permission');
-    } finally {
-      setActing(null);
-    }
+
+  const startEditingPermissions = (manager: Manager) => {
+    const roleIds = manager.roles.map(role => role.id);
+    const inherited = rolePermissionIds(roleIds);
+    const denied = new Set(manager.denied_permission_ids ?? []);
+    setEditingManagerId(manager.id);
+    setEditingPermissionIds(inherited.filter(id => !denied.has(id)));
   };
 
-  const removePermission = async (managerId: string, permissionId: string) => {
+  const savePermissions = async (managerId: string) => {
     if (!canManage) return;
-    setActing(`permission-remove:${managerId}:${permissionId}`);
+    setActing(`permissions:${managerId}`);
     setError('');
     try {
-      const res = await fetch(`${EDGE_URL}?action=admin-remove-manager-permission`, {
+      const res = await fetch(`${EDGE_URL}?action=admin-update-manager-permissions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, manager_id: managerId, permission_id: permissionId }),
+        body: JSON.stringify({
+          manager_token: token,
+          manager_id: managerId,
+          permission_ids: editingPermissionIds,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Could not remove permission');
+      if (!res.ok) throw new Error(data.error ?? 'Could not save permissions');
+      setEditingManagerId(null);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not remove permission');
+      setError(e instanceof Error ? e.message : 'Could not save permissions');
     } finally {
       setActing(null);
     }
@@ -466,7 +496,7 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
   };
 
   const createManager = async () => {
-    if (!canManage) return;
+    if (!canManage || newRoleIds.length === 0 || newPermissionIds.length === 0) return;
     setActing('create');
     setError('');
     try {
@@ -477,7 +507,7 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
           manager_token: token,
           email: newEmail,
           full_name: newName,
-          role_id: newRoleId,
+          role_ids: newRoleIds,
           password: newPassword,
           permission_ids: newPermissionIds,
         }),
@@ -486,8 +516,8 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       if (!res.ok) throw new Error(data.error ?? 'Could not add Import Manager');
       setNewEmail('');
       setNewName('');
-      setNewRoleId('');
       setNewPassword('');
+      setNewRoleIds([]);
       setNewPermissionIds([]);
       setShowAddForm(false);
       await load();
@@ -497,7 +527,6 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       setActing(null);
     }
   };
-
 
   if (loading) {
     return <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">Loading Import Managers…</div>;
@@ -510,7 +539,7 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
           <div>
             <p className="font-bold text-gray-900 text-sm">Admin Access</p>
             <p className="text-[11px] text-gray-400 mt-1">
-              Manage legacy Import Manager identities and their Import Admin roles. Only @qafrica.store managers are supported.
+              Assign one or more roles. Permissions come from the selected roles, and individual permissions can be removed for that admin.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -532,237 +561,285 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
             </button>
           </div>
         </div>
+
         {!canManage && (
           <div className="mt-3 rounded-xl bg-amber-50 border border-amber-100 px-3 py-2 text-[11px] text-amber-700">
-            You can view manager access, but you do not have permission to change roles.
+            You can view manager access, but you do not have permission to change roles or permissions.
           </div>
         )}
+
+        {error && (
+          <div className="mt-3 rounded-xl bg-red-50 border border-red-100 px-3 py-2 text-[11px] text-red-600">
+            {error}
+          </div>
+        )}
+
         {canManage && showAddForm && (
-          <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4">
-            <p className="text-xs font-bold text-gray-900">Add Import Admin</p>
-            <p className="text-[10px] text-gray-400 mt-1">
-              Use a @qafrica.store email and assign the role this admin should have.
-            </p>
-            <div className="grid gap-2 mt-3">
-              <input
-                value={newName}
-                onChange={e => setNewName(e.target.value)}
-                placeholder="Full name"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
-              />
-              <input
-                value={newEmail}
-                onChange={e => setNewEmail(e.target.value)}
-                placeholder="admin@qafrica.store"
-                type="email"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
-              />
-              <input
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="Temporary password (minimum 8 characters)"
-                type="password"
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
-              />
-              <select
-                value={newRoleId}
-                onChange={e => setNewRoleId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
-              >
-                <option value="">Select Import Admin role…</option>
+          <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+            <p className="text-xs font-bold text-gray-900">Add Import Manager</p>
+            <input
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              placeholder="Full name"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+            />
+            <input
+              value={newEmail}
+              onChange={e => setNewEmail(e.target.value)}
+              placeholder="name@qafrica.store"
+              type="email"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+            />
+            <input
+              value={newPassword}
+              onChange={e => setNewPassword(e.target.value)}
+              placeholder="Temporary password (minimum 8 characters)"
+              type="password"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+            />
+
+            <div className="rounded-lg border border-gray-200 bg-white p-3">
+              <p className="text-[10px] font-bold text-gray-500 mb-2">Roles</p>
+              <div className="space-y-2">
                 {roles.map(role => (
-                  <option key={role.id} value={role.id}>{role.name}</option>
+                  <label key={role.id} className="flex items-start gap-2 text-[11px] text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={newRoleIds.includes(role.id)}
+                      onChange={e => toggleNewRole(role.id, e.target.checked)}
+                    />
+                    <span>
+                      <b>{role.name}</b>
+                      {role.description && <span className="block text-[10px] text-gray-400">{role.description}</span>}
+                    </span>
+                  </label>
                 ))}
-              </select>
-              <div className="rounded-lg border border-gray-200 bg-white p-3">
-                <p className="text-[10px] font-bold text-gray-500 mb-2">Optional direct permissions</p>
-                <div className="max-h-48 overflow-y-auto space-y-1.5">
-                  {permissions.map(permission => (
-                    <label key={permission.id} className="flex items-start gap-2 text-[10px] text-gray-600">
-                      <input
-                        type="checkbox"
-                        checked={newPermissionIds.includes(permission.id)}
-                        onChange={e => setNewPermissionIds(ids => e.target.checked ? [...ids, permission.id] : ids.filter(id => id !== permission.id))}
-                      />
-                      <span><b>{permission.name}</b><span className="text-gray-400"> — {permission.key}</span></span>
-                    </label>
-                  ))}
-                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => void createManager()}
-                disabled={acting === 'create' || !newName.trim() || !newEmail.trim() || !newRoleId || newPassword.length < 8}
-                className="w-full py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-xs font-bold"
-              >
-                {acting === 'create' ? 'Adding…' : 'Add Admin'}
-              </button>
             </div>
+
+            <div className="rounded-lg border border-gray-200 bg-white p-3">
+              <p className="text-[10px] font-bold text-gray-500 mb-2">
+                Permissions from selected roles
+              </p>
+              {newRoleIds.length === 0 ? (
+                <p className="text-[10px] text-gray-400">Select at least one role first.</p>
+              ) : (
+                <div className="max-h-56 overflow-y-auto space-y-1.5">
+                  {permissions
+                    .filter(permission => rolePermissionIds(newRoleIds).includes(permission.id))
+                    .map(permission => (
+                      <label key={permission.id} className="flex items-start gap-2 text-[10px] text-gray-600">
+                        <input
+                          type="checkbox"
+                          checked={newPermissionIds.includes(permission.id)}
+                          onChange={e => setNewPermissionIds(ids =>
+                            e.target.checked
+                              ? Array.from(new Set([...ids, permission.id]))
+                              : ids.filter(id => id !== permission.id)
+                          )}
+                        />
+                        <span>
+                          <b>{permission.name}</b>
+                          <span className="text-gray-400"> — {permission.key}</span>
+                        </span>
+                      </label>
+                    ))}
+                </div>
+              )}
+              <p className="text-[10px] text-gray-400 mt-2">
+                Checked permissions are allowed. Unchecked permissions are explicitly removed even when a selected role provides them.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void createManager()}
+              disabled={
+                acting === 'create' ||
+                !newName.trim() ||
+                !newEmail.trim() ||
+                newPassword.length < 8 ||
+                newRoleIds.length === 0 ||
+                newPermissionIds.length === 0
+              }
+              className="w-full py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-xs font-bold"
+            >
+              {acting === 'create' ? 'Adding…' : 'Add Admin'}
+            </button>
           </div>
         )}
       </div>
 
-      {error && (
-        <div className="bg-red-50 border border-red-100 text-red-600 text-xs rounded-xl px-4 py-3">
-          {error}
-        </div>
-      )}
+      <div className="space-y-3">
+        {managers.map(manager => {
+          const isEditing = editingManagerId === manager.id;
+          const inheritedIds = rolePermissionIds(manager.roles.map(role => role.id));
+          const inheritedSet = new Set(inheritedIds);
 
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 text-[10px] font-bold uppercase tracking-wide text-gray-400">
-          Legacy Import Managers
-        </div>
+          return (
+            <div key={manager.id} className="bg-white rounded-2xl border border-gray-100 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">{manager.full_name || 'Unnamed manager'}</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">{manager.email}</p>
+                </div>
+                <span className={`text-[9px] font-bold px-2 py-1 rounded-full ${manager.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>
+                  {manager.is_active ? 'Active' : 'Inactive'}
+                </span>
+              </div>
 
-        {managers.length === 0 ? (
-          <div className="p-6 text-sm text-gray-400 text-center">No Import Managers found.</div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {managers.map(manager => {
-              const assignedIds = new Set(manager.roles.map(role => role.id));
-              const availableRoles = roles.filter(role => !assignedIds.has(role.id));
-
-              return (
-                <div key={manager.id} className="px-4 py-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-900">
-                        {manager.full_name || manager.email}
-                      </p>
-                      <p className="text-xs text-gray-400 mt-0.5">{manager.email}</p>
-                    </div>
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${manager.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {manager.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1.5 mt-3">
-                    {manager.roles.length ? manager.roles.map(role => (
-                      <span key={role.id} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-[10px] font-semibold text-gray-600">
-                        {role.name}
-                        {canManage && (
-                          <button
-                            type="button"
-                            onClick={() => void removeRole(manager.id, role.id)}
-                            disabled={acting === `remove:${manager.id}:${role.id}`}
-                            className="text-gray-400 hover:text-red-500 disabled:opacity-40"
-                            aria-label={`Remove ${role.name}`}
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        )}
-                      </span>
-                    )) : (
-                      <span className="text-[11px] text-red-500">No Import Admin role assigned</span>
-                    )}
-                  </div>
-
-                  {canManage && availableRoles.length > 0 && (
-                    <div className="mt-3 flex items-center gap-2">
-                      <select
-                        defaultValue=""
-                        onChange={e => {
-                          const roleId = e.target.value;
-                          e.target.value = '';
-                          if (roleId) void assignRole(manager.id, roleId);
-                        }}
-                        disabled={acting?.startsWith(`assign:${manager.id}:`) ?? false}
-                        className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
-                      >
-                        <option value="">Assign another role…</option>
-                        {availableRoles.map(role => (
-                          <option key={role.id} value={role.id}>{role.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <div className="mt-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
-                      Effective permissions ({manager.permissions?.length ?? 0})
-                    </p>
-                    <div className="flex flex-wrap gap-1.5 mt-2">
-                      {(manager.permissions ?? []).map(permission => {
-                        const isDirect = manager.direct_permission_ids?.includes(permission.id);
-                        return (
-                          <span key={permission.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-white border border-gray-100 text-[9px] text-gray-600">
-                            {permission.name}
-                            {canManage && isDirect && (
-                              <button
-                                type="button"
-                                onClick={() => void removePermission(manager.id, permission.id)}
-                                disabled={acting === `permission-remove:${manager.id}:${permission.id}`}
-                                className="text-gray-400 hover:text-red-500 disabled:opacity-40"
-                              >
-                                <X className="w-2.5 h-2.5" />
-                              </button>
-                            )}
-                          </span>
-                        );
-                      })}
-                    </div>
-                    {canManage && (
-                      <div className="mt-2 flex gap-2">
-                        <select
-                          defaultValue=""
-                          onChange={e => {
-                            const permissionId = e.target.value;
-                            e.target.value = '';
-                            if (permissionId) void assignPermission(manager.id, permissionId);
-                          }}
-                          className="flex-1 px-2.5 py-2 rounded-lg border border-gray-200 text-[10px] bg-white"
-                        >
-                          <option value="">Add direct permission…</option>
-                          {permissions.filter(p => !manager.direct_permission_ids?.includes(p.id)).map(permission => (
-                            <option key={permission.id} value={permission.id}>{permission.name} — {permission.section}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-
-                  {canManage && (
-                    <div className="mt-3">
-                      {resetManagerId === manager.id ? (
-                        <div className="flex gap-2">
-                          <input
-                            value={resetPassword}
-                            onChange={e => setResetPassword(e.target.value)}
-                            type="password"
-                            placeholder="New password (8+ characters)"
-                            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => void resetManagerPassword(manager.id)}
-                            disabled={acting === `password:${manager.id}` || resetPassword.length < 8}
-                            className="px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40"
-                          >
-                            Reset
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => { setResetManagerId(null); setResetPassword(''); }}
-                            className="px-3 py-2 rounded-lg border border-gray-200 text-[10px] font-semibold"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
+              <div className="mt-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Roles</p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {manager.roles.map(role => (
+                    <span key={role.id} className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-50 border border-gray-100 text-[10px] text-gray-600">
+                      {role.name}
+                      {canManage && manager.roles.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => { setResetManagerId(manager.id); setResetPassword(''); }}
-                          className="text-[10px] font-semibold text-gray-500 hover:text-gray-900"
+                          onClick={() => void removeRole(manager.id, role.id)}
+                          disabled={acting === `remove:${manager.id}:${role.id}`}
+                          className="text-gray-400 hover:text-red-500 disabled:opacity-40"
+                          title="Remove role"
                         >
-                          Reset password
+                          <X className="w-2.5 h-2.5" />
                         </button>
                       )}
-                    </div>
+                    </span>
+                  ))}
+                  {manager.roles.length === 0 && <span className="text-[10px] text-red-500">No role assigned</span>}
+                </div>
+
+                {canManage && (
+                  <div className="mt-2">
+                    <select
+                      defaultValue=""
+                      onChange={e => {
+                        const roleId = e.target.value;
+                        e.target.value = '';
+                        if (roleId) void assignRole(manager.id, roleId);
+                      }}
+                      className="w-full px-2.5 py-2 rounded-lg border border-gray-200 text-[10px] bg-white"
+                    >
+                      <option value="">Add another role…</option>
+                      {roles.filter(role => !manager.roles.some(existing => existing.id === role.id)).map(role => (
+                        <option key={role.id} value={role.id}>{role.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                    Effective permissions ({manager.permissions?.length ?? 0})
+                  </p>
+                  {canManage && (
+                    <button
+                      type="button"
+                      onClick={() => isEditing ? setEditingManagerId(null) : startEditingPermissions(manager)}
+                      className="text-[10px] font-semibold text-gray-600 hover:text-gray-900"
+                    >
+                      {isEditing ? 'Cancel' : 'Edit permissions'}
+                    </button>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                {!isEditing ? (
+                  <>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {(manager.permissions ?? []).map(permission => (
+                        <span key={permission.id} className="px-2 py-1 rounded-md bg-white border border-gray-100 text-[9px] text-gray-600">
+                          {permission.name}
+                        </span>
+                      ))}
+                    </div>
+                    {(manager.denied_permission_ids?.length ?? 0) > 0 && (
+                      <p className="text-[10px] text-amber-600 mt-2">
+                        {manager.denied_permission_ids.length} role permission{manager.denied_permission_ids.length === 1 ? '' : 's'} explicitly removed.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <div className="mt-2">
+                    <div className="max-h-64 overflow-y-auto space-y-1.5">
+                      {permissions
+                        .filter(permission => inheritedSet.has(permission.id))
+                        .map(permission => (
+                          <label key={permission.id} className="flex items-start gap-2 text-[10px] text-gray-600">
+                            <input
+                              type="checkbox"
+                              checked={editingPermissionIds.includes(permission.id)}
+                              onChange={e => setEditingPermissionIds(ids =>
+                                e.target.checked
+                                  ? Array.from(new Set([...ids, permission.id]))
+                                  : ids.filter(id => id !== permission.id)
+                              )}
+                            />
+                            <span>
+                              <b>{permission.name}</b>
+                              <span className="text-gray-400"> — {permission.key}</span>
+                            </span>
+                          </label>
+                        ))}
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">
+                      Uncheck a permission to deny it for this admin. The denial stays in place even if another selected role also provides that permission.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => void savePermissions(manager.id)}
+                      disabled={acting === `permissions:${manager.id}`}
+                      className="mt-3 px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40"
+                    >
+                      {acting === `permissions:${manager.id}` ? 'Saving…' : 'Save permissions'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {canManage && (
+                <div className="mt-3">
+                  {resetManagerId === manager.id ? (
+                    <div className="flex gap-2">
+                      <input
+                        value={resetPassword}
+                        onChange={e => setResetPassword(e.target.value)}
+                        type="password"
+                        placeholder="New password (8+ characters)"
+                        className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-xs bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void resetManagerPassword(manager.id)}
+                        disabled={acting === `password:${manager.id}` || resetPassword.length < 8}
+                        className="px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40"
+                      >
+                        Reset
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setResetManagerId(null); setResetPassword(''); }}
+                        className="px-3 py-2 rounded-lg border border-gray-200 text-[10px] font-semibold"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => { setResetManagerId(manager.id); setResetPassword(''); }}
+                      className="text-[10px] font-semibold text-gray-500 hover:text-gray-900"
+                    >
+                      Reset password
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-[11px] text-blue-700">
@@ -774,7 +851,6 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
     </div>
   );
 }
-
 function Divider() {
   return <div className="h-px bg-gray-100 my-1" />;
 }
