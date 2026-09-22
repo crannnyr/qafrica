@@ -412,7 +412,19 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not assign role');
-      await load();
+      setManagers(current => current.map(manager => {
+        if (manager.id !== managerId) return manager;
+        const role = roles.find(item => item.id === roleId);
+        if (!role) return manager;
+        const nextRoles = [...manager.roles, { ...role, permission_ids: role.permission_ids ?? [] }];
+        const permissionIds = rolePermissionIds(nextRoles.map(item => item.id));
+        const denied = new Set(manager.denied_permission_ids ?? []);
+        return {
+          ...manager,
+          roles: nextRoles,
+          permissions: permissions.filter(permission => permissionIds.includes(permission.id) && !denied.has(permission.id)),
+        };
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not assign role');
     } finally {
@@ -433,7 +445,18 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not remove role');
-      await load();
+      setManagers(current => current.map(manager => {
+        if (manager.id !== managerId) return manager;
+        const nextRoles = manager.roles.filter(role => role.id !== roleId);
+        const permissionIds = rolePermissionIds(nextRoles.map(item => item.id));
+        const denied = new Set(manager.denied_permission_ids ?? []);
+        return {
+          ...manager,
+          roles: nextRoles,
+          permissions: permissions.filter(permission => permissionIds.includes(permission.id) && !denied.has(permission.id)),
+          denied_permission_ids: (manager.denied_permission_ids ?? []).filter(id => permissionIds.includes(id)),
+        };
+      }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not remove role');
     } finally {
@@ -465,8 +488,17 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not save permissions');
+      setManagers(current => current.map(manager => {
+        if (manager.id !== managerId) return manager;
+        const inherited = rolePermissionIds(manager.roles.map(role => role.id));
+        const selected = new Set(editingPermissionIds);
+        return {
+          ...manager,
+          permissions: permissions.filter(permission => inherited.includes(permission.id) && selected.has(permission.id)),
+          denied_permission_ids: inherited.filter(id => !selected.has(id)),
+        };
+      }));
       setEditingManagerId(null);
-      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save permissions');
     } finally {
@@ -575,8 +607,19 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
       setNewPassword('');
       setNewRoleIds([]);
       setNewPermissionIds([]);
+      const selectedRoles = roles
+        .filter(role => newRoleIds.includes(role.id))
+        .map(role => ({ ...role, permission_ids: role.permission_ids ?? [] }));
+      const selected = new Set(newPermissionIds);
+      const inherited = rolePermissionIds(newRoleIds);
+      const createdManager: Manager = {
+        ...data.manager,
+        roles: selectedRoles,
+        permissions: permissions.filter(permission => inherited.includes(permission.id) && selected.has(permission.id)),
+        denied_permission_ids: inherited.filter(id => !selected.has(id)),
+      };
+      setManagers(current => [...current, createdManager]);
       setShowAddForm(false);
-      await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add Import Manager');
     } finally {
