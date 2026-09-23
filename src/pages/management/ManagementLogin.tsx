@@ -1,12 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Eye, EyeOff, Loader } from 'lucide-react';
 import CONFIG from '@/lib/config';
-import {
-  getManagementToken,
-  setManagementSession,
-  validateManagementSession,
-} from './ManagementAuth';
+import { setManagementSession } from './ManagementAuth';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -16,30 +12,7 @@ export default function ManagementLogin() {
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const checkExistingSession = async () => {
-      if (!getManagementToken()) {
-        if (!cancelled) setCheckingSession(false);
-        return;
-      }
-
-      const manager = validateManagementSession();
-      if (!cancelled) {
-        if (manager) navigate('/management', { replace: true });
-        else setCheckingSession(false);
-      }
-    };
-
-    void checkExistingSession();
-    return () => {
-      cancelled = true;
-    };
-  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,14 +40,6 @@ export default function ManagementLogin() {
       setIsLoading(false);
     }
   };
-
-  if (checkingSession) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader className="w-5 h-5 text-orange-500 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
