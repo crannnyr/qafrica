@@ -174,7 +174,7 @@ export default function ManagementAnalytics() {
             <KpiCard icon={DollarSign} tone="revenue" label="Revenue" value={fmtCompact(data.revenue_ngn)} sub={`${data.orders_count.toLocaleString()} paid orders`} />
             <KpiCard icon={ShoppingCart} tone="orders" label="Orders" value={data.orders_count.toLocaleString()} sub="Paid orders" />
             <KpiCard icon={Package} tone="units" label="Units sold" value={data.units_sold.toLocaleString()} />
-            <KpiCard icon={TrendingUp} tone="profit" label="Profit" value={fmtCompact(data.profit_ngn)} sub={`${data.margin_pct}% margin`} />
+            <KpiCard icon={TrendingUp} tone="profit" label="Expected Profit" value={fmtCompact(data.profit_ngn)} sub={`${data.margin_pct}% margin`} />
           </div>
 
           <ChartCard title="Revenue trend">
