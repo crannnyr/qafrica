@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Loader, Shield } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, Loader } from 'lucide-react';
 import { logoutManagementSession } from './ManagementAuth';
 
 export default function ManagementLogout() {
