@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
-import { Calendar, DollarSign, Package, ShoppingCart, RefreshCw } from 'lucide-react'
+import { Calendar, DollarSign, Package, ShoppingCart, TrendingUp, RefreshCw } from 'lucide-react'
 import CONFIG from '@/lib/config'
 import { getManagementToken } from './ManagementAuth'
 
@@ -12,6 +12,8 @@ type Analytics = {
   orders_count: number
   units_sold: number
   revenue_ngn: number
+  profit_ngn: number
+  margin_pct: number
   daily_trend: { date: string; orders: number; revenue_ngn: number }[]
 }
 
@@ -57,6 +59,7 @@ const KPI_STYLES = {
   revenue: { icon: 'text-emerald-600', bg: 'bg-emerald-50' },
   orders: { icon: 'text-blue-600', bg: 'bg-blue-50' },
   units: { icon: 'text-violet-600', bg: 'bg-violet-50' },
+  profit: { icon: 'text-green-600', bg: 'bg-green-50' },
 }
 
 function KpiCard({ icon: Icon, label, value, sub, tone }: { icon: any; label: string; value: string; sub?: string; tone: keyof typeof KPI_STYLES }) {
@@ -157,8 +160,8 @@ export default function ManagementAnalytics() {
       </div>
 
       {isLoading && !data ? (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {Array.from({ length: 3 }).map((_, i) => <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 h-24 animate-pulse" />)}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 h-24 animate-pulse" />)}
         </div>
       ) : !data ? (
         <div className="bg-white rounded-2xl border border-red-100 p-8 text-center">
@@ -171,6 +174,7 @@ export default function ManagementAnalytics() {
             <KpiCard icon={DollarSign} tone="revenue" label="Revenue" value={fmtCompact(data.revenue_ngn)} sub={`${data.orders_count.toLocaleString()} paid orders`} />
             <KpiCard icon={ShoppingCart} tone="orders" label="Orders" value={data.orders_count.toLocaleString()} sub="Paid orders" />
             <KpiCard icon={Package} tone="units" label="Units sold" value={data.units_sold.toLocaleString()} />
+            <KpiCard icon={TrendingUp} tone="profit" label="Profit" value={fmtCompact(data.profit_ngn)} sub={`${data.margin_pct}% margin`} />
           </div>
 
           <ChartCard title="Revenue trend">
