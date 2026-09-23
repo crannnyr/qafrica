@@ -184,7 +184,7 @@ serve(async (req) => {
   }
 
   if (action === 'admin-product-create') {
-    if (!(await requireManager(supabase, body.manager_token, 'import.products.manage'))) return json({ error: 'Unauthorized' }, 401)
+    if (!(await requireManager(supabase, body.manager_token, 'import.products.create'))) return json({ error: 'Unauthorized' }, 401)
 
     const row = buildProductPayload(body)
     if (!row.name) return json({ error: 'Product name is required' }, 400)
@@ -197,7 +197,7 @@ serve(async (req) => {
   }
 
   if (action === 'admin-product-update') {
-    if (!(await requireManager(supabase, body.manager_token, 'import.products.manage'))) return json({ error: 'Unauthorized' }, 401)
+    if (!(await requireManager(supabase, body.manager_token, 'import.products.update'))) return json({ error: 'Unauthorized' }, 401)
     if (!body.id) return json({ error: 'Missing product id' }, 400)
 
     const row = buildProductPayload(body, true)
@@ -209,7 +209,7 @@ serve(async (req) => {
   }
 
   if (action === 'admin-product-toggle') {
-    if (!(await requireManager(supabase, body.manager_token, 'import.products.manage'))) return json({ error: 'Unauthorized' }, 401)
+    if (!(await requireManager(supabase, body.manager_token, 'import.products.update'))) return json({ error: 'Unauthorized' }, 401)
     if (!body.id || typeof body.is_active !== 'boolean') return json({ error: 'Missing product id or is_active' }, 400)
 
     const { data, error } = await supabase.from('china_import_products')
@@ -221,7 +221,7 @@ serve(async (req) => {
   }
 
   if (action === 'admin-product-delete') {
-    if (!(await requireManager(supabase, body.manager_token, 'import.products.manage'))) return json({ error: 'Unauthorized' }, 401)
+    if (!(await requireManager(supabase, body.manager_token, 'import.products.delete'))) return json({ error: 'Unauthorized' }, 401)
     if (!body.id) return json({ error: 'Missing product id' }, 400)
 
     const { data: existing } = await supabase.from('china_import_products').select('id, name').eq('id', body.id).maybeSingle()
