@@ -9,6 +9,7 @@ import { getManagementManager, logoutManagementSession, validateManagementSessio
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/management' },
+  { icon: Package, label: 'Products', path: '/management/products' },
   { icon: Users, label: 'Customers', path: '/management/customers' },
   { icon: Package, label: 'Orders', path: '/management/orders' },
   { icon: ShoppingCart, label: 'Import Orders', path: '/management/import-orders' },
