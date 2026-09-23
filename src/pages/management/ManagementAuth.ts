@@ -7,9 +7,12 @@ export type ManagementManager = {
   name?: string;
 };
 
+// Management uses the exact same manager session as Import Admin.
+// Keeping the same storage keys means signing in to either area keeps
+// the same session alive.
+const TOKEN_KEY = 'import_manager_token';
+const MANAGER_KEY = 'import_manager';
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
-const TOKEN_KEY = 'management_token';
-const MANAGER_KEY = 'management_manager';
 
 export function getManagementToken(): string | null {
   return sessionStorage.getItem(TOKEN_KEY);
@@ -32,45 +35,31 @@ export function setManagementSession(token: string, manager: ManagementManager) 
 export function clearManagementSession() {
   sessionStorage.removeItem(TOKEN_KEY);
   sessionStorage.removeItem(MANAGER_KEY);
+  sessionStorage.removeItem('import_manager_source');
 }
 
-export async function validateManagementSession(): Promise<ManagementManager | null> {
+export function validateManagementSession(): ManagementManager | null {
   const token = getManagementToken();
-  if (!token) return null;
+  const manager = getManagementManager();
 
-  try {
-    const res = await fetch(`${EDGE_URL}?action=admin-session`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ manager_token: token }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data.success || !data.manager) {
-      clearManagementSession();
-      return null;
-    }
-
-    sessionStorage.setItem(MANAGER_KEY, JSON.stringify(data.manager));
-    return data.manager;
-  } catch {
-    // Keep the local session when the network is unavailable. Protected
-    // management API calls still require the server-side session token.
-    return getManagementManager();
+  if (!token || !manager || typeof manager.email !== 'string' || !manager.email.toLowerCase().endsWith('@qafrica.store')) {
+    clearManagementSession();
+    return null;
   }
+
+  return manager;
 }
 
 export async function logoutManagementSession(): Promise<void> {
   const token = getManagementToken();
 
-  try {
-    if (token) {
-      await fetch(`${EDGE_URL}?action=admin-logout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token }),
-      });
-    }
-  } finally {
-    clearManagementSession();
+  if (token) {
+    fetch(`${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=admin-logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manager_token: token }),
+    }).catch(() => {});
   }
+
+  clearManagementSession();
 }
