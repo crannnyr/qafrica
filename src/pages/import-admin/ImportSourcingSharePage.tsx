@@ -125,22 +125,10 @@ export default function ImportSourcingSharePage() {
 
               <div className="flex items-center gap-2">
                 <div className="inline-flex items-center rounded-xl border border-gray-200 bg-gray-50 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('list')}
-                    aria-label="List view"
-                    title="List view"
-                    className={`inline-flex items-center justify-center w-9 h-9 rounded-lg transition ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-700'}`}
-                  >
+                  <button type="button" onClick={() => setViewMode('list')} aria-label="List view" title="List view" className={`inline-flex items-center justify-center w-9 h-9 rounded-lg transition ${viewMode === 'list' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-700'}`}>
                     <List className="w-4 h-4" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setViewMode('grid')}
-                    aria-label="Grid view"
-                    title="Grid view"
-                    className={`inline-flex items-center justify-center w-9 h-9 rounded-lg transition ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-700'}`}
-                  >
+                  <button type="button" onClick={() => setViewMode('grid')} aria-label="Grid view" title="Grid view" className={`inline-flex items-center justify-center w-9 h-9 rounded-lg transition ${viewMode === 'grid' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-400 hover:text-gray-700'}`}>
                     <Grid2X2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -162,17 +150,8 @@ export default function ImportSourcingSharePage() {
                 {products.map(product => (
                   <div key={product.product_id} className="bg-white rounded-2xl border border-gray-100 p-4">
                     <div className="flex gap-4">
-                      <button
-                        type="button"
-                        onClick={() => product.product_image && setSelectedImage(product.product_image)}
-                        className="w-24 h-24 rounded-xl bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-orange-500"
-                        aria-label={product.product_image ? `Open image for ${product.product_name}` : 'No product image'}
-                      >
-                        {product.product_image ? (
-                          <img src={product.product_image} alt="" className="w-full h-full object-cover transition-transform duration-200 hover:scale-105" />
-                        ) : (
-                          <ImageOff className="w-6 h-6 text-gray-300" />
-                        )}
+                      <button type="button" onClick={() => product.product_image && setSelectedImage(product.product_image)} className="w-24 h-24 rounded-xl bg-gray-100 overflow-hidden shrink-0 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-orange-500" aria-label={product.product_image ? `Open image for ${product.product_name}` : 'No product image'}>
+                        {product.product_image ? <img src={product.product_image} alt="" className="w-full h-full object-cover transition-transform duration-200 hover:scale-105" /> : <ImageOff className="w-6 h-6 text-gray-300" />}
                       </button>
                       <div className="min-w-0 flex-1">
                         <h2 className="font-bold text-sm text-gray-900">{product.product_name}</h2>
@@ -187,23 +166,25 @@ export default function ImportSourcingSharePage() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {products.map(product => (
                   <div key={product.product_id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => product.product_image && setSelectedImage(product.product_image)}
-                      className="w-full aspect-square bg-gray-100 overflow-hidden flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-inset focus:ring-orange-500"
-                      aria-label={product.product_image ? `Open image for ${product.product_name}` : 'No product image'}
-                    >
-                      {product.product_image ? (
-                        <img src={product.product_image} alt="" className="w-full h-full object-cover transition-transform duration-200 hover:scale-105" />
-                      ) : (
-                        <ImageOff className="w-8 h-8 text-gray-300" />
-                      )}
+                    <button type="button" onClick={() => product.product_image && setSelectedImage(product.product_image)} className="w-full aspect-square bg-gray-100 overflow-hidden flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-inset focus:ring-orange-500" aria-label={product.product_image ? `Open image for ${product.product_name}` : 'No product image'}>
+                      {product.product_image ? <img src={product.product_image} alt="" className="w-full h-full object-cover transition-transform duration-200 hover:scale-105" /> : <ImageOff className="w-8 h-8 text-gray-300" />}
                     </button>
                     <div className="p-3">
                       <h2 className="font-bold text-sm text-gray-900 line-clamp-2">{product.product_name}</h2>
                       <p className="mt-1 text-xs font-black text-orange-600">Qty: {product.total_qty.toLocaleString()}</p>
                       {product.variants.length > 0 && (
-                        <p className="mt-2 text-[11px] text-gray-500">{product.variants.length} variant{product.variants.length === 1 ? '' : 's'}</p>
+                        <div className="mt-2 border-t border-gray-100 pt-2 space-y-1.5">
+                          {product.variants.map((variant, index) => (
+                            <div key={index} className="flex items-start justify-between gap-2 bg-gray-50 rounded-lg px-2.5 py-2">
+                              <span className="text-[10px] leading-4 text-gray-600 min-w-0">
+                                {variant.variant_options
+                                  ? Object.entries(variant.variant_options).map(([k, v]) => `${k}: ${v}`).join(' · ')
+                                  : 'No variant specified'}
+                              </span>
+                              <span className="text-[10px] font-black text-gray-900 whitespace-nowrap">Qty {variant.quantity}</span>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -217,27 +198,11 @@ export default function ImportSourcingSharePage() {
       </main>
 
       {selectedImage && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/80 p-4 flex items-center justify-center"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Product image preview"
-          onClick={() => setSelectedImage(null)}
-        >
-          <button
-            type="button"
-            onClick={() => setSelectedImage(null)}
-            aria-label="Close image preview"
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20"
-          >
+        <div className="fixed inset-0 z-[100] bg-black/80 p-4 flex items-center justify-center" role="dialog" aria-modal="true" aria-label="Product image preview" onClick={() => setSelectedImage(null)}>
+          <button type="button" onClick={() => setSelectedImage(null)} aria-label="Close image preview" className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20">
             <X className="w-5 h-5" />
           </button>
-          <img
-            src={selectedImage}
-            alt="Product preview"
-            className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl"
-            onClick={event => event.stopPropagation()}
-          />
+          <img src={selectedImage} alt="Product preview" className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl" onClick={event => event.stopPropagation()} />
         </div>
       )}
     </div>
