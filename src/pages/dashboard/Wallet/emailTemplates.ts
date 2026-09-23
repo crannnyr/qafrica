@@ -37,7 +37,7 @@ export const sendBankChangeOtp = async (
           <div style="background:#FEF2F2;border-left:3px solid #EF4444;border-radius:0 8px 8px 0;padding:12px 16px;">
             <p style="margin:0;font-size:13px;color:#991B1B;">
               If you didn't request this change, contact us immediately on
-              <a href="https://wa.me/447404707531" style="color:#F97316;">WhatsApp</a>.
+              <a href="https://wa.me/2347015470881" style="color:#F97316;">WhatsApp</a>.
             </p>
           </div>
         </td></tr>
@@ -115,7 +115,7 @@ export const withdrawalEmailHtml = ({
           </div>
           <p style="margin:0;font-size:12px;color:#9CA3AF;">
             If you have questions, contact us on
-            <a href="https://wa.me/447404707531" style="color:#F97316;">WhatsApp</a>.
+            <a href="https://wa.me/2347015470881" style="color:#F97316;">WhatsApp</a>.
           </p>
         </td></tr>
         <tr><td align="center" style="padding:20px 0 0;">
