@@ -1,15 +1,14 @@
-// Minimal service worker — exists to satisfy PWA installability criteria for
-// the import experience. Intentionally does not cache anything yet; it's a
-// pass-through so the app always serves fresh content while still qualifying
-// as an installable app on Android/desktop Chrome.
+// Minimal service worker for the import experience.
+//
+// Do not intercept navigation or asset requests here. The import experience
+// must continue to use the browser/Netlify network path directly, including
+// public share URLs such as /importations/sourcing/<token>. A pass-through
+// fetch handler can surface browser-level "FetchEvent.respondWith ... Load
+// failed" errors when the underlying navigation request is interrupted.
 self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
-});
-
-self.addEventListener('fetch', (event) => {
-  event.respondWith(fetch(event.request));
 });
