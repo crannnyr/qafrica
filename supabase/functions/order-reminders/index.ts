@@ -76,7 +76,7 @@ function firstReminderEmail(name: string, code: string): { subject: string; html
         If you've already sent payment, please confirm it from your dashboard so we can get moving.
         And if you have any questions or ran into an issue, we're right here to help.
       </p>
-      <a href="https://chat.whatsapp.com/DggRK0IeD94F0vyszfhfPW" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
+      <a href="https://wa.me/2347015470881" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
         Talk to us on WhatsApp →
       </a>
       <p style="color:#9CA3AF;font-size:12px;margin-top:24px;">Order code: ${code}</p>
@@ -97,7 +97,7 @@ function urgentReminderEmail(name: string, code: string): { subject: string; htm
         If you've already paid, please confirm it from your dashboard right away. If anything's
         holding you up, just reach out — we're happy to help sort it out.
       </p>
-      <a href="https://chat.whatsapp.com/DggRK0IeD94F0vyszfhfPW" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
+      <a href="https://wa.me/2347015470881" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
         Talk to us on WhatsApp →
       </a>
       <p style="color:#9CA3AF;font-size:12px;margin-top:24px;">Order code: ${code}</p>
