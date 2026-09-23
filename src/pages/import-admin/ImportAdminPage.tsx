@@ -104,6 +104,7 @@ interface ImportProduct {
   /** Admin-only 1688 sourcing link. Never returned by the public products endpoint. */
   source_url?: string | null;
   ship_only?: boolean;
+  express_air_cargo?: boolean;
   category_id?: string | null;
   subcategory_id?: string | null;
   parent_category?: string | null;
@@ -2097,6 +2098,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [moq, setMoq]                 = useState('1');
   const [sourceUrl, setSourceUrl]     = useState('');
   const [shipOnly, setShipOnly]       = useState(false);
+  const [expressAirCargo, setExpressAirCargo] = useState(false);
   const [volumeCbm, setVolumeCbm] = useState('');
   const [weightGrams, setWeightGrams] = useState('');
   const [unitsSold, setUnitsSold]     = useState('');
@@ -2256,7 +2258,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setName(''); setDesc(''); setCategory('General');
     setCategoryId(''); setSubcategoryId('');
     setPriceAmount(''); setMoq('1'); setUnitsSold('');
-    setSourceUrl(''); setShipOnly(false);
+    setSourceUrl(''); setShipOnly(false); setExpressAirCargo(false);
     setVariantGroups([]); setCustomGroupName(''); setCustomOptionDrafts({}); setExpandedVariantGroups(new Set());
     setImagePreviews([]); setImageFiles([null, null, null]);
     setSaveError('');
@@ -2290,6 +2292,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setMoq((p.moq ?? 1).toString());
     setSourceUrl(p.source_url ?? '');
     setShipOnly(p.ship_only === true);
+    setExpressAirCargo(p.express_air_cargo === true);
     setUnitsSold((p.units_sold ?? 0).toString());
     setVariantGroups(p.variants?.length ? p.variants.map(g => ({ ...g, id: g.id || genId() })) : []);
     setExpandedVariantGroups(new Set());
@@ -2393,6 +2396,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
         image_urls:      resolvedUrls,
         source_url:      sourceUrl.trim(),
         ship_only:       shipOnly,
+        express_air_cargo: expressAirCargo,
         volume_cbm: volumeCbm.trim() === '' ? null : Number(volumeCbm),
         weight_grams: weightGrams.trim() === '' ? null : Number(weightGrams),
         manager_token:   token,
@@ -2642,7 +2646,24 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                 </label>
               </div>
 
+
+ 
               <div>
+                <label className="flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={expressAirCargo}
+                    onChange={e => setExpressAirCargo(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-orange-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-gray-900">Express Air cargo delivery</span>
+                    <span className="block text-[11px] text-gray-400">
+                      Mark this product as eligible for Express Air cargo delivery.
+                    </span>
+                  </span>
+                </label>
+              </div>              <div>
                 <Label>Volume for sea freight (CBM)</Label>
                 <input
                   type="number" min={0} step="0.001"
