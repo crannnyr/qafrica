@@ -8,7 +8,7 @@ const AI_URL = CONFIG.SUPABASE_URL + '/functions/v1/import-ai-support';
 type Customer = { id?: string; full_name?: string | null; email?: string | null; phone?: string | null };
 type Conversation = {
   id: string; wa_id: string; customer_id: string | null;
-  status: 'ai' | 'returned_to_ai' | 'human_requested' | 'human_assigned' | 'human_active';
+  status: 'ai' | 'returned_to_ai' | 'human_requested' | 'human_assigned' | 'human_active' | 'closed';
   last_inbound_at: string | null; last_outbound_at: string | null;
   created_at: string; updated_at: string; customers?: Customer | Customer[] | null;
 };
@@ -129,7 +129,7 @@ export function AiSupportAlertMonitor({ token, enabled = true }: { token: string
 }
 
 export default function AiSupportInbox({ token }: { token: string }) {
-  const [activeTab, setActiveTab] = useState<'ai' | 'human'>('ai');
+  const [activeTab, setActiveTab] = useState<'ai' | 'human' | 'resolved'>('ai');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -217,6 +217,21 @@ export default function AiSupportInbox({ token }: { token: string }) {
       toast.success('You took over this WhatsApp conversation');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not take over');
+      await load(true);
+    } finally { setActing(false); }
+  };
+
+  const markResolved = async () => {
+    if (!selected) return;
+    setActing(true);
+    try {
+      await supportRequest(token, 'resolve_support_conversation', { conversation_id: selected.id });
+      setConversations(prev => prev.filter(c => c.id !== selected.id));
+      setSelected(null);
+      setMessages([]);
+      toast.success('Conversation marked resolved');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not mark conversation resolved');
     } finally { setActing(false); }
   };
 
@@ -253,6 +268,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
 
   const waitingCount = conversations.filter(c => c.status === 'human_requested').length;
   const aiCount = conversations.length;
+  const resolvedCount = conversations.length;
 
   return (
     <div className="space-y-4">
@@ -302,6 +318,14 @@ export default function AiSupportInbox({ token }: { token: string }) {
             Human support
             {waitingCount > 0 && <span className={"rounded-full px-1.5 py-0.5 text-[9px] " + (activeTab === 'human' ? 'bg-red-500 text-white' : 'bg-red-50 text-red-600')}>{waitingCount}</span>}
           </button>
+          <button
+            onClick={() => setActiveTab('resolved')}
+            className={"inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold " + (activeTab === 'resolved' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600')}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            Resolved
+            <span className={"rounded-full px-1.5 py-0.5 text-[9px] " + (activeTab === 'resolved' ? 'bg-white/15 text-white' : 'bg-white text-gray-500')}>{resolvedCount}</span>
+          </button>
         </div>
       </div>
 
@@ -310,14 +334,14 @@ export default function AiSupportInbox({ token }: { token: string }) {
       ) : conversations.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
           <MessageCircle className="w-8 h-8 mx-auto text-gray-200 mb-3" />
-          <p className="text-sm font-semibold text-gray-700">{activeTab === 'ai' ? 'No AI-handled conversations' : 'No human support requests'}</p>
-          <p className="text-xs text-gray-400 mt-1">{activeTab === 'ai' ? 'AI conversations will appear here so you can review every message it handled.' : 'When a customer asks for a human, the conversation will appear here and trigger an alert.'}</p>
+          <p className="text-sm font-semibold text-gray-700">{activeTab === 'ai' ? 'No AI-handled conversations' : activeTab === 'resolved' ? 'No resolved conversations' : 'No human support requests'}</p>
+          <p className="text-xs text-gray-400 mt-1">{activeTab === 'ai' ? 'AI conversations will appear here so you can review every message it handled.' : activeTab === 'resolved' ? 'Resolved conversations remain available for review.' : 'When a customer asks for a human, the conversation will appear here and trigger an alert.'}</p>
         </div>
       ) : (
         <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{activeTab === 'ai' ? 'AI handled conversations' : 'Human support'}</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{activeTab === 'ai' ? 'AI handled conversations' : activeTab === 'resolved' ? 'Resolved conversations' : 'Human support'}</p>
               <span className="text-[10px] text-gray-400">{conversations.length}</span>
             </div>
             <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
@@ -362,6 +386,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
                       <button onClick={() => void takeOver()} disabled={acting || selected.status === 'human_active'} className="px-2.5 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">
                         {selected.status === 'human_active' ? 'Human active' : 'Take over'}
                       </button>
+                      <button onClick={() => void markResolved()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold disabled:opacity-40">Mark resolved</button>
                       <button onClick={() => void returnToAi()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold disabled:opacity-40">Return to AI</button>
                     </div>
                   )}
