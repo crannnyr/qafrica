@@ -156,7 +156,7 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
     if (!id) throw new Error('conversation_id is required')
     const { data, error } = await s.from('import_ai_whatsapp_conversations')
       .update({ status: 'closed', updated_at: new Date().toISOString() })
-      .eq('id', id).in('status', ['human_requested','human_assigned','human_active'])
+      .eq('id', id).in('status', ['ai','returned_to_ai','human_requested','human_assigned','human_active'])
       .select('id,status,channel,human_agent_id').maybeSingle()
     if (error) throw error
     if (!data) throw new Error('Conversation is not currently with human support')
