@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { Calendar, DollarSign, Package, ShoppingCart, RefreshCw } from 'lucide-react'
 import CONFIG from '@/lib/config'
@@ -53,12 +53,19 @@ function fmtCompact(n: number) {
   return `₦${Math.round(n).toLocaleString()}`
 }
 
-function KpiCard({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {
+const KPI_STYLES = {
+  revenue: { icon: 'text-emerald-600', bg: 'bg-emerald-50' },
+  orders: { icon: 'text-blue-600', bg: 'bg-blue-50' },
+  units: { icon: 'text-violet-600', bg: 'bg-violet-50' },
+}
+
+function KpiCard({ icon: Icon, label, value, sub, tone }: { icon: any; label: string; value: string; sub?: string; tone: keyof typeof KPI_STYLES }) {
+  const style = KPI_STYLES[tone]
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4">
       <div className="flex items-center gap-2 mb-2">
-        <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center">
-          <Icon className="w-3.5 h-3.5 text-gray-400" />
+        <div className={`w-8 h-8 rounded-lg ${style.bg} flex items-center justify-center`}>
+          <Icon className={`w-4 h-4 ${style.icon}`} />
         </div>
         <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
       </div>
@@ -161,9 +168,9 @@ export default function ManagementAnalytics() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-            <KpiCard icon={DollarSign} label="Revenue" value={fmtCompact(data.revenue_ngn)} sub={`${data.orders_count.toLocaleString()} paid orders`} />
-            <KpiCard icon={ShoppingCart} label="Orders" value={data.orders_count.toLocaleString()} sub="Paid orders" />
-            <KpiCard icon={Package} label="Units sold" value={data.units_sold.toLocaleString()} />
+            <KpiCard icon={DollarSign} tone="revenue" label="Revenue" value={fmtCompact(data.revenue_ngn)} sub={`${data.orders_count.toLocaleString()} paid orders`} />
+            <KpiCard icon={ShoppingCart} tone="orders" label="Orders" value={data.orders_count.toLocaleString()} sub="Paid orders" />
+            <KpiCard icon={Package} tone="units" label="Units sold" value={data.units_sold.toLocaleString()} />
           </div>
 
           <ChartCard title="Revenue trend">
@@ -171,13 +178,19 @@ export default function ManagementAnalytics() {
               <p className="text-xs text-gray-300 py-8 text-center">No paid orders in this range yet.</p>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
-                <LineChart data={trend}>
+                <AreaChart data={trend}>
+                  <defs>
+                    <linearGradient id="revenueFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#16A34A" stopOpacity={0.22} />
+                      <stop offset="100%" stopColor="#16A34A" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                   <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={48} tickFormatter={fmtCompact} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="revenue_ngn" name="Revenue" stroke="#16A34A" strokeWidth={3} dot={{ r: 3, fill: '#16A34A' }} activeDot={{ r: 5 }} />
-                </LineChart>
+                  <Area type="monotone" dataKey="revenue_ngn" name="Revenue" stroke="#16A34A" strokeWidth={3} fill="url(#revenueFill)" dot={{ r: 3, fill: '#16A34A' }} activeDot={{ r: 5 }} />
+                </AreaChart>
               </ResponsiveContainer>
             )}
           </ChartCard>
