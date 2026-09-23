@@ -32,29 +32,7 @@ type Product = {
   updated_at?: string;
 };
 
-type ProductForm = {
-  name: string;
-  description: string;
-  image_url: string;
-  price_cny: string;
-  price_ngn: string;
-  category: string;
-  parent_category: string;
-  moq: string;
-  delivery_time: string;
-  source_url: string;
-  ship_only: boolean;
-  is_active: boolean;
-  sort_order: string;
-};
-
 type Pagination = { page: number; per_page: number; total: number; page_count: number };
-
-const EMPTY_FORM: ProductForm = {
-  name: '', description: '', image_url: '', price_cny: '', price_ngn: '',
-  category: 'General', parent_category: '', moq: '1', delivery_time: 'air',
-  source_url: '', ship_only: false, is_active: true, sort_order: '0',
-};
 
 export default function ManagementProducts() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -63,19 +41,6 @@ export default function ManagementProducts() {
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  const request = useCallback(async (action: string, body: Record<string, unknown> = {}) => {
-    const token = getManagementToken();
-    if (!token) throw new Error('Management session expired');
-    const res = await fetch(`${EDGE_URL}?action=${action}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ manager_token: token, ...body }),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error ?? 'Request failed');
-    return data;
-  }, []);
 
   const load = useCallback(async (page = 1, signal?: AbortSignal) => {
     const token = getManagementToken();
@@ -110,6 +75,25 @@ export default function ManagementProducts() {
     const timer = window.setTimeout(() => void load(1, controller.signal), search.trim() ? 350 : 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [load]);
+
+  const deleteProduct = async (product: Product) => {
+    if (!window.confirm(`Delete "${product.name}"? This cannot be undone.`)) return;
+    try {
+      const token = getManagementToken();
+      if (!token) throw new Error('Management session expired');
+      const res = await fetch(`${EDGE_URL}?action=admin-product-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, id: product.id }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Could not delete product');
+      const nextPage = pagination.page > 1 && products.length === 1 ? pagination.page - 1 : pagination.page;
+      await load(nextPage);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete product');
+    }
+  };
 
   const money = (value?: number | null) =>
     value == null ? '—' : `₦${Number(value).toLocaleString('en-NG', { maximumFractionDigits: 0 })}`;
