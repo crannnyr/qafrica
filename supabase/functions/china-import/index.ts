@@ -1944,10 +1944,56 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'admin-update-settings') {
-      const { manager_token, paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name } = await req.json()
+      const {
+        manager_token,
+        charge_shipping_at_checkout,
+        shipping_discount_percent,
+        shipping_discount_min_ngn,
+        bulk_discount_tier1_qty,
+        bulk_discount_tier1_percent,
+        bulk_discount_tier2_qty,
+        bulk_discount_tier2_percent,
+        paystack_enabled,
+        manual_transfer_enabled,
+        bank_account_number,
+        bank_account_name,
+        bank_name,
+      } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.settings.update'))) return json({ error: 'Unauthorized' }, 401)
 
       const updates: Record<string, unknown> = {}
+      if (typeof charge_shipping_at_checkout === 'boolean') updates.charge_shipping_at_checkout = charge_shipping_at_checkout
+      const nonNegative = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0
+      const positiveInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v > 0
+      const percent = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100
+
+      if (shipping_discount_percent !== undefined) {
+        if (!percent(shipping_discount_percent)) return json({ error: 'Shipping discount must be between 0 and 100%.' }, 400)
+        updates.shipping_discount_percent = Number(shipping_discount_percent)
+      }
+      if (shipping_discount_min_ngn !== undefined) {
+        if (!nonNegative(shipping_discount_min_ngn)) return json({ error: 'Minimum shipping must be a non-negative number.' }, 400)
+        updates.shipping_discount_min_ngn = Number(shipping_discount_min_ngn)
+      }
+      if (bulk_discount_tier1_qty !== undefined) {
+        if (!positiveInt(bulk_discount_tier1_qty)) return json({ error: 'Tier 1 quantity must be a positive whole number.' }, 400)
+        updates.bulk_discount_tier1_qty = Number(bulk_discount_tier1_qty)
+      }
+      if (bulk_discount_tier1_percent !== undefined) {
+        if (!percent(bulk_discount_tier1_percent)) return json({ error: 'Tier 1 discount must be between 0 and 100%.' }, 400)
+        updates.bulk_discount_tier1_percent = Number(bulk_discount_tier1_percent)
+      }
+      if (bulk_discount_tier2_qty !== undefined) {
+        if (!positiveInt(bulk_discount_tier2_qty)) return json({ error: 'Tier 2 quantity must be a positive whole number.' }, 400)
+        updates.bulk_discount_tier2_qty = Number(bulk_discount_tier2_qty)
+      }
+      if (bulk_discount_tier2_percent !== undefined) {
+        if (!percent(bulk_discount_tier2_percent)) return json({ error: 'Tier 2 discount must be between 0 and 100%.' }, 400)
+        updates.bulk_discount_tier2_percent = Number(bulk_discount_tier2_percent)
+      }
+
+      // Preserve the existing Import Admin payment settings API, but Management
+      // does not send or display these fields.
       if (typeof paystack_enabled === 'boolean') updates.paystack_enabled = paystack_enabled
       if (typeof manual_transfer_enabled === 'boolean') updates.manual_transfer_enabled = manual_transfer_enabled
       if (typeof bank_account_number === 'string') updates.bank_account_number = bank_account_number
