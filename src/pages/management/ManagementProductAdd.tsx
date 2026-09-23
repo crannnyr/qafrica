@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader, Plus, Trash2 } from 'lucide-react';
 import CONFIG from '@/lib/config';
@@ -23,7 +23,7 @@ export default function ManagementProductAdd({ productId: propProductId }: { pro
   const navigate=useNavigate(); const { id: routeProductId } = useParams(); const productId = propProductId || routeProductId; const [f,setF]=useState(initial); const [variants,setVariants]=useState<VariantGroup[]>([]);
   const [saving,setSaving]=useState(false); const [loading,setLoading]=useState(Boolean(productId)); const [error,setError]=useState('');
   const set=(key:string,value:any)=>setF(v=>({...v,[key]:value}));
-  useState(() => { if (!productId) return; void (async () => {
+  useEffect(() => { if (!productId) return; void (async () => {
     try {
       const token=getManagementToken(); if(!token) throw new Error('Management session expired');
       const res=await fetch(`${EDGE_URL}?action=admin-product`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manager_token:token,id:productId})});
@@ -32,7 +32,7 @@ export default function ManagementProductAdd({ productId: propProductId }: { pro
       setF(v=>({...v,name:p.name??'',description:p.description??'',category:p.category??'General',parent_category:p.parent_category??'',category_id:p.category_id??'',subcategory_id:p.subcategory_id??'',image_url:p.image_url??'',image_urls:[...(p.image_urls??[]), '', '', ''].slice(0,3),price_cny:String(p.price_cny??''),price_cny_original:String(p.price_cny_original??''),price_ngn:String(p.price_ngn??''),price_usd:String(p.price_usd??''),cost_ngn:String(p.cost_ngn??''),price_input_currency:p.price_input_currency??'cny',price_input_amount:String(p.price_input_amount??''),original_price_usd:String(p.original_price_usd??''),usd_to_ngn_rate:String(p.usd_to_ngn_rate??''),markup_percent:String(p.markup_percent??''),markup_amount_ngn:String(p.markup_amount_ngn??''),sea_shipping_allocation_ngn:String(p.sea_shipping_allocation_ngn??''),sea_shipping_customer_ngn:String(p.sea_shipping_customer_ngn??''),air_shipping_customer_ngn:String(p.air_shipping_customer_ngn??''),volume_cbm:String(p.volume_cbm??''),weight_grams:String(p.weight_grams??''),sea_shipping_cost_ngn:String(p.sea_shipping_cost_ngn??''),flight_shipping_cost_ngn:String(p.flight_shipping_cost_ngn??''),moq:String(p.moq??1),units_sold:String(p.units_sold??0),delivery_time:p.delivery_time??'air',source_url:p.source_url??'',ship_only:Boolean(p.ship_only),sort_order:String(p.sort_order??0),is_active:p.is_active!==false,is_trending:Boolean(p.is_trending),trending_order:String(p.trending_order??0),trending_source:p.trending_source??'manual',has_variants:Boolean(p.has_variants)}));
       setVariants(Array.isArray(p.variants)?p.variants:[]);
     } catch(e){setError(e instanceof Error?e.message:'Could not load product')} finally {setLoading(false)}
-  })(); });
+  })(); }, [productId]);
   const addGroup=()=>setVariants(v=>[...v,{id:crypto.randomUUID(),name:'',options:[]}]);
   const save=async()=>{ if(!f.name.trim()||!f.image_url.trim()) return setError('Product name and primary image URL are required.');
     setSaving(true);setError('');
