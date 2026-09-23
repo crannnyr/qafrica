@@ -821,13 +821,47 @@ serve(async (req: Request) => {
       const { manager_token } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token, 'import.products.view'))) return json({ error: 'Unauthorized' }, 401)
 
-      // Admin is the only surface that sees source_url.
-      const { data, error } = await supabase
+      // Keep the existing Import Admin response unchanged when no pagination
+      // parameters are supplied. Management can opt into server-side pagination
+      // without changing the legacy Import Admin client.
+      const body = await req.json().catch(() => ({}))
+      const requestedPage = Number(body.page)
+      const requestedPerPage = Number(body.per_page)
+      const paginated = Number.isFinite(requestedPage) && requestedPage >= 1 && Number.isFinite(requestedPerPage) && requestedPerPage >= 1
+
+      let query = supabase
         .from('china_import_products')
-        .select('id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, sort_order, units_sold, is_trending, trending_order, trending_source, created_at')
+        .select('id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, sort_order, units_sold, is_trending, trending_order, trending_source, created_at', paginated ? { count: 'exact' } : undefined)
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
 
+      const search = typeof body.search === 'string' ? body.search.trim() : ''
+      const status = body.status === 'active' || body.status === 'inactive' ? body.status : 'all'
+      if (search) query = query.ilike('name', '%' + search + '%')
+      if (status === 'active') query = query.eq('is_active', true)
+      if (status === 'inactive') query = query.eq('is_active', false)
+
+      if (paginated) {
+        const page = Math.floor(requestedPage)
+        const perPage = Math.min(50, Math.floor(requestedPerPage))
+        const from = (page - 1) * perPage
+        const to = from + perPage - 1
+        const { data, error, count } = await query.range(from, to)
+        if (error) return json({ error: error.message, products: [] }, 500)
+
+        const total = Number(count ?? 0)
+        return json({
+          products: data ?? [],
+          pagination: {
+            page,
+            per_page: perPage,
+            total,
+            page_count: Math.max(1, Math.ceil(total / perPage)),
+          },
+        })
+      }
+
+      const { data, error } = await query
       if (error) return json({ error: error.message, products: [] }, 500)
       return json({ products: data ?? [] })
     }
