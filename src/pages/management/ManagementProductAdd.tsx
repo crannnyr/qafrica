@@ -64,7 +64,7 @@ export default function ManagementProductAdd({productId:productIdProp}:{productI
   if(loading)return <div className="min-h-[50vh] flex items-center justify-center"><Loader className="w-5 h-5 text-orange-500 animate-spin"/></div>;
   const slots=Math.min(3,previews.length+1);
 
-  return <div className="max-w-5xl space-y-4 pb-8">
+  return <div className="w-full max-w-5xl mx-auto space-y-4 pb-8">
     <div className="flex items-center gap-3"><button onClick={()=>navigate('/management/products')} className="p-2 rounded-lg hover:bg-gray-100"><ArrowLeft className="w-5 h-5"/></button><div><h1 className="font-bold text-gray-900">{editing?'Edit product':'Add product'}</h1><p className="text-xs text-gray-400">Same product template and pricing flow as Import Admin.</p></div></div>
     {error&&<div className="px-4 py-3 rounded-xl bg-red-50 text-red-600 text-xs">{error}</div>}
 
