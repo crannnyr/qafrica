@@ -380,7 +380,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
             onClick={() => setSupportView('human')}
             className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-colors ${supportView === 'human' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
           >
-            Human Support {humanCount > 0 ? `(${humanCount})` : ''}
+            Human {humanCount > 0 ? `(${humanCount})` : ''}
           </button>
           <button
             onClick={() => setSupportView('resolved')}
