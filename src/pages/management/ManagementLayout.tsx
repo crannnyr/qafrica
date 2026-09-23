@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, Menu, X,
-  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags,
+  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
 } from 'lucide-react';
 import { getManagementManager, logoutManagementSession, validateManagementSession, type ManagementManager } from './ManagementAuth';
 
