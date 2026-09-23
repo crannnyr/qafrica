@@ -7,7 +7,7 @@ const AI_URL = CONFIG.SUPABASE_URL + '/functions/v1/import-ai-support';
 
 type Customer = { id?: string; full_name?: string | null; email?: string | null; phone?: string | null };
 type Conversation = {
-  id: string; wa_id: string; customer_id: string | null;
+  id: string; wa_id: string; customer_id: string | null; channel?: 'website' | 'whatsapp'; human_agent_id?: string | null;
   status: 'ai' | 'returned_to_ai' | 'human_requested' | 'human_assigned' | 'human_active' | 'closed';
   last_inbound_at: string | null; last_outbound_at: string | null;
   created_at: string; updated_at: string; customers?: Customer | Customer[] | null;
@@ -226,9 +226,9 @@ export default function AiSupportInbox({ token }: { token: string }) {
     setActing(true);
     try {
       await supportRequest(token, 'resolve_support_conversation', { conversation_id: selected.id });
-      setConversations(prev => prev.filter(c => c.id !== selected.id));
       setSelected(null);
       setMessages([]);
+      setActiveTab('resolved');
       toast.success('Conversation marked resolved');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not mark conversation resolved');
@@ -267,8 +267,8 @@ export default function AiSupportInbox({ token }: { token: string }) {
   };
 
   const waitingCount = conversations.filter(c => c.status === 'human_requested').length;
-  const aiCount = conversations.length;
-  const resolvedCount = conversations.length;
+  const aiCount = activeTab === 'ai' ? conversations.length : 0;
+  const resolvedCount = activeTab === 'resolved' ? conversations.length : 0;
 
   return (
     <div className="space-y-4">
@@ -360,6 +360,11 @@ export default function AiSupportInbox({ token }: { token: string }) {
                           {waiting && <span className="text-[9px] font-bold text-red-600">WAITING</span>}
                         </div>
                         <p className="text-[10px] text-gray-400 truncate">{c.channel === 'website' ? 'Website AI' : 'WhatsApp AI'} · {customer?.email || ('+' + c.wa_id)}</p>
+                        {activeTab === 'resolved' && (
+                          <span className="inline-flex mt-1 rounded-full bg-emerald-50 text-emerald-700 px-1.5 py-0.5 text-[9px] font-bold">
+                            {c.human_agent_id ? 'Human resolved' : 'AI resolved'}
+                          </span>
+                        )}
                         <p className="text-[9px] text-gray-300 mt-1">{new Date(c.updated_at).toLocaleString()}</p>
                       </div>
                     </div>
@@ -380,16 +385,23 @@ export default function AiSupportInbox({ token }: { token: string }) {
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-gray-900 truncate">{customerOf(selected)?.full_name || (selected.channel === 'website' ? 'Website customer' : 'WhatsApp customer')}</p>
                     <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''}</p>
+                    <span className={"inline-flex mt-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold " + (selected.status === 'closed' ? 'bg-emerald-50 text-emerald-700' : selected.status === 'human_requested' ? 'bg-red-50 text-red-600' : selected.status === 'human_active' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600')}>
+                      {selected.status === 'closed' ? (selected.human_agent_id ? 'Resolved · Human' : 'Resolved · AI') : selected.status === 'human_requested' ? 'Waiting for human' : selected.status === 'human_active' ? 'Human active' : 'AI handling'}
+                    </span>
                   </div>
-                  {activeTab === 'human' && (
-                    <div className="flex gap-2">
+                  {activeTab === 'human' ? (
+                    <div className="flex flex-wrap justify-end gap-2">
                       <button onClick={() => void takeOver()} disabled={acting || selected.status === 'human_active'} className="px-2.5 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">
                         {selected.status === 'human_active' ? 'Human active' : 'Take over'}
                       </button>
                       <button onClick={() => void markResolved()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold disabled:opacity-40">Mark resolved</button>
                       <button onClick={() => void returnToAi()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold disabled:opacity-40">Return to AI</button>
                     </div>
-                  )}
+                  ) : activeTab === 'ai' ? (
+                    <button onClick={() => void markResolved()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold disabled:opacity-40">
+                      Mark resolved
+                    </button>
+                  ) : null}
                 </div>
 
                 <div className="p-4 space-y-2 max-h-[520px] overflow-y-auto">
@@ -419,7 +431,9 @@ export default function AiSupportInbox({ token }: { token: string }) {
                   </div>
                 ) : (
                   <div className="border-t border-gray-100 px-4 py-3 text-[10px] text-gray-400">
-                    Read-only view: this conversation is currently handled by QAfrica AI.
+                    {activeTab === 'resolved'
+                      ? 'Resolved conversation: this history remains available for review.'
+                      : 'Read-only view: this conversation is currently handled by QAfrica AI.'}
                   </div>
                 )}
               </>
