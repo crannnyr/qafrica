@@ -50,9 +50,9 @@ export default function ImportSourcingSharePage() {
           const label = v.variant_options ? Object.entries(v.variant_options).map(([k, val]) => `${k}: ${val}`).join(', ') : 'No variant'
           return `  - ${label}: ${v.quantity}`
         })
-        .join('\n')
-      return `${i + 1}. ${p.product_name}\nTotal quantity: ${p.total_qty}\n${variants}`
-    }).join('\n\n')
+        .join('\\n')
+      return `${i + 1}. ${p.product_name}\\nTotal quantity: ${p.total_qty}\\n${variants}`
+    }).join('\\n\\n')
 
     try {
       await navigator.clipboard.writeText(text)
@@ -65,7 +65,7 @@ export default function ImportSourcingSharePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
-      <header className="bg-gray-900 text-white">
+      <header className="sticky top-0 z-50 bg-gray-900 text-white shadow-md">
         <div className="max-w-4xl mx-auto px-4 py-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-orange-500 flex items-center justify-center">
