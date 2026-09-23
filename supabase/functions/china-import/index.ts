@@ -2200,7 +2200,7 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'all-orders') {
-      const { manager_token, date_from, date_to, payment_status, status } = await req.json()
+      const { manager_token, date_from, date_to, payment_status, status, staged } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.orders.view'))) return json({ error: 'Unauthorized' }, 401)
 
       const buildQuery = (from: number, to: number) => {
@@ -2212,6 +2212,8 @@ serve(async (req: Request) => {
         if (date_to) q = q.lte('created_at', date_to)
         if (payment_status) q = q.eq('payment_status', payment_status)
         if (status) q = q.eq('status', status)
+        if (staged === 'active') q = q.is('staged_at', null)
+        if (staged === 'closed') q = q.not('staged_at', 'is', null)
         return q
       }
 
