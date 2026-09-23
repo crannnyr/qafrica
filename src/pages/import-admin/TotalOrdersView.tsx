@@ -192,26 +192,37 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
     URL.revokeObjectURL(url);
   };
 
-  // Closes every currently active batch in one go — collects every order id
-  // across all groups (deduped, since one order can span multiple groups if
-  // it has multiple different line items), downloads a CSV record of what's
-  // being closed, then stamps them all closed in a single request.
+  // Close All uses the same admin-close-group endpoint as the individual
+  // Close batch action, but sends the deduplicated IDs for every active
+  // order. This guarantees one import batch while avoiding the separate
+  // admin-close-all route that was returning a gateway 400 in production.
   const closeAll = async () => {
     if (groups.length === 0) return;
     setClosingAll(true);
     try {
       downloadCsv(groups);
-      const res = await fetch(`${EDGE_URL}?action=admin-close-all`, {
+
+      const orderIds = Array.from(new Set(
+        groups.flatMap(group => group.orderIds).filter(Boolean)
+      ));
+
+      if (orderIds.length === 0) {
+        throw new Error('No active orders were found to close');
+      }
+
+      const res = await fetch(`${EDGE_URL}?action=admin-close-group`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token }),
+        body: JSON.stringify({ manager_token: token, order_ids: orderIds }),
       });
       const data = await res.json().catch(() => ({}));
+
       if (!res.ok || data.success !== true) {
         throw new Error(data.error ?? 'Could not close the active orders');
       }
+
       await load();
-      toast.success(`Closed ${data.count ?? 0} active orders`);
+      toast.success(`Closed ${data.count ?? data.closed_count ?? orderIds.length} active orders`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not close the active orders');
     } finally {
