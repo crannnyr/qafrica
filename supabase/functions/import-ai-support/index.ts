@@ -90,10 +90,10 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
     await requireAdmin(s, token, 'import.messages.view')
     const { data, error } = await s.from('import_ai_whatsapp_conversations')
       .select('id,wa_id,channel,customer_id,status,last_inbound_at,last_outbound_at,human_requested_at,human_assigned_at,human_agent_id,created_at,updated_at,customers(id,full_name,email,phone,avatar_url)')
-      .in('status', ['ai','returned_to_ai','human_requested','human_assigned','human_active','resolved','closed'])
+      .in('status', ['ai','returned_to_ai','human_requested','human_assigned','human_active','resolved'])
       .order('updated_at', { ascending: false }).limit(1000)
     if (error) throw error
-    return { conversations: (data ?? []).map((row:any) => ({ ...row, status: row.status === 'closed' ? 'resolved' : row.status })) }
+    return { conversations: data ?? [] }
   }
 
   if (action === 'get_support_conversation') {
@@ -109,7 +109,6 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
       .select('id,direction,sender_type,body,whatsapp_message_id,metadata,created_at')
       .eq('conversation_id', id).order('created_at', { ascending: true }).limit(300)
     if (me) throw me
-    if (conversation.status === 'closed') conversation.status = 'resolved'
     return { conversation, messages: messages ?? [] }
   }
 
@@ -619,17 +618,11 @@ serve(async(req:Request)=>{
   const s=createClient(Deno.env.get('SUPABASE_URL')??'',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')??'')
   let body:any;try{body=await req.json()}catch{return json({error:'Invalid JSON body'},400)}
   const actor:Actor=body.actor==='admin'?'admin':body.actor==='guest'?'guest':'customer'
-  const internalSecret = req.headers.get('x-import-ai-internal-secret')
-  const internalCustomerId = req.headers.get('x-import-ai-customer-id')
-  const expectedInternalSecret = Deno.env.get('IMPORT_AI_INTERNAL_SECRET') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-  const hasVerifiedInternalCustomer = !!(internalSecret && expectedInternalSecret && internalSecret === expectedInternalSecret && internalCustomerId)
-  let effectiveActor:Actor = actor
   if (actor === 'admin' && body.action) {
     try { return json(await adminSupportAction(s, clean(body.manager_token, 500), String(body.action), body)) }
     catch(e) { return json({error:e instanceof Error?e.message:'Support action failed'},400) }
   }
   const channel=clean(body.channel,40) || 'website'
-  if (channel === 'whatsapp' && actor === 'guest' && hasVerifiedInternalCustomer) effectiveActor = 'customer'
   const conversationId=clean(body.conversation_id,80) || null
   if (actor==='customer' && channel==='website' && body.action==='get_state') {
     try {
@@ -657,15 +650,8 @@ serve(async(req:Request)=>{
         .map((m:any)=>({role:m.role,content:clean(m.content,2000)}))
     : []
   try{
-    if (channel === 'whatsapp' && conversationId && hasVerifiedInternalCustomer) {
-      const verifiedCustomer = await customerId(s, req)
-      const { error: bindError } = await s.from('import_ai_whatsapp_conversations')
-        .update({ customer_id: verifiedCustomer, updated_at: new Date().toISOString() })
-        .eq('id', conversationId)
-      if (bindError) throw bindError
-    }
-    if(effectiveActor==='admin')await requireAdmin(s,token,'import.clients.view')
-    const tools=effectiveActor==='admin'?adminTools:effectiveActor==='guest'?guestTools:channel==='whatsapp'?whatsappCustomerTools:[...customerTools,requestHumanSupportTool]
+    if(actor==='admin')await requireAdmin(s,token,'import.clients.view')
+    const tools=actor==='admin'?adminTools:actor==='guest'?guestTools:channel==='whatsapp'?whatsappCustomerTools:[...customerTools,requestHumanSupportTool]
     let websiteConversation:any = null
     if (actor==='customer' && channel==='website') {
       websiteConversation = conversationId
@@ -683,7 +669,7 @@ serve(async(req:Request)=>{
       }
       await appendSupportMessage(s, websiteConversation.id, 'inbound', 'customer', message)
     }
-    let input:any[]=[{role:'system',content:prompt(effectiveActor, channel, isNewConversation)},...history,{role:'user',content:message}]
+    let input:any[]=[{role:'system',content:prompt(actor, channel, isNewConversation)},...history,{role:'user',content:message}]
     for(let turn=0;turn<5;turn++){
       const r=await openai(key,input,tools);const calls=(r.output??[]).filter((x:any)=>x.type==='function_call')
       if(!calls.length){
@@ -698,7 +684,7 @@ serve(async(req:Request)=>{
       for(const c of calls){
         let a:any={};try{a=JSON.parse(c.arguments||'{}')}catch{a={}}
         let result:any
-        try{result=effectiveActor==='admin'?await adminTool(s,token!,c.name,a):await customerTool(s,req,effectiveActor,c.name,a,{channel,conversationId})}catch(e){result={error:e instanceof Error?e.message:'Tool execution failed'}}
+        try{result=actor==='admin'?await adminTool(s,token!,c.name,a):await customerTool(s,req,actor,c.name,a,{channel,conversationId})}catch(e){result={error:e instanceof Error?e.message:'Tool execution failed'}}
         input.push({type:'function_call_output',call_id:c.call_id,output:JSON.stringify(result)})
       }
     }
