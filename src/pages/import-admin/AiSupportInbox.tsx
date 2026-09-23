@@ -8,7 +8,7 @@ const AI_URL = CONFIG.SUPABASE_URL + '/functions/v1/import-ai-support';
 type Customer = { id?: string; full_name?: string | null; email?: string | null; phone?: string | null };
 type Conversation = {
   id: string; wa_id: string; customer_id: string | null;
-  status: 'human_requested' | 'human_assigned' | 'human_active';
+  status: 'ai' | 'returned_to_ai' | 'human_requested' | 'human_assigned' | 'human_active';
   last_inbound_at: string | null; last_outbound_at: string | null;
   created_at: string; updated_at: string; customers?: Customer | Customer[] | null;
 };
@@ -129,6 +129,7 @@ export function AiSupportAlertMonitor({ token, enabled = true }: { token: string
 }
 
 export default function AiSupportInbox({ token }: { token: string }) {
+  const [activeTab, setActiveTab] = useState<'ai' | 'human'>('ai');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selected, setSelected] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -145,7 +146,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
-      const data = await supportRequest(token, 'list_support_conversations');
+      const data = await supportRequest(token, 'list_support_conversations', { scope: activeTab });
       const rows: Conversation[] = data.conversations || [];
       setConversations(rows);
       setSelected(current => current ? (rows.find(x => x.id === current.id) || current) : (rows[0] || null));
@@ -154,7 +155,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
     } finally {
       if (!quiet) setLoading(false);
     }
-  }, [token]);
+  }, [activeTab, token]);
 
   const openConversation = useCallback(async (conversation: Conversation) => {
     setSelected(conversation);
@@ -171,6 +172,8 @@ export default function AiSupportInbox({ token }: { token: string }) {
   }, [token]);
 
   useEffect(() => {
+    setSelected(null);
+    setMessages([]);
     void load();
     const timer = window.setInterval(() => void load(true), 5000);
     return () => window.clearInterval(timer);
@@ -249,6 +252,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
   };
 
   const waitingCount = conversations.filter(c => c.status === 'human_requested').length;
+  const aiCount = conversations.length;
 
   return (
     <div className="space-y-4">
@@ -264,7 +268,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">Human requests, live WhatsApp conversations and AI handoff.</p>
+            <p className="text-[11px] text-gray-400 mt-1">Review every conversation currently handled by AI, plus human support handoffs.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={enableSound} className={"inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[11px] font-bold " + (soundEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-900 text-white')}>
@@ -280,6 +284,25 @@ export default function AiSupportInbox({ token }: { token: string }) {
             </button>
           </div>
         </div>
+
+        <div className="mt-4 flex gap-2 border-t border-gray-100 pt-3">
+          <button
+            onClick={() => setActiveTab('ai')}
+            className={"inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold " + (activeTab === 'ai' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600')}
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            AI handled
+            <span className={"rounded-full px-1.5 py-0.5 text-[9px] " + (activeTab === 'ai' ? 'bg-white/15 text-white' : 'bg-white text-gray-500')}>{aiCount}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('human')}
+            className={"inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold " + (activeTab === 'human' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600')}
+          >
+            <BellRing className="w-3.5 h-3.5" />
+            Human support
+            {waitingCount > 0 && <span className={"rounded-full px-1.5 py-0.5 text-[9px] " + (activeTab === 'human' ? 'bg-red-500 text-white' : 'bg-red-50 text-red-600')}>{waitingCount}</span>}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -287,14 +310,14 @@ export default function AiSupportInbox({ token }: { token: string }) {
       ) : conversations.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
           <MessageCircle className="w-8 h-8 mx-auto text-gray-200 mb-3" />
-          <p className="text-sm font-semibold text-gray-700">No human support requests</p>
-          <p className="text-xs text-gray-400 mt-1">When a customer asks for a human, the conversation will appear here and trigger an alert.</p>
+          <p className="text-sm font-semibold text-gray-700">{activeTab === 'ai' ? 'No AI-handled conversations' : 'No human support requests'}</p>
+          <p className="text-xs text-gray-400 mt-1">{activeTab === 'ai' ? 'AI conversations will appear here so you can review every message it handled.' : 'When a customer asks for a human, the conversation will appear here and trigger an alert.'}</p>
         </div>
       ) : (
         <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Active support</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{activeTab === 'ai' ? 'AI handled conversations' : 'Human support'}</p>
               <span className="text-[10px] text-gray-400">{conversations.length}</span>
             </div>
             <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
@@ -312,7 +335,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
                           <p className="text-xs font-bold text-gray-900 truncate">{customer?.full_name || customer?.email || ('+' + c.wa_id)}</p>
                           {waiting && <span className="text-[9px] font-bold text-red-600">WAITING</span>}
                         </div>
-                        <p className="text-[10px] text-gray-400 truncate">{customer?.email || ('+' + c.wa_id)}</p>
+                        <p className="text-[10px] text-gray-400 truncate">{c.channel === 'website' ? 'Website AI' : 'WhatsApp AI'} · {customer?.email || ('+' + c.wa_id)}</p>
                         <p className="text-[9px] text-gray-300 mt-1">{new Date(c.updated_at).toLocaleString()}</p>
                       </div>
                     </div>
@@ -334,12 +357,14 @@ export default function AiSupportInbox({ token }: { token: string }) {
                     <p className="text-sm font-bold text-gray-900 truncate">{customerOf(selected)?.full_name || 'WhatsApp customer'}</p>
                     <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => void takeOver()} disabled={acting || selected.status === 'human_active'} className="px-2.5 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">
-                      {selected.status === 'human_active' ? 'Human active' : 'Take over'}
-                    </button>
-                    <button onClick={() => void returnToAi()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold disabled:opacity-40">Return to AI</button>
-                  </div>
+                  {activeTab === 'human' && (
+                    <div className="flex gap-2">
+                      <button onClick={() => void takeOver()} disabled={acting || selected.status === 'human_active'} className="px-2.5 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">
+                        {selected.status === 'human_active' ? 'Human active' : 'Take over'}
+                      </button>
+                      <button onClick={() => void returnToAi()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold disabled:opacity-40">Return to AI</button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-4 space-y-2 max-h-[520px] overflow-y-auto">
@@ -353,19 +378,25 @@ export default function AiSupportInbox({ token }: { token: string }) {
                   ))}
                 </div>
 
-                <div className="border-t border-gray-100 p-3 flex gap-2">
-                  <input
-                    value={reply}
-                    onChange={e => setReply(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendReply(); } }}
-                    placeholder="Reply to customer on WhatsApp…"
-                    className="flex-1 min-w-0 px-3 py-2.5 rounded-xl border border-gray-200 text-xs"
-                    disabled={sending || selected.status !== 'human_active'}
-                  />
-                  <button onClick={() => void sendReply()} disabled={sending || !reply.trim() || selected.status !== 'human_active'} className="px-3 rounded-xl bg-gray-900 text-white disabled:opacity-30">
-                    {sending ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  </button>
-                </div>
+                {activeTab === 'human' ? (
+                  <div className="border-t border-gray-100 p-3 flex gap-2">
+                    <input
+                      value={reply}
+                      onChange={e => setReply(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void sendReply(); } }}
+                      placeholder="Reply to customer on WhatsApp…"
+                      className="flex-1 min-w-0 px-3 py-2.5 rounded-xl border border-gray-200 text-xs"
+                      disabled={sending || selected.status !== 'human_active'}
+                    />
+                    <button onClick={() => void sendReply()} disabled={sending || !reply.trim() || selected.status !== 'human_active'} className="px-3 rounded-xl bg-gray-900 text-white disabled:opacity-30">
+                      {sending ? <Loader className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="border-t border-gray-100 px-4 py-3 text-[10px] text-gray-400">
+                    Read-only view: this conversation is currently handled by QAfrica AI.
+                  </div>
+                )}
               </>
             )}
           </div>
