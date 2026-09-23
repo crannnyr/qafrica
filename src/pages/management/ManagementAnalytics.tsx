@@ -12,7 +12,6 @@ type Analytics = {
   orders_count: number
   units_sold: number
   revenue_ngn: number
-  cost_ngn: number
   daily_trend: { date: string; orders: number; revenue_ngn: number }[]
 }
 
@@ -162,8 +161,8 @@ export default function ManagementAnalytics() {
       </div>
 
       {isLoading && !data ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 h-24 animate-pulse" />
           ))}
         </div>
@@ -174,11 +173,10 @@ export default function ManagementAnalytics() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
             <KpiCard icon={DollarSign} label="Revenue" value={fmtCompact(data.revenue_ngn)} sub={`${data.orders_count.toLocaleString()} paid orders`} />
             <KpiCard icon={ShoppingCart} label="Orders" value={data.orders_count.toLocaleString()} sub="Paid orders" />
             <KpiCard icon={Package} label="Units sold" value={data.units_sold.toLocaleString()} />
-            <KpiCard icon={DollarSign} label="Cost" value={fmtCompact(data.cost_ngn)} sub="Product cost" />
           </div>
 
           <ChartCard title="Revenue trend">
