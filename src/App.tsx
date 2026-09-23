@@ -42,6 +42,7 @@ const ManagementLogout = lazy(() => import('@/pages/management/ManagementLogout'
 const ManagementLayout = lazy(() => import('@/pages/management/ManagementLayout'));
 const ManagementDashboard = lazy(() => import('@/pages/management/ManagementDashboard'));
 const ManagementProducts = lazy(() => import('@/pages/management/ManagementProducts'));
+const ManagementProductAdd = lazy(() => import('@/pages/management/ManagementProductAdd'));
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
 const CustomOrderRequestPage = lazy(() => import('@/pages/recommendations/CustomOrderRequestPage'));
