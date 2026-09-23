@@ -1,4 +1,3 @@
-import { serve } from 'https://deno.land/std@0.168.0/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const CORS = {
@@ -109,7 +108,7 @@ async function requireAdmin(db: any, token: unknown, permissionKey?: string) {
   return false
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   const db = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
   const action = new URL(req.url).searchParams.get('action') ?? 'list'
