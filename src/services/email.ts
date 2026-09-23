@@ -220,7 +220,7 @@ welcome: (name: string, appUrl?: string) => ({
             <td align="center" style="padding:28px 0 0;">
               <p style="margin:0 0 6px;font-size:13px;color:#9CA3AF;">
                 Questions? Reply to this email or reach us on
-                <a href="https://wa.me/447404707531" style="color:#F97316;text-decoration:none;">WhatsApp</a>
+                <a href="https://wa.me/2347015470881" style="color:#F97316;text-decoration:none;">WhatsApp</a>
               </p>
               <p style="margin:0;font-size:12px;color:#D1D5DB;">
                 © ${new Date().getFullYear()} QAFRICA. Building Africa's digital commerce, one store at a time.
@@ -618,7 +618,7 @@ const storeCreatedTemplate = (name: string, storeName: string, storeSlug: string
             <td align="center" style="padding:28px 0 0;">
               <p style="margin:0 0 6px;font-size:13px;color:#9CA3AF;">
                 Questions? Reply to this email or reach us on
-                <a href="https://wa.me/447404707531" style="color:#F97316;text-decoration:none;">WhatsApp</a>
+                <a href="https://wa.me/2347015470881" style="color:#F97316;text-decoration:none;">WhatsApp</a>
               </p>
               <p style="margin:0;font-size:12px;color:#D1D5DB;">
                 © ${new Date().getFullYear()} QAFRICA. Building Africa's digital commerce, one store at a time.
