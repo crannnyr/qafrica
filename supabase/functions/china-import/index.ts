@@ -1187,6 +1187,171 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'admin-session') {
+      const authHeader = req.headers.get('Authorization') ?? ''
+      const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : ''
+      if (!accessToken) return json({ error: 'Authorization required' }, 401)
+
+      const { data: authData, error: authError } = await supabase.auth.getUser(accessToken)
+      const user = authData?.user
+      if (authError || !user) return json({ error: 'Invalid authentication session' }, 401)
+
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role, full_name')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (profileError) return json({ error: 'Could not verify admin account' }, 500)
+      if (profile?.role !== 'admin') return json({ error: 'Import Admin access requires a platform admin account' }, 403)
+
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from('import_admin_user_roles')
+        .select('role_id')
+        .eq('user_id', user.id)
+      if (assignmentsError) return json({ error: 'Could not load Import Admin roles' }, 500)
+
+      const roleIds = (assignments ?? []).map((row: any) => row.role_id).filter(Boolean)
+      if (roleIds.length === 0) return json({ error: 'No Import Admin role has been assigned to this account' }, 403)
+
+      const { data: rolePermissions, error: rolePermissionsError } = await supabase
+        .from('import_admin_role_permissions')
+        .select('permission_id')
+        .in('role_id', roleIds)
+      if (rolePermissionsError) return json({ error: 'Could not load Import Admin permissions' }, 500)
+
+      const permissionIds = Array.from(new Set((rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+      if (permissionIds.length === 0) return json({ error: 'No Import Admin permissions are assigned to this account' }, 403)
+
+      const { data: permissions, error: permissionsError } = await supabase
+        .from('import_admin_permissions')
+        .select('key')
+        .in('id', permissionIds)
+        .eq('key', 'import.admin_access.view')
+        .limit(1)
+      if (permissionsError) return json({ error: 'Could not verify Import Admin access' }, 500)
+      if (!permissions?.length) return json({ error: 'Import Admin access permission is not assigned to this account' }, 403)
+
+      const { data: session, error: sessionErr } = await supabase
+        .from('import_admin_sessions')
+        .insert({
+          user_id: user.id,
+          expires_at: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+        })
+        .select('token')
+        .single()
+      if (sessionErr || !session) return json({ error: 'Could not create Import Admin session' }, 500)
+
+      return json({
+        success: true,
+        token: session.token,
+        manager: {
+          email: user.email ?? null,
+          full_name: profile?.full_name ?? user.email ?? 'Import Admin',
+        },
+      })
+    }
+
+    if (req.method === 'POST' && action === 'admin-login') {
+      const body = await req.json().catch(() => ({}))
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+      const { password } = body
+
+      if (!email || !email.endsWith('@qafrica.store')) {
+        return json({ error: 'Use your @qafrica.store admin email.' }, 403)
+      }
+      if (!password) return json({ error: 'Password required' }, 400)
+
+      const { data: manager, error: managerError } = await supabase
+        .from('import_admin_managers')
+        .select('id, email, full_name, is_active')
+        .eq('email', email)
+        .maybeSingle()
+
+      if (managerError) return json({ error: 'Login check failed' }, 500)
+      if (!manager || !manager.is_active) return json({ error: 'Invalid credentials' }, 401)
+
+      const { data: creds } = await supabase
+        .from('import_admin_manager_credentials')
+        .select('failed_attempts, locked_until')
+        .eq('manager_id', manager.id)
+        .maybeSingle()
+
+      if (!creds) {
+        return json({ error: 'This Import Admin does not have a password set. Ask a Super Admin to reset it.' }, 401)
+      }
+
+      if (creds.locked_until && new Date(creds.locked_until) > new Date()) {
+        const minutesLeft = Math.ceil((new Date(creds.locked_until).getTime() - Date.now()) / 60000)
+        return json({ error: `Too many failed attempts. Try again in ${minutesLeft} minute(s).` }, 429)
+      }
+
+      const { data: isValid, error } = await supabase.rpc('verify_import_manager_password', {
+        p_manager_id: manager.id,
+        p_password: password,
+      })
+      if (error) return json({ error: 'Login check failed' }, 500)
+
+      if (!isValid) {
+        const attempts = (creds.failed_attempts ?? 0) + 1
+        const lockout = attempts >= 5
+        await supabase.from('import_admin_manager_credentials').update({
+          failed_attempts: attempts,
+          locked_until: lockout ? new Date(Date.now() + 15 * 60_000).toISOString() : null,
+        }).eq('manager_id', manager.id)
+        return json({ error: lockout ? 'Too many failed attempts. Try again in 15 minutes.' : 'Invalid credentials' }, lockout ? 429 : 401)
+      }
+
+      await supabase.from('import_admin_manager_credentials')
+        .update({ failed_attempts: 0, locked_until: null })
+        .eq('manager_id', manager.id)
+
+      const { data: session, error: sessionErr } = await supabase
+        .from('import_admin_sessions')
+        .insert({
+          manager_id: manager.id,
+          expires_at: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+        })
+        .select('token').single()
+      if (sessionErr || !session) return json({ error: 'Login failed — could not create session' }, 500)
+
+      return json({
+        success: true,
+        token: session.token,
+        manager: { email: manager.email, full_name: manager.full_name ?? manager.email },
+      })
+    }
+
+    if (req.method === 'POST' && action === 'admin-reset-manager-password') {
+      const { manager_token, manager_id, password } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!manager_id || typeof password !== 'string' || password.length < 8) {
+        return json({ error: 'Password must be at least 8 characters.' }, 400)
+      }
+
+      const { data: targetManager } = await supabase
+        .from('import_admin_managers')
+        .select('id, is_active, email')
+        .eq('id', manager_id)
+        .maybeSingle()
+      if (!targetManager || !targetManager.is_active || !targetManager.email.endsWith('@qafrica.store')) {
+        return json({ error: 'Import Manager not found or inactive' }, 404)
+      }
+
+      const { data: ok, error } = await supabase.rpc('set_import_manager_password', {
+        p_manager_id: manager_id,
+        p_password: password,
+      })
+      if (error || !ok) return json({ error: error?.message ?? 'Could not reset password.' }, 500)
+      return json({ success: true })
+    }
+
+    if (req.method === 'POST' && action === 'admin-logout') {
+      const { manager_token } = await req.json().catch(() => ({}))
+      if (manager_token) await supabase.from('import_admin_sessions').delete().eq('token', manager_token)
+      return json({ success: true })
+    }
+
+
+    if (req.method === 'POST' && action === 'admin-session') {
       const { manager_token } = await req.json().catch(() => ({}))
       if (!manager_token || typeof manager_token !== 'string') {
         return json({ success: false, error: 'Missing management session' }, 401)
@@ -1228,6 +1393,8 @@ serve(async (req: Request) => {
       })
     }
 
+
+    // ── Create a legacy Import Manager ─────────────────────────────────────
     if (req.method === 'POST' && action === 'admin-create-manager') {
       const { manager_token, email, full_name, role_id, role_ids, password, permission_ids } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token, 'import.admin_access.manage'))) {
@@ -2076,7 +2243,7 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'all-orders') {
-      const { manager_token, date_from, date_to, payment_status, status, staged } = await req.json()
+      const { manager_token, date_from, date_to, payment_status, status } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.orders.view'))) return json({ error: 'Unauthorized' }, 401)
 
       const buildQuery = (from: number, to: number) => {
@@ -2088,8 +2255,6 @@ serve(async (req: Request) => {
         if (date_to) q = q.lte('created_at', date_to)
         if (payment_status) q = q.eq('payment_status', payment_status)
         if (status) q = q.eq('status', status)
-        if (staged === 'active') q = q.is('staged_at', null)
-        if (staged === 'closed') q = q.not('staged_at', 'is', null)
         return q
       }
 
@@ -2492,121 +2657,23 @@ serve(async (req: Request) => {
       return json({ success: true, merged: order_ids.length, batch_key: target_batch_key })
     }
 
-    if (req.method === 'POST' && action === 'admin-close-all') {
-      const { manager_token } = await req.json().catch(() => ({}))
-      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
-
-      // Resolve the active set on the server. The browser does not need to
-      // send hundreds of order IDs, and a stale client list cannot prevent
-      // Close All from operating on the actual current active orders.
-      const { data: activeOrders, error: findError } = await supabase
-        .from('china_import_orders')
-        .select('id')
-        .eq('payment_status', 'paid')
-        .is('staged_at', null)
-
-      if (findError) return json({ error: findError.message }, 500)
-
-      const orderIds = (activeOrders ?? []).map((o: any) => o.id).filter(Boolean)
-      if (orderIds.length === 0) return json({ success: true, count: 0, note: 'No active paid orders found.' })
-
-      const stagedAt = new Date().toISOString()
-      const { data: newBatch, error: batchError } = await supabase
-        .from('import_batches')
-        .insert({ opened_at: stagedAt })
-        .select('id')
-        .single()
-
-      if (batchError || !newBatch) {
-        return json({ error: batchError?.message ?? 'Could not create the import batch' }, 500)
-      }
-
-      const { data: updatedOrders, error: updateError } = await supabase
-        .from('china_import_orders')
-        .update({
-          staged_at: stagedAt,
-          batch_id: newBatch.id,
-          status: 'ordered',
-          updated_at: stagedAt,
-        })
-        .in('id', orderIds)
-        .is('staged_at', null)
-        .select('id')
-
-      if (updateError) {
-        await supabase.from('import_batches').delete().eq('id', newBatch.id)
-        return json({ error: updateError.message }, 500)
-      }
-
-      const count = updatedOrders?.length ?? 0
-      if (count === 0) {
-        await supabase.from('import_batches').delete().eq('id', newBatch.id)
-        return json({ success: true, count: 0, note: 'No active paid orders remained to close.' })
-      }
-
-      return json({ success: true, staged_at: stagedAt, batch_id: newBatch.id, count })
-    }
-
     if (req.method === 'POST' && action === 'admin-close-group') {
-      const { manager_token, order_ids } = await req.json().catch(() => ({}))
+      const { manager_token, order_ids } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
       if (!Array.isArray(order_ids) || order_ids.length === 0) return json({ error: 'Missing order_ids' }, 400)
 
-      const requestedIds = Array.from(new Set(order_ids.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)))
-      if (requestedIds.length === 0) return json({ error: 'No valid order ids were supplied' }, 400)
-
-      // Only close orders that are still active paid import orders. This makes
-      // Close All safe against a stale browser list and prevents an already
-      // staged order from being silently moved into a second batch.
-      const { data: activeOrders, error: findError } = await supabase
-        .from('china_import_orders')
-        .select('id, payment_status, staged_at')
-        .in('id', requestedIds)
-      if (findError) return json({ error: findError.message }, 500)
-
-      const eligibleIds = (activeOrders ?? [])
-        .filter((order: any) => order.payment_status === 'paid' && !order.staged_at)
-        .map((order: any) => order.id)
-      if (eligibleIds.length === 0) return json({ error: 'No active paid orders were found to close.' }, 409)
-
       const stagedAt = new Date().toISOString()
-      // Create the batch first so every successfully closed order gets its
-      // batch_id in the same operation path. The previous implementation
-      // staged orders first and only then attempted to create the batch, which
-      // could leave a closed-looking batch without a batch record.
-      const { data: newBatch, error: batchError } = await supabase
-        .from('import_batches')
-        .insert({ opened_at: stagedAt })
-        .select('id')
-        .single()
-      if (batchError || !newBatch) {
-        return json({ error: batchError?.message ?? 'Could not create the import batch' }, 500)
-      }
-
-      const { data: updatedOrders, error: updateError } = await supabase
+      const { error } = await supabase
         .from('china_import_orders')
-        .update({
-          staged_at: stagedAt,
-          batch_id: newBatch.id,
-          status: 'ordered',
-          updated_at: stagedAt,
-        })
-        .in('id', eligibleIds)
-        .is('staged_at', null)
-        .select('id')
+        .update({ staged_at: stagedAt, status: 'ordered', updated_at: new Date().toISOString() })
+        .in('id', order_ids)
+      if (error) return json({ error: error.message }, 500)
 
-      if (updateError) {
-        await supabase.from('import_batches').delete().eq('id', newBatch.id)
-        return json({ error: updateError.message }, 500)
-      }
+      const { data: newBatch, error: batchErr } = await supabase.from('import_batches').insert({ opened_at: stagedAt }).select('id').single()
+      if (batchErr) console.warn('[china-import] failed to create import_batches row:', batchErr.message)
+      else await supabase.from('china_import_orders').update({ batch_id: newBatch.id }).in('id', order_ids)
 
-      const closedCount = updatedOrders?.length ?? 0
-      if (closedCount === 0) {
-        await supabase.from('import_batches').delete().eq('id', newBatch.id)
-        return json({ error: 'The selected orders were already closed. Please refresh and try again.' }, 409)
-      }
-
-      return json({ success: true, staged_at: stagedAt, batch_id: newBatch.id, count: closedCount })
+      return json({ success: true, staged_at: stagedAt, count: order_ids.length })
     }
 
     if (req.method === 'POST' && action === 'admin-send-confirmed-message') {
