@@ -115,17 +115,24 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
   const load = useCallback(async () => {
     setIsLoading(true);
     try {
+      const staged = showClosed ? 'closed' : 'active';
       const res = await fetch(`${EDGE_URL}?action=all-orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, payment_status: 'paid' }),
+        body: JSON.stringify({ manager_token: token, payment_status: 'paid', staged }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) {
+        throw new Error(data.error ?? `Could not load ${staged} import orders (HTTP ${res.status})`);
+      }
       setOrders(data.orders ?? []);
+    } catch (error) {
+      setOrders([]);
+      toast.error(error instanceof Error ? error.message : 'Could not load import orders');
     } finally {
       setIsLoading(false);
     }
-  }, [token]);
+  }, [token, showClosed]);
 
   useEffect(() => { load(); }, [load]);
 
