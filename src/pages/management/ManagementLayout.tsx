@@ -3,9 +3,9 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Users, Package, ShoppingCart, Menu, X,
-  LogOut, Shield, ChevronLeft, User,
+  LogOut, Shield, ChevronLeft, User, Loader,
 } from 'lucide-react';
-import { toast } from 'sonner';
+import { getManagementManager, logoutManagementSession, validateManagementSession, type ManagementManager } from './ManagementAuth';
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/management' },
@@ -14,30 +14,40 @@ const NAV = [
   { icon: ShoppingCart, label: 'Import Orders', path: '/management/import-orders' },
 ];
 
-type Manager = { full_name?: string; name?: string; email?: string };
-
-function getManager(): Manager | null {
-  try {
-    return JSON.parse(sessionStorage.getItem('management_manager') || 'null');
-  } catch {
-    return null;
-  }
-}
-
 export default function ManagementLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const manager = getManager();
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [manager, setManager] = useState<ManagementManager | null>(getManagementManager());
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkSession = async () => {
+      const activeManager = await validateManagementSession();
+      if (cancelled) return;
+
+      if (!activeManager) {
+        navigate('/management/login', { replace: true });
+        return;
+      }
+
+      setManager(activeManager);
+      setCheckingSession(false);
+    };
+
+    void checkSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
+
   const handleLogout = () => {
-    sessionStorage.removeItem('management_token');
-    sessionStorage.removeItem('management_manager');
-    toast.success('Logged out');
-    navigate('/management/login');
+    navigate('/management/logout');
   };
 
   const isActive = (path: string) =>
@@ -47,6 +57,14 @@ export default function ManagementLayout() {
 
   const activeLabel = NAV.find(n => isActive(n.path))?.label || 'Dashboard';
   const managerName = manager?.full_name || manager?.name || 'Manager';
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader className="w-5 h-5 text-orange-500 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
