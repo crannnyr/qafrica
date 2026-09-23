@@ -45,6 +45,7 @@ const ManagementDashboard = lazy(() => import('@/pages/management/ManagementDash
 const ManagementProducts = lazy(() => import('@/pages/management/ManagementProducts'));
 const ManagementOrders = lazy(() => import('@/pages/management/ManagementOrders'));
 const ManagementSettings = lazy(() => import('@/pages/management/ManagementSettings'));
+const ManagementCategories = lazy(() => import('@/pages/management/ManagementCategories'));
 const ManagementProductAdd = lazy(() => import('@/pages/management/ManagementProductAdd'));
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
@@ -340,6 +341,7 @@ function App() {
             <Route index element={<ManagementDashboard />} />
             <Route path="products" element={<ManagementProducts />} />
             <Route path="orders" element={<ManagementOrders />} />
+            <Route path="categories" element={<ManagementCategories />} />
             <Route path="settings" element={<ManagementSettings />} />
             <Route path="products/add" element={<ManagementProductAdd />} />
             <Route path="products/edit/:id" element={<ManagementProductAdd />} />
