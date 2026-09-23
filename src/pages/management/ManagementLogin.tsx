@@ -1,0 +1,151 @@
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Shield, Eye, EyeOff, Loader } from 'lucide-react';
+import CONFIG from '@/lib/config';
+import {
+  getManagementToken,
+  setManagementSession,
+  validateManagementSession,
+} from './ManagementAuth';
+
+const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+
+export default function ManagementLogin() {
+  const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkExistingSession = async () => {
+      if (!getManagementToken()) {
+        if (!cancelled) setCheckingSession(false);
+        return;
+      }
+
+      const manager = await validateManagementSession();
+      if (!cancelled) {
+        if (manager) navigate('/management', { replace: true });
+        else setCheckingSession(false);
+      }
+    };
+
+    void checkExistingSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success || !data.token || !data.manager) {
+        setError(data.error ?? 'Invalid credentials');
+        return;
+      }
+
+      setManagementSession(data.token, data.manager);
+      navigate('/management', { replace: true });
+    } catch {
+      setError('Connection error. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader className="w-5 h-5 text-orange-500 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <div className="w-full max-w-sm">
+        <div className="flex items-center justify-center gap-2 mb-8">
+          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center">
+            <Shield className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <p className="font-black text-gray-900 leading-none">QAFRICA</p>
+            <p className="text-xs text-gray-400 leading-none">Management</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-gray-100 p-6">
+          <h1 className="font-bold text-gray-900 text-xl mb-1">Sign in</h1>
+          <p className="text-gray-400 text-sm mb-6">Management access only</p>
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1.5 block">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="import@qafrica.store"
+                required
+                autoComplete="username"
+                className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-700 mb-1.5 block">Password</label>
+              <div className="relative">
+                <input
+                  type={showPw ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
+                  className="w-full px-4 py-3 pr-11 rounded-xl border border-gray-200 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(p => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  aria-label={showPw ? 'Hide password' : 'Show password'}
+                >
+                  {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <p className="text-red-500 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={isLoading || !email || !password}
+              className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-2"
+            >
+              {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : 'Sign In'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
