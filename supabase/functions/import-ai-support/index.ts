@@ -90,7 +90,7 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
     await requireAdmin(s, token, 'import.messages.view')
     const { data, error } = await s.from('import_ai_whatsapp_conversations')
       .select('id,wa_id,channel,customer_id,status,last_inbound_at,last_outbound_at,human_requested_at,human_assigned_at,human_agent_id,created_at,updated_at,customers(id,full_name,email,phone,avatar_url)')
-      .in('status', ['ai','human_requested','human_assigned','human_active'])
+      .in('status', ['ai','returned_to_ai','human_requested','human_assigned','human_active'])
       .order('updated_at', { ascending: false }).limit(100)
     if (error) throw error
     return { conversations: data ?? [] }
