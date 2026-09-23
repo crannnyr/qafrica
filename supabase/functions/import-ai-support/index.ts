@@ -623,6 +623,12 @@ serve(async(req:Request)=>{
       if (['human_requested','human_assigned','human_active'].includes(websiteConversation.status)) {
         return json({answer:'Your conversation is currently with a QAfrica Support agent. Please send your message here and the agent will reply in this chat.',conversation_id:websiteConversation.id,status:websiteConversation.status,handed_off:true,human_active:true})
       }
+      if (websiteConversation.status === 'resolved') {
+        await s.from('import_ai_whatsapp_conversations').update({
+          status: 'ai', human_agent_id: null, updated_at: new Date().toISOString()
+        }).eq('id', websiteConversation.id)
+        websiteConversation.status = 'ai'
+      }
       await appendSupportMessage(s, websiteConversation.id, 'inbound', 'customer', message)
     }
     let input:any[]=[{role:'system',content:prompt(actor, channel, isNewConversation)},...history,{role:'user',content:message}]
