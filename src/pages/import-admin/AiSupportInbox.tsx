@@ -440,7 +440,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
                         Take over
                       </button>
                     )}
-                    {(selected.status === 'human_active' || selected.status === 'human_requested' || selected.status === 'human_assigned') && (
+                    {(selected.status === 'ai' || selected.status === 'returned_to_ai' || selected.status === 'human_active' || selected.status === 'human_requested' || selected.status === 'human_assigned') && (
                       <button onClick={() => void resolveConversation()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold disabled:opacity-40">Mark resolved</button>
                     )}
                     {(selected.status === 'human_requested' || selected.status === 'human_assigned' || selected.status === 'human_active') && (
