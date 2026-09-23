@@ -87,8 +87,8 @@ async function sendWhatsAppText(to: string, body: string) {
 async function adminSupportAction(s:any, token:string, action:string, body:any) {
   if (action === 'list_support_conversations') {
     await requireAdmin(s, token, 'import.messages.view')
-    const scope = body.scope === 'ai' ? 'ai' : 'human'
-    const statuses = scope === 'ai' ? ['ai','returned_to_ai'] : ['human_requested','human_assigned','human_active']
+    const scope = body.scope === 'ai' ? 'ai' : body.scope === 'resolved' ? 'resolved' : 'human'
+    const statuses = scope === 'ai' ? ['ai','returned_to_ai'] : scope === 'resolved' ? ['closed'] : ['human_requested','human_assigned','human_active']
     const { data, error } = await s.from('import_ai_whatsapp_conversations')
       .select('id,wa_id,channel,customer_id,status,last_inbound_at,last_outbound_at,human_requested_at,human_assigned_at,human_agent_id,created_at,updated_at,customers(id,full_name,email,phone,avatar_url)')
       .in('status', statuses)
@@ -116,13 +116,25 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
   if (action === 'take_support_conversation') {
     const managerId = await requireAdmin(s, token, 'import.messages.send')
     const id = clean(body.conversation_id, 80)
+    if (!id) throw new Error('conversation_id is required')
+    const { data: current, error: currentError } = await s.from('import_ai_whatsapp_conversations')
+      .select('id,status,channel,human_agent_id')
+      .eq('id', id).maybeSingle()
+    if (currentError) throw currentError
+    if (!current) throw new Error('Conversation not found')
+    if (current.status === 'human_active') {
+      return { conversation: current, already_active: true }
+    }
+    if (!['human_requested','human_assigned'].includes(current.status)) {
+      throw new Error(`Conversation cannot be taken over from its current status: ${current.status}`)
+    }
     const now = new Date().toISOString()
     const { data, error } = await s.from('import_ai_whatsapp_conversations')
       .update({ status: 'human_active', human_assigned_at:now, human_agent_id:managerId, updated_at: now })
-      .eq('id', id).in('status', ['human_requested','human_assigned','human_active'])
+      .eq('id', id).in('status', ['human_requested','human_assigned'])
       .select('id,status,channel,human_agent_id').maybeSingle()
     if (error) throw error
-    if (!data) throw new Error('Conversation is no longer waiting for human support')
+    if (!data) throw new Error('Conversation changed before takeover completed. Refresh and try again.')
     return { conversation: data }
   }
 
@@ -135,6 +147,19 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
       .select('id,status,channel').maybeSingle()
     if (error) throw error
     if (!data) throw new Error('Conversation is no longer with human support')
+    return { conversation: data }
+  }
+
+  if (action === 'resolve_support_conversation') {
+    await requireAdmin(s, token, 'import.messages.send')
+    const id = clean(body.conversation_id, 80)
+    if (!id) throw new Error('conversation_id is required')
+    const { data, error } = await s.from('import_ai_whatsapp_conversations')
+      .update({ status: 'closed', updated_at: new Date().toISOString() })
+      .eq('id', id).in('status', ['human_requested','human_assigned','human_active'])
+      .select('id,status,channel,human_agent_id').maybeSingle()
+    if (error) throw error
+    if (!data) throw new Error('Conversation is not currently with human support')
     return { conversation: data }
   }
 
