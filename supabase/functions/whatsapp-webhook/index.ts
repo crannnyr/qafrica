@@ -133,7 +133,7 @@ async function requestEmailVerification(s:any, conversation:any, email:string) {
 async function verifyEmailCode(s:any, conversation:any, code:string) {
   if (!/^\d{6}$/.test(code)) return false
   const { data: rows, error } = await s.from('import_ai_whatsapp_verification_codes')
-    .select('id,customer_id,expires_at,attempts')
+    .select('id,customer_id,code_hash,expires_at,attempts')
     .eq('conversation_id', conversation.id)
     .is('consumed_at', null)
     .order('created_at', { ascending: false })
