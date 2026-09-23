@@ -156,6 +156,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [acting, setActing] = useState(false);
+  const [supportView, setSupportView] = useState<'ai' | 'human'>('ai');
   const soundEnabled = true;
   const [browserNotifications, setBrowserNotifications] = useState(
     typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted'
@@ -198,7 +199,10 @@ export default function AiSupportInbox({ token }: { token: string }) {
   useEffect(() => {
     const handler = () => {
       const waiting = conversations.find(c => c.status === 'human_requested');
-      if (waiting) void openConversation(waiting);
+      if (waiting) {
+        setSupportView('human');
+        void openConversation(waiting);
+      }
     };
     window.addEventListener('qafrica-open-ai-support', handler);
     return () => window.removeEventListener('qafrica-open-ai-support', handler);
@@ -245,10 +249,11 @@ export default function AiSupportInbox({ token }: { token: string }) {
     if (!selected) return;
     setActing(true);
     try {
-      await supportRequest(token, 'return_support_to_ai', { conversation_id: selected.id });
-      setConversations(prev => prev.filter(c => c.id !== selected.id));
-      setSelected(null);
-      setMessages([]);
+      const data = await supportRequest(token, 'return_support_to_ai', { conversation_id: selected.id });
+      const nextStatus = data.conversation?.status || 'returned_to_ai';
+      setConversations(prev => prev.map(c => c.id === selected.id ? { ...c, status: nextStatus } : c));
+      setSelected(prev => prev ? { ...prev, status: nextStatus } : prev);
+      setSupportView('ai');
       toast.success('Conversation returned to AI');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not return to AI');
@@ -274,6 +279,22 @@ export default function AiSupportInbox({ token }: { token: string }) {
 
   const waitingCount = conversations.filter(c => c.status === 'human_requested').length;
   const aiCount = conversations.filter(c => c.status === 'ai' || c.status === 'returned_to_ai').length;
+  const humanCount = conversations.filter(c => c.status === 'human_requested' || c.status === 'human_assigned' || c.status === 'human_active').length;
+  const visibleConversations = conversations.filter(c => supportView === 'ai'
+    ? c.status === 'ai' || c.status === 'returned_to_ai'
+    : c.status === 'human_requested' || c.status === 'human_assigned' || c.status === 'human_active'
+  );
+
+  useEffect(() => {
+    if (visibleConversations.length === 0) {
+      setSelected(null);
+      setMessages([]);
+      return;
+    }
+    if (!selected || !visibleConversations.some(c => c.id === selected.id)) {
+      void openConversation(visibleConversations[0]);
+    }
+  }, [supportView, conversations.length, visibleConversations.length]);
 
   return (
     <div className="space-y-4">
@@ -312,6 +333,23 @@ export default function AiSupportInbox({ token }: { token: string }) {
         </div>
       </div>
 
+      {!loading && conversations.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-1.5 flex gap-1">
+          <button
+            onClick={() => setSupportView('ai')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-colors ${supportView === 'ai' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            AI Chats {aiCount > 0 ? `(${aiCount})` : ''}
+          </button>
+          <button
+            onClick={() => setSupportView('human')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-colors ${supportView === 'human' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            Human Support {humanCount > 0 ? `(${humanCount})` : ''}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 flex justify-center"><Loader className="w-5 h-5 animate-spin text-gray-300" /></div>
       ) : conversations.length === 0 ? (
@@ -320,15 +358,21 @@ export default function AiSupportInbox({ token }: { token: string }) {
           <p className="text-sm font-semibold text-gray-700">No active support chats</p>
           <p className="text-xs text-gray-400 mt-1">AI-handled chats and conversations waiting for or assigned to human support will appear here.</p>
         </div>
+      ) : visibleConversations.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+          <MessageCircle className="w-8 h-8 mx-auto text-gray-200 mb-3" />
+          <p className="text-sm font-semibold text-gray-700">{supportView === 'ai' ? 'No AI-handled chats' : 'No human support conversations'}</p>
+          <p className="text-xs text-gray-400 mt-1">{supportView === 'ai' ? 'Conversations currently handled by AI will appear here.' : 'Conversations waiting for or assigned to a human agent will appear here.'}</p>
+        </div>
       ) : (
         <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">All active chats</p>
-              <span className="text-[10px] text-gray-400">{conversations.length}</span>
+              <span className="text-[10px] text-gray-400">{visibleConversations.length}</span>
             </div>
             <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
-              {conversations.map(c => {
+              {visibleConversations.map(c => {
                 const customer = customerOf(c);
                 const waiting = c.status === 'human_requested';
                 return (
@@ -366,9 +410,9 @@ export default function AiSupportInbox({ token }: { token: string }) {
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => void takeOver()} disabled={acting || selected.status === 'human_active'} className="px-2.5 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">
-                      {selected.status === 'human_active' ? 'Human active' : selected.status === 'ai' ? 'Take over' : 'Take over'}
+                      {selected.status === 'human_active' ? 'Human active' : 'Take over'}
                     </button>
-                    {selected.status !== 'ai' && (
+                    {(selected.status === 'human_requested' || selected.status === 'human_assigned' || selected.status === 'human_active') && (
                       <button onClick={() => void returnToAi()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold disabled:opacity-40">Return to AI</button>
                     )}
                   </div>
