@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import { Calendar, DollarSign, Package, ShoppingCart, RefreshCw } from 'lucide-react'
 import CONFIG from '@/lib/config'
@@ -25,13 +25,11 @@ const RANGE_PRESETS: { key: RangeKey; label: string }[] = [
 
 function getRange(key: RangeKey) {
   const now = new Date()
-
   if (key === 'today') {
     const start = new Date(now)
     start.setHours(0, 0, 0, 0)
     return { date_from: start.toISOString(), date_to: now.toISOString() }
   }
-
   if (key === 'yesterday') {
     const end = new Date(now)
     end.setHours(0, 0, 0, 0)
@@ -39,7 +37,6 @@ function getRange(key: RangeKey) {
     start.setDate(start.getDate() - 1)
     return { date_from: start.toISOString(), date_to: end.toISOString() }
   }
-
   return {
     date_from: new Date(now.getTime() - 7 * 86_400_000).toISOString(),
     date_to: now.toISOString(),
@@ -82,13 +79,12 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
-
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 shadow-xl">
       {label && <p className="text-xs text-gray-400 mb-1.5">{label}</p>}
       {payload.map((entry: any) => (
         <div key={entry.dataKey ?? entry.name} className="flex items-center gap-2 text-xs">
-          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.fill ?? entry.color }} />
+          <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: entry.stroke ?? entry.color }} />
           <span className="text-gray-300 capitalize">{entry.name}:</span>
           <span className="text-white font-semibold">
             {entry.dataKey === 'revenue_ngn' ? fmt(Number(entry.value)) : Number(entry.value).toLocaleString()}
@@ -111,7 +107,6 @@ export default function ManagementAnalytics() {
       setIsLoading(false)
       return
     }
-
     setIsLoading(true)
     try {
       const { date_from, date_to } = getRange(range)
@@ -120,10 +115,8 @@ export default function ManagementAnalytics() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: token, date_from, date_to }),
       })
-
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.analytics) throw new Error(json.error || 'Could not load analytics.')
-
       setData(json.analytics)
     } catch {
       setData(null)
@@ -145,12 +138,8 @@ export default function ManagementAnalytics() {
         <Calendar className="w-3.5 h-3.5 text-gray-300" />
         <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1 flex-1">
           {RANGE_PRESETS.map(item => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => setRange(item.key)}
-              className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${range === item.key ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'}`}
-            >
+            <button key={item.key} type="button" onClick={() => setRange(item.key)}
+              className={`flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${range === item.key ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'}`}>
               {item.label}
             </button>
           ))}
@@ -162,9 +151,7 @@ export default function ManagementAnalytics() {
 
       {isLoading && !data ? (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 h-24 animate-pulse" />
-          ))}
+          {Array.from({ length: 3 }).map((_, i) => <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 h-24 animate-pulse" />)}
         </div>
       ) : !data ? (
         <div className="bg-white rounded-2xl border border-red-100 p-8 text-center">
@@ -184,13 +171,13 @@ export default function ManagementAnalytics() {
               <p className="text-xs text-gray-300 py-8 text-center">No paid orders in this range yet.</p>
             ) : (
               <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={trend} barCategoryGap="30%">
+                <LineChart data={trend}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                   <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={48} tickFormatter={fmtCompact} />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 4 }} />
-                  <Bar dataKey="revenue_ngn" name="Revenue" fill="#F97316" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                </BarChart>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line type="monotone" dataKey="revenue_ngn" name="Revenue" stroke="#16A34A" strokeWidth={3} dot={{ r: 3, fill: '#16A34A' }} activeDot={{ r: 5 }} />
+                </LineChart>
               </ResponsiveContainer>
             )}
           </ChartCard>
