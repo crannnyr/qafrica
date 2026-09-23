@@ -1351,6 +1351,49 @@ serve(async (req: Request) => {
     }
 
 
+    if (req.method === 'POST' && action === 'admin-session') {
+      const { manager_token } = await req.json().catch(() => ({}))
+      if (!manager_token || typeof manager_token !== 'string') {
+        return json({ success: false, error: 'Missing management session' }, 401)
+      }
+
+      const { data: session, error: sessionError } = await supabase
+        .from('import_admin_sessions')
+        .select('token, manager_id, expires_at')
+        .eq('token', manager_token)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+
+      if (sessionError || !session?.manager_id) {
+        return json({ success: false, error: 'Session expired' }, 401)
+      }
+
+      const { data: manager, error: managerError } = await supabase
+        .from('import_admin_managers')
+        .select('id, email, full_name, is_active')
+        .eq('id', session.manager_id)
+        .maybeSingle()
+
+      if (managerError || !manager || !manager.is_active) {
+        return json({ success: false, error: 'Management account is inactive' }, 401)
+      }
+
+      await supabase
+        .from('import_admin_sessions')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('token', manager_token)
+
+      return json({
+        success: true,
+        manager: {
+          id: manager.id,
+          email: manager.email,
+          full_name: manager.full_name ?? manager.email,
+        },
+      })
+    }
+
+
     // ── Create a legacy Import Manager ─────────────────────────────────────
     if (req.method === 'POST' && action === 'admin-create-manager') {
       const { manager_token, email, full_name, role_id, role_ids, password, permission_ids } = await req.json().catch(() => ({}))
