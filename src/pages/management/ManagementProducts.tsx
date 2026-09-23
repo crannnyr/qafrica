@@ -3,7 +3,7 @@ import { Search, RefreshCw, ChevronLeft, ChevronRight, Package, Loader } from 'l
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
 
-const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/management`;
 const PAGE_SIZE = 50;
 
 type Product = {
