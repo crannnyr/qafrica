@@ -5,7 +5,7 @@ import CONFIG from '@/lib/config';
 
 const AI_URL = CONFIG.SUPABASE_URL + '/functions/v1/import-ai-support';
 
-type Customer = { id?: string; full_name?: string | null; email?: string | null; phone?: string | null };
+type Customer = { id?: string; full_name?: string | null; email?: string | null; phone?: string | null; avatar_url?: string | null };
 type Conversation = {
   id: string; wa_id: string; customer_id: string | null;
   status: 'ai' | 'returned_to_ai' | 'human_requested' | 'human_assigned' | 'human_active' | 'resolved';
@@ -20,6 +20,21 @@ type Message = {
 function customerOf(c: Conversation): Customer | null {
   if (!c.customers) return null;
   return Array.isArray(c.customers) ? (c.customers[0] || null) : c.customers;
+}
+
+function initials(name?: string | null) {
+  const value = (name || 'Customer').trim();
+  return value.split(/\s+/).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'C';
+}
+
+function ProfileAvatar({ customer, size = 'sm' }: { customer: Customer | null; size?: 'sm' | 'md' }) {
+  const name = customer?.full_name || customer?.email || 'Customer';
+  const dimensions = size === 'md' ? 'w-9 h-9 text-xs' : 'w-8 h-8 text-[10px]';
+  return customer?.avatar_url ? (
+    <img src={customer.avatar_url} alt="" className={dimensions + ' rounded-full object-cover flex-shrink-0 bg-gray-100'} />
+  ) : (
+    <div className={dimensions + ' rounded-full flex items-center justify-center flex-shrink-0 bg-gray-100 text-gray-500 font-bold'}>{initials(name)}</div>
+  );
 }
 
 async function supportRequest(token: string, action: string, extra: Record<string, unknown> = {}) {
@@ -404,8 +419,9 @@ export default function AiSupportInbox({ token }: { token: string }) {
                 return (
                   <button key={c.id} onClick={() => void openConversation(c)} className={"w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors " + (selected?.id === c.id ? 'bg-gray-50' : '')}>
                     <div className="flex items-start gap-2">
-                      <div className={"w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 " + (waiting ? 'bg-red-100 text-red-600' : (c.status === 'ai' || c.status === 'returned_to_ai') ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600')}>
-                        {waiting ? <BellRing className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
+                      <div className="relative flex-shrink-0">
+                        <ProfileAvatar customer={customer} />
+                        {waiting && <span className="absolute -right-0.5 -bottom-0.5 w-3.5 h-3.5 rounded-full bg-red-100 text-red-600 flex items-center justify-center"><BellRing className="w-2.5 h-2.5" /></span>}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
@@ -430,9 +446,12 @@ export default function AiSupportInbox({ token }: { token: string }) {
             ) : (
               <>
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ProfileAvatar customer={customerOf(selected)} size="md" />
+                    <div className="min-w-0">
                     <p className="text-sm font-bold text-gray-900 truncate">{customerOf(selected)?.full_name || 'WhatsApp customer'}</p>
                     <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''} · {(selected.status === 'ai' || selected.status === 'returned_to_ai') ? 'AI handling' : selected.status === 'human_requested' ? 'Waiting for human' : selected.status === 'resolved' ? 'Resolved' : 'Human support'}</p>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     {(selected.status === 'ai' || selected.status === 'returned_to_ai' || selected.status === 'human_requested' || selected.status === 'human_assigned') && (
@@ -450,14 +469,19 @@ export default function AiSupportInbox({ token }: { token: string }) {
                 </div>
 
                 <div className="p-4 space-y-2 max-h-[520px] overflow-y-auto">
-                  {messages.map(m => (
-                    <div key={m.id} className={"flex " + (m.direction === 'inbound' ? 'justify-start' : 'justify-end')}>
-                      <div className={"max-w-[82%] rounded-2xl px-3 py-2 " + (m.direction === 'inbound' ? 'bg-gray-100 text-gray-800' : m.sender_type === 'human' ? 'bg-gray-900 text-white' : 'bg-orange-50 text-gray-800')}>
-                        <p className="text-[11px] whitespace-pre-wrap break-words">{m.body}</p>
-                        <p className="text-[9px] opacity-50 mt-1">{new Date(m.created_at).toLocaleString()}</p>
+                  {messages.map(m => {
+                    const customer = customerOf(selected);
+                    return (
+                      <div key={m.id} className={"flex items-end gap-2 " + (m.direction === 'inbound' ? 'justify-start' : 'justify-end')}>
+                        {m.direction === 'inbound' && <ProfileAvatar customer={customer} />}
+                        <div className={"max-w-[82%] rounded-2xl px-3 py-2 " + (m.direction === 'inbound' ? 'bg-gray-100 text-gray-800' : m.sender_type === 'human' ? 'bg-gray-900 text-white' : 'bg-orange-50 text-gray-800')}>
+                          <p className="text-[11px] whitespace-pre-wrap break-words">{m.body}</p>
+                          <p className="text-[9px] opacity-50 mt-1">{new Date(m.created_at).toLocaleString()}</p>
+                        </div>
+                        {m.direction === 'outbound' && m.sender_type === 'ai' && <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-700 flex items-center justify-center text-[9px] font-black flex-shrink-0">AI</div>}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="border-t border-gray-100 p-3 flex gap-2">
