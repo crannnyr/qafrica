@@ -28,7 +28,7 @@ export default function ManagementLogin() {
         return;
       }
 
-      const manager = await validateManagementSession();
+      const manager = validateManagementSession();
       if (!cancelled) {
         if (manager) navigate('/management', { replace: true });
         else setCheckingSession(false);
