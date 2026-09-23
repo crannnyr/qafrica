@@ -197,11 +197,10 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
     setClosingAll(true);
     try {
       downloadCsv(groups);
-      const allOrderIds = Array.from(new Set(groups.flatMap(g => g.orderIds)));
-      const res = await fetch(`${EDGE_URL}?action=admin-close-group`, {
+      const res = await fetch(`${EDGE_URL}?action=admin-close-all`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, order_ids: allOrderIds }),
+        body: JSON.stringify({ manager_token: token }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.success !== true) {
