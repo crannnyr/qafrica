@@ -28,7 +28,7 @@ export default function ManagementLayout() {
     let cancelled = false;
 
     const checkSession = async () => {
-      const activeManager = await validateManagementSession();
+      const activeManager = validateManagementSession();
       if (cancelled) return;
 
       if (!activeManager) {
