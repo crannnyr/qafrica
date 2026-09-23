@@ -9,6 +9,7 @@ import { Loader, Package, Users, Archive, CheckCircle2, FileDown } from 'lucide-
 import CONFIG from '@/lib/config';
 import { CustomerDetail } from './ImportAdminCustomers';
 import ClosedBatchDetail from './ClosedBatchDetail';
+import { toast } from 'sonner';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -159,6 +160,9 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
         throw new Error(data.error ?? 'Could not close this batch');
       }
       await load();
+      toast.success('Batch closed successfully');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not close this batch');
     } finally {
       setClosingKey(null);
     }
@@ -207,6 +211,9 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
         throw new Error(data.error ?? 'Could not close the active orders');
       }
       await load();
+      toast.success(`Closed ${data.count ?? 0} active orders`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not close the active orders');
     } finally {
       setClosingAll(false);
     }
