@@ -66,7 +66,7 @@ async function requireManager(db: any, token: unknown, permissionKey: string) {
   return hasManagerPermission(db, session.manager_id, permissionKey)
 }
 
-const PRODUCT_SELECT = 'id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, sort_order, units_sold, is_trending, trending_order, trending_source, created_at, updated_at'
+const PRODUCT_SELECT = 'id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, express_air_cargo, sort_order, units_sold, is_trending, trending_order, trending_source, created_at, updated_at'
 
 function cleanText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback
@@ -126,6 +126,7 @@ function buildProductPayload(body: any, partial = false) {
   if (body.delivery_time !== undefined) row.delivery_time = cleanText(body.delivery_time) || null
   if (body.source_url !== undefined) row.source_url = cleanText(body.source_url) || null
   if (body.ship_only !== undefined) row.ship_only = Boolean(body.ship_only)
+  if (body.express_air_cargo !== undefined) row.express_air_cargo = Boolean(body.express_air_cargo)
   if (body.sort_order !== undefined) row.sort_order = Math.floor(Number(body.sort_order) || 0)
   if (body.is_trending !== undefined) row.is_trending = Boolean(body.is_trending)
   if (body.trending_order !== undefined) row.trending_order = Math.floor(Number(body.trending_order) || 0)
