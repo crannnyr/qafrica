@@ -8,7 +8,7 @@ const AI_URL = CONFIG.SUPABASE_URL + '/functions/v1/import-ai-support';
 type Customer = { id?: string; full_name?: string | null; email?: string | null; phone?: string | null };
 type Conversation = {
   id: string; wa_id: string; customer_id: string | null;
-  status: 'human_requested' | 'human_assigned' | 'human_active';
+  status: 'ai' | 'human_requested' | 'human_assigned' | 'human_active';
   last_inbound_at: string | null; last_outbound_at: string | null;
   created_at: string; updated_at: string; customers?: Customer | Customer[] | null;
 };
@@ -273,6 +273,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
   };
 
   const waitingCount = conversations.filter(c => c.status === 'human_requested').length;
+  const aiCount = conversations.filter(c => c.status === 'ai').length;
 
   return (
     <div className="space-y-4">
@@ -282,6 +283,11 @@ export default function AiSupportInbox({ token }: { token: string }) {
             <div className="flex items-center gap-2">
               <MessageCircle className="w-4 h-4 text-gray-900" />
               <p className="font-bold text-gray-900 text-sm">WhatsApp AI Support</p>
+              {aiCount > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 text-orange-700 px-2 py-0.5 text-[10px] font-bold">
+                  <MessageCircle className="w-3 h-3" /> {aiCount} AI
+                </span>
+              )}
               {waitingCount > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-600 px-2 py-0.5 text-[10px] font-bold">
                   <BellRing className="w-3 h-3" /> {waitingCount} waiting
@@ -318,7 +324,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
         <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Active support</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">All active chats</p>
               <span className="text-[10px] text-gray-400">{conversations.length}</span>
             </div>
             <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
@@ -328,13 +334,13 @@ export default function AiSupportInbox({ token }: { token: string }) {
                 return (
                   <button key={c.id} onClick={() => void openConversation(c)} className={"w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors " + (selected?.id === c.id ? 'bg-gray-50' : '')}>
                     <div className="flex items-start gap-2">
-                      <div className={"w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 " + (waiting ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600')}>
+                      <div className={"w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 " + (waiting ? 'bg-red-100 text-red-600' : c.status === 'ai' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600')}>
                         {waiting ? <BellRing className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-xs font-bold text-gray-900 truncate">{customer?.full_name || customer?.email || ('+' + c.wa_id)}</p>
-                          {waiting && <span className="text-[9px] font-bold text-red-600">WAITING</span>}
+                          {waiting ? <span className="text-[9px] font-bold text-red-600">WAITING</span> : c.status === 'ai' ? <span className="text-[9px] font-bold text-orange-600">AI</span> : <span className="text-[9px] font-bold text-gray-500">HUMAN</span>}
                         </div>
                         <p className="text-[10px] text-gray-400 truncate">{customer?.email || ('+' + c.wa_id)}</p>
                         <p className="text-[9px] text-gray-300 mt-1">{new Date(c.updated_at).toLocaleString()}</p>
@@ -356,13 +362,15 @@ export default function AiSupportInbox({ token }: { token: string }) {
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-gray-900 truncate">{customerOf(selected)?.full_name || 'WhatsApp customer'}</p>
-                    <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''}</p>
+                    <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''} · {selected.status === 'ai' ? 'AI handling' : selected.status === 'human_requested' ? 'Waiting for human' : 'Human support'}</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => void takeOver()} disabled={acting || selected.status === 'human_active'} className="px-2.5 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">
-                      {selected.status === 'human_active' ? 'Human active' : 'Take over'}
+                      {selected.status === 'human_active' ? 'Human active' : selected.status === 'ai' ? 'Take over' : 'Take over'}
                     </button>
-                    <button onClick={() => void returnToAi()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold disabled:opacity-40">Return to AI</button>
+                    {selected.status !== 'ai' && (
+                      <button onClick={() => void returnToAi()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold disabled:opacity-40">Return to AI</button>
+                    )}
                   </div>
                 </div>
 
