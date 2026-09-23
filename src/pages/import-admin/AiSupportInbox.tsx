@@ -8,7 +8,7 @@ const AI_URL = CONFIG.SUPABASE_URL + '/functions/v1/import-ai-support';
 type Customer = { id?: string; full_name?: string | null; email?: string | null; phone?: string | null };
 type Conversation = {
   id: string; wa_id: string; customer_id: string | null;
-  status: 'ai' | 'returned_to_ai' | 'human_requested' | 'human_assigned' | 'human_active';
+  status: 'ai' | 'returned_to_ai' | 'human_requested' | 'human_assigned' | 'human_active' | 'resolved';
   last_inbound_at: string | null; last_outbound_at: string | null;
   created_at: string; updated_at: string; customers?: Customer | Customer[] | null;
 };
@@ -156,7 +156,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [acting, setActing] = useState(false);
-  const [supportView, setSupportView] = useState<'ai' | 'human'>('ai');
+  const [supportView, setSupportView] = useState<'ai' | 'human' | 'resolved'>('ai');
   const soundEnabled = true;
   const [browserNotifications, setBrowserNotifications] = useState(
     typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted'
@@ -237,11 +237,28 @@ export default function AiSupportInbox({ token }: { token: string }) {
     setActing(true);
     try {
       const data = await supportRequest(token, 'take_support_conversation', { conversation_id: selected.id });
-      setSelected(prev => prev ? { ...prev, status: data.conversation?.status || 'human_active' } : prev);
-      await load(true);
-      toast.success('You took over this WhatsApp conversation');
+      const nextStatus = data.conversation?.status || 'human_active';
+      setSelected(prev => prev ? { ...prev, status: nextStatus } : prev);
+      setConversations(prev => prev.map(c => c.id === selected.id ? { ...c, status: nextStatus } : c));
+      setSupportView('human');
+      toast.success('You took over this conversation');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not take over');
+    } finally { setActing(false); }
+  };
+
+  const resolveConversation = async () => {
+    if (!selected) return;
+    setActing(true);
+    try {
+      const data = await supportRequest(token, 'resolve_support_conversation', { conversation_id: selected.id });
+      const nextStatus = data.conversation?.status || 'resolved';
+      setConversations(prev => prev.map(c => c.id === selected.id ? { ...c, status: nextStatus } : c));
+      setSelected(prev => prev ? { ...prev, status: nextStatus } : prev);
+      setSupportView('resolved');
+      toast.success('Conversation marked as resolved');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not resolve conversation');
     } finally { setActing(false); }
   };
 
@@ -280,9 +297,12 @@ export default function AiSupportInbox({ token }: { token: string }) {
   const waitingCount = conversations.filter(c => c.status === 'human_requested').length;
   const aiCount = conversations.filter(c => c.status === 'ai' || c.status === 'returned_to_ai').length;
   const humanCount = conversations.filter(c => c.status === 'human_requested' || c.status === 'human_assigned' || c.status === 'human_active').length;
+  const resolvedCount = conversations.filter(c => c.status === 'resolved').length;
   const visibleConversations = conversations.filter(c => supportView === 'ai'
     ? c.status === 'ai' || c.status === 'returned_to_ai'
-    : c.status === 'human_requested' || c.status === 'human_assigned' || c.status === 'human_active'
+    : supportView === 'human'
+      ? c.status === 'human_requested' || c.status === 'human_assigned' || c.status === 'human_active'
+      : c.status === 'resolved'
   );
 
   useEffect(() => {
@@ -347,6 +367,12 @@ export default function AiSupportInbox({ token }: { token: string }) {
           >
             Human Support {humanCount > 0 ? `(${humanCount})` : ''}
           </button>
+          <button
+            onClick={() => setSupportView('resolved')}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-colors ${supportView === 'resolved' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            Resolved {resolvedCount > 0 ? `(${resolvedCount})` : ''}
+          </button>
         </div>
       )}
 
@@ -361,8 +387,8 @@ export default function AiSupportInbox({ token }: { token: string }) {
       ) : visibleConversations.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
           <MessageCircle className="w-8 h-8 mx-auto text-gray-200 mb-3" />
-          <p className="text-sm font-semibold text-gray-700">{supportView === 'ai' ? 'No AI-handled chats' : 'No human support conversations'}</p>
-          <p className="text-xs text-gray-400 mt-1">{supportView === 'ai' ? 'Conversations currently handled by AI will appear here.' : 'Conversations waiting for or assigned to a human agent will appear here.'}</p>
+          <p className="text-sm font-semibold text-gray-700">{supportView === 'ai' ? 'No AI-handled chats' : supportView === 'human' ? 'No human support conversations' : 'No resolved conversations'}</p>
+          <p className="text-xs text-gray-400 mt-1">{supportView === 'ai' ? 'Conversations currently handled by AI will appear here.' : supportView === 'human' ? 'Conversations waiting for or assigned to a human agent will appear here.' : 'Resolved conversations are kept here for reference.'}</p>
         </div>
       ) : (
         <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4">
@@ -384,7 +410,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-xs font-bold text-gray-900 truncate">{customer?.full_name || customer?.email || ('+' + c.wa_id)}</p>
-                          {waiting ? <span className="text-[9px] font-bold text-red-600">WAITING</span> : (c.status === 'ai' || c.status === 'returned_to_ai') ? <span className="text-[9px] font-bold text-orange-600">AI</span> : <span className="text-[9px] font-bold text-gray-500">HUMAN</span>}
+                          {waiting ? <span className="text-[9px] font-bold text-red-600">WAITING</span> : (c.status === 'ai' || c.status === 'returned_to_ai') ? <span className="text-[9px] font-bold text-orange-600">AI</span> : c.status === 'resolved' ? <span className="text-[9px] font-bold text-emerald-600">RESOLVED</span> : <span className="text-[9px] font-bold text-gray-500">HUMAN</span>}
                         </div>
                         <p className="text-[10px] text-gray-400 truncate">{customer?.email || ('+' + c.wa_id)}</p>
                         <p className="text-[9px] text-gray-300 mt-1">{new Date(c.updated_at).toLocaleString()}</p>
@@ -406,12 +432,17 @@ export default function AiSupportInbox({ token }: { token: string }) {
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-gray-900 truncate">{customerOf(selected)?.full_name || 'WhatsApp customer'}</p>
-                    <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''} · {(selected.status === 'ai' || selected.status === 'returned_to_ai') ? 'AI handling' : selected.status === 'human_requested' ? 'Waiting for human' : 'Human support'}</p>
+                    <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''} · {(selected.status === 'ai' || selected.status === 'returned_to_ai') ? 'AI handling' : selected.status === 'human_requested' ? 'Waiting for human' : selected.status === 'resolved' ? 'Resolved' : 'Human support'}</p>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => void takeOver()} disabled={acting || selected.status === 'human_active'} className="px-2.5 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">
-                      {selected.status === 'human_active' ? 'Human active' : 'Take over'}
-                    </button>
+                    {(selected.status === 'ai' || selected.status === 'returned_to_ai' || selected.status === 'human_requested' || selected.status === 'human_assigned') && (
+                      <button onClick={() => void takeOver()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">
+                        Take over
+                      </button>
+                    )}
+                    {(selected.status === 'human_active' || selected.status === 'human_requested' || selected.status === 'human_assigned') && (
+                      <button onClick={() => void resolveConversation()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold disabled:opacity-40">Mark resolved</button>
+                    )}
                     {(selected.status === 'human_requested' || selected.status === 'human_assigned' || selected.status === 'human_active') && (
                       <button onClick={() => void returnToAi()} disabled={acting} className="px-2.5 py-2 rounded-lg bg-gray-100 text-gray-700 text-[10px] font-bold disabled:opacity-40">Return to AI</button>
                     )}
