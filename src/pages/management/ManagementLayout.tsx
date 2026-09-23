@@ -13,6 +13,7 @@ const NAV = [
   { icon: ShoppingCart, label: 'Orders', path: '/management/orders' },
   { icon: Tags, label: 'Categories', path: '/management/categories' },
   { icon: Settings, label: 'Settings', path: '/management/settings' },
+  { icon: ReceiptText, label: 'Expenses', path: '/management/expenses' },
 ];
 
 export default function ManagementLayout() {
