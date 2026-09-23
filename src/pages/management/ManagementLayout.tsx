@@ -60,8 +60,8 @@ export default function ManagementLayout() {
         )}
       </AnimatePresence>
 
-      <aside className={`fixed lg:sticky lg:top-0 inset-y-0 left-0 z-50 bg-gray-900 text-white flex flex-col h-screen transition-all duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${collapsed ? 'w-0 lg:w-[68px]' : 'w-[260px]'}`}>
-        <div className={`px-4 py-4 border-b border-gray-800 flex items-center flex-shrink-0 ${collapsed ? 'lg:justify-center' : 'justify-between'}`}>
+      <aside className={`fixed lg:sticky lg:top-0 inset-y-0 left-0 z-50 bg-white text-gray-900 flex flex-col h-screen transition-all duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'} ${collapsed ? 'w-0 lg:w-[68px]' : 'w-[260px]'}`}>
+        <div className={`px-4 py-4 border-b border-gray-200 flex items-center flex-shrink-0 ${collapsed ? 'lg:justify-center' : 'justify-between'}`}>
           {!collapsed && (
             <Link to="/management" className="flex items-center gap-3">
               <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center">
@@ -69,12 +69,12 @@ export default function ManagementLayout() {
               </div>
               <div>
                 <span className="text-sm font-bold leading-none">QAFRICA</span>
-                <p className="text-[10px] text-gray-400 leading-none mt-0.5">Management</p>
+                <p className="text-[10px] text-gray-500 leading-none mt-0.5">Management</p>
               </div>
             </Link>
           )}
           {collapsed && <div className="hidden lg:flex w-9 h-9 bg-orange-500 rounded-xl items-center justify-center"><Shield className="w-5 h-5 text-white" /></div>}
-          <button onClick={() => setMobileOpen(false)} className="lg:hidden p-1.5 hover:bg-gray-800 rounded-lg"><X className="w-4 h-4" /></button>
+          <button onClick={() => setMobileOpen(false)} className="lg:hidden p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
 
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto min-h-0">
@@ -82,7 +82,7 @@ export default function ManagementLayout() {
             const active = isActive(item.path);
             return (
               <Link key={item.path} to={item.path} title={collapsed ? item.label : undefined}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm ${active ? 'bg-orange-500 text-white font-medium' : 'text-gray-400 hover:bg-gray-800 hover:text-white'} ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}>
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm ${active ? 'bg-orange-500 text-white font-medium' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'} ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}>
                 <item.icon className="w-4 h-4 flex-shrink-0" />
                 {!collapsed && <span className="truncate">{item.label}</span>}
               </Link>
@@ -90,17 +90,17 @@ export default function ManagementLayout() {
           })}
         </nav>
 
-        <div className={`px-3 py-3 border-t border-gray-800 flex-shrink-0 ${collapsed ? 'lg:px-2' : ''}`}>
+        <div className={`px-3 py-3 border-t border-gray-200 flex-shrink-0 ${collapsed ? 'lg:px-2' : ''}`}>
           {!collapsed && (
             <div className="flex items-center gap-2.5 mb-2 px-1">
-              <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-gray-400" /></div>
+              <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><User className="w-4 h-4 text-gray-500" /></div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate leading-none">{managerName}</p>
-                <p className="text-[10px] text-gray-400 truncate mt-0.5">{manager?.email || ''}</p>
+                <p className="text-[10px] text-gray-500 truncate mt-0.5">{manager?.email || ''}</p>
               </div>
             </div>
           )}
-          <button onClick={handleLogout} className={`flex items-center gap-2 w-full px-3 py-2 text-red-400 hover:bg-gray-800 rounded-xl transition-colors text-sm ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}>
+          <button onClick={handleLogout} className={`flex items-center gap-2 w-full px-3 py-2 text-red-400 hover:bg-gray-100 rounded-xl transition-colors text-sm ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}>
             <LogOut className="w-4 h-4 flex-shrink-0" />
             {!collapsed && <span>Logout</span>}
           </button>
