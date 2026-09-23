@@ -261,7 +261,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
           <div>
             <div className="flex items-center gap-2">
               <MessageCircle className="w-4 h-4 text-gray-900" />
-              <p className="font-bold text-gray-900 text-sm">WhatsApp AI Support</p>
+              <p className="font-bold text-gray-900 text-sm">AI Support Inbox</p>
               {waitingCount > 0 && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-red-50 text-red-600 px-2 py-0.5 text-[10px] font-bold">
                   <BellRing className="w-3 h-3" /> {waitingCount} waiting
@@ -354,7 +354,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
               <>
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-sm font-bold text-gray-900 truncate">{customerOf(selected)?.full_name || 'WhatsApp customer'}</p>
+                    <p className="text-sm font-bold text-gray-900 truncate">{customerOf(selected)?.full_name || (selected.channel === 'website' ? 'Website customer' : 'WhatsApp customer')}</p>
                     <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''}</p>
                   </div>
                   {activeTab === 'human' && (
