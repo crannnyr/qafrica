@@ -2615,22 +2615,65 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'admin-close-group') {
-      const { manager_token, order_ids } = await req.json()
+      const { manager_token, order_ids } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
       if (!Array.isArray(order_ids) || order_ids.length === 0) return json({ error: 'Missing order_ids' }, 400)
 
-      const stagedAt = new Date().toISOString()
-      const { error } = await supabase
+      const requestedIds = Array.from(new Set(order_ids.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)))
+      if (requestedIds.length === 0) return json({ error: 'No valid order ids were supplied' }, 400)
+
+      // Only close orders that are still active paid import orders. This makes
+      // Close All safe against a stale browser list and prevents an already
+      // staged order from being silently moved into a second batch.
+      const { data: activeOrders, error: findError } = await supabase
         .from('china_import_orders')
-        .update({ staged_at: stagedAt, status: 'ordered', updated_at: new Date().toISOString() })
-        .in('id', order_ids)
-      if (error) return json({ error: error.message }, 500)
+        .select('id, payment_status, staged_at')
+        .in('id', requestedIds)
+      if (findError) return json({ error: findError.message }, 500)
 
-      const { data: newBatch, error: batchErr } = await supabase.from('import_batches').insert({ opened_at: stagedAt }).select('id').single()
-      if (batchErr) console.warn('[china-import] failed to create import_batches row:', batchErr.message)
-      else await supabase.from('china_import_orders').update({ batch_id: newBatch.id }).in('id', order_ids)
+      const eligibleIds = (activeOrders ?? [])
+        .filter((order: any) => order.payment_status === 'paid' && !order.staged_at)
+        .map((order: any) => order.id)
+      if (eligibleIds.length === 0) return json({ error: 'No active paid orders were found to close.' }, 409)
 
-      return json({ success: true, staged_at: stagedAt, count: order_ids.length })
+      const stagedAt = new Date().toISOString()
+      // Create the batch first so every successfully closed order gets its
+      // batch_id in the same operation path. The previous implementation
+      // staged orders first and only then attempted to create the batch, which
+      // could leave a closed-looking batch without a batch record.
+      const { data: newBatch, error: batchError } = await supabase
+        .from('import_batches')
+        .insert({ opened_at: stagedAt })
+        .select('id')
+        .single()
+      if (batchError || !newBatch) {
+        return json({ error: batchError?.message ?? 'Could not create the import batch' }, 500)
+      }
+
+      const { data: updatedOrders, error: updateError } = await supabase
+        .from('china_import_orders')
+        .update({
+          staged_at: stagedAt,
+          batch_id: newBatch.id,
+          status: 'ordered',
+          updated_at: stagedAt,
+        })
+        .in('id', eligibleIds)
+        .is('staged_at', null)
+        .select('id')
+
+      if (updateError) {
+        await supabase.from('import_batches').delete().eq('id', newBatch.id)
+        return json({ error: updateError.message }, 500)
+      }
+
+      const closedCount = updatedOrders?.length ?? 0
+      if (closedCount === 0) {
+        await supabase.from('import_batches').delete().eq('id', newBatch.id)
+        return json({ error: 'The selected orders were already closed. Please refresh and try again.' }, 409)
+      }
+
+      return json({ success: true, staged_at: stagedAt, batch_id: newBatch.id, count: closedCount })
     }
 
     if (req.method === 'POST' && action === 'admin-send-confirmed-message') {
