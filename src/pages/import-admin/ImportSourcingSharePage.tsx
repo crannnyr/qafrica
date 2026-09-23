@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Loader, Package, Copy, Check, ImageOff, Grid2X2, List, X } from 'lucide-react'
+import { Loader, Package, Copy, Check, ImageOff, Grid2X2, List, X, ChevronDown } from 'lucide-react'
 import CONFIG from '@/lib/config'
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-sourcing-share`
@@ -25,6 +25,7 @@ export default function ImportSourcingSharePage() {
   const [copied, setCopied] = useState(false)
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [expandedProduct, setExpandedProduct] = useState<string | null>(null)
 
   useEffect(() => {
     const token = window.location.pathname.split('/').filter(Boolean).pop()
@@ -47,11 +48,9 @@ export default function ImportSourcingSharePage() {
 
   useEffect(() => {
     if (!selectedImage) return
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setSelectedImage(null)
     }
-
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [selectedImage])
@@ -74,6 +73,10 @@ export default function ImportSourcingSharePage() {
     } catch {
       // Clipboard is optional; the page remains usable.
     }
+  }
+
+  const toggleExpanded = (productId: string) => {
+    setExpandedProduct(current => current === productId ? null : productId)
   }
 
   const variantContent = (product: Product) => (
@@ -164,31 +167,52 @@ export default function ImportSourcingSharePage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {products.map(product => (
-                  <div key={product.product_id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                    <button type="button" onClick={() => product.product_image && setSelectedImage(product.product_image)} className="w-full aspect-square bg-gray-100 overflow-hidden flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-inset focus:ring-orange-500" aria-label={product.product_image ? `Open image for ${product.product_name}` : 'No product image'}>
-                      {product.product_image ? <img src={product.product_image} alt="" className="w-full h-full object-cover transition-transform duration-200 hover:scale-105" /> : <ImageOff className="w-8 h-8 text-gray-300" />}
-                    </button>
-                    <div className="p-3">
-                      <h2 className="font-bold text-sm text-gray-900 line-clamp-2">{product.product_name}</h2>
-                      <p className="mt-1 text-xs font-black text-orange-600">Qty: {product.total_qty.toLocaleString()}</p>
-                      {product.variants.length > 0 && (
-                        <div className="mt-2 border-t border-gray-100 pt-2 space-y-1.5">
-                          {product.variants.map((variant, index) => (
-                            <div key={index} className="flex items-start justify-between gap-2 bg-gray-50 rounded-lg px-2.5 py-2">
-                              <span className="text-[10px] leading-4 text-gray-600 min-w-0">
-                                {variant.variant_options
-                                  ? Object.entries(variant.variant_options).map(([k, v]) => `${k}: ${v}`).join(' · ')
-                                  : 'No variant specified'}
-                              </span>
-                              <span className="text-[10px] font-black text-gray-900 whitespace-nowrap">Qty {variant.quantity}</span>
-                            </div>
-                          ))}
+                {products.map(product => {
+                  const expanded = expandedProduct === product.product_id
+
+                  return (
+                    <div key={product.product_id} className={`bg-white rounded-2xl border overflow-hidden transition-all duration-200 ${expanded ? 'border-orange-200 shadow-md' : 'border-gray-100'}`}>
+                      <button type="button" onClick={() => product.product_image && setSelectedImage(product.product_image)} className="w-full aspect-square bg-gray-100 overflow-hidden flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-inset focus:ring-orange-500" aria-label={product.product_image ? `Open image for ${product.product_name}` : 'No product image'}>
+                        {product.product_image ? <img src={product.product_image} alt="" className="w-full h-full object-cover transition-transform duration-200 hover:scale-105" /> : <ImageOff className="w-8 h-8 text-gray-300" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(product.product_id)}
+                        className="w-full text-left p-3 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-orange-500"
+                        aria-expanded={expanded}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h2 className="font-bold text-sm text-gray-900 line-clamp-2">{product.product_name}</h2>
+                            <p className="mt-1 text-xs font-black text-orange-600">Total quantity: {product.total_qty.toLocaleString()}</p>
+                          </div>
+                          <ChevronDown className={`w-4 h-4 shrink-0 text-gray-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
                         </div>
-                      )}
+                        <p className="mt-1 text-[10px] text-gray-400">{expanded ? 'Tap to collapse' : 'Tap to view variants'}</p>
+                      </button>
+
+                      <div className={`grid transition-[grid-template-rows] duration-200 ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                        <div className="overflow-hidden">
+                          <div className="px-3 pb-3 border-t border-gray-100 pt-2 space-y-1.5">
+                            {product.variants.length > 0 ? product.variants.map((variant, index) => (
+                              <div key={index} className="flex items-start justify-between gap-2 bg-gray-50 rounded-lg px-2.5 py-2">
+                                <span className="text-[10px] leading-4 text-gray-600 min-w-0">
+                                  {variant.variant_options
+                                    ? Object.entries(variant.variant_options).map(([k, v]) => `${k}: ${v}`).join(' · ')
+                                    : 'No variant specified'}
+                                </span>
+                                <span className="text-[10px] font-black text-gray-900 whitespace-nowrap">Qty {variant.quantity}</span>
+                              </div>
+                            )) : (
+                              <p className="text-[10px] text-gray-400">No variants specified.</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
