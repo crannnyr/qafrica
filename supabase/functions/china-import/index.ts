@@ -2614,6 +2614,61 @@ serve(async (req: Request) => {
       return json({ success: true, merged: order_ids.length, batch_key: target_batch_key })
     }
 
+    if (req.method === 'POST' && action === 'admin-close-all') {
+      const { manager_token } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
+
+      // Resolve the active set on the server. The browser does not need to
+      // send hundreds of order IDs, and a stale client list cannot prevent
+      // Close All from operating on the actual current active orders.
+      const { data: activeOrders, error: findError } = await supabase
+        .from('china_import_orders')
+        .select('id')
+        .eq('payment_status', 'paid')
+        .is('staged_at', null)
+
+      if (findError) return json({ error: findError.message }, 500)
+
+      const orderIds = (activeOrders ?? []).map((o: any) => o.id).filter(Boolean)
+      if (orderIds.length === 0) return json({ success: true, count: 0, note: 'No active paid orders found.' })
+
+      const stagedAt = new Date().toISOString()
+      const { data: newBatch, error: batchError } = await supabase
+        .from('import_batches')
+        .insert({ opened_at: stagedAt })
+        .select('id')
+        .single()
+
+      if (batchError || !newBatch) {
+        return json({ error: batchError?.message ?? 'Could not create the import batch' }, 500)
+      }
+
+      const { data: updatedOrders, error: updateError } = await supabase
+        .from('china_import_orders')
+        .update({
+          staged_at: stagedAt,
+          batch_id: newBatch.id,
+          status: 'ordered',
+          updated_at: stagedAt,
+        })
+        .in('id', orderIds)
+        .is('staged_at', null)
+        .select('id')
+
+      if (updateError) {
+        await supabase.from('import_batches').delete().eq('id', newBatch.id)
+        return json({ error: updateError.message }, 500)
+      }
+
+      const count = updatedOrders?.length ?? 0
+      if (count === 0) {
+        await supabase.from('import_batches').delete().eq('id', newBatch.id)
+        return json({ success: true, count: 0, note: 'No active paid orders remained to close.' })
+      }
+
+      return json({ success: true, staged_at: stagedAt, batch_id: newBatch.id, count })
+    }
+
     if (req.method === 'POST' && action === 'admin-close-group') {
       const { manager_token, order_ids } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
