@@ -703,7 +703,7 @@ serve(async (req: Request) => {
       // the badge and force sea freight at checkout.
       const { data, error } = await supabase
         .from('china_import_products')
-        .select('id, name, description, image_url, image_urls, price_cny, price_ngn, price_usd, category, moq, has_variants, variants, delivery_time, ship_only, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, sort_order, units_sold, is_trending, trending_order, created_at')
+        .select('id, name, description, image_url, image_urls, price_cny, price_ngn, price_usd, category, moq, has_variants, variants, delivery_time, ship_only, express_air_cargo, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, sort_order, units_sold, is_trending, trending_order, created_at')
         .eq('is_active', true)
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
@@ -824,7 +824,7 @@ serve(async (req: Request) => {
       // Admin is the only surface that sees source_url.
       const { data, error } = await supabase
         .from('china_import_products')
-        .select('id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, sort_order, units_sold, is_trending, trending_order, trending_source, created_at')
+        .select('id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, express_air_cargo, sort_order, units_sold, is_trending, trending_order, trending_source, created_at')
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
 
@@ -2122,6 +2122,7 @@ serve(async (req: Request) => {
         return json({ error: 'The 1688 link is not a valid URL. It should start with https://' }, 400)
       }
       const shipOnly = body.ship_only === true
+      const expressAirCargo = body.express_air_cargo === true
       const seedSold = Number(body.units_sold)
       const hasSeedSold = Number.isFinite(seedSold) && seedSold >= 0
 
@@ -2157,6 +2158,7 @@ serve(async (req: Request) => {
         variants: cleanVariants,
         source_url: sourceUrl,
         ship_only: shipOnly,
+        express_air_cargo: expressAirCargo,
         delivery_time: shipOnly ? 'sea' : 'air',
         ...(hasSeedSold ? { units_sold: Math.round(seedSold) } : {}),
       }
