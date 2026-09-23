@@ -119,6 +119,7 @@ function buildProductPayload(body: any, partial = false) {
   if (body.sea_shipping_cost_ngn !== undefined) row.sea_shipping_cost_ngn = cleanNumber(body.sea_shipping_cost_ngn)
   if (body.flight_shipping_cost_ngn !== undefined) row.flight_shipping_cost_ngn = cleanNumber(body.flight_shipping_cost_ngn)
   if (body.is_active !== undefined) row.is_active = Boolean(body.is_active)
+  if (body.units_sold !== undefined) row.units_sold = Math.max(0, Math.floor(Number(body.units_sold) || 0))
   if (body.moq !== undefined) row.moq = Math.max(1, Math.floor(Number(body.moq) || 1))
   if (body.has_variants !== undefined) row.has_variants = Boolean(body.has_variants)
   if (body.variants !== undefined) row.variants = cleanVariants(body.variants)
