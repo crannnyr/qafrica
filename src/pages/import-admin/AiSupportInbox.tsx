@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Bell, BellRing, CheckCircle2, Loader, MessageCircle, RefreshCw, Send, Volume2, VolumeX } from 'lucide-react';
+import { Bell, BellRing, CheckCircle2, Loader, MessageCircle, RefreshCw, Send, Volume2 } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 
@@ -33,11 +33,31 @@ async function supportRequest(token: string, action: string, extra: Record<strin
   return data;
 }
 
+let alertAudioContext: AudioContext | null = null;
+
+function getAlertAudioContext() {
+  const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) return null;
+  if (!alertAudioContext || alertAudioContext.state === 'closed') alertAudioContext = new AudioCtx();
+  return alertAudioContext;
+}
+
+function unlockAlertSound() {
+  try {
+    const ctx = getAlertAudioContext();
+    if (!ctx) return false;
+    void ctx.resume();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function playAlertSound() {
   try {
-    const AudioCtx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return false;
-    const ctx = new AudioCtx();
+    const ctx = getAlertAudioContext();
+    if (!ctx) return false;
+    if (ctx.state === 'suspended') void ctx.resume();
     const now = ctx.currentTime;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.0001, now);
@@ -56,7 +76,6 @@ function playAlertSound() {
     const osc2 = ctx.createOscillator();
     osc2.type = 'sine'; osc2.frequency.setValueAtTime(1175, now + 0.25);
     osc2.connect(gain2); osc2.start(now + 0.25); osc2.stop(now + 0.48);
-    window.setTimeout(() => void ctx.close(), 700);
     return true;
   } catch {
     return false;
@@ -137,7 +156,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
   const [acting, setActing] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const soundEnabled = true;
   const [browserNotifications, setBrowserNotifications] = useState(
     typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted'
   );
@@ -185,12 +204,17 @@ export default function AiSupportInbox({ token }: { token: string }) {
     return () => window.removeEventListener('qafrica-open-ai-support', handler);
   }, [conversations, openConversation]);
 
-  const enableSound = () => {
-    const played = playAlertSound();
-    setSoundEnabled(played);
-    if (played) toast.success('Support sound alerts are on');
-    else toast.error('Your browser blocked the sound. Tap again or check browser/site sound settings.');
-  };
+  useEffect(() => {
+    const unlock = () => { void unlockAlertSound(); };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    window.addEventListener('touchstart', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('touchstart', unlock);
+    };
+  }, []);
 
   const enableBrowserNotifications = async () => {
     if (!('Notification' in window)) {
@@ -267,10 +291,10 @@ export default function AiSupportInbox({ token }: { token: string }) {
             <p className="text-[11px] text-gray-400 mt-1">Human requests, live WhatsApp conversations and AI handoff.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={enableSound} className={"inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[11px] font-bold " + (soundEnabled ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-900 text-white')}>
-              {soundEnabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
-              {soundEnabled ? 'Sound on' : 'Enable sound'}
-            </button>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-[11px] font-bold" title="Support sound alerts stay enabled automatically">
+              <Volume2 className="w-3.5 h-3.5" />
+              Sound on
+            </span>
             <button onClick={() => void enableBrowserNotifications()} disabled={browserNotifications} className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-lg bg-gray-100 text-gray-700 text-[11px] font-bold disabled:opacity-60">
               {browserNotifications ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5" />}
               {browserNotifications ? 'Notifications on' : 'Enable notifications'}
