@@ -8,7 +8,7 @@ const AI_URL = CONFIG.SUPABASE_URL + '/functions/v1/import-ai-support';
 type Customer = { id?: string; full_name?: string | null; email?: string | null; phone?: string | null };
 type Conversation = {
   id: string; wa_id: string; customer_id: string | null;
-  status: 'ai' | 'human_requested' | 'human_assigned' | 'human_active';
+  status: 'ai' | 'returned_to_ai' | 'human_requested' | 'human_assigned' | 'human_active';
   last_inbound_at: string | null; last_outbound_at: string | null;
   created_at: string; updated_at: string; customers?: Customer | Customer[] | null;
 };
@@ -273,7 +273,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
   };
 
   const waitingCount = conversations.filter(c => c.status === 'human_requested').length;
-  const aiCount = conversations.filter(c => c.status === 'ai').length;
+  const aiCount = conversations.filter(c => c.status === 'ai' || c.status === 'returned_to_ai').length;
 
   return (
     <div className="space-y-4">
@@ -317,8 +317,8 @@ export default function AiSupportInbox({ token }: { token: string }) {
       ) : conversations.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
           <MessageCircle className="w-8 h-8 mx-auto text-gray-200 mb-3" />
-          <p className="text-sm font-semibold text-gray-700">No human support requests</p>
-          <p className="text-xs text-gray-400 mt-1">When a customer asks for a human, the conversation will appear here and trigger an alert.</p>
+          <p className="text-sm font-semibold text-gray-700">No active support chats</p>
+          <p className="text-xs text-gray-400 mt-1">AI-handled chats and conversations waiting for or assigned to human support will appear here.</p>
         </div>
       ) : (
         <div className="grid lg:grid-cols-[320px_minmax(0,1fr)] gap-4">
@@ -334,13 +334,13 @@ export default function AiSupportInbox({ token }: { token: string }) {
                 return (
                   <button key={c.id} onClick={() => void openConversation(c)} className={"w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors " + (selected?.id === c.id ? 'bg-gray-50' : '')}>
                     <div className="flex items-start gap-2">
-                      <div className={"w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 " + (waiting ? 'bg-red-100 text-red-600' : c.status === 'ai' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600')}>
+                      <div className={"w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 " + (waiting ? 'bg-red-100 text-red-600' : (c.status === 'ai' || c.status === 'returned_to_ai') ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600')}>
                         {waiting ? <BellRing className="w-4 h-4" /> : <MessageCircle className="w-4 h-4" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-xs font-bold text-gray-900 truncate">{customer?.full_name || customer?.email || ('+' + c.wa_id)}</p>
-                          {waiting ? <span className="text-[9px] font-bold text-red-600">WAITING</span> : c.status === 'ai' ? <span className="text-[9px] font-bold text-orange-600">AI</span> : <span className="text-[9px] font-bold text-gray-500">HUMAN</span>}
+                          {waiting ? <span className="text-[9px] font-bold text-red-600">WAITING</span> : (c.status === 'ai' || c.status === 'returned_to_ai') ? <span className="text-[9px] font-bold text-orange-600">AI</span> : <span className="text-[9px] font-bold text-gray-500">HUMAN</span>}
                         </div>
                         <p className="text-[10px] text-gray-400 truncate">{customer?.email || ('+' + c.wa_id)}</p>
                         <p className="text-[9px] text-gray-300 mt-1">{new Date(c.updated_at).toLocaleString()}</p>
@@ -362,7 +362,7 @@ export default function AiSupportInbox({ token }: { token: string }) {
                 <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-sm font-bold text-gray-900 truncate">{customerOf(selected)?.full_name || 'WhatsApp customer'}</p>
-                    <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''} · {selected.status === 'ai' ? 'AI handling' : selected.status === 'human_requested' ? 'Waiting for human' : 'Human support'}</p>
+                    <p className="text-[10px] text-gray-400">+{selected.wa_id}{customerOf(selected)?.email ? ' · ' + customerOf(selected)?.email : ''} · {(selected.status === 'ai' || selected.status === 'returned_to_ai') ? 'AI handling' : selected.status === 'human_requested' ? 'Waiting for human' : 'Human support'}</p>
                   </div>
                   <div className="flex gap-2">
                     <button onClick={() => void takeOver()} disabled={acting || selected.status === 'human_active'} className="px-2.5 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">
