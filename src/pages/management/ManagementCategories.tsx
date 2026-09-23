@@ -109,7 +109,7 @@ export default function ManagementCategories() {
   const saveCategory = async () => {
     const token = getManagementToken();
     const name = categoryName.trim();
-    if (!token || !name || !categoryNicheId) return;
+    if (!token || !name) return;
 
     setSaving(true);
     setError('');
@@ -121,7 +121,7 @@ export default function ManagementCategories() {
           manager_token: token,
           id: editingCategory?.id,
           name,
-          niche_id: categoryNicheId,
+          niche_id: categoryNicheId || niches[0]?.id,
           sort_order: Number(categorySortOrder) || 0,
         }),
       });
@@ -218,8 +218,6 @@ export default function ManagementCategories() {
     }
   };
 
-  const groupedNiches = Array.from(new Set(categories.map(category => category.niche_id)));
-
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl border border-gray-100 p-4">
@@ -261,14 +259,6 @@ export default function ManagementCategories() {
               <button onClick={closeCategoryForm} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50" aria-label="Close"><X className="w-4 h-4" /></button>
             </div>
             <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Niche</label>
-                <select value={categoryNicheId} onChange={e => setCategoryNicheId(e.target.value)} disabled={categoryFormMode === 'edit'} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white disabled:bg-gray-50">
-                  <option value="">Select niche</option>
-                  {niches.map(niche => <option key={niche.id} value={niche.id}>{niche.name} ({niche.id})</option>)}
-                </select>
-                {categoryFormMode === 'edit' && <p className="text-[10px] text-gray-400 mt-1">The niche is kept unchanged when editing a category.</p>}
-              </div>
               <div>
                 <label className="block text-[11px] font-semibold text-gray-500 mb-1.5">Category name</label>
                 <input value={categoryName} onChange={e => setCategoryName(e.target.value)} placeholder="e.g. Phones" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm" />
@@ -381,7 +371,7 @@ export default function ManagementCategories() {
       )}
 
       <div className="text-[10px] text-gray-400 px-1">
-        {categories.length} categor{categories.length === 1 ? 'y' : 'ies'} loaded{groupedNiches.length ? ` across ${groupedNiches.length} niche${groupedNiches.length === 1 ? '' : 's'}.` : '.'}
+        {categories.length} categor{categories.length === 1 ? 'y' : 'ies'} loaded.
       </div>
     </div>
   );
