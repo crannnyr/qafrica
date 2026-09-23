@@ -37,10 +37,17 @@ const BlogPostPage = lazy(() => import('@/pages/blog/BlogPostPage'));
 const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
 const ImportAdminLogin = lazy(() => import('@/pages/import-admin/ImportAdminLogin'));
 const ImportAdminPage = lazy(() => import('@/pages/import-admin/ImportAdminPage'));
+const ImportSourcingSharePage = lazy(() => import('@/pages/import-admin/ImportSourcingSharePage'));
 const ManagementLogin = lazy(() => import('@/pages/management/ManagementLogin'));
 const ManagementLogout = lazy(() => import('@/pages/management/ManagementLogout'));
 const ManagementLayout = lazy(() => import('@/pages/management/ManagementLayout'));
 const ManagementDashboard = lazy(() => import('@/pages/management/ManagementDashboard'));
+const ManagementProducts = lazy(() => import('@/pages/management/ManagementProducts'));
+const ManagementOrders = lazy(() => import('@/pages/management/ManagementOrders'));
+const ManagementSettings = lazy(() => import('@/pages/management/ManagementSettings'));
+const ManagementCategories = lazy(() => import('@/pages/management/ManagementCategories'));
+const ManagementExpenses = lazy(() => import('@/pages/management/ManagementExpenses'));
+const ManagementProductAdd = lazy(() => import('@/pages/management/ManagementProductAdd'));
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
 const CustomOrderRequestPage = lazy(() => import('@/pages/recommendations/CustomOrderRequestPage'));
@@ -328,10 +335,18 @@ function App() {
           <Route path="/importations" element={<ImportPage />} />
           <Route path="/importations/admin/login" element={<ImportAdminLogin />} />
           <Route path="/importations/admin" element={<ImportAdminPage />} />
+          <Route path="/importations/sourcing/:token" element={<ImportSourcingSharePage />} />
           <Route path="/management/login" element={<ManagementLogin />} />
           <Route path="/management/logout" element={<ManagementLogout />} />
           <Route path="/management" element={<ManagementLayout />}>
             <Route index element={<ManagementDashboard />} />
+            <Route path="products" element={<ManagementProducts />} />
+            <Route path="orders" element={<ManagementOrders />} />
+            <Route path="categories" element={<ManagementCategories />} />
+            <Route path="settings" element={<ManagementSettings />} />
+            <Route path="expenses" element={<ManagementExpenses />} />
+            <Route path="products/add" element={<ManagementProductAdd />} />
+            <Route path="products/edit/:id" element={<ManagementProductAdd />} />
           </Route>
           <Route path="/importations/dashboard" element={<ImporterDashboardPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />

@@ -703,7 +703,7 @@ serve(async (req: Request) => {
       // the badge and force sea freight at checkout.
       const { data, error } = await supabase
         .from('china_import_products')
-        .select('id, name, description, image_url, image_urls, price_cny, price_ngn, price_usd, category, moq, has_variants, variants, delivery_time, ship_only, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, sort_order, units_sold, is_trending, trending_order, created_at')
+        .select('id, name, description, image_url, image_urls, price_cny, price_ngn, price_usd, category, moq, has_variants, variants, delivery_time, ship_only, express_air_cargo, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, sort_order, units_sold, is_trending, trending_order, created_at')
         .eq('is_active', true)
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
@@ -824,7 +824,7 @@ serve(async (req: Request) => {
       // Admin is the only surface that sees source_url.
       const { data, error } = await supabase
         .from('china_import_products')
-        .select('id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, sort_order, units_sold, is_trending, trending_order, trending_source, created_at')
+        .select('id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, express_air_cargo, sort_order, units_sold, is_trending, trending_order, trending_source, created_at')
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: false })
 
@@ -1944,10 +1944,56 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'admin-update-settings') {
-      const { manager_token, paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name } = await req.json()
+      const {
+        manager_token,
+        charge_shipping_at_checkout,
+        shipping_discount_percent,
+        shipping_discount_min_ngn,
+        bulk_discount_tier1_qty,
+        bulk_discount_tier1_percent,
+        bulk_discount_tier2_qty,
+        bulk_discount_tier2_percent,
+        paystack_enabled,
+        manual_transfer_enabled,
+        bank_account_number,
+        bank_account_name,
+        bank_name,
+      } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.settings.update'))) return json({ error: 'Unauthorized' }, 401)
 
       const updates: Record<string, unknown> = {}
+      if (typeof charge_shipping_at_checkout === 'boolean') updates.charge_shipping_at_checkout = charge_shipping_at_checkout
+      const nonNegative = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0
+      const positiveInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v > 0
+      const percent = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100
+
+      if (shipping_discount_percent !== undefined) {
+        if (!percent(shipping_discount_percent)) return json({ error: 'Shipping discount must be between 0 and 100%.' }, 400)
+        updates.shipping_discount_percent = Number(shipping_discount_percent)
+      }
+      if (shipping_discount_min_ngn !== undefined) {
+        if (!nonNegative(shipping_discount_min_ngn)) return json({ error: 'Minimum shipping must be a non-negative number.' }, 400)
+        updates.shipping_discount_min_ngn = Number(shipping_discount_min_ngn)
+      }
+      if (bulk_discount_tier1_qty !== undefined) {
+        if (!positiveInt(bulk_discount_tier1_qty)) return json({ error: 'Tier 1 quantity must be a positive whole number.' }, 400)
+        updates.bulk_discount_tier1_qty = Number(bulk_discount_tier1_qty)
+      }
+      if (bulk_discount_tier1_percent !== undefined) {
+        if (!percent(bulk_discount_tier1_percent)) return json({ error: 'Tier 1 discount must be between 0 and 100%.' }, 400)
+        updates.bulk_discount_tier1_percent = Number(bulk_discount_tier1_percent)
+      }
+      if (bulk_discount_tier2_qty !== undefined) {
+        if (!positiveInt(bulk_discount_tier2_qty)) return json({ error: 'Tier 2 quantity must be a positive whole number.' }, 400)
+        updates.bulk_discount_tier2_qty = Number(bulk_discount_tier2_qty)
+      }
+      if (bulk_discount_tier2_percent !== undefined) {
+        if (!percent(bulk_discount_tier2_percent)) return json({ error: 'Tier 2 discount must be between 0 and 100%.' }, 400)
+        updates.bulk_discount_tier2_percent = Number(bulk_discount_tier2_percent)
+      }
+
+      // Preserve the existing Import Admin payment settings API, but Management
+      // does not send or display these fields.
       if (typeof paystack_enabled === 'boolean') updates.paystack_enabled = paystack_enabled
       if (typeof manual_transfer_enabled === 'boolean') updates.manual_transfer_enabled = manual_transfer_enabled
       if (typeof bank_account_number === 'string') updates.bank_account_number = bank_account_number
@@ -2122,6 +2168,7 @@ serve(async (req: Request) => {
         return json({ error: 'The 1688 link is not a valid URL. It should start with https://' }, 400)
       }
       const shipOnly = body.ship_only === true
+      const expressAirCargo = body.express_air_cargo === true
       const seedSold = Number(body.units_sold)
       const hasSeedSold = Number.isFinite(seedSold) && seedSold >= 0
 
@@ -2157,6 +2204,7 @@ serve(async (req: Request) => {
         variants: cleanVariants,
         source_url: sourceUrl,
         ship_only: shipOnly,
+        express_air_cargo: expressAirCargo,
         delivery_time: shipOnly ? 'sea' : 'air',
         ...(hasSeedSold ? { units_sold: Math.round(seedSold) } : {}),
       }

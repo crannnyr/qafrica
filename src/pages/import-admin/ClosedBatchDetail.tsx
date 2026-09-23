@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Loader, Users, Plane, Ship, ShieldCheck, Send, AlertTriangle,
   ChevronRight, Package, CheckCircle2, Truck, PackageCheck, ExternalLink, Layers,
-  StickyNote, RotateCcw, Boxes, Pencil, Search,
+  StickyNote, RotateCcw, Boxes, Pencil, Search, Share2, Copy, Check,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ import { CustomerDetail } from './ImportAdminCustomers';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const BATCH_VIEW_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-batch-view`;
+const SOURCING_SHARE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-sourcing-share`;
 
 interface OrderItem { id: string; name: string; image_url: string; quantity: number; price_ngn?: number; variant_options?: Record<string, string>; }
 interface VariantGroup { id: string; name: string; options: string[]; price_deltas?: Record<string, number>; }
@@ -155,6 +156,29 @@ export default function ClosedBatchDetail({
   // full customer profile — independent of the row's own expand/collapse.
   const [sourcingDrilldownProduct, setSourcingDrilldownProduct] = useState<{ id: string; name: string } | null>(null);
 
+  const createSourcingShare = async () => {
+    if (sourcingShareLoading) return;
+    setSourcingShareLoading(true);
+    try {
+      const res = await fetch(SOURCING_SHARE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, batch_key: batchKey }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) throw new Error(data?.error || 'Could not create sourcing link');
+      setSourcingShareUrl(data.url);
+      await navigator.clipboard.writeText(data.url);
+      setSourcingShareCopied(true);
+      window.setTimeout(() => setSourcingShareCopied(false), 1800);
+      toast.success('Sourcing link copied');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not create sourcing link');
+    } finally {
+      setSourcingShareLoading(false);
+    }
+  };
+
   const openSourcingProduct = async (productId: string) => {
     if (expandedSourcingProduct === productId) { setExpandedSourcingProduct(null); return; }
     setExpandedSourcingProduct(productId);
@@ -186,6 +210,9 @@ export default function ClosedBatchDetail({
   const [isActing, setIsActing] = useState(false);
   const [individualActing, setIndividualActing] = useState<string | null>(null);
   const [selectedCustomerForDrilldown, setSelectedCustomerForDrilldown] = useState<string | null>(null);
+  const [sourcingShareUrl, setSourcingShareUrl] = useState<string | null>(null);
+  const [sourcingShareLoading, setSourcingShareLoading] = useState(false);
+  const [sourcingShareCopied, setSourcingShareCopied] = useState(false);
   const listScrollPos = useRef(0);
 
   const load = useCallback(async () => {
@@ -643,6 +670,33 @@ export default function ClosedBatchDetail({
           <p className="text-[11px] text-gray-400">
             {counts.total} customer{counts.total !== 1 ? 's' : ''} · {counts.billedC} billed · {counts.shippedN} shipped · {counts.billedClr} clearance billed · {counts.receivedN} received
           </p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => void createSourcingShare()}
+            disabled={sourcingShareLoading}
+            title="Create and copy sourcing link"
+            className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-xl bg-gray-900 text-white text-[10px] font-bold disabled:opacity-50"
+          >
+            {sourcingShareLoading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : sourcingShareCopied ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
+            {sourcingShareCopied ? 'Copied' : 'Sourcing link'}
+          </button>
+          {sourcingShareUrl && (
+            <button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(sourcingShareUrl);
+                  setSourcingShareCopied(true);
+                  window.setTimeout(() => setSourcingShareCopied(false), 1800);
+                } catch {}
+              }}
+              title="Copy sourcing link again"
+              className="p-2 rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200"
+              aria-label="Copy sourcing link"
+            >
+              <Copy className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

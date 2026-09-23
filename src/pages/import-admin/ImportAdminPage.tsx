@@ -28,6 +28,7 @@ import AdminOrderReceiptSheet from './AdminOrderReceiptSheet';
 import PaystackTransactions from './PaystackTransactions';
 import CategoryManager from './CategoryManager';
 import AiSupportInbox, { AiSupportAlertMonitor } from './AiSupportInbox';
+import ImportAdminExpenses from './ImportAdminExpenses';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const IMPORT_ADMIN_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-admin-orders`;
@@ -104,6 +105,7 @@ interface ImportProduct {
   /** Admin-only 1688 sourcing link. Never returned by the public products endpoint. */
   source_url?: string | null;
   ship_only?: boolean;
+  express_air_cargo?: boolean;
   category_id?: string | null;
   subcategory_id?: string | null;
   parent_category?: string | null;
@@ -2097,6 +2099,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
   const [moq, setMoq]                 = useState('1');
   const [sourceUrl, setSourceUrl]     = useState('');
   const [shipOnly, setShipOnly]       = useState(false);
+  const [expressAirCargo, setExpressAirCargo] = useState(false);
+  const [airShipping, setAirShipping] = useState(true);
   const [volumeCbm, setVolumeCbm] = useState('');
   const [weightGrams, setWeightGrams] = useState('');
   const [unitsSold, setUnitsSold]     = useState('');
@@ -2229,9 +2233,13 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
         });
       })
       .catch(() => {});
-    fetch(`${CONFIG.SUPABASE_URL}/functions/v1/category?action=list`)
-      .then(r => r.json())
-      .then(d => setProductCategories(Array.isArray(d.categories) ? d.categories : []))
+    const categoryUrl = `${CONFIG.SUPABASE_URL}/functions/v1/category?action=list&manager_token=${encodeURIComponent(token)}`;
+    fetch(categoryUrl)
+      .then(async r => {
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d?.error || 'Could not load categories');
+        setProductCategories(Array.isArray(d.categories) ? d.categories : []);
+      })
       .catch(() => setProductCategories([]));
   }, []);
 
@@ -2256,7 +2264,7 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setName(''); setDesc(''); setCategory('General');
     setCategoryId(''); setSubcategoryId('');
     setPriceAmount(''); setMoq('1'); setUnitsSold('');
-    setSourceUrl(''); setShipOnly(false);
+    setSourceUrl(''); setShipOnly(false); setExpressAirCargo(false); setAirShipping(true);
     setVariantGroups([]); setCustomGroupName(''); setCustomOptionDrafts({}); setExpandedVariantGroups(new Set());
     setImagePreviews([]); setImageFiles([null, null, null]);
     setSaveError('');
@@ -2290,6 +2298,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setMoq((p.moq ?? 1).toString());
     setSourceUrl(p.source_url ?? '');
     setShipOnly(p.ship_only === true);
+    setExpressAirCargo(p.express_air_cargo === true);
+    setAirShipping(p.ship_only === true ? false : true);
     setUnitsSold((p.units_sold ?? 0).toString());
     setVariantGroups(p.variants?.length ? p.variants.map(g => ({ ...g, id: g.id || genId() })) : []);
     setExpandedVariantGroups(new Set());
@@ -2303,6 +2313,19 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
     setVolumeCbm(p.volume_cbm != null ? p.volume_cbm.toString() : '');
     setWeightGrams(p.weight_grams != null ? p.weight_grams.toString() : '');
   };
+
+  useEffect(() => {
+    if (!editProduct || productCategories.length === 0) return;
+    const matchedCategory = editProduct.category_id
+      ? productCategories.find(c => c.id === editProduct.category_id)
+      : productCategories.find(c => c.name === (editProduct.parent_category ?? editProduct.category));
+    if (!matchedCategory) return;
+    setCategoryId(matchedCategory.id);
+    const matchedSubcategory = matchedCategory.subcategories.find(s =>
+      s.id === editProduct.subcategory_id || s.name === editProduct.category
+    );
+    setSubcategoryId(matchedSubcategory?.id ?? editProduct.subcategory_id ?? '');
+  }, [editProduct, productCategories]);
 
   // Routed in from the Total Orders tab (click a product in a batch) —
   // once this manager's own product list has loaded, open that product's
@@ -2393,6 +2416,8 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
         image_urls:      resolvedUrls,
         source_url:      sourceUrl.trim(),
         ship_only:       shipOnly,
+        express_air_cargo: expressAirCargo,
+        delivery_time: shipOnly ? 'sea' : 'air',
         volume_cbm: volumeCbm.trim() === '' ? null : Number(volumeCbm),
         weight_grams: weightGrams.trim() === '' ? null : Number(weightGrams),
         manager_token:   token,
@@ -2630,19 +2655,55 @@ function ProductsManager({ token, openProductId, onOpenedProduct }: { token: str
                   <input
                     type="checkbox"
                     checked={shipOnly}
-                    onChange={e => setShipOnly(e.target.checked)}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setShipOnly(checked);
+                      if (checked) {
+                        setExpressAirCargo(false);
+                        setAirShipping(false);
+                      } else {
+                        setAirShipping(true);
+                      }
+                    }}
                     className="mt-0.5 w-4 h-4 accent-orange-500"
                   />
                   <span>
                     <span className="block text-sm font-semibold text-gray-900">Sea freight only</span>
-                    <span className="block text-[11px] text-gray-400">
-                      Customers can't pick air for this product, and checkout will block a flight order containing it.
-                    </span>
+                    <span className="block text-[11px] text-gray-400">Delivery: 60 - 90 days</span>
                   </span>
                 </label>
               </div>
 
               <div>
+                <label className="flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={expressAirCargo}
+                    disabled={shipOnly}
+                    onChange={e => setExpressAirCargo(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-orange-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-gray-900">Express Air cargo delivery</span>
+                    <span className="block text-[11px] text-gray-400">Delivery: 2 - 3 days</span>
+                  </span>
+                </label>
+              </div>
+
+              <div>
+                <label className="flex items-start gap-3 px-4 py-3 rounded-xl border border-gray-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={airShipping}
+                    disabled
+                    className="mt-0.5 w-4 h-4 accent-orange-500"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-gray-900">Air shipping <span className="text-[10px] font-medium text-orange-500">(Default)</span></span>
+                    <span className="block text-[11px] text-gray-400">Delivery: 7 - 10 days</span>
+                  </span>
+                </label>
+              </div>              <div>
                 <Label>Volume for sea freight (CBM)</Label>
                 <input
                   type="number" min={0} step="0.001"
@@ -3676,7 +3737,7 @@ export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
   const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(token);
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access' | 'ai-support'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access' | 'ai-support' | 'expenses'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -3705,9 +3766,10 @@ export default function ImportAdminPage() {
     categories: 'import.categories.view',
     'admin-access': 'import.admin_access.view',
     'ai-support': 'import.messages.view',
+    expenses: 'import.expenses.view',
   } as const;
 
-  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access', 'ai-support'] as const;
+  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access', 'ai-support', 'expenses'] as const;
 
   const visibleTabs = allTabs.filter(t => hasPermission(tabPermissions[t]));
 
@@ -3808,7 +3870,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'ai-support' ? 'AI Support' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'ai-support' ? 'AI Support' : t === 'expenses' ? 'Expenses' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
             </button>
           ))}
         </div>
@@ -3846,6 +3908,8 @@ export default function ImportAdminPage() {
           <ImportAdminAccessManager token={token} canManage={hasPermission('import.admin_access.manage')} />
         ) : tab === 'ai-support' ? (
           <AiSupportInbox token={token} />
+        ) : tab === 'expenses' ? (
+          <ImportAdminExpenses token={token} />
         ) : tab === 'settings' ? (
           <SettingsManager token={token} />
         ) : tab === 'pricing-shipping' ? (
