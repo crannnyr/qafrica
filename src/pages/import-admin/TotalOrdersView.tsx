@@ -149,11 +149,15 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
   const closeGroup = async (group: Group) => {
     setClosingKey(group.key);
     try {
-      await fetch(`${EDGE_URL}?action=admin-close-group`, {
+      const res = await fetch(`${EDGE_URL}?action=admin-close-group`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: token, order_ids: group.orderIds }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.error ?? 'Could not close this batch');
+      }
       await load();
     } finally {
       setClosingKey(null);
@@ -194,11 +198,15 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
     try {
       downloadCsv(groups);
       const allOrderIds = Array.from(new Set(groups.flatMap(g => g.orderIds)));
-      await fetch(`${EDGE_URL}?action=admin-close-group`, {
+      const res = await fetch(`${EDGE_URL}?action=admin-close-group`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: token, order_ids: allOrderIds }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success !== true) {
+        throw new Error(data.error ?? 'Could not close the active orders');
+      }
       await load();
     } finally {
       setClosingAll(false);
