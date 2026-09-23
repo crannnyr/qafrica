@@ -37,6 +37,7 @@ const BlogPostPage = lazy(() => import('@/pages/blog/BlogPostPage'));
 const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
 const ImportAdminLogin = lazy(() => import('@/pages/import-admin/ImportAdminLogin'));
 const ImportAdminPage = lazy(() => import('@/pages/import-admin/ImportAdminPage'));
+const ImportSourcingSharePage = lazy(() => import('@/pages/import-admin/ImportSourcingSharePage'));
 const ManagementLogin = lazy(() => import('@/pages/management/ManagementLogin'));
 const ManagementLogout = lazy(() => import('@/pages/management/ManagementLogout'));
 const ManagementLayout = lazy(() => import('@/pages/management/ManagementLayout'));
@@ -331,6 +332,7 @@ function App() {
           <Route path="/importations" element={<ImportPage />} />
           <Route path="/importations/admin/login" element={<ImportAdminLogin />} />
           <Route path="/importations/admin" element={<ImportAdminPage />} />
+          <Route path="/importations/sourcing/:token" element={<ImportSourcingSharePage />} />
           <Route path="/management/login" element={<ManagementLogin />} />
           <Route path="/management/logout" element={<ManagementLogout />} />
           <Route path="/management" element={<ManagementLayout />}>
