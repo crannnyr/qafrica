@@ -335,6 +335,8 @@ function App() {
           <Route path="/management" element={<ManagementLayout />}>
             <Route index element={<ManagementDashboard />} />
             <Route path="products" element={<ManagementProducts />} />
+            <Route path="products/add" element={<ManagementProductAdd />} />
+            <Route path="products/edit/:id" element={<ManagementProductAdd />} />
           </Route>
           <Route path="/importations/dashboard" element={<ImporterDashboardPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
