@@ -41,6 +41,7 @@ const ManagementLogin = lazy(() => import('@/pages/management/ManagementLogin'))
 const ManagementLogout = lazy(() => import('@/pages/management/ManagementLogout'));
 const ManagementLayout = lazy(() => import('@/pages/management/ManagementLayout'));
 const ManagementDashboard = lazy(() => import('@/pages/management/ManagementDashboard'));
+const ManagementProducts = lazy(() => import('@/pages/management/ManagementProducts'));
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
 const CustomOrderRequestPage = lazy(() => import('@/pages/recommendations/CustomOrderRequestPage'));
@@ -332,6 +333,7 @@ function App() {
           <Route path="/management/logout" element={<ManagementLogout />} />
           <Route path="/management" element={<ManagementLayout />}>
             <Route index element={<ManagementDashboard />} />
+            <Route path="products" element={<ManagementProducts />} />
           </Route>
           <Route path="/importations/dashboard" element={<ImporterDashboardPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
