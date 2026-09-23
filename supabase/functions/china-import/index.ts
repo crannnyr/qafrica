@@ -219,7 +219,7 @@ async function sendOrderConfirmedEmail(supabase: any, order: any) {
             You can track your order anytime from your dashboard. We'll email you again the moment there's an update.
           </p>
         </div>
-        <a href="https://chat.whatsapp.com/DggRK0IeD94F0vyszfhfPW" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
+        <a href="https://wa.me/2347015470881" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
           Join the QAFRICA community →
         </a>
         <p style="color:#9CA3AF;font-size:12px;margin-top:24px;">
