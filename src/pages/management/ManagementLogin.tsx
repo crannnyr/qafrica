@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Eye, EyeOff, Loader } from 'lucide-react';
 import CONFIG from '@/lib/config';
+import {
+  getManagementToken,
+  setManagementSession,
+  validateManagementSession,
+} from './ManagementAuth';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -11,32 +16,65 @@ export default function ManagementLogin() {
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const checkExistingSession = async () => {
+      if (!getManagementToken()) {
+        if (!cancelled) setCheckingSession(false);
+        return;
+      }
+
+      const manager = await validateManagementSession();
+      if (!cancelled) {
+        if (manager) navigate('/management', { replace: true });
+        else setCheckingSession(false);
+      }
+    };
+
+    void checkExistingSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
+
     try {
       const res = await fetch(`${EDGE_URL}?action=admin-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success || !data.token || !data.manager) {
         setError(data.error ?? 'Invalid credentials');
         return;
       }
-      sessionStorage.setItem('management_token', data.token);
-      sessionStorage.setItem('management_manager', JSON.stringify(data.manager));
-      navigate('/management');
+
+      setManagementSession(data.token, data.manager);
+      navigate('/management', { replace: true });
     } catch {
       setError('Connection error. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  if (checkingSession) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader className="w-5 h-5 text-orange-500 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -64,6 +102,7 @@ export default function ManagementLogin() {
                 onChange={e => setEmail(e.target.value)}
                 placeholder="import@qafrica.store"
                 required
+                autoComplete="username"
                 className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none"
               />
             </div>
@@ -77,12 +116,14 @@ export default function ManagementLogin() {
                   onChange={e => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
+                  autoComplete="current-password"
                   className="w-full px-4 py-3 pr-11 rounded-xl border border-gray-200 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPw(p => !p)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
+                  aria-label={showPw ? 'Hide password' : 'Show password'}
                 >
                   {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
