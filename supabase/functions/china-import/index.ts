@@ -497,8 +497,7 @@ function lastCallEmail(name: string, dateLabel: string) {
       </p>
       <p style="color:#6B7280;margin:0 0 20px;line-height:1.6;">
         Order your last set of items now to make sure it ships with this round.
-      </p>      <a href="https://qafrica.store/recommendations" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
-        Order now →
+      </p>      <a href="https://qafrica.store/recommendations" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">        Order now →
       </a>
     `),
   }
@@ -997,8 +996,7 @@ serve(async (req: Request) => {
           }
         }
       }
-      const lat = typeof delivery_latitude === 'number' ? delivery_latitude : null
-      const lng = typeof delivery_longitude === 'number' ? delivery_longitude : null
+      const lat = typeof delivery_latitude === 'number' ? delivery_latitude : null      const lng = typeof delivery_longitude === 'number' ? delivery_longitude : null
 
       if (payment_method === 'paystack') {
         let paystackEnabled = cacheGet<boolean>('paystack_enabled')
@@ -1498,7 +1496,6 @@ serve(async (req: Request) => {
       const rolePermissionIds = Array.from(new Set(
         (rolePermissionRows ?? []).map((row: any) => row.permission_id).filter(Boolean)
       ))
-
       const effectivePermissionIds = requestedPermissionIds === null
         ? rolePermissionIds
         : requestedPermissionIds
@@ -1998,7 +1995,6 @@ serve(async (req: Request) => {
       if (error) return json({ error: error.message }, 500)
       return json({ settings: data })
     }
-
     if (req.method === 'POST' && action === 'admin-update-settings') {
       const {
         manager_token,
@@ -2053,7 +2049,8 @@ serve(async (req: Request) => {
       if (typeof paystack_enabled === 'boolean') updates.paystack_enabled = paystack_enabled
       if (typeof manual_transfer_enabled === 'boolean') updates.manual_transfer_enabled = manual_transfer_enabled
       if (typeof bank_account_number === 'string') updates.bank_account_number = bank_account_number
-      if (typeof bank_account_name === 'string') updates.bank_account_name = bank_account_name      if (typeof bank_name === 'string') updates.bank_name = bank_name
+      if (typeof bank_account_name === 'string') updates.bank_account_name = bank_account_name
+      if (typeof bank_name === 'string') updates.bank_name = bank_name
 
       const { data, error } = await supabase
         .from('import_admin_credentials').update(updates).eq('id', 1).select().single()
@@ -2497,8 +2494,7 @@ serve(async (req: Request) => {
       if (!(await requireAdmin(supabase, manager_token, 'import.clients.view'))) return json({ error: 'Unauthorized' }, 401)
       if (!customer_id) return json({ error: 'Missing customer_id' }, 400)
 
-      const [{ data: customer, error: custErr }, { data: orders }, { data: bills }, { data: favorite }, { data: failedOrders }] = await Promise.all([
-        supabase.from('customers').select('id, full_name, email, phone, avatar_url, created_at').eq('id', customer_id).single(),
+      const [{ data: customer, error: custErr }, { data: orders }, { data: bills }, { data: favorite }, { data: failedOrders }] = await Promise.all([        supabase.from('customers').select('id, full_name, email, phone, avatar_url, created_at').eq('id', customer_id).single(),
         supabase.from('china_import_orders').select('*').eq('user_id', customer_id).order('created_at', { ascending: false }),
         supabase.from('china_import_consolidation_bills').select('*').eq('user_id', customer_id).order('created_at', { ascending: false }),
         supabase.from('import_admin_favorite_customers').select('id').eq('customer_id', customer_id).maybeSingle(),
