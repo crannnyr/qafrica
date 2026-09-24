@@ -17,6 +17,8 @@ import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { useCustomerAuthStore } from '@/stores';
 import CONFIG from '@/lib/config';
 import type { Store, DeliveryZone } from '@/types';
+import { StoreBrand } from '@/components/storefront/StoreBrand';
+import { useStoreLook } from '@/hooks/useStoreLook';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -251,6 +253,8 @@ export default function CheckoutPage() {
   const { getStoreCart, clearStoreCart, validateCoupon } = useCartStore();
   const { customer, getDefaultAddress, fetchAddresses } = useCustomerAuthStore();
   const theme = store?.theme ? getThemeById(store.theme) : getThemeById('modern');
+  // Presentation only: new storefront looks show their font and brand in the header
+  const look = useStoreLook(store);
   const PLATFORM_DELIVERY_MARKUP = 500;
 
   useEffect(() => {
@@ -818,7 +822,10 @@ export default function CheckoutPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+    <div
+      className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors"
+      style={look ? { fontFamily: look.fonts.body } : undefined}
+    >
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto px-4 py-4">
@@ -830,6 +837,12 @@ export default function CheckoutPage() {
               <ArrowLeft className="w-5 h-5" />
               <span className="hidden sm:inline">Continue Shopping</span>
             </Link>
+
+            {look && store && (
+              <Link to={`/${slug}`} className="hidden sm:block min-w-0 dark:text-white">
+                <StoreBrand store={store} look={look} primary={store.primary_color || '#F97316'} />
+              </Link>
+            )}
 
             <div className="flex items-center gap-2">
               {(['shipping', 'payment'] as const).map((step, i) => (

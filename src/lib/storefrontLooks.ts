@@ -187,3 +187,33 @@ export function loadLookFonts(look: LookDefinition) {
     .join('&')}&display=swap`;
   document.head.appendChild(link);
 }
+
+/**
+ * Owner preview: ?sf_preview=1&sf_look=…&sf_nav=…&sf_side=…&sf_settings={…}
+ * Applies unsaved layout choices for this visitor only. Nothing is saved.
+ */
+export function applyPreviewOverrides<T extends Store>(store: T, search: string = window.location.search): T {
+  const q = new URLSearchParams(search);
+  if (q.get('sf_preview') !== '1') return store;
+  let settings: Record<string, unknown> | undefined;
+  try {
+    const parsed = JSON.parse(q.get('sf_settings') ?? 'null');
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) settings = parsed;
+  } catch {
+    /* ignore bad preview params */
+  }
+  const look = q.get('sf_look');
+  const nav = q.get('sf_nav');
+  const side = q.get('sf_side');
+  return {
+    ...store,
+    ...(look === 'classic' || isNewLook(look) ? { storefront_look: look as StorefrontLook } : {}),
+    ...(nav === 'auto' || nav === 'bottom' || nav === 'sidebar' ? { nav_style: nav } : {}),
+    ...(side === 'left' || side === 'right' ? { sidebar_side: side } : {}),
+    ...(settings ? { look_settings: settings } : {}),
+  };
+}
+
+/** Query string to carry the owner preview onto product pages ('' when not previewing). */
+export const previewSearch = (search: string = window.location.search) =>
+  new URLSearchParams(search).get('sf_preview') === '1' ? search : '';

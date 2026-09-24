@@ -10,10 +10,11 @@ import {
 } from 'lucide-react';
 import type { Product, Store } from '@/types';
 import {
-  getLook, loadLookFonts, lookSetting, resolveNavStyle, splitWordmark, getContrastColor,
+  getLook, loadLookFonts, lookSetting, resolveNavStyle, getContrastColor, previewSearch,
   type LookDefinition,
 } from '@/lib/storefrontLooks';
 import CategoryCircles from './CategoryCircles';
+import { StoreMark, Wordmark } from './StoreBrand';
 import { buildCategories } from '@/lib/storefrontCategories';
 
 type Customer = { full_name: string; avatar_url?: string | null } | null | undefined;
@@ -83,7 +84,7 @@ export default function LookStorefront(props: Props) {
   const accountHref = isAuthenticated
     ? '/customer/dashboard'
     : `/customer/login?return=${encodeURIComponent(`/${slug}`)}`;
-  const openProduct = (p: Product) => navigate(`/${slug}/product/${p.id}`);
+  const openProduct = (p: Product) => navigate(`/${slug}/product/${p.id}${previewSearch()}`);
   const pickCategory = (c: string) => {
     setCategory(c);
     setDrawerOpen(false);
@@ -305,30 +306,6 @@ function gridClass(look: LookDefinition, withSidebar: boolean) {
     case 'bento': return 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3';
     default: return 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-8';
   }
-}
-
-function StoreMark({ store, primary, className = '' }: { store: Store; primary: string; className?: string }) {
-  return store.logo_url ? (
-    <img src={store.logo_url} alt="" className={`object-cover ${className}`} />
-  ) : (
-    <span
-      className={`flex items-center justify-center font-bold ${className}`}
-      style={{ backgroundColor: primary, color: getContrastColor(primary) }}
-      aria-hidden
-    >
-      {store.name.charAt(0)}
-    </span>
-  );
-}
-
-function Wordmark({ store, primary }: { store: Store; primary: string }) {
-  const [dark, accent] = splitWordmark(store);
-  return (
-    <span className="text-[22px] font-extrabold tracking-[-0.03em] leading-none whitespace-nowrap">
-      <span className="text-gray-950">{dark}</span>
-      <span style={{ color: primary }}>{accent}</span>
-    </span>
-  );
 }
 
 function IconBtn(props: { label: string; onClick?: () => void; to?: string; children: ReactNode; className?: string }) {

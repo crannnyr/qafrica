@@ -18,7 +18,7 @@ import { useCustomDomainSlug } from '@/components/CustomDomainRouter';
 import StoreLocationBanner from './StoreLocationBanner';
 import type { Store, Product } from '@/types';
 import LookStorefront from '@/components/storefront/LookStorefront';
-import { isNewLook } from '@/lib/storefrontLooks';
+import { applyPreviewOverrides, isNewLook } from '@/lib/storefrontLooks';
 
 // ── Helper: pick black or white text based on background color ────────────────
 function getContrastColor(hex: string): string {
@@ -357,26 +357,7 @@ export default function StorePage() {
   // ─── New storefront looks ───────────────────────────────────────────────
   // ?sf_preview=1 lets the owner's settings screen preview unsaved choices in an
   // iframe. It only changes what this visitor sees; nothing is saved.
-  const previewParams = new URLSearchParams(window.location.search);
-  let viewStore: Store = store;
-  if (previewParams.get('sf_preview') === '1') {
-    let previewSettings: Record<string, unknown> | undefined;
-    try {
-      const raw = previewParams.get('sf_settings');
-      const parsed = raw ? JSON.parse(raw) : undefined;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) previewSettings = parsed;
-    } catch { /* ignore bad preview params */ }
-    const look = previewParams.get('sf_look');
-    const nav = previewParams.get('sf_nav');
-    const side = previewParams.get('sf_side');
-    viewStore = {
-      ...store,
-      ...(look && (look === 'classic' || isNewLook(look)) ? { storefront_look: look as Store['storefront_look'] } : {}),
-      ...(nav === 'auto' || nav === 'bottom' || nav === 'sidebar' ? { nav_style: nav } : {}),
-      ...(side === 'left' || side === 'right' ? { sidebar_side: side } : {}),
-      ...(previewSettings ? { look_settings: previewSettings } : {}),
-    };
-  }
+  const viewStore: Store = applyPreviewOverrides(store);
 
   if (isNewLook(viewStore.storefront_look)) {
     return (

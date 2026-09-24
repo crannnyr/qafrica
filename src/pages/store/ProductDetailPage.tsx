@@ -14,6 +14,9 @@ import { getThemeById } from '@/lib/themes';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
 import type { Store as StoreType, Product, ProductVariant } from '@/types';
+import { LookPageHeader } from '@/components/storefront/StoreBrand';
+import { useStoreLook } from '@/hooks/useStoreLook';
+import { applyPreviewOverrides } from '@/lib/storefrontLooks';
 
 // ── Helper: pick black or white text based on background color ────────────────
 function getContrastColor(hex: string): string {
@@ -126,7 +129,7 @@ export default function ProductDetailPage() {
   useForceLightMode();
   const { slug, productId } = useParams<{ slug: string; productId: string }>();
   const navigate = useNavigate();
-  const { addItem, addToWishlist, removeFromWishlist, isInWishlist } = useCartStore();
+  const { addItem, addToWishlist, removeFromWishlist, isInWishlist, getTotalItems } = useCartStore();
   const { customer } = useCustomerAuthStore();
 
   const [store, setStore] = useState<StoreType | null>(null);
@@ -153,6 +156,9 @@ export default function ProductDetailPage() {
 
   const theme = store?.theme ? getThemeById(store.theme) : getThemeById('modern');
   const primary = store?.primary_color || theme?.colors.primary || '#f97316';
+  // New storefront looks: use the look's fonts and header (classic = undefined, unchanged)
+  const viewStore = store ? applyPreviewOverrides(store) : store; // owner preview only
+  const look = useStoreLook(viewStore);
   const contrastText = store ? getContrastColor(primary) : '#ffffff';
 
   useEffect(() => {
@@ -384,9 +390,12 @@ export default function ProductDetailPage() {
   const currentStock = getCurrentStock();
 
   return (
-    <div className="min-h-screen bg-white" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="min-h-screen bg-white" style={{ fontFamily: look ? look.fonts.body : "'DM Sans', system-ui, sans-serif" }}>
 
       {/* ── Header ── */}
+      {look ? (
+        <LookPageHeader store={viewStore ?? store} look={look} primary={primary} slug={slug ?? store.slug} cartCount={getTotalItems()} />
+      ) : (
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <Link
@@ -416,6 +425,7 @@ export default function ProductDetailPage() {
           </Link>
         </div>
       </header>
+      )}
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-16">
@@ -446,7 +456,12 @@ export default function ProductDetailPage() {
             {/* Name + category */}
             <div>
               <p className="text-xs text-gray-400 mb-1">{product.category}</p>
-              <h1 className="text-2xl font-bold text-gray-900 leading-tight">{product.name}</h1>
+              <h1
+                className={`text-gray-900 leading-tight ${look?.id === 'boutique' ? 'text-3xl font-medium' : look?.id === 'social' ? 'text-4xl font-bold' : 'text-2xl font-bold'}`}
+                style={look ? { fontFamily: look.fonts.display } : undefined}
+              >
+                {product.name}
+              </h1>
             </div>
 
             {/* Price + stock */}
