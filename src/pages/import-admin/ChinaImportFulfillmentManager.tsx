@@ -71,6 +71,52 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [trackingDraft, setTrackingDraft] = useState({ carrier_name: '', tracking_number: '', tracking_url: '', waybill_url: '', delivery_mode: '', note: '' });
   const [shipmentUpdating, setShipmentUpdating] = useState(false);
   const [receiptShipment, setReceiptShipment] = useState<ShipmentReceiptData | null>(null);
+  const [fulfillmentTab, setFulfillmentTab] = useState<'receiving' | 'shipments'>('receiving');
+  const [allShipments, setAllShipments] = useState<any[]>([]);
+  const [shipmentsLoading, setShipmentsLoading] = useState(false);
+
+  const loadShipments = useCallback(async () => {
+    setShipmentsLoading(true);
+    try {
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/import-fulfillment-shipments?action=admin-fulfillment-shipments-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Could not load shipments');
+      setAllShipments(Array.isArray(data.shipments) ? data.shipments : []);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load shipments');
+      setAllShipments([]);
+    } finally {
+      setShipmentsLoading(false);
+    }
+  }, [token]);
+
+  const showShipmentReceipt = useCallback((shipment: any) => {
+    const customer = items.find(item => item.order_id === shipment.order_id);
+    setReceiptShipment({
+      shipment_code: shipment.shipment_code,
+      status: shipment.status,
+      created_at: shipment.created_at,
+      shipped_at: shipment.shipped_at,
+      delivered_at: shipment.delivered_at,
+      carrier_name: shipment.carrier_name,
+      tracking_number: shipment.tracking_number,
+      delivery_mode: shipment.delivery_mode,
+      notes: shipment.notes,
+      order_code: customer?.order_code ?? '—',
+      customer_name: customer?.customer_name ?? 'Customer',
+      customer_whatsapp: customer?.customer_whatsapp ?? null,
+      delivery_address: shipment.delivery_address ?? null,
+      items: (shipment.items ?? []).map((row: any) => ({
+        product_name: row.fulfillment_item?.product_name ?? 'Item',
+        quantity: row.quantity,
+        variant_options: row.fulfillment_item?.variant_options ?? null,
+      })),
+    });
+  }, [items]);
 
   const shipmentItems = useMemo(() => {
     if (!shipmentOrderId) return [];
@@ -117,6 +163,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       setSelectedShipment(null);
       await load(true);
       if (shipmentOrderId) await openShipment(shipmentOrderId);
+      if (fulfillmentTab === 'shipments') await loadShipments();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not update shipment');
     } finally {
@@ -191,6 +238,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   }, [token]);
 
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (fulfillmentTab === 'shipments') void loadShipments();
+  }, [fulfillmentTab, loadShipments]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -299,7 +349,86 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
 
       {error && <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-3 text-xs">{error}</div>}
 
-      {loading ? (
+      <div className="flex rounded-xl bg-gray-100 p-1 gap-1">
+        <button
+          type="button"
+          onClick={() => setFulfillmentTab('receiving')}
+          className={fulfillmentTab === 'receiving' ? 'flex-1 py-2 rounded-lg text-xs font-bold bg-white text-gray-900 shadow-sm' : 'flex-1 py-2 rounded-lg text-xs font-bold text-gray-500'}
+        >
+          Receiving
+        </button>
+        <button
+          type="button"
+          onClick={() => setFulfillmentTab('shipments')}
+          className={fulfillmentTab === 'shipments' ? 'flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-white text-gray-900 shadow-sm' : 'flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 text-gray-500'}
+        >
+          <Truck className="w-3.5 h-3.5" />
+          Shipments
+          {allShipments.length > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600">{allShipments.length}</span>}
+        </button>
+      </div>
+
+      {fulfillmentTab === 'shipments' ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-black text-gray-900">Shipments</p>
+              <p className="text-[10px] text-gray-400">Manage dispatches and print shipment receipts.</p>
+            </div>
+            <button type="button" onClick={() => void loadShipments()} disabled={shipmentsLoading} className="px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold flex items-center gap-1.5 disabled:opacity-50">
+              <RefreshCw className={shipmentsLoading ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
+            </button>
+          </div>
+          {shipmentsLoading ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+          ) : allShipments.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+              <Truck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <p className="text-sm font-bold text-gray-700">No shipments yet</p>
+              <p className="text-xs text-gray-400 mt-1">Create a shipment from the Receiving tab after items arrive at QAfrica HQ.</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-100 overflow-hidden">
+              {allShipments.map(shipment => {
+                const customer = items.find(item => item.order_id === shipment.order_id);
+                return (
+                  <div key={shipment.id} className="p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-xs font-black text-gray-900">{shipment.shipment_code}</p>
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{String(shipment.status).replaceAll('_', ' ')}</span>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-1">{customer?.order_code ?? 'Order'}{customer?.customer_name ? ' · ' + customer.customer_name : ''}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{shipment.items?.length ?? 0} item line{(shipment.items?.length ?? 0) === 1 ? '' : 's'} · {new Date(shipment.created_at).toLocaleString()}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => showShipmentReceipt(shipment)} className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 text-[10px] font-bold">Receipt</button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedShipment(shipment);
+                            setTrackingDraft({
+                              carrier_name: shipment.carrier_name ?? '',
+                              tracking_number: shipment.tracking_number ?? '',
+                              tracking_url: shipment.tracking_url ?? '',
+                              waybill_url: shipment.waybill_url ?? '',
+                              delivery_mode: shipment.delivery_mode ?? '',
+                              note: '',
+                            });
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-gray-900 text-white text-[10px] font-bold"
+                        >Manage</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        {loading ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
       ) : batches.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
@@ -403,6 +532,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             );
           })}
         </div>
+      )}
       )}
     </div>
 
@@ -537,29 +667,8 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               </div>
               <textarea value={trackingDraft.note} onChange={e => setTrackingDraft(v => ({...v, note:e.target.value}))} rows={3} placeholder="Internal tracking note…" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs resize-none" />
               <button
-                onClick={() => {
-                  const customer = items.find(item => item.order_id === selectedShipment.order_id);
-                  setReceiptShipment({
-                    shipment_code: selectedShipment.shipment_code,
-                    status: selectedShipment.status,
-                    created_at: selectedShipment.created_at,
-                    shipped_at: selectedShipment.shipped_at,
-                    delivered_at: selectedShipment.delivered_at,
-                    carrier_name: selectedShipment.carrier_name,
-                    tracking_number: selectedShipment.tracking_number,
-                    delivery_mode: selectedShipment.delivery_mode,
-                    notes: selectedShipment.notes,
-                    order_code: customer?.order_code ?? '—',
-                    customer_name: customer?.customer_name ?? 'Customer',
-                    customer_whatsapp: customer?.customer_whatsapp ?? null,
-                    delivery_address: selectedShipment.delivery_address ?? null,
-                    items: (selectedShipment.items ?? []).map((row: any) => ({
-                      product_name: row.fulfillment_item?.product_name ?? 'Item',
-                      quantity: row.quantity,
-                      variant_options: row.fulfillment_item?.variant_options ?? null,
-                    })),
-                  });
-                }}
+                type="button"
+                onClick={() => showShipmentReceipt(selectedShipment)}
                 className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-700 text-xs font-bold"
               >
                 Print shipment receipt
