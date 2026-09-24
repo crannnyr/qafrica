@@ -228,6 +228,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const receivedUnits = items.reduce((sum, item) => sum + item.received_quantity, 0);
 
   return (
+    <>
     <div className="space-y-4">
       <div className="flex flex-col gap-3">
         <div>
@@ -301,6 +302,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                 </button>
 
                 {isOpen && (
+                  <>
                   <div className="border-t border-gray-50 divide-y divide-gray-50">
                     {batch.items.map(item => {
                       const currentReceived = item.received_quantity;
@@ -349,6 +351,26 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                       );
                     })}
                   </div>
+
+                  {canReceive && Array.from(new Set(batch.items.map(item => item.order_id))).map(orderId => {
+                    const orderItem = batch.items.find(item => item.order_id === orderId);
+                    const available = batch.items
+                      .filter(item => item.order_id === orderId)
+                      .reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+                    if (!orderItem || available <= 0) return null;
+                    return (
+                      <div key={orderId} className="border-t border-gray-50 p-3">
+                        <button
+                          onClick={() => void openShipment(orderId)}
+                          className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"
+                        >
+                          <Truck className="w-3.5 h-3.5" />
+                          Create shipment · {orderItem.order_code} · {available} available
+                        </button>
+                      </div>
+                    );
+                  })}
+                  </>
                 )}
               </div>
             );
@@ -356,5 +378,100 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
         </div>
       )}
     </div>
+
+      {shipmentOrderId && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
+            <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-black text-gray-900">Create shipment</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Select received quantities. The same item can be split across multiple shipments.</p>
+              </div>
+              <button onClick={() => setShipmentOrderId(null)} className="p-2 rounded-lg hover:bg-gray-100"><X className="w-4 h-4 text-gray-500" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              {shipmentLoading ? (
+                <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+              ) : (
+                <>
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[10px] uppercase font-bold text-gray-400">Available received items</p>
+                      {shipmentItems.length > 0 && (
+                        <button
+                          onClick={() => setShipmentQuantities(Object.fromEntries(shipmentItems.map(item => [item.id, Math.max(0, item.received_quantity - item.allocated_quantity)])))}
+                          className="text-[10px] font-bold text-orange-600"
+                        >Use all available</button>
+                      )}
+                    </div>
+                    <div className="mt-2 space-y-2">
+                      {shipmentItems.length === 0 ? (
+                        <p className="text-xs text-gray-500">Nothing remains available for a new shipment.</p>
+                      ) : shipmentItems.map(item => {
+                        const available = Math.max(0, item.received_quantity - item.allocated_quantity);
+                        return (
+                          <div key={item.id} className="flex items-center gap-2.5 bg-white rounded-lg p-2.5 border border-gray-100">
+                            {item.image_url ? <img src={item.image_url} alt="" className="w-10 h-10 rounded-lg object-cover" /> : <div className="w-10 h-10 rounded-lg bg-gray-100" />}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-bold text-gray-800 truncate">{item.product_name}</p>
+                              <p className="text-[10px] text-gray-400">{variantLabel(item.variant_options)} · {available} available</p>
+                            </div>
+                            <input
+                              type="number"
+                              min={0}
+                              max={available}
+                              step={1}
+                              value={shipmentQuantities[item.id] ?? 0}
+                              onChange={e => setShipmentQuantities(current => ({ ...current, [item.id]: Number(e.target.value) }))}
+                              className="w-20 px-2 py-2 rounded-lg border border-gray-200 text-xs text-center"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={shipmentNotes}
+                    onChange={e => setShipmentNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Optional shipment note…"
+                    className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs resize-none"
+                  />
+
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-gray-400 mb-2">Existing shipments</p>
+                    {shipments.length === 0 ? (
+                      <p className="text-xs text-gray-400">No shipment has been created for this order.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {shipments.map(shipment => (
+                          <div key={shipment.id} className="border border-gray-100 rounded-xl p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-black text-gray-800">{shipment.shipment_code}</p>
+                              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{String(shipment.status).replaceAll('_', ' ')}</span>
+                            </div>
+                            <p className="text-[10px] text-gray-400 mt-1">{shipment.items?.length ?? 0} item line{(shipment.items?.length ?? 0) === 1 ? '' : 's'} · {new Date(shipment.created_at).toLocaleString()}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => void createShipment()}
+                    disabled={shipmentSaving || shipmentItems.length === 0}
+                    className="w-full py-3 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40"
+                  >
+                    {shipmentSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    {shipmentSaving ? 'Creating shipment…' : 'Create draft shipment'}
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
