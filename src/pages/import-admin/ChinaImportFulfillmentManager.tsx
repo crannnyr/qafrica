@@ -387,7 +387,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
           </div>
 
           {shipmentsLoading ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
+            </div>
           ) : filteredShipments.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
               <Truck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
@@ -417,6 +419,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                         shipment.status === 'cancelled' ? 'bg-red-50 text-red-600' :
                         shipment.status === 'draft' ? 'bg-gray-100 text-gray-600' :
                         'bg-orange-50 text-orange-700';
+                      const unitCount = (shipment.items ?? []).reduce((sum: number, row: any) => sum + Number(row.quantity ?? 0), 0);
                       return (
                         <tr key={shipment.id} className="hover:bg-gray-50/70">
                           <td className="px-4 py-3.5 align-top">
@@ -429,7 +432,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                           </td>
                           <td className="px-4 py-3.5 align-top">
                             <p className="text-xs font-bold text-gray-800">{shipment.items?.length ?? 0} line{(shipment.items?.length ?? 0) === 1 ? '' : 's'}</p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">{(shipment.items ?? []).reduce((sum: number, row: any) => sum + Number(row.quantity ?? 0), 0)} unit{(shipment.items ?? []).reduce((sum: number, row: any) => sum + Number(row.quantity ?? 0), 0) === 1 ? '' : 's'}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{unitCount} unit{unitCount === 1 ? '' : 's'}</p>
                           </td>
                           <td className="px-4 py-3.5 align-top">
                             <span className={"inline-flex px-2 py-1 rounded-full text-[9px] font-bold capitalize " + statusClass}>{status}</span>
@@ -468,65 +471,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
           )}
         </div>
       ) : (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-black text-gray-900">Shipments</p>
-              <p className="text-[10px] text-gray-400">Manage dispatches and print shipment receipts.</p>
-            </div>
-            <button type="button" onClick={() => void loadShipments()} disabled={shipmentsLoading} className="px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold flex items-center gap-1.5 disabled:opacity-50">
-              <RefreshCw className={shipmentsLoading ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
-            </button>
-          </div>
-          {shipmentsLoading ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
-          ) : allShipments.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
-              <Truck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-              <p className="text-sm font-bold text-gray-700">No shipments yet</p>
-              <p className="text-xs text-gray-400 mt-1">Create a shipment from the Receiving tab after items arrive at QAfrica HQ.</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-100 overflow-hidden">
-              {allShipments.map(shipment => {
-                const customer = items.find(item => item.order_id === shipment.order_id);
-                return (
-                  <div key={shipment.id} className="p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <p className="text-xs font-black text-gray-900">{shipment.shipment_code}</p>
-                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{String(shipment.status).replaceAll('_', ' ')}</span>
-                        </div>
-                        <p className="text-[10px] text-gray-500 mt-1">{customer?.order_code ?? 'Order'}{customer?.customer_name ? ' · ' + customer.customer_name : ''}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{shipment.items?.length ?? 0} item line{(shipment.items?.length ?? 0) === 1 ? '' : 's'} · {new Date(shipment.created_at).toLocaleString()}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => showShipmentReceipt(shipment)} className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-700 text-[10px] font-bold">Receipt</button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedShipment(shipment);
-                            setTrackingDraft({
-                              carrier_name: shipment.carrier_name ?? '',
-                              tracking_number: shipment.tracking_number ?? '',
-                              tracking_url: shipment.tracking_url ?? '',
-                              waybill_url: shipment.waybill_url ?? '',
-                              delivery_mode: shipment.delivery_mode ?? '',
-                              note: '',
-                            });
-                          }}
-                          className="px-2.5 py-1.5 rounded-lg bg-gray-900 text-white text-[10px] font-bold"
-                        >Manage</button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ) : (
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-white rounded-xl border border-gray-100 p-3">
@@ -542,6 +486,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               <p className="text-xl font-black text-gray-900">{receivedUnits.toLocaleString()}<span className="text-xs text-gray-400">/{orderedUnits.toLocaleString()}</span></p>
             </div>
           </div>
+
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
@@ -556,110 +501,113 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               <RefreshCw className={refreshing ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
             </button>
           </div>
+
           {loading ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
+            </div>
           ) : batches.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
-          <PackageCheck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-          <p className="text-sm font-bold text-gray-700">No fulfillment items found</p>
-          <p className="text-xs text-gray-400 mt-1">Only paid consolidation-shipping orders are included.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {batches.map(batch => {
-            const batchKey = batch.id;
-            const isOpen = openBatches.has(batchKey);
-            const batchOrdered = batch.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
-            const batchReceived = batch.items.reduce((sum, item) => sum + item.received_quantity, 0);
-            return (
-              <div key={batchKey} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                <button onClick={() => setOpenBatches(current => {
-                  const next = new Set(current);
-                  if (next.has(batchKey)) next.delete(batchKey); else next.add(batchKey);
-                  return next;
-                })} className="w-full p-4 flex items-center justify-between gap-3 text-left">
-                  <div>
-                    <p className="text-xs font-black text-gray-900">{batch.id === 'unbatched' ? 'Unbatched' : batchLabel(batch)}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{batch.items.length} item line{batch.items.length === 1 ? '' : 's'} · {batchReceived}/{batchOrdered} units received</p>
-                  </div>
-                  {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-                </button>
-
-                {isOpen && (
-                  <>
-                  <div className="border-t border-gray-50 divide-y divide-gray-50">
-                    {batch.items.map(item => {
-                      const currentReceived = item.received_quantity;
-                      const draft = receivedDrafts[item.id] ?? String(currentReceived);
-                      const complete = currentReceived >= item.ordered_quantity;
-                      return (
-                        <div key={item.id} className="p-4">
-                          <div className="flex gap-3">
-                            {item.image_url ? <img src={item.image_url} alt="" className="w-14 h-14 rounded-xl object-cover bg-gray-50 flex-shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-gray-100 flex-shrink-0" />}
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <span className="text-[10px] font-mono font-bold text-orange-600">{item.order_code}</span>
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${complete ? 'bg-emerald-50 text-emerald-600' : currentReceived > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
-                                  {complete ? 'At HQ' : currentReceived > 0 ? 'Partially received' : 'Awaiting arrival'}
-                                </span>
-                              </div>
-                              <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
-                              {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
-                              <p className="text-[10px] text-gray-400 mt-1">{item.customer_name}{item.customer_whatsapp ? ` · ${item.customer_whatsapp}` : ''} · Ordered {item.ordered_quantity}</p>
-                            </div>
-                          </div>
-
-                          <div className="mt-3 bg-gray-50 rounded-xl p-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <div>
-                                <p className="text-[10px] font-bold text-gray-500 uppercase">Received at HQ</p>
-                                <p className="text-xs text-gray-700 mt-0.5">{currentReceived} of {item.ordered_quantity} unit{item.ordered_quantity !== 1 ? 's' : ''}</p>
-                              </div>
-                              {complete && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                            </div>
-                            {canReceive && !complete && (
-                              <>
-                                <div className="flex gap-2 mt-2">
-                                  <input type="number" min={currentReceived} max={item.ordered_quantity} step={1} value={draft} onChange={e => setReceivedDrafts(current => ({ ...current, [item.id]: e.target.value }))} className="w-24 px-2.5 py-2 rounded-lg border border-gray-200 text-xs" />
-                                  <button onClick={() => void receive(item)} disabled={acting === item.id} className="flex-1 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-                                    {acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Record received
-                                  </button>
-                                </div>
-                                <textarea value={notes[item.id] ?? ''} onChange={e => setNotes(current => ({ ...current, [item.id]: e.target.value }))} rows={2} placeholder="Optional internal note…" className="w-full mt-2 px-2.5 py-2 rounded-lg border border-gray-200 text-xs resize-none" />
-                              </>
-                            )}
-                            {!canReceive && !complete && <p className="text-[10px] text-gray-400 mt-2">You can view fulfillment, but your account cannot record receiving.</p>}
-                            {item.received_at && <p className="text-[10px] text-gray-400 mt-2">Last received: {new Date(item.received_at).toLocaleString()}</p>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {canReceive && Array.from(new Set(batch.items.map(item => item.order_id))).map(orderId => {
-                    const orderItem = batch.items.find(item => item.order_id === orderId);
-                    const available = batch.items
-                      .filter(item => item.order_id === orderId)
-                      .reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
-                    if (!orderItem || available <= 0) return null;
-                    return (
-                      <div key={orderId} className="border-t border-gray-50 p-3">
-                        <button
-                          onClick={() => void openShipment(orderId)}
-                          className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"
-                        >
-                          <Truck className="w-3.5 h-3.5" />
-                          Create shipment · {orderItem.order_code} · {available} available
-                        </button>
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+              <PackageCheck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <p className="text-sm font-bold text-gray-700">No fulfillment items found</p>
+              <p className="text-xs text-gray-400 mt-1">Only paid consolidation-shipping orders are included.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {batches.map(batch => {
+                const batchKey = batch.id;
+                const isOpen = openBatches.has(batchKey);
+                const batchOrdered = batch.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
+                const batchReceived = batch.items.reduce((sum, item) => sum + item.received_quantity, 0);
+                return (
+                  <div key={batchKey} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <button onClick={() => setOpenBatches(current => {
+                      const next = new Set(current);
+                      if (next.has(batchKey)) next.delete(batchKey); else next.add(batchKey);
+                      return next;
+                    })} className="w-full p-4 flex items-center justify-between gap-3 text-left">
+                      <div>
+                        <p className="text-xs font-black text-gray-900">{batch.id === 'unbatched' ? 'Unbatched' : batchLabel(batch)}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{batch.items.length} item line{batch.items.length === 1 ? '' : 's'} · {batchReceived}/{batchOrdered} units received</p>
                       </div>
-                    );
-                  })}
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                      {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                    </button>
+
+                    {isOpen && (
+                      <>
+                        <div className="border-t border-gray-50 divide-y divide-gray-50">
+                          {batch.items.map(item => {
+                            const currentReceived = item.received_quantity;
+                            const draft = receivedDrafts[item.id] ?? String(currentReceived);
+                            const complete = currentReceived >= item.ordered_quantity;
+                            return (
+                              <div key={item.id} className="p-4">
+                                <div className="flex gap-3">
+                                  {item.image_url ? <img src={item.image_url} alt="" className="w-14 h-14 rounded-xl object-cover bg-gray-50 flex-shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-gray-100 flex-shrink-0" />}
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      <span className="text-[10px] font-mono font-bold text-orange-600">{item.order_code}</span>
+                                      <span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + (complete ? 'bg-emerald-50 text-emerald-600' : currentReceived > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500')}>
+                                        {complete ? 'At HQ' : currentReceived > 0 ? 'Partially received' : 'Awaiting arrival'}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
+                                    {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
+                                    <p className="text-[10px] text-gray-400 mt-1">{item.customer_name}{item.customer_whatsapp ? ' · ' + item.customer_whatsapp : ''} · Ordered {item.ordered_quantity}</p>
+                                  </div>
+                                </div>
+
+                                <div className="mt-3 bg-gray-50 rounded-xl p-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-[10px] font-bold text-gray-500 uppercase">Received at HQ</p>
+                                      <p className="text-xs text-gray-700 mt-0.5">{currentReceived} of {item.ordered_quantity} unit{item.ordered_quantity !== 1 ? 's' : ''}</p>
+                                    </div>
+                                    {complete && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                                  </div>
+                                  {canReceive && !complete && (
+                                    <>
+                                      <div className="flex gap-2 mt-2">
+                                        <input type="number" min={currentReceived} max={item.ordered_quantity} step={1} value={draft} onChange={e => setReceivedDrafts(current => ({ ...current, [item.id]: e.target.value }))} className="w-24 px-2.5 py-2 rounded-lg border border-gray-200 text-xs" />
+                                        <button onClick={() => void receive(item)} disabled={acting === item.id} className="flex-1 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                                          {acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Record received
+                                        </button>
+                                      </div>
+                                      <textarea value={notes[item.id] ?? ''} onChange={e => setNotes(current => ({ ...current, [item.id]: e.target.value }))} rows={2} placeholder="Optional internal note…" className="w-full mt-2 px-2.5 py-2 rounded-lg border border-gray-200 text-xs resize-none" />
+                                    </>
+                                  )}
+                                  {!canReceive && !complete && <p className="text-[10px] text-gray-400 mt-2">You can view fulfillment, but your account cannot record receiving.</p>}
+                                  {item.received_at && <p className="text-[10px] text-gray-400 mt-2">Last received: {new Date(item.received_at).toLocaleString()}</p>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {canReceive && Array.from(new Set(batch.items.map(item => item.order_id))).map(orderId => {
+                          const orderItem = batch.items.find(item => item.order_id === orderId);
+                          const available = batch.items
+                            .filter(item => item.order_id === orderId)
+                            .reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+                          if (!orderItem || available <= 0) return null;
+                          return (
+                            <div key={orderId} className="border-t border-gray-50 p-3">
+                              <button
+                                onClick={() => void openShipment(orderId)}
+                                className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"
+                              >
+                                <Truck className="w-3.5 h-3.5" />
+                                Create shipment · {orderItem.order_code} · {available} available
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
