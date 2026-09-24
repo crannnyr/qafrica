@@ -13,6 +13,210 @@ function json(body: unknown, status = 200) {
   })
 }
 
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function itemRows(items: Array<{ product_name: string; quantity: number }>): string {
+  if (!items.length) return '<p style="margin:0;color:#6B7280;font-size:13px;">None</p>'
+  return items.map((item) =>
+    `<p style="margin:0 0 6px;color:#374151;font-size:13px;"><strong>${escapeHtml(item.product_name)}</strong> × ${item.quantity}</p>`
+  ).join('')
+}
+
+async function queueFulfillmentNotification(
+  db: any,
+  notificationKey: string,
+  notificationType: string,
+  orderId: string,
+  shipmentId: string | null,
+  templateKey: string,
+  tokens: Record<string, string>,
+) {
+  const { data: existing } = await db
+    .from('china_import_customer_notification_log')
+    .select('id')
+    .eq('notification_key', notificationKey)
+    .maybeSingle()
+  if (existing) return
+
+  const { data: order } = await db
+    .from('china_import_orders')
+    .select('id, code, user_id, customer_name')
+    .eq('id', orderId)
+    .maybeSingle()
+  if (!order?.user_id) return
+
+  const { data: customer } = await db
+    .from('customers')
+    .select('email, full_name')
+    .eq('id', order.user_id)
+    .maybeSingle()
+  if (!customer?.email) return
+
+  const { data: template } = await db
+    .from('import_message_templates')
+    .select('subject, body_html')
+    .eq('key', templateKey)
+    .maybeSingle()
+  if (!template) return
+
+  const render = (value: string) => {
+    let output = value
+    for (const [key, token] of Object.entries(tokens)) {
+      output = output.split(`{{${key}}}`).join(token)
+    }
+    return output.replace(/\{\{[a-z_]+\}\}/g, '')
+  }
+
+  const { data: claimed, error: claimError } = await db
+    .from('china_import_customer_notification_log')
+    .insert({
+      notification_key: notificationKey,
+      order_id: orderId,
+      shipment_id: shipmentId,
+      notification_type: notificationType,
+    })
+    .select('id')
+    .maybeSingle()
+
+  if (claimError) {
+    if (claimError.code === '23505') return
+    return
+  }
+  if (!claimed) return
+
+  const subject = render(template.subject)
+  const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+    <div style="background:#F97316;border-radius:12px;padding:16px 20px;margin-bottom:24px;display:inline-block;">
+      <span style="color:#fff;font-size:20px;font-weight:800;">QAFRICA</span>
+    </div>
+    ${render(template.body_html)}
+  </div>`
+
+  const { error: queueError } = await db.from('import_notification_queue').insert({
+    to_email: customer.email,
+    subject,
+    html,
+  })
+
+  if (queueError) {
+    await db.from('china_import_customer_notification_log').delete().eq('id', claimed.id)
+  }
+}
+
+async function notifyShipmentChange(db: any, shipment: any, status: string) {
+  if (!['shipped', 'delivered'].includes(status)) return
+
+  const { data: order } = await db
+    .from('china_import_orders')
+    .select('id, code, customer_name, user_id')
+    .eq('id', shipment.order_id)
+    .maybeSingle()
+  if (!order) return
+
+  const { data: fulfillmentItems } = await db
+    .from('china_import_fulfillment_items')
+    .select('id, order_item_index, product_name, ordered_quantity, shipped_quantity, delivered_quantity')
+    .eq('order_id', order.id)
+    .order('order_item_index', { ascending: true })
+
+  const items = fulfillmentItems ?? []
+  const remainingUnshipped = items
+    .map((item: any) => ({ product_name: item.product_name, quantity: Math.max(0, item.ordered_quantity - item.shipped_quantity) }))
+    .filter((item: any) => item.quantity > 0)
+
+  if (status === 'shipped' && remainingUnshipped.length > 0) {
+    const { data: shipmentItems } = await db
+      .from('china_import_shipment_items')
+      .select('fulfillment_item_id, quantity')
+      .eq('shipment_id', shipment.id)
+
+    const itemById = new Map(items.map((item: any) => [item.id, item]))
+    const shipped = (shipmentItems ?? []).map((row: any) => ({
+      product_name: itemById.get(row.fulfillment_item_id)?.product_name ?? 'Item',
+      quantity: Number(row.quantity ?? 0),
+    })).filter((item: any) => item.quantity > 0)
+
+    const trackingNumber = shipment.tracking_number || 'Not available yet'
+    const trackingLink = shipment.tracking_url || `https://qafrica.store/track?code=${encodeURIComponent(order.code)}`
+
+    await queueFulfillmentNotification(
+      db,
+      `partial_shipment:${shipment.id}`,
+      'partial_shipment',
+      order.id,
+      shipment.id,
+      'fulfillment_partial_shipment',
+      {
+        customer_name: escapeHtml(order.customer_name || 'there'),
+        order_code: escapeHtml(order.code),
+        shipped_items_html: itemRows(shipped),
+        remaining_items_html: itemRows(remainingUnshipped),
+        shipment_code: escapeHtml(shipment.shipment_code),
+        tracking_number: escapeHtml(trackingNumber),
+        tracking_link: escapeHtml(trackingLink),
+      },
+    )
+    return
+  }
+
+  if (status === 'delivered') {
+    const allDelivered = items.length > 0 && items.every((item: any) => item.delivered_quantity >= item.ordered_quantity)
+
+    if (allDelivered) {
+      await queueFulfillmentNotification(
+        db,
+        `order_complete:${order.id}`,
+        'order_complete',
+        order.id,
+        null,
+        'fulfillment_order_complete',
+        {
+          customer_name: escapeHtml(order.customer_name || 'there'),
+          order_code: escapeHtml(order.code),
+        },
+      )
+      return
+    }
+
+    const { data: shipmentItems } = await db
+      .from('china_import_shipment_items')
+      .select('fulfillment_item_id, quantity')
+      .eq('shipment_id', shipment.id)
+
+    const itemById = new Map(items.map((item: any) => [item.id, item]))
+    const delivered = (shipmentItems ?? []).map((row: any) => ({
+      product_name: itemById.get(row.fulfillment_item_id)?.product_name ?? 'Item',
+      quantity: Number(row.quantity ?? 0),
+    })).filter((item: any) => item.quantity > 0)
+
+    const remaining = items
+      .map((item: any) => ({ product_name: item.product_name, quantity: Math.max(0, item.ordered_quantity - item.delivered_quantity) }))
+      .filter((item: any) => item.quantity > 0)
+
+    await queueFulfillmentNotification(
+      db,
+      `partial_delivery:${shipment.id}`,
+      'partial_delivery',
+      order.id,
+      shipment.id,
+      'fulfillment_partial_delivery',
+      {
+        customer_name: escapeHtml(order.customer_name || 'there'),
+        order_code: escapeHtml(order.code),
+        delivered_items_html: itemRows(delivered),
+        remaining_items_html: itemRows(remaining),
+      },
+    )
+  }
+}
+
 async function authorize(db: any, token: unknown, permissionKey: string) {
   if (!token || typeof token !== 'string') return null
   const { data: session, error } = await db.from('import_admin_sessions')
@@ -126,6 +330,7 @@ serve(async (req) => {
         p_note: typeof body.note === 'string' ? body.note : null,
       })
       if (error) return json({ error: error.message }, 400)
+      await notifyShipmentChange(db, shipment, body.status)
       return json({
         success: true,
         status: 'updated',
