@@ -66,6 +66,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [shipmentLoading, setShipmentLoading] = useState(false);
   const [shipmentSaving, setShipmentSaving] = useState(false);
   const [shipments, setShipments] = useState<any[]>([]);
+  const [selectedShipment, setSelectedShipment] = useState<any | null>(null);
+  const [trackingDraft, setTrackingDraft] = useState({ carrier_name: '', tracking_number: '', tracking_url: '', waybill_url: '', delivery_mode: '', note: '' });
+  const [shipmentUpdating, setShipmentUpdating] = useState(false);
 
   const shipmentItems = useMemo(() => {
     if (!shipmentOrderId) return [];
@@ -96,6 +99,28 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       setShipmentLoading(false);
     }
   }, [token]);
+
+  const updateShipment = async (status: string) => {
+    if (!selectedShipment) return;
+    setShipmentUpdating(true);
+    try {
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/import-fulfillment-shipments?action=admin-fulfillment-shipment-update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, shipment_id: selectedShipment.id, status, ...trackingDraft }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Could not update shipment');
+      toast.success(status === 'shipped' ? 'Shipment dispatched' : 'Shipment marked ' + status.replaceAll('_', ' '));
+      setSelectedShipment(null);
+      await load(true);
+      if (shipmentOrderId) await openShipment(shipmentOrderId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update shipment');
+    } finally {
+      setShipmentUpdating(false);
+    }
+  };
 
   const createShipment = async () => {
     if (!shipmentOrderId) return;
@@ -452,6 +477,20 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                               <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">{String(shipment.status).replaceAll('_', ' ')}</span>
                             </div>
                             <p className="text-[10px] text-gray-400 mt-1">{shipment.items?.length ?? 0} item line{(shipment.items?.length ?? 0) === 1 ? '' : 's'} · {new Date(shipment.created_at).toLocaleString()}</p>
+                            <button
+                              onClick={() => {
+                                setSelectedShipment(shipment);
+                                setTrackingDraft({
+                                  carrier_name: shipment.carrier_name ?? '',
+                                  tracking_number: shipment.tracking_number ?? '',
+                                  tracking_url: shipment.tracking_url ?? '',
+                                  waybill_url: shipment.waybill_url ?? '',
+                                  delivery_mode: shipment.delivery_mode ?? '',
+                                  note: '',
+                                });
+                              }}
+                              className="mt-2 px-2.5 py-1.5 rounded-lg bg-gray-900 text-white text-[10px] font-bold"
+                            >Manage shipment</button>
                           </div>
                         ))}
                       </div>
@@ -468,6 +507,42 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                   </button>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+      {selectedShipment && (
+        <div className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center p-3">
+          <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
+            <div className="sticky top-0 bg-white border-b border-gray-100 p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-black text-gray-900">{selectedShipment.shipment_code}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">Shipment status: {String(selectedShipment.status).replaceAll('_', ' ')}</p>
+              </div>
+              <button onClick={() => setSelectedShipment(null)} className="p-2 rounded-lg hover:bg-gray-100"><X className="w-4 h-4 text-gray-500" /></button>
+            </div>
+            <div className="p-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input value={trackingDraft.carrier_name} onChange={e => setTrackingDraft(v => ({...v, carrier_name:e.target.value}))} placeholder="Carrier name" className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs" />
+                <input value={trackingDraft.tracking_number} onChange={e => setTrackingDraft(v => ({...v, tracking_number:e.target.value}))} placeholder="Tracking number" className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs" />
+                <input value={trackingDraft.tracking_url} onChange={e => setTrackingDraft(v => ({...v, tracking_url:e.target.value}))} placeholder="Tracking URL" className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs" />
+                <input value={trackingDraft.waybill_url} onChange={e => setTrackingDraft(v => ({...v, waybill_url:e.target.value}))} placeholder="Waybill URL" className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs" />
+                <select value={trackingDraft.delivery_mode} onChange={e => setTrackingDraft(v => ({...v, delivery_mode:e.target.value}))} className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white">
+                  <option value="">Delivery mode</option>
+                  <option value="door_delivery">Door delivery</option>
+                  <option value="pickup">Pickup</option>
+                </select>
+              </div>
+              <textarea value={trackingDraft.note} onChange={e => setTrackingDraft(v => ({...v, note:e.target.value}))} rows={3} placeholder="Internal tracking note…" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs resize-none" />
+              <div className="grid grid-cols-2 gap-2">
+                {selectedShipment.status === 'draft' && <button onClick={() => void updateShipment('ready_to_ship')} disabled={shipmentUpdating} className="py-2.5 rounded-xl border border-orange-200 text-orange-600 text-xs font-bold disabled:opacity-40">Mark ready to ship</button>}
+                {['draft','ready_to_ship'].includes(selectedShipment.status) && <button onClick={() => void updateShipment('shipped')} disabled={shipmentUpdating} className="py-2.5 rounded-xl bg-orange-500 text-white text-xs font-bold disabled:opacity-40">Dispatch shipment</button>}
+                {selectedShipment.status === 'shipped' && <button onClick={() => void updateShipment('in_transit')} disabled={shipmentUpdating} className="py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold disabled:opacity-40">Mark in transit</button>}
+                {selectedShipment.status === 'in_transit' && <button onClick={() => void updateShipment('out_for_delivery')} disabled={shipmentUpdating} className="py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold disabled:opacity-40">Out for delivery</button>}
+                {selectedShipment.status === 'out_for_delivery' && <button onClick={() => void updateShipment('delivered')} disabled={shipmentUpdating} className="py-2.5 rounded-xl bg-emerald-500 text-white text-xs font-bold disabled:opacity-40">Mark delivered</button>}
+                {!['delivered','cancelled'].includes(selectedShipment.status) && <button onClick={() => void updateShipment('cancelled')} disabled={shipmentUpdating} className="py-2.5 rounded-xl border border-red-200 text-red-600 text-xs font-bold disabled:opacity-40">Cancel shipment</button>}
+              </div>
+              {shipmentUpdating && <div className="flex justify-center py-2"><Loader2 className="w-4 h-4 animate-spin text-orange-500" /></div>}
             </div>
           </div>
         </div>
