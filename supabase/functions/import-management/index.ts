@@ -148,6 +148,41 @@ serve(async (req) => {
 
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
+  if (action === 'admin-fulfillment-receive') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.orders.update'))) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
+
+    if (!body.fulfillment_item_id) return json({ error: 'Missing fulfillment item id' }, 400)
+
+    const requestedQuantity = Number(body.received_quantity)
+    if (!Number.isInteger(requestedQuantity) || requestedQuantity < 0) {
+      return json({ error: 'received_quantity must be a non-negative integer' }, 400)
+    }
+
+    const { data: session, error: sessionError } = await supabase
+      .from('import_admin_sessions')
+      .select('manager_id')
+      .eq('token', body.manager_token)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+
+    if (sessionError || !session?.manager_id) {
+      return json({ error: 'Valid manager session required' }, 401)
+    }
+
+    const { data, error } = await supabase.rpc('receive_china_import_fulfillment_item', {
+      p_fulfillment_item_id: body.fulfillment_item_id,
+      p_received_quantity: requestedQuantity,
+      p_manager_id: session.manager_id,
+      p_note: typeof body.note === 'string' ? body.note.trim() || null : null,
+    })
+
+    if (error) return json({ error: error.message }, 400)
+
+    return json({ success: true, fulfillment_item: data })
+  }
+
   if (action === 'admin-products') {
     if (!(await requireManager(supabase, body.manager_token, 'import.products.view'))) return json({ error: 'Unauthorized' }, 401)
 
