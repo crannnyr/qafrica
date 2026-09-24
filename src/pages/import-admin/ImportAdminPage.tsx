@@ -3839,9 +3839,7 @@ export default function ImportAdminPage() {
       <header className="bg-white border-b border-gray-100 sticky top-0 z-30">
         <div className="flex items-center justify-between px-4 lg:px-8 py-3 max-w-3xl lg:max-w-6xl mx-auto">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-gray-900 rounded-lg flex items-center justify-center">
-              <ShoppingBag className="w-3.5 h-3.5 text-white" />
-            </div>
+            <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="w-7 h-7 rounded-lg object-cover" />
             <div>
               <p className="font-bold text-gray-900 text-sm leading-none">Import Admin</p>
               <p className="text-[10px] text-gray-400 leading-none mt-0.5">{manager?.full_name}</p>
