@@ -37,9 +37,7 @@ export default function OpticsviewMergerNotice() {
             className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6"
           >
             <div className="flex items-center justify-between mb-4">
-              <div className="w-9 h-9 bg-orange-500 rounded-xl flex items-center justify-center">
-                <ShoppingBag className="w-4.5 h-4.5 text-white" />
-              </div>
+              <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="w-9 h-9 rounded-xl object-cover" />
               <button onClick={dismiss} className="p-1.5 hover:bg-gray-100 rounded-xl">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
