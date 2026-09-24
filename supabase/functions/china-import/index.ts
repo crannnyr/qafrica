@@ -497,7 +497,9 @@ function lastCallEmail(name: string, dateLabel: string) {
       </p>
       <p style="color:#6B7280;margin:0 0 20px;line-height:1.6;">
         Order your last set of items now to make sure it ships with this round.
-      </p>      <a href="https://qafrica.store/recommendations" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">        Order now →
+      </p>
+      <a href="https://qafrica.store/recommendations" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
+        Order now →
       </a>
     `),
   }
@@ -723,6 +725,9 @@ serve(async (req: Request) => {
       if (error) return json({ error: error.message }, 500)
       if (!order) return json({ error: "No order found with that code. Double-check and try again." }, 404)
 
+      // The consolidation/shipping bill is the source of truth for the
+      // customer-facing warehouse milestone. Any active bill means the order
+      // has entered the billing/warehouse stage; cancelled bills do not.
       const { data: consolidationBill, error: billError } = await supabase
         .from('china_import_consolidation_bills')
         .select('id, status')
@@ -732,73 +737,11 @@ serve(async (req: Request) => {
         .maybeSingle()
       if (billError) return json({ error: billError.message }, 500)
 
-      // Fulfillment is an order snapshot plus item-level operational state.
-      // Only expose fulfillment records belonging to this public order code.
-      const { data: fulfillmentItems, error: fulfillmentError } = await supabase
-        .from('china_import_fulfillment_items')
-        .select('id, order_item_index, product_id, product_name, image_url, variant_options, ordered_quantity, received_quantity, allocated_quantity, shipped_quantity, delivered_quantity, status, received_at')
-        .eq('order_id', order.id)
-        .order('order_item_index', { ascending: true })
-      if (fulfillmentError) return json({ error: fulfillmentError.message }, 500)
-
-      const { data: shipments, error: shipmentError } = await supabase
-        .from('china_import_shipments')
-        .select('id, shipment_code, status, delivery_mode, carrier_name, tracking_number, tracking_url, waybill_url, shipped_at, delivered_at, created_at, notes')
-        .eq('order_id', order.id)
-        .neq('status', 'cancelled')
-        .order('created_at', { ascending: true })
-      if (shipmentError) return json({ error: shipmentError.message }, 500)
-
-      const shipmentIds = (shipments ?? []).map((s: any) => s.id)
-      const shipmentItems = shipmentIds.length
-        ? (await supabase
-            .from('china_import_shipment_items')
-            .select('shipment_id, fulfillment_item_id, quantity')
-            .in('shipment_id', shipmentIds)).data ?? []
-        : []
-
-      const shipmentItemIds = (shipmentItems ?? []).map((row: any) => row.fulfillment_item_id)
-      const shipmentEvents = shipmentIds.length
-        ? (await supabase
-            .from('china_import_fulfillment_events')
-            .select('id, shipment_id, fulfillment_item_id, event_type, status, location, note, created_at')
-            .in('shipment_id', shipmentIds)
-            .order('created_at', { ascending: true })).data ?? []
-        : []
-
-      const fulfillmentById = new Map((fulfillmentItems ?? []).map((item: any) => [item.id, item]))
-      const publicShipments = (shipments ?? []).map((shipment: any) => ({
-        ...shipment,
-        items: (shipmentItems ?? [])
-          .filter((row: any) => row.shipment_id === shipment.id)
-          .map((row: any) => {
-            const item = fulfillmentById.get(row.fulfillment_item_id)
-            return {
-              fulfillment_item_id: row.fulfillment_item_id,
-              quantity: row.quantity,
-              product_name: item?.product_name ?? 'Item',
-              image_url: item?.image_url ?? null,
-              variant_options: item?.variant_options ?? null,
-            }
-          }),
-        events: (shipmentEvents ?? [])
-          .filter((event: any) => event.shipment_id === shipment.id)
-          .map((event: any) => ({
-            event_type: event.event_type,
-            status: event.status,
-            location: event.location,
-            note: event.note,
-            created_at: event.created_at,
-          })),
-      }))
-
       return json({
         order: {
           ...order,
           consolidation_billed: !!consolidationBill,
           consolidation_bill_status: consolidationBill?.status ?? null,
-          fulfillment_items: fulfillmentItems ?? [],
-          shipments: publicShipments,
         },
       })
     }
@@ -996,7 +939,8 @@ serve(async (req: Request) => {
           }
         }
       }
-      const lat = typeof delivery_latitude === 'number' ? delivery_latitude : null      const lng = typeof delivery_longitude === 'number' ? delivery_longitude : null
+      const lat = typeof delivery_latitude === 'number' ? delivery_latitude : null
+      const lng = typeof delivery_longitude === 'number' ? delivery_longitude : null
 
       if (payment_method === 'paystack') {
         let paystackEnabled = cacheGet<boolean>('paystack_enabled')
@@ -1053,7 +997,8 @@ serve(async (req: Request) => {
         if (!product) return null
         const method = i.shipping_method ?? shipping_method
         const price_ngn = computeItemPriceNgn(product, i.variant_options)
-        const shippingRateNgn = method === 'flight'          ? Number(product.air_shipping_customer_ngn ?? 0)
+        const shippingRateNgn = method === 'flight'
+          ? Number(product.air_shipping_customer_ngn ?? 0)
           : Number(product.sea_shipping_customer_ngn ?? 0)
         return {
           ...i,
@@ -1496,6 +1441,7 @@ serve(async (req: Request) => {
       const rolePermissionIds = Array.from(new Set(
         (rolePermissionRows ?? []).map((row: any) => row.permission_id).filter(Boolean)
       ))
+
       const effectivePermissionIds = requestedPermissionIds === null
         ? rolePermissionIds
         : requestedPermissionIds
@@ -1551,7 +1497,8 @@ serve(async (req: Request) => {
         .from('import_admin_manager_roles')
         .insert(requestedRoleIds.map((selectedRoleId: string) => ({
           manager_id: manager.id,
-          role_id: selectedRoleId,        })))
+          role_id: selectedRoleId,
+        })))
 
       if (assignmentError) {
         await cleanupManager()
@@ -1995,6 +1942,7 @@ serve(async (req: Request) => {
       if (error) return json({ error: error.message }, 500)
       return json({ settings: data })
     }
+
     if (req.method === 'POST' && action === 'admin-update-settings') {
       const {
         manager_token,
@@ -2494,7 +2442,8 @@ serve(async (req: Request) => {
       if (!(await requireAdmin(supabase, manager_token, 'import.clients.view'))) return json({ error: 'Unauthorized' }, 401)
       if (!customer_id) return json({ error: 'Missing customer_id' }, 400)
 
-      const [{ data: customer, error: custErr }, { data: orders }, { data: bills }, { data: favorite }, { data: failedOrders }] = await Promise.all([        supabase.from('customers').select('id, full_name, email, phone, avatar_url, created_at').eq('id', customer_id).single(),
+      const [{ data: customer, error: custErr }, { data: orders }, { data: bills }, { data: favorite }, { data: failedOrders }] = await Promise.all([
+        supabase.from('customers').select('id, full_name, email, phone, avatar_url, created_at').eq('id', customer_id).single(),
         supabase.from('china_import_orders').select('*').eq('user_id', customer_id).order('created_at', { ascending: false }),
         supabase.from('china_import_consolidation_bills').select('*').eq('user_id', customer_id).order('created_at', { ascending: false }),
         supabase.from('import_admin_favorite_customers').select('id').eq('customer_id', customer_id).maybeSingle(),
@@ -2549,3 +2498,1099 @@ serve(async (req: Request) => {
         .eq('user_id', customer_id)
         .order('created_at', { ascending: false })
         .limit(100)
+      if (error) return json({ error: error.message }, 500)
+      return json({ bills: data ?? [] })
+    }
+
+    if (req.method === 'POST' && action === 'bill-mark-paid') {
+      const { customer_id, bill_id, sender_name, sender_bank_name } = await req.json()
+      if (!customer_id || !bill_id) return json({ error: 'Missing customer_id or bill_id' }, 400)
+      if (!sender_name || typeof sender_name !== 'string' || !sender_name.trim()) {
+        return json({ error: 'Sender name is required so we can match your payment.' }, 400)
+      }
+
+      const { data: bill, error: findErr } = await supabase
+        .from('china_import_consolidation_bills').select('id, user_id, status').eq('id', bill_id).single()
+      if (findErr || !bill) return json({ error: 'Bill not found' }, 404)
+      if (bill.user_id !== customer_id) return json({ error: 'Unauthorized' }, 403)
+      if (bill.status !== 'pending') return json({ bill }, 200)
+
+      const updates: Record<string, unknown> = {
+        status: 'awaiting_confirmation', customer_marked_paid_at: new Date().toISOString(),
+        manual_sender_name: sender_name.trim(),
+      }
+      if (typeof sender_bank_name === 'string' && sender_bank_name.trim()) updates.manual_sender_bank = sender_bank_name.trim()
+
+      const { data, error } = await supabase
+        .from('china_import_consolidation_bills')
+        .update(updates)
+        .eq('id', bill_id).select().single()
+      if (error) return json({ error: error.message }, 500)
+      return json({ bill: data })
+    }
+
+    if (req.method === 'POST' && action === 'admin-create-bill') {
+      const { manager_token, user_id, order_id, amount_ngn, reason, kind } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!user_id) return json({ error: 'Missing user_id' }, 400)
+      const amount = Number(amount_ngn)
+      if (!amount || amount <= 0) return json({ error: 'Invalid amount_ngn' }, 400)
+      const billKind = kind === 'clearance' ? 'clearance' : 'consolidation_shipping'
+      const defaultReason = billKind === 'clearance' ? 'Clearance fee' : 'Consolidation & shipping fee'
+
+      const { data, error } = await supabase
+        .from('china_import_consolidation_bills')
+        .insert({
+          user_id, order_id: order_id ?? null,
+          amount_ngn: amount, reason: reason || defaultReason,
+          kind: billKind,
+          line_items: [{ label: reason || defaultReason, amount_ngn: amount }],
+        })
+        .select().single()
+      if (error) return json({ error: error.message }, 500)
+
+      const { data: customer } = await supabase.from('customers').select('full_name, email').eq('id', user_id).single()
+      if (customer?.email) {
+        await sendTemplatedEmail(supabase, billKind === 'clearance' ? 'clearance_bill' : 'consolidation_shipping_bill', customer.email,
+          { customer_name: customer?.full_name ?? 'there', amount_due: Number(amount).toLocaleString(), pay_link: DASHBOARD_BILLS_URL })
+      }
+
+      return json({ bill: data })
+    }
+
+    if (req.method === 'POST' && action === 'admin-all-bills') {
+      const { manager_token, status } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.view'))) return json({ error: 'Unauthorized' }, 401)
+
+      let query = supabase
+        .from('china_import_consolidation_bills')
+        .select('*, china_import_orders(code)')
+        .order('created_at', { ascending: false })
+      if (status) query = query.eq('status', status)
+
+      const { data, error } = await query.limit(500)
+      if (error) return json({ error: error.message }, 500)
+      return json({ bills: data ?? [] })
+    }
+
+    if (req.method === 'POST' && action === 'admin-confirm-bill') {
+      const { manager_token, bill_id, cancel } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!bill_id) return json({ error: 'Missing bill_id' }, 400)
+
+      const updates: Record<string, unknown> = cancel
+        ? { status: 'cancelled' }
+        : { status: 'paid', confirmed_paid_at: new Date().toISOString(), reminder_count: 0 }
+
+      const { data, error } = await supabase
+        .from('china_import_consolidation_bills').update(updates).eq('id', bill_id).select().single()
+      if (error) return json({ error: error.message }, 500)
+
+      if (!cancel && data?.user_id) {
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', data.user_id).single()
+        if (customer?.email) {
+          await sendTemplatedEmail(supabase, 'bill_payment_confirmed', customer.email, {
+            customer_name: customer.full_name ?? 'there',
+            amount_paid: Number(data.amount_ngn ?? 0).toLocaleString(),
+          })
+        }
+      }
+
+      return json({ bill: data })
+    }
+
+    if (req.method === 'POST' && action === 'ask-question') {
+      const { customer_id, product_id, question } = await req.json()
+      if (!customer_id) return json({ error: 'Login required' }, 401)
+      if (!product_id || !question || !question.trim()) return json({ error: 'Missing product_id or question' }, 400)
+
+      const { data: customer } = await supabase.from('customers').select('full_name, email').eq('id', customer_id).single()
+
+      const { data, error } = await supabase
+        .from('china_import_product_questions')
+        .insert({
+          product_id, user_id: customer_id,
+          customer_name: customer?.full_name ?? null,
+          customer_email: customer?.email ?? null,
+          question: question.trim(),
+        })
+        .select().single()
+      if (error) return json({ error: error.message }, 500)
+      return json({ question: data })
+    }
+
+    if (req.method === 'POST' && action === 'admin-questions') {
+      const { manager_token, status } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.questions.view'))) return json({ error: 'Unauthorized' }, 401)
+
+      let query = supabase
+        .from('china_import_product_questions')
+        .select('*, china_import_products(name, image_url)')
+        .order('created_at', { ascending: false })
+      if (status) query = query.eq('status', status)
+
+      const { data, error } = await query.limit(500)
+      if (error) return json({ error: error.message }, 500)
+      return json({ questions: data ?? [] })
+    }
+
+    if (req.method === 'POST' && action === 'admin-reply-question') {
+      const { manager_token, question_id, reply, template } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.questions.reply'))) return json({ error: 'Unauthorized' }, 401)
+      if (!question_id || !reply || !reply.trim()) return json({ error: 'Missing question_id or reply' }, 400)
+
+      const { data: q, error: findErr } = await supabase
+        .from('china_import_product_questions')
+        .select('*, china_import_products(name)')
+        .eq('id', question_id).single()
+      if (findErr || !q) return json({ error: 'Question not found' }, 404)
+
+      const { data, error } = await supabase
+        .from('china_import_product_questions')
+        .update({ status: 'answered', admin_reply: reply.trim(), reply_template: template ?? null, replied_at: new Date().toISOString() })
+        .eq('id', question_id).select().single()
+      if (error) return json({ error: error.message }, 500)
+
+      if (q.customer_email) {
+        const productName = q.china_import_products?.name ?? 'your question'
+        const html = `
+          <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+            <div style="background:#F97316;border-radius:12px;padding:16px 20px;margin-bottom:24px;display:inline-block;">
+              <span style="color:#fff;font-size:20px;font-weight:800;">QAFRICA</span>
+            </div>
+            <h2 style="color:#111827;margin:0 0 8px;">We answered your question 💬</h2>
+            <p style="color:#6B7280;margin:0 0 16px;">
+              Hi ${q.customer_name ?? 'there'}, you asked about <strong>${productName}</strong>:
+            </p>
+            <div style="background:#F9FAFB;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+              <p style="margin:0;font-size:13px;color:#6B7280;font-style:italic;">"${q.question}"</p>
+            </div>
+            <div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 10px 10px 0;padding:16px 20px;">
+              <p style="margin:0;font-size:14px;color:#374151;white-space:pre-wrap;">${reply.trim()}</p>
+            </div>
+            <p style="color:#9CA3AF;font-size:12px;margin-top:20px;">
+              Have another question? Just ask again from the product page.
+            </p>
+          </div>
+        `
+        await supabase.functions.invoke('send-email', {
+          body: { to: q.customer_email, subject: `We answered your question about ${productName}`, html },
+        }).catch(() => {})
+      }
+
+      return json({ question: data })
+    }
+
+    if (req.method === 'POST' && action === 'admin-merge-into-batch') {
+      const { manager_token, order_ids, target_batch_key } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!Array.isArray(order_ids) || order_ids.length === 0) return json({ error: 'Missing order_ids' }, 400)
+      if (!target_batch_key) return json({ error: 'Missing target_batch_key' }, 400)
+
+      const { data: existingOrders } = await supabase.from('china_import_orders').select('id, staged_at').eq('staged_at', target_batch_key).limit(1)
+      if (!existingOrders || existingOrders.length === 0) return json({ error: 'Target batch not found.' }, 404)
+
+      const { data: billStatus } = await supabase.from('import_batch_bill_status').select('status').eq('batch_key', target_batch_key).eq('kind', 'consolidation_shipping').maybeSingle()
+      if (billStatus?.status === 'sent') {
+        return json({ error: 'That batch has already been billed and is locked — merging into it would break its pricing. Pick a different batch, or leave this as its own new batch.' }, 409)
+      }
+
+      const batchId = await resolveBatchId(supabase, target_batch_key)
+      const { error } = await supabase
+        .from('china_import_orders')
+        .update({ staged_at: target_batch_key, batch_id: batchId, status: 'ordered', updated_at: new Date().toISOString() })
+        .in('id', order_ids)
+      if (error) return json({ error: error.message }, 500)
+
+      return json({ success: true, merged: order_ids.length, batch_key: target_batch_key })
+    }
+
+    if (req.method === 'POST' && action === 'admin-close-group') {
+      const { manager_token, order_ids } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!Array.isArray(order_ids) || order_ids.length === 0) return json({ error: 'Missing order_ids' }, 400)
+
+      const stagedAt = new Date().toISOString()
+      const { error } = await supabase
+        .from('china_import_orders')
+        .update({ staged_at: stagedAt, status: 'ordered', updated_at: new Date().toISOString() })
+        .in('id', order_ids)
+      if (error) return json({ error: error.message }, 500)
+
+      const { data: newBatch, error: batchErr } = await supabase.from('import_batches').insert({ opened_at: stagedAt }).select('id').single()
+      if (batchErr) console.warn('[china-import] failed to create import_batches row:', batchErr.message)
+      else await supabase.from('china_import_orders').update({ batch_id: newBatch.id }).in('id', order_ids)
+
+      return json({ success: true, staged_at: stagedAt, count: order_ids.length })
+    }
+
+    if (req.method === 'POST' && action === 'admin-send-confirmed-message') {
+      const { manager_token, template } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.messages.send'))) return json({ error: 'Unauthorized' }, 401)
+      if (!['consolidation', 'last_call'].includes(template)) return json({ error: 'Invalid template' }, 400)
+
+      const { data: orders, error } = await supabase
+        .from('china_import_orders')
+        .select('user_id, customer_name')
+        .eq('payment_status', 'paid')
+        .is('staged_at', null)
+      if (error) return json({ error: error.message }, 500)
+
+      const byUser = new Map<string, string>()
+      for (const o of (orders ?? [])) {
+        if (o.user_id && !byUser.has(o.user_id)) byUser.set(o.user_id, o.customer_name ?? 'there')
+      }
+      if (byUser.size === 0) return json({ success: true, queued: 0 })
+
+      const userIds = Array.from(byUser.keys())
+      const { data: customers } = await supabase
+        .from('customers').select('id, email, full_name').in('id', userIds)
+      const emailMap = new Map((customers ?? []).map((c: any) => [c.id, { email: c.email, name: c.full_name }]))
+
+      const dateLabel = fmtDate(new Date())
+      let queued = 0
+      for (const userId of userIds) {
+        const c = emailMap.get(userId)
+        if (!c?.email) continue
+        const name = c.name ?? byUser.get(userId) ?? 'there'
+        let ok = false
+        if (template === 'consolidation') {
+          ok = await queueTemplatedEmail(supabase, 'consolidation_notice', c.email, { customer_name: name, date_label: dateLabel })
+        } else {
+          const { subject, html } = lastCallEmail(name, dateLabel)
+          const { error: qErr } = await supabase.from('import_notification_queue').insert({ to_email: c.email, subject, html })
+          ok = !qErr
+        }
+        if (ok) queued++
+      }
+
+      return json({ success: true, queued, recipients: userIds.length })
+    }
+
+    if (req.method === 'POST' && action === 'admin-send-shipped-message') {
+      const { manager_token, order_ids } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.messages.send'))) return json({ error: 'Unauthorized' }, 401)
+      if (!Array.isArray(order_ids) || order_ids.length === 0) return json({ error: 'Missing order_ids' }, 400)
+
+      const { data: orders, error } = await supabase
+        .from('china_import_orders')
+        .select('id, user_id, customer_name, created_at, shipping_method, shipped_at')
+        .in('id', order_ids)
+      if (error) return json({ error: error.message }, 500)
+
+      const eligibleOrders = (orders ?? []).filter((o: any) => !o.shipped_at)
+      if (eligibleOrders.length === 0) return json({ success: true, queued: 0, note: 'Every order in this batch was already marked shipped.' })
+
+      const { data: bills } = await supabase
+        .from('china_import_consolidation_bills')
+        .select('order_id, status')
+        .in('order_id', eligibleOrders.map((o: any) => o.id))
+
+      const billsByOrder = new Map<string, string[]>()
+      for (const b of (bills ?? [])) {
+        if (!b.order_id) continue
+        const list = billsByOrder.get(b.order_id) ?? []
+        list.push(b.status)
+        billsByOrder.set(b.order_id, list)
+      }
+
+      const qualifyingOrders = eligibleOrders.filter((o: any) => {
+        const statuses = billsByOrder.get(o.id)
+        return !!statuses && statuses.length > 0 && statuses.every(s => s === 'paid')
+      })
+      const skippedUnpaid = eligibleOrders.length - qualifyingOrders.length
+
+      if (qualifyingOrders.length === 0) {
+        return json({ success: true, queued: 0, skipped_unpaid: skippedUnpaid, note: 'No orders in this batch are billed and fully paid yet.' })
+      }
+
+      const dates = qualifyingOrders.map((o: any) => new Date(o.created_at).getTime())
+      const minDate = new Date(Math.min(...dates))
+      const maxDate = new Date(Math.max(...dates))
+      const rangeLabel = minDate.toDateString() === maxDate.toDateString()
+        ? fmtDate(minDate)
+        : `between ${fmtDate(minDate)} and ${fmtDate(maxDate)}`
+
+      const byUser = new Map<string, { name: string; orderIds: string[]; shippingMethod: string | null }>()
+      for (const o of qualifyingOrders) {
+        if (!o.user_id) continue
+        const entry = byUser.get(o.user_id) ?? { name: o.customer_name ?? 'there', orderIds: [], shippingMethod: o.shipping_method ?? null }
+        entry.orderIds.push(o.id)
+        byUser.set(o.user_id, entry)
+      }
+
+      const userIds = Array.from(byUser.keys())
+      const { data: customers } = await supabase.from('customers').select('id, email, full_name').in('id', userIds)
+      const emailMap = new Map((customers ?? []).map((c: any) => [c.id, c.email]))
+
+      let queued = 0
+      const now = new Date().toISOString()
+      for (const [userId, entry] of byUser.entries()) {
+        const email = emailMap.get(userId)
+        if (email) {
+          const methodLabel = entry.shippingMethod === 'flight' ? ' by air' : entry.shippingMethod === 'sea_freight' ? ' by sea' : ''
+          const ok = await queueTemplatedEmail(supabase, 'shipped', email, { customer_name: entry.name, date_label: rangeLabel, shipping_method_label: methodLabel })
+          if (ok) queued++
+        }
+      }
+
+      await supabase.from('china_import_orders').update({ shipped_at: now }).in('id', qualifyingOrders.map((o: any) => o.id))
+
+      return json({ success: true, queued, recipients: userIds.length, skipped_unpaid: skippedUnpaid })
+    }
+
+    if (req.method === 'POST' && action === 'admin-broadcast-audience-count') {
+      const { manager_token } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.broadcast.view'))) return json({ error: 'Unauthorized' }, 401)
+
+      const { count, error } = await supabase
+        .from('customers')
+        .select('id', { count: 'exact', head: true })
+        .eq('signup_source', 'importation')
+        .not('email', 'is', null)
+      if (error) return json({ error: error.message }, 500)
+      return json({ count: count ?? 0 })
+    }
+
+    if (req.method === 'POST' && action === 'admin-send-broadcast') {
+      const { manager_token, subject, html } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.broadcast.send'))) return json({ error: 'Unauthorized' }, 401)
+      if (!subject || typeof subject !== 'string' || !subject.trim()) return json({ error: 'Missing subject' }, 400)
+      if (!html || typeof html !== 'string' || !html.trim()) return json({ error: 'Missing html body' }, 400)
+
+      const { data: customers, error } = await supabase
+        .from('customers')
+        .select('id, email, full_name')
+        .eq('signup_source', 'importation')
+        .not('email', 'is', null)
+      if (error) return json({ error: error.message }, 500)
+
+      const recipients = (customers ?? []).filter((c: any) => !!c.email)
+      let queued = 0
+      for (const c of recipients) {
+        const personalizedHtml = emailShell(personalizeBroadcast(html, c.full_name ?? 'there'))
+        const personalizedSubject = personalizeBroadcast(subject, c.full_name ?? 'there')
+        const { error: qErr } = await supabase.from('import_notification_queue').insert({ to_email: c.email, subject: personalizedSubject, html: personalizedHtml })
+        if (!qErr) queued++
+      }
+
+      return json({ success: true, queued, recipients: recipients.length })
+    }
+
+    if (req.method === 'POST' && action === 'checkout-mark-paid-claim') {
+      const { customer_id, order_id, sender_name, sender_bank_name } = await req.json()
+      if (!customer_id || !order_id) return json({ error: 'Missing customer_id or order_id' }, 400)
+      if (!sender_name || typeof sender_name !== 'string' || !sender_name.trim()) {
+        return json({ error: 'Sender name is required so we can match your payment.' }, 400)
+      }
+
+      const { data: existing, error: findErr } = await supabase
+        .from('china_import_orders').select('id, user_id, payment_method, payment_status').eq('id', order_id).single()
+      if (findErr || !existing) return json({ error: 'Order not found' }, 404)
+      if (existing.user_id !== customer_id) return json({ error: 'Unauthorized' }, 403)
+      if (existing.payment_method !== 'manual') return json({ error: 'This order is not a manual-transfer order' }, 400)
+      if (existing.payment_status !== 'unpaid') return json({ order: existing })
+
+      const updates: Record<string, unknown> = {
+        payment_status: 'awaiting_confirmation',
+        manual_sender_name: sender_name.trim(),
+      }
+      if (typeof sender_bank_name === 'string' && sender_bank_name.trim()) updates.manual_sender_bank = sender_bank_name.trim()
+
+      const { data, error } = await supabase
+        .from('china_import_orders')
+        .update(updates)
+        .eq('id', order_id).select().single()
+      if (error) return json({ error: error.message }, 500)
+      return json({ order: data })
+    }
+
+    if (req.method === 'POST' && action === 'admin-get-templates') {
+      const { manager_token } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.messages.view'))) return json({ error: 'Unauthorized' }, 401)
+      const { data, error } = await supabase.from('import_message_templates').select('*').order('key')
+      if (error) return json({ error: error.message }, 500)
+      return json({ templates: data ?? [] })
+    }
+
+    if (req.method === 'POST' && action === 'admin-update-template') {
+      const { manager_token, key, subject, body_html } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.messages.send'))) return json({ error: 'Unauthorized' }, 401)
+      if (!key || !subject || !body_html) return json({ error: 'Missing key, subject, or body_html' }, 400)
+      const { data, error } = await supabase
+        .from('import_message_templates')
+        .update({ subject, body_html, updated_at: new Date().toISOString() })
+        .eq('key', key).select().single()
+      if (error) return json({ error: error.message }, 500)
+      return json({ template: data })
+    }
+
+    if (req.method === 'POST' && action === 'process-notification-queue') {
+      const { data: pending, error } = await supabase
+        .from('import_notification_queue')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(25)
+      if (error) return json({ error: error.message }, 500)
+      if (!pending || pending.length === 0) return json({ processed: 0 })
+
+      let sent = 0, failed = 0
+      for (const row of pending) {
+        try {
+          const res = await supabase.functions.invoke('send-email', { body: { to: row.to_email, subject: row.subject, html: row.html } })
+          if (res.error) {
+            await supabase.from('import_notification_queue').update({
+              status: row.attempts + 1 >= 3 ? 'failed' : 'pending',
+              attempts: row.attempts + 1,
+              error: res.error.message ?? String(res.error),
+            }).eq('id', row.id)
+            failed++
+          } else {
+            await supabase.from('import_notification_queue').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', row.id)
+            sent++
+          }
+        } catch (e: any) {
+          await supabase.from('import_notification_queue').update({
+            status: row.attempts + 1 >= 3 ? 'failed' : 'pending',
+            attempts: row.attempts + 1,
+            error: e?.message ?? String(e),
+          }).eq('id', row.id)
+          failed++
+        }
+      }
+      return json({ processed: pending.length, sent, failed })
+    }
+
+    if (req.method === 'POST' && action === 'admin-batch-item-bills') {
+      const { manager_token, batch_key } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.view'))) return json({ error: 'Unauthorized' }, 401)
+      if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
+      const [{ data: items }, { data: statuses }] = await Promise.all([
+        supabase.from('import_batch_item_bills').select('*').eq('batch_key', batch_key),
+        supabase.from('import_batch_bill_status').select('*').eq('batch_key', batch_key),
+      ])
+      return json({ items: items ?? [], statuses: statuses ?? [] })
+    }
+
+    if (req.method === 'POST' && action === 'admin-batch-set-item-price') {
+      const { manager_token, batch_key, product_id, product_name, unit_amount_ngn, kind } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!batch_key || !product_id || !product_name || typeof unit_amount_ngn !== 'number') return json({ error: 'Missing fields' }, 400)
+      const billKind = kind === 'clearance' ? 'clearance' : 'consolidation_shipping'
+
+      // NOTE: previously checked import_batch_bill_status for a 'sent' row
+      // with .maybeSingle() and no customer_id filter — that table is
+      // per-customer, so once 2+ customers were billed for this batch+kind
+      // that query threw (PostgREST errors on multiple rows for
+      // maybeSingle()), silently blocking admin from ever re-pricing a
+      // partially-billed batch. Removed: the real protection now lives in
+      // get_batch_billing_eligible_customers, which already excludes
+      // already-billed customers per-customer when auto-billing below —
+      // changing the batch default here only affects customers not yet
+      // billed, exactly as intended.
+      const { error } = await supabase.from('import_batch_item_bills')
+        .upsert({ batch_key, product_id, product_name, unit_amount_ngn, kind: billKind, updated_at: new Date().toISOString() }, { onConflict: 'batch_key,product_id,kind' })
+      if (error) return json({ error: error.message }, 500)
+
+      // Setting this batch-wide default price can complete pricing for any
+      // number of customers who ordered this product and had everything
+      // else already priced — bill everyone now eligible, immediately,
+      // with an itemized email each.
+      const { billedCount, queued } = await bulkAutoBillAndNotify(supabase, batch_key, billKind)
+      return json({ success: true, auto_billed_count: billedCount, emails_queued: queued })
+    }
+
+    if (req.method === 'POST' && action === 'admin-batch-toggle-audit') {
+      const { manager_token, id } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.confirmed_payments.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!id) return json({ error: 'Missing id' }, 400)
+      const { data: row } = await supabase.from('import_batch_item_bills').select('audit_status').eq('id', id).single()
+      if (!row) return json({ error: 'Not found' }, 404)
+      const { data, error } = await supabase.from('import_batch_item_bills').update({ audit_status: !row.audit_status }).eq('id', id).select().single()
+      if (error) return json({ error: error.message }, 500)
+      return json({ item: data })
+    }
+
+    if (req.method === 'POST' && action === 'admin-batch-breakdown') {
+      const { manager_token, batch_key } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.view'))) return json({ error: 'Unauthorized' }, 401)
+      if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
+
+      const { data, error } = await supabase.rpc('get_batch_product_breakdown', { p_batch_key: batch_key })
+      if (error) return json({ error: error.message }, 500)
+
+      const { data: shippingCounts } = await supabase
+        .from('china_import_orders')
+        .select('shipping_method')
+        .eq('staged_at', batch_key)
+      const flightCount = (shippingCounts ?? []).filter((o: any) => o.shipping_method === 'flight').length
+      const seaCount = (shippingCounts ?? []).filter((o: any) => o.shipping_method === 'sea_freight').length
+
+      return json({ rows: data ?? [], shipping_kpi: { flight: flightCount, sea_freight: seaCount } })
+    }
+
+    if (req.method === 'POST' && action === 'admin-batch-close-ordered') {
+      const { manager_token, batch_key } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
+
+      const result = await closeBatchBilling(supabase, batch_key, 'consolidation_shipping', 'ordered_and_closed', 'ordered_closed_at')
+      if (result.error) return json({ error: result.error }, result.status ?? 500)
+      return json({ success: true, ...result })
+    }
+
+    if (req.method === 'POST' && action === 'admin-batch-mark-shipped') {
+      const { manager_token, batch_key, shipping_method_final } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
+
+      const { data: billStatus } = await supabase.from('import_batch_bill_status').select('status').eq('batch_key', batch_key).eq('kind', 'consolidation_shipping').maybeSingle()
+      if (billStatus?.status !== 'sent') return json({ error: 'Close & bill this batch (consolidation & shipping) before marking it shipped.' }, 400)
+
+      const { data: batchOrders, error: ordersErr } = await supabase
+        .from('china_import_orders')
+        .select('id, user_id, customer_name, shipping_method')
+        .eq('staged_at', batch_key)
+      if (ordersErr) return json({ error: ordersErr.message }, 500)
+      if (!batchOrders || batchOrders.length === 0) return json({ error: 'No orders found in this batch.' }, 400)
+
+      const orderIds = batchOrders.map((o: any) => o.id)
+      const now = new Date().toISOString()
+      await supabase.from('china_import_orders').update({ status: 'shipped_and_closed', shipped_at: now, updated_at: now }).in('id', orderIds)
+
+      const batchId = await resolveBatchId(supabase, batch_key)
+      if (batchId) {
+        await supabase.from('import_batches').update({
+          shipped_closed_at: now, updated_at: now,
+          ...(shipping_method_final ? { shipping_method_final } : {}),
+        }).eq('id', batchId)
+      }
+
+      const { data: bills } = await supabase
+        .from('china_import_consolidation_bills')
+        .select('user_id, status')
+        .eq('kind', 'consolidation_shipping')
+        .in('user_id', [...new Set(batchOrders.map((o: any) => o.user_id).filter(Boolean))])
+      const billStatusByUser = new Map<string, string>()
+      for (const b of (bills ?? [])) {
+        if (billStatusByUser.get(b.user_id) !== 'paid') billStatusByUser.set(b.user_id, b.status)
+      }
+
+      const seenUsers = new Set<string>()
+      const methodLabel = shipping_method_final === 'flight' ? ' by air' : shipping_method_final === 'sea_freight' ? ' by sea' : ''
+      let paidNotified = 0, heldNotified = 0
+      for (const o of batchOrders) {
+        if (!o.user_id || seenUsers.has(o.user_id)) continue
+        seenUsers.add(o.user_id)
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', o.user_id).single()
+        if (!customer?.email) continue
+        const isPaid = billStatusByUser.get(o.user_id) === 'paid'
+        const ok = await queueTemplatedEmail(supabase, isPaid ? 'shipped_paid' : 'shipped_held_unpaid', customer.email, {
+          customer_name: customer.full_name ?? o.customer_name ?? 'there',
+          shipping_method_label: methodLabel,
+        })
+        if (ok) { if (isPaid) paidNotified++; else heldNotified++ }
+      }
+
+      return json({ success: true, orders_updated: orderIds.length, paid_notified: paidNotified, held_unpaid_notified: heldNotified })
+    }
+
+    if (req.method === 'POST' && action === 'admin-batch-close-clearance') {
+      const { manager_token, batch_key } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.total_orders.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!batch_key) return json({ error: 'Missing batch_key' }, 400)
+
+      const batchId = await resolveBatchId(supabase, batch_key)
+      const { data: batchRow } = batchId ? await supabase.from('import_batches').select('shipped_closed_at').eq('id', batchId).single() : { data: null }
+      if (!batchRow?.shipped_closed_at) return json({ error: 'This batch must be marked shipped & closed before clearance can be billed.' }, 400)
+
+      const result = await closeBatchBilling(supabase, batch_key, 'clearance', 'clearance_and_closed', 'clearance_closed_at')
+      if (result.error) return json({ error: result.error }, result.status ?? 500)
+      return json({ success: true, ...result })
+    }
+
+    if (req.method === 'POST' && action === 'admin-mark-received') {
+      const { manager_token, order_id } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.orders.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!order_id) return json({ error: 'Missing order_id' }, 400)
+
+      const { data: order, error: orderErr } = await supabase.from('china_import_orders').select('id, status, user_id, code, customer_name').eq('id', order_id).single()
+      if (orderErr || !order) return json({ error: 'Order not found' }, 404)
+      if (order.status !== 'clearance_and_closed') return json({ error: 'This order must reach clearance & closed before it can be marked received.' }, 400)
+
+      const { data: clearanceBill } = await supabase
+        .from('china_import_consolidation_bills')
+        .select('status')
+        .eq('user_id', order.user_id)
+        .eq('kind', 'clearance')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (clearanceBill?.status !== 'paid') return json({ error: "This customer's clearance fee hasn't been confirmed paid yet." }, 400)
+
+      const now = new Date().toISOString()
+      const { data: updated, error: updateErr } = await supabase
+        .from('china_import_orders')
+        .update({ status: 'received', received_at: now, updated_at: now })
+        .eq('id', order_id).select().single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+
+      if (order.user_id) {
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', order.user_id).single()
+        if (customer?.email) {
+          await sendTemplatedEmail(supabase, 'order_received', customer.email, {
+            customer_name: customer.full_name ?? order.customer_name ?? 'there',
+            order_code: order.code,
+          })
+        }
+      }
+
+      return json({ order: updated })
+    }
+
+    // Admin per-item shipping override. Only allowed before the batch's
+    // consolidation_shipping bill is locked ('sent') — after that, shipping
+    // is already priced/committed and changing it would silently break the
+    // bill the customer already saw. Matches an item by product_id (+
+    // variant_options when present) inside the order's items array.
+    if (req.method === 'POST' && action === 'admin-set-item-shipping-method') {
+      const { manager_token, order_id, product_id, variant_options, new_method } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!order_id || !product_id) return json({ error: 'Missing order_id or product_id' }, 400)
+      if (!['flight', 'sea_freight'].includes(new_method)) return json({ error: 'Invalid new_method' }, 400)
+
+      const { data: order, error: orderErr } = await supabase
+        .from('china_import_orders').select('*').eq('id', order_id).single()
+      if (orderErr || !order) return json({ error: 'Order not found' }, 404)
+
+      if (order.staged_at) {
+        const { data: billStatus } = await supabase
+          .from('import_batch_bill_status').select('status')
+          .eq('batch_key', order.staged_at).eq('kind', 'consolidation_shipping').maybeSingle()
+        if (billStatus?.status === 'sent') {
+          return json({ error: 'This batch has already been billed — shipping method can no longer be changed here.' }, 409)
+        }
+      }
+
+      const { data: product } = await supabase
+        .from('china_import_products').select('name, ship_only').eq('id', product_id).maybeSingle()
+      if (product?.ship_only && new_method === 'flight') {
+        return json({ error: 'This item can only ship by sea freight.' }, 400)
+      }
+
+      const items = Array.isArray(order.items) ? order.items : []
+      const variantMatch = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+      let matched = false
+      const updatedItems = items.map((i: any) => {
+        if (i.id === product_id && (variant_options === undefined || variantMatch(i.variant_options, variant_options))) {
+          matched = true
+          return { ...i, shipping_method: new_method }
+        }
+        return i
+      })
+      if (!matched) return json({ error: 'Could not find that item on this order' }, 404)
+
+      const methods = new Set(updatedItems.map((i: any) => i.shipping_method).filter(Boolean))
+      const summary = methods.size === 1 ? [...methods][0] : methods.size > 1 ? 'mixed' : order.shipping_method
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('china_import_orders')
+        .update({ items: updatedItems, shipping_method: summary, updated_at: new Date().toISOString() })
+        .eq('id', order_id).select().single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+
+      if (order.user_id) {
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', order.user_id).single()
+        if (customer?.email) {
+          await queueTemplatedEmail(supabase, 'item_shipping_reassigned', customer.email, {
+            customer_name: customer.full_name ?? order.customer_name ?? 'there',
+            order_code: order.code,
+            item_name: product?.name ?? 'your item',
+            new_method_label: new_method === 'flight' ? 'air freight' : 'sea freight',
+            arrival_window: new_method === 'flight' ? '20–30 days' : '60–90 days',
+          })
+        }
+      }
+
+      return json({ order: updated })
+    }
+
+    // Admin per-item variant override — some customers ask for a size/color
+    // change after paying. Same "not billed" gate as shipping method, since
+    // a variant change can also change price_ngn (price_deltas), which would
+    // silently disagree with an already-sent bill otherwise.
+    if (req.method === 'POST' && action === 'admin-set-item-variant') {
+      const { manager_token, order_id, product_id, old_variant_options, new_variant_options } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.products.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!order_id || !product_id || !new_variant_options) return json({ error: 'Missing order_id, product_id, or new_variant_options' }, 400)
+
+      const { data: order, error: orderErr } = await supabase
+        .from('china_import_orders').select('*').eq('id', order_id).single()
+      if (orderErr || !order) return json({ error: 'Order not found' }, 404)
+
+      if (order.staged_at) {
+        const { data: billStatus } = await supabase
+          .from('import_batch_bill_status').select('status')
+          .eq('batch_key', order.staged_at).eq('kind', 'consolidation_shipping').maybeSingle()
+        if (billStatus?.status === 'sent') {
+          return json({ error: 'This batch has already been billed — variants can no longer be changed here.' }, 409)
+        }
+      }
+
+      const { data: product } = await supabase
+        .from('china_import_products').select('name, price_ngn, variants, has_variants').eq('id', product_id).maybeSingle()
+      if (!product?.has_variants) return json({ error: 'This product has no variants to change.' }, 400)
+
+      const items = Array.isArray(order.items) ? order.items : []
+      const variantMatch = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+      let matched = false
+      let oldVariantOptions: Record<string, string> | null = null
+      const newPrice = computeItemPriceNgn(product, new_variant_options)
+      const updatedItems = items.map((i: any) => {
+        if (i.id === product_id && (old_variant_options === undefined || variantMatch(i.variant_options, old_variant_options))) {
+          matched = true
+          oldVariantOptions = i.variant_options ?? null
+          return { ...i, variant_options: new_variant_options, price_ngn: newPrice }
+        }
+        return i
+      })
+      if (!matched) return json({ error: 'Could not find that item on this order' }, 404)
+
+      const subtotalNgn = updatedItems.reduce((s: number, i: any) => s + Number(i.price_ngn ?? 0) * Number(i.quantity ?? 0), 0)
+      const jumiaFeeNgn = order.delivery_type === 'to_qafrica' ? updatedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
+      const totalNgn = subtotalNgn + jumiaFeeNgn
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('china_import_orders')
+        .update({ items: updatedItems, subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn, total_ngn: totalNgn, updated_at: new Date().toISOString() })
+        .eq('id', order_id).select().single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+
+      if (order.user_id) {
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', order.user_id).single()
+        if (customer?.email) {
+          const fmtVariant = (v: Record<string, string> | null) => v && Object.keys(v).length ? Object.values(v).join(', ') : 'no variant selected'
+          await queueTemplatedEmail(supabase, 'item_variant_changed', customer.email, {
+            customer_name: customer.full_name ?? order.customer_name ?? 'there',
+            order_code: order.code,
+            item_name: product?.name ?? 'your item',
+            old_variant: fmtVariant(oldVariantOptions),
+            new_variant: fmtVariant(new_variant_options),
+            new_price: `₦${Math.round(newPrice).toLocaleString()}`,
+          })
+        }
+      }
+
+      return json({ order: updated })
+    }
+
+    // ── Timed Out Orders (admin) ────────────────────────────────────────────
+    // china_import_failed_orders is populated by order-reminders' 24h expiry
+    // sweep, which DELETES the original china_import_orders row — only the
+    // fields it explicitly copies survive (code, customer_name, user_id,
+    // items, total_ngn, delivery_type, payment_method, order_created_at).
+    // shipping_method, delivery_address, customer_whatsapp are NOT preserved,
+    // which is why a restored order always needs the customer to re-supply
+    // shipping info (see 'complete-order-shipping' below and the
+    // run-shipping-info-reminders / run-shipping-info-evening-reminders
+    // actions in order-reminders).
+    if (req.method === 'POST' && action === 'admin-failed-orders') {
+      const { manager_token, search } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.timed_out.view'))) return json({ error: 'Unauthorized' }, 401)
+
+      let query = supabase
+        .from('china_import_failed_orders')
+        .select('*, customers(email, phone)')
+        .is('restored_at', null)
+        .order('failed_at', { ascending: false })
+        .limit(500)
+      if (search && typeof search === 'string' && search.trim()) {
+        const s = search.trim()
+        query = query.or(`code.ilike.%${s}%,customer_name.ilike.%${s}%`)
+      }
+      const { data, error } = await query
+      if (error) return json({ error: error.message }, 500)
+      return json({
+        failed_orders: (data ?? []).map((o: any) => ({ ...o, customer_email: o.customers?.email ?? null, customer_phone: o.customers?.phone ?? null, customers: undefined })),
+      })
+    }
+
+    if (req.method === 'POST' && action === 'admin-restore-failed-order') {
+      const { manager_token, failed_order_id } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token, 'import.timed_out.manage'))) return json({ error: 'Unauthorized' }, 401)
+      if (!failed_order_id) return json({ error: 'Missing failed_order_id' }, 400)
+
+      const { data: failed, error: findErr } = await supabase
+        .from('china_import_failed_orders').select('*').eq('id', failed_order_id).maybeSingle()
+      if (findErr || !failed) return json({ error: 'Timed-out order not found' }, 404)
+      if (failed.restored_at) return json({ error: 'This order has already been restored.' }, 409)
+
+      const items = Array.isArray(failed.items) ? failed.items : []
+      const subtotalNgn = items.reduce((s: number, i: any) => s + Number(i.price_ngn ?? 0) * Number(i.quantity ?? 0), 0)
+      const jumiaFeeNgn = failed.delivery_type === 'to_qafrica' ? items.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
+
+      // china_import_orders.customer_whatsapp is NOT NULL, but the failed
+      // snapshot never carried it — fall back to the customer's profile
+      // phone if they have one, and to a clear placeholder otherwise. The
+      // apology email tells them to fill in their delivery details anyway.
+      let fallbackWhatsapp = 'Not provided — please update from your dashboard'
+      if (failed.user_id) {
+        const { data: c } = await supabase.from('customers').select('phone').eq('id', failed.user_id).single()
+        if (c?.phone) fallbackWhatsapp = c.phone
+      }
+
+      const now = new Date().toISOString()
+      const { data: restored, error: insertErr } = await supabase.from('china_import_orders').insert({
+        code: failed.code, customer_name: failed.customer_name, customer_whatsapp: fallbackWhatsapp,
+        items, delivery_type: failed.delivery_type,
+        subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn, total_ngn: failed.total_ngn,
+        status: 'confirmed', user_id: failed.user_id,
+        payment_method: failed.payment_method, payment_status: 'paid', paid_at: now,
+        delivery_mode: 'home',
+        restored_at: now, restored_from_failed_order_id: failed.id,
+        admin_note: `Restored from a timed-out order (originally placed ${failed.order_created_at}). Shipping method and delivery details were lost when it expired — customer has been asked to set them again.`,
+      }).select().single()
+      if (insertErr) return json({ error: insertErr.message }, 500)
+
+      await supabase.from('china_import_failed_orders')
+        .update({ restored_at: now, restored_order_id: restored.id }).eq('id', failed.id)
+
+      await incrementUnitsSold(supabase, items)
+
+      if (failed.user_id) {
+        const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', failed.user_id).single()
+        if (customer?.email) {
+          await sendTemplatedEmail(supabase, 'order_restored_apology', customer.email, {
+            customer_name: customer.full_name ?? failed.customer_name ?? 'there',
+            order_code: restored.code,
+            dashboard_link: DASHBOARD_BILLS_URL,
+          })
+        }
+      }
+
+      return json({ order: restored })
+    }
+
+    // Customer sets shipping method (+ delivery address or pickup station)
+    // on an order that's missing it — the only route into this today is a
+    // restored order, but it's written generically against "any order
+    // missing shipping info" rather than gated on restored_at, in case that
+    // ever becomes true for another reason.
+    if (req.method === 'POST' && action === 'complete-order-shipping') {
+      const body = await req.json()
+      const { customer_id, order_id, shipping_method, delivery_mode, pickup_station_id, delivery_address, address_id } = body
+      if (!customer_id || !order_id) return json({ error: 'Missing customer_id or order_id' }, 400)
+      if (!shipping_method || !['flight', 'sea_freight'].includes(shipping_method)) return json({ error: 'Invalid shipping_method' }, 400)
+
+      const { data: order, error: findErr } = await supabase
+        .from('china_import_orders').select('*').eq('id', order_id).eq('user_id', customer_id).maybeSingle()
+      if (findErr || !order) return json({ error: 'Order not found' }, 404)
+
+      const resolvedDeliveryMode: 'home' | 'pickup_station' = delivery_mode === 'pickup_station' ? 'pickup_station' : 'home'
+      let cleanAddress: Record<string, string> | null = null
+      let resolvedAddressId: string | null = null
+      let pickupStationSnapshot: { id: string; name: string; address: string } | null = null
+
+      if (order.delivery_type === 'to_me') {
+        if (resolvedDeliveryMode === 'pickup_station') {
+          if (!pickup_station_id) return json({ error: 'Missing pickup_station_id' }, 400)
+          const { data: station } = await supabase
+            .from('pickup_stations').select('id, name, address, is_active').eq('id', pickup_station_id).maybeSingle()
+          if (!station || !station.is_active) return json({ error: 'That pickup station is no longer available. Please pick another.' }, 400)
+          pickupStationSnapshot = { id: station.id, name: station.name, address: station.address }
+          const a = delivery_address ?? {}
+          if (!a.name?.trim() || !a.phone?.trim()) return json({ error: 'Missing delivery address field: name or phone' }, 400)
+          cleanAddress = { name: a.name.trim(), phone: a.phone.trim() }
+        } else if (address_id) {
+          const { data: saved, error: savedErr } = await supabase
+            .from('import_customer_addresses').select('*').eq('id', address_id).eq('customer_id', customer_id).maybeSingle()
+          if (savedErr || !saved) return json({ error: 'Saved address not found' }, 404)
+          resolvedAddressId = saved.id
+          cleanAddress = {
+            name: saved.name, phone: saved.phone, address_line1: saved.address_line1,
+            address_line2: saved.address_line2 ?? '', city: saved.city, state: saved.state,
+            landmark: saved.landmark ?? '',
+          }
+        } else {
+          const a = delivery_address ?? {}
+          const required = ['name', 'phone', 'address_line1', 'city', 'state']
+          for (const field of required) {
+            if (!a[field] || typeof a[field] !== 'string' || !a[field].trim()) {
+              return json({ error: `Missing delivery address field: ${field}` }, 400)
+            }
+          }
+          cleanAddress = {
+            name: a.name.trim(), phone: a.phone.trim(),
+            address_line1: a.address_line1.trim(), address_line2: (a.address_line2 ?? '').trim(),
+            city: a.city.trim(), state: a.state.trim(), landmark: (a.landmark ?? '').trim(),
+          }
+        }
+      }
+
+      const updatedItems = (Array.isArray(order.items) ? order.items : []).map((i: any) => ({ ...i, shipping_method: i.shipping_method ?? shipping_method }))
+
+      const { data: updated, error: updateErr } = await supabase.from('china_import_orders').update({
+        shipping_method, items: updatedItems,
+        delivery_mode: order.delivery_type === 'to_me' ? resolvedDeliveryMode : 'home',
+        delivery_address: cleanAddress ?? order.delivery_address,
+        address_id: resolvedAddressId,
+        pickup_station_id: pickupStationSnapshot?.id ?? null,
+        pickup_station_name: pickupStationSnapshot?.name ?? null,
+        pickup_station_address: pickupStationSnapshot?.address ?? null,
+        last_shipping_info_reminder_at: null, // stops further reminders — the completeness check below will exclude it
+        updated_at: new Date().toISOString(),
+      }).eq('id', order_id).select().single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+
+      return json({ order: updated })
+    }
+
+    if (req.method === 'POST' && action === 'bill-pay-verify') {
+      const { customer_id, bill_id, reference } = await req.json()
+      if (!customer_id || !bill_id || !reference) return json({ error: 'Missing customer_id, bill_id, or reference' }, 400)
+      if (!PAYSTACK_SECRET_KEY) return json({ error: 'Payment verification not configured' }, 500)
+
+      const { data: bill, error: findErr } = await supabase
+        .from('china_import_consolidation_bills').select('*').eq('id', bill_id).single()
+      if (findErr || !bill) return json({ error: 'Bill not found' }, 404)
+      if (bill.user_id !== customer_id) return json({ error: 'Unauthorized' }, 403)
+      if (bill.status === 'paid') return json({ success: true, bill })
+
+      const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+        headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
+      })
+      const verifyData = await verifyRes.json()
+      const ok = verifyRes.ok && verifyData?.data?.status === 'success'
+      if (!ok) return json({ success: false, error: 'Payment could not be verified.' }, 400)
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('china_import_consolidation_bills')
+        .update({ status: 'paid', confirmed_paid_at: new Date().toISOString(), paystack_reference: reference, reminder_count: 0 })
+        .eq('id', bill_id).select().single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+
+      const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', customer_id).single()
+      if (customer?.email) {
+        await sendTemplatedEmail(supabase, 'bill_payment_confirmed', customer.email, {
+          customer_name: customer.full_name ?? 'there',
+          amount_paid: Number(bill.amount_ngn ?? 0).toLocaleString(),
+        })
+      }
+
+      return json({ success: true, bill: updated })
+    }
+
+    // ── Address book (import customers only) ───────────────────────────────
+    if (req.method === 'POST' && action === 'my-addresses') {
+      const { customer_id } = await req.json()
+      if (!customer_id) return json({ error: 'Login required' }, 401)
+      const { data, error } = await supabase
+        .from('import_customer_addresses')
+        .select('*')
+        .eq('customer_id', customer_id)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false })
+      if (error) return json({ error: error.message }, 500)
+      return json({ addresses: data ?? [] })
+    }
+
+    if (req.method === 'POST' && action === 'save-address') {
+      const body = await req.json()
+      const { customer_id, id, label, name, phone, address_line1, address_line2, city, state, landmark, is_default, preferred_pickup_station_id } = body
+      if (!customer_id) return json({ error: 'Login required' }, 401)
+      const required = { name, phone, address_line1, city, state }
+      for (const [field, value] of Object.entries(required)) {
+        if (!value || typeof value !== 'string' || !value.trim()) return json({ error: `Missing ${field}` }, 400)
+      }
+
+      const row = {
+        customer_id,
+        label: typeof label === 'string' ? label.trim() || null : null,
+        name: name.trim(), phone: phone.trim(),
+        address_line1: address_line1.trim(), address_line2: (address_line2 ?? '').trim() || null,
+        city: city.trim(), state: state.trim(), landmark: (landmark ?? '').trim() || null,
+        is_default: !!is_default,
+        preferred_pickup_station_id: preferred_pickup_station_id || null,
+        updated_at: new Date().toISOString(),
+      }
+
+      // Only one default per customer — clear any existing default first so
+      // the partial unique index (customer_id where is_default) never
+      // collides with the row we're about to write.
+      if (row.is_default) {
+        await supabase.from('import_customer_addresses').update({ is_default: false }).eq('customer_id', customer_id).eq('is_default', true)
+      }
+
+      if (id) {
+        const { data, error } = await supabase
+          .from('import_customer_addresses').update(row).eq('id', id).eq('customer_id', customer_id).select().single()
+        if (error) return json({ error: error.message }, 500)
+        return json({ address: data })
+      } else {
+        const { data, error } = await supabase
+          .from('import_customer_addresses').insert(row).select().single()
+        if (error) return json({ error: error.message }, 500)
+        return json({ address: data })
+      }
+    }
+
+    if (req.method === 'POST' && action === 'delete-address') {
+      const { customer_id, id } = await req.json()
+      if (!customer_id || !id) return json({ error: 'Missing customer_id or id' }, 400)
+      const { error } = await supabase
+        .from('import_customer_addresses').delete().eq('id', id).eq('customer_id', customer_id)
+      if (error) return json({ error: error.message }, 500)
+      return json({ success: true })
+    }
+
+    // ── Delivery preference (default mode + default pickup station) ────────
+    if (req.method === 'POST' && action === 'my-delivery-prefs') {
+      const { customer_id } = await req.json()
+      if (!customer_id) return json({ error: 'Login required' }, 401)
+      const { data, error } = await supabase
+        .from('customers')
+        .select('import_default_delivery_mode, import_default_pickup_station_id, pickup_stations:import_default_pickup_station_id(id, name, address, state)')
+        .eq('id', customer_id).single()
+      if (error) return json({ error: error.message }, 500)
+      return json({
+        default_delivery_mode: data.import_default_delivery_mode,
+        default_pickup_station: data.pickup_stations ?? null,
+      })
+    }
+
+    if (req.method === 'POST' && action === 'save-delivery-prefs') {
+      const { customer_id, default_delivery_mode, default_pickup_station_id } = await req.json()
+      if (!customer_id) return json({ error: 'Login required' }, 401)
+      if (!['home', 'pickup_station'].includes(default_delivery_mode)) return json({ error: 'Invalid default_delivery_mode' }, 400)
+      if (default_delivery_mode === 'pickup_station' && !default_pickup_station_id) {
+        return json({ error: 'Pick a default station first' }, 400)
+      }
+      const { error } = await supabase
+        .from('customers')
+        .update({
+          import_default_delivery_mode: default_delivery_mode,
+          import_default_pickup_station_id: default_delivery_mode === 'pickup_station' ? default_pickup_station_id : null,
+        })
+        .eq('id', customer_id)
+      if (error) return json({ error: error.message }, 500)
+      return json({ success: true })
+    }
+
+    if (req.method === 'POST' && action === 'set-default-address') {
+      const { customer_id, id } = await req.json()
+      if (!customer_id || !id) return json({ error: 'Missing customer_id or id' }, 400)
+      await supabase.from('import_customer_addresses').update({ is_default: false }).eq('customer_id', customer_id).eq('is_default', true)
+      const { data, error } = await supabase
+        .from('import_customer_addresses').update({ is_default: true }).eq('id', id).eq('customer_id', customer_id).select().single()
+      if (error) return json({ error: error.message }, 500)
+      return json({ address: data })
+    }
+
+    return json({ error: `Unknown action: ${action ?? '(none)'}` }, 400)
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unexpected error'
+    console.error('[china-import]', message)
+    return json({ error: message }, 500)
+  }
+})
