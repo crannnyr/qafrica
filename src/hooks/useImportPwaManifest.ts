@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 const MANIFEST_HREF = '/manifest-import.json';
 const SW_URL = '/import-sw.js';
 const THEME_COLOR = '#f97316';
-const APPLE_ICON_HREF = 'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.3760297850944828.webp';
+const APPLE_ICON_HREF = '/qafrica-bag-logo.svg';
 
 let swRegistered = false;
 
