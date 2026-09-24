@@ -71,6 +71,13 @@ serve(async (req) => {
 
       const { data: shipments, error } = await query
       if (error) return json({ error: error.message }, 500)
+      const orderIds = Array.from(new Set((shipments ?? []).map((s: any) => s.order_id).filter(Boolean)))
+      const { data: orders, error: ordersError } = orderIds.length
+        ? await db.from('china_import_orders').select('id,delivery_mode,delivery_address,pickup_station_name,pickup_station_address').in('id', orderIds)
+        : { data: [], error: null }
+      if (ordersError) return json({ error: ordersError.message }, 500)
+      const orderById = new Map((orders ?? []).map((o: any) => [o.id, o]))
+
       const ids = (shipments ?? []).map((s: any) => s.id)
       const { data: shipmentItems, error: itemsError } = ids.length
         ? await db.from('china_import_shipment_items').select('id,shipment_id,fulfillment_item_id,quantity').in('shipment_id', ids)
@@ -85,11 +92,20 @@ serve(async (req) => {
 
       const byId = new Map((fulfillmentItems ?? []).map((i: any) => [i.id, i]))
       return json({
-        shipments: (shipments ?? []).map((shipment: any) => ({
-          ...shipment,
-          items: (shipmentItems ?? []).filter((i: any) => i.shipment_id === shipment.id)
+        shipments: (shipments ?? []).map((shipment: any) => {
+          const order = orderById.get(shipment.order_id)
+          return {
+            ...shipment,
+            delivery_mode: shipment.delivery_mode ?? order?.delivery_mode ?? null,
+            delivery_address: shipment.delivery_address ?? order?.delivery_address ?? (
+              order?.delivery_mode === 'pickup_station' && order?.pickup_station_name
+                ? { name: order.pickup_station_name, address: order.pickup_station_address ?? '' }
+                : null
+            ),
+            items: (shipmentItems ?? []).filter((i: any) => i.shipment_id === shipment.id)
             .map((i: any) => ({ ...i, fulfillment_item: byId.get(i.fulfillment_item_id) ?? null })),
-        })),
+          }
+        }),
       })
     }
 
@@ -129,12 +145,30 @@ serve(async (req) => {
         return json({ error: 'Each item must have a positive integer quantity' }, 400)
       }
 
+      const { data: orderSnapshot, error: orderSnapshotError } = await db.from('china_import_orders')
+        .select('delivery_mode,delivery_address,pickup_station_name,pickup_station_address')
+        .eq('id', body.order_id)
+        .maybeSingle()
+      if (orderSnapshotError) return json({ error: orderSnapshotError.message }, 500)
+      if (!orderSnapshot) return json({ error: 'Order not found' }, 404)
+
+      const deliveryMode = typeof body.delivery_mode === 'string' && body.delivery_mode.trim()
+        ? body.delivery_mode
+        : orderSnapshot.delivery_mode
+      const deliveryAddress = body.delivery_address && typeof body.delivery_address === 'object'
+        ? body.delivery_address
+        : orderSnapshot.delivery_address ?? (
+          orderSnapshot.delivery_mode === 'pickup_station' && orderSnapshot.pickup_station_name
+            ? { name: orderSnapshot.pickup_station_name, address: orderSnapshot.pickup_station_address ?? '' }
+            : null
+        )
+
       const { data: shipment, error } = await db.rpc('create_china_import_shipment', {
         p_order_id: body.order_id,
         p_items: items,
         p_manager_id: managerId,
-        p_delivery_mode: typeof body.delivery_mode === 'string' ? body.delivery_mode : null,
-        p_delivery_address: body.delivery_address && typeof body.delivery_address === 'object' ? body.delivery_address : null,
+        p_delivery_mode: deliveryMode,
+        p_delivery_address: deliveryAddress,
         p_notes: typeof body.notes === 'string' ? body.notes : null,
       })
       if (error) return json({ error: error.message }, 400)
