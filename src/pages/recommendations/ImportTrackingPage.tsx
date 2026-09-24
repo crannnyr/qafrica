@@ -18,11 +18,23 @@ import {
 import CONFIG from '@/lib/config';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const FULFILLMENT_TRACKING_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-fulfillment-tracking`;
 
 interface TrackedItem {
   id: string; name: string; quantity: number; image_url?: string;
   shipping_method?: 'flight' | 'sea_freight';
   variant_options?: Record<string, string>;
+}
+interface TrackedFulfillmentItem {
+  id: string; product_name: string; image_url?: string | null; variant_options?: Record<string, string> | null;
+  ordered_quantity: number; received_quantity: number; allocated_quantity: number; shipped_quantity: number; delivered_quantity: number; status: string;
+}
+interface TrackedShipment {
+  id: string; shipment_code: string; status: string; delivery_mode?: string | null; carrier_name?: string | null;
+  tracking_number?: string | null; tracking_url?: string | null; waybill_url?: string | null;
+  shipped_at?: string | null; delivered_at?: string | null; created_at: string; notes?: string | null;
+  items: Array<{ fulfillment_item_id: string; quantity: number; product_name: string; image_url?: string | null; variant_options?: Record<string, string> | null }>;
+  events: Array<{ event_type: string; status?: string | null; location?: string | null; note?: string | null; created_at: string }>;
 }
 interface TrackedOrder {
   id: string; code: string; status: string;
@@ -33,6 +45,8 @@ interface TrackedOrder {
   delivery_mode?: 'home' | 'pickup_station';
   pickup_station_name?: string | null;
   pickup_station_address?: string | null;
+  fulfillment_items?: TrackedFulfillmentItem[];
+  shipments?: TrackedShipment[];
 }
 
 // Each stage carries its own color so the milestone bar reads as distinct
@@ -184,7 +198,7 @@ export default function ImportTrackingPage() {
     setError('');
     setOrder(null);
     try {
-      const res = await fetch(`${EDGE_URL}?action=track-order`, {
+      const res = await fetch(FULFILLMENT_TRACKING_URL, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: code.trim() }),
       });
@@ -291,6 +305,60 @@ export default function ImportTrackingPage() {
                 </div>
               </div>
             </div>
+
+            {order.fulfillment_items && order.fulfillment_items.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fulfillment progress</p>
+                  <span className="text-[10px] font-semibold text-gray-400">
+                    {order.fulfillment_items.reduce((sum, item) => sum + item.delivered_quantity, 0)}/
+                    {order.fulfillment_items.reduce((sum, item) => sum + item.ordered_quantity, 0)} delivered
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {order.fulfillment_items.map((item) => {
+                    const remaining = Math.max(item.ordered_quantity - item.delivered_quantity, 0);
+                    const state = item.delivered_quantity >= item.ordered_quantity ? 'Delivered' : item.received_quantity > 0 ? 'Received at QAfrica HQ' : 'Awaiting arrival';
+                    return (
+                      <div key={item.id} className="rounded-xl bg-gray-50 p-3">
+                        <div className="flex items-center gap-3">
+                          {item.image_url ? <img src={item.image_url} alt={item.product_name} className="w-11 h-11 rounded-lg object-cover flex-shrink-0" /> : <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center text-gray-300 text-xs">Item</div>}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-semibold text-gray-800 truncate">{item.product_name}</p>
+                            {item.variant_options && Object.keys(item.variant_options).length > 0 && <p className="text-[10px] text-gray-400 truncate">{Object.values(item.variant_options).join(', ')}</p>}
+                            <p className="text-[10px] text-gray-500 mt-1">{item.delivered_quantity}/{item.ordered_quantity} delivered · {state}</p>
+                          </div>
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white text-gray-600 flex-shrink-0">{remaining === 0 ? 'Complete' : remaining + ' left'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {order.shipments && order.shipments.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-100 p-5">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Shipments</p>
+                <div className="space-y-4">
+                  {order.shipments.map((shipment) => (
+                    <div key={shipment.id} className="rounded-xl border border-gray-100 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div><p className="font-mono font-bold text-sm text-gray-900">{shipment.shipment_code}</p><p className="text-[10px] text-gray-500 mt-1">{shipment.carrier_name || 'QAfrica delivery'} · {shipment.status.replaceAll('_', ' ')}</p></div>
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{shipment.items.reduce((sum, item) => sum + item.quantity, 0)} units</span>
+                      </div>
+                      {shipment.tracking_number && <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2"><p className="text-[10px] text-gray-400 uppercase tracking-wide">Tracking number</p><p className="font-mono text-xs font-bold text-gray-800">{shipment.tracking_number}</p></div>}
+                      <div className="mt-3 space-y-2">
+                        {shipment.events.map((event) => (
+                          <div key={event.created_at + event.event_type} className="flex gap-2"><div className="w-1.5 h-1.5 rounded-full bg-orange-400 mt-1.5 flex-shrink-0" /><div><p className="text-[11px] font-semibold text-gray-700">{event.event_type.replaceAll('_', ' ')}</p><p className="text-[10px] text-gray-400">{new Date(event.created_at).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}{event.location ? ' · ' + event.location : ''}</p>{event.note && <p className="text-[10px] text-gray-500 mt-0.5">{event.note}</p>}</div></div>
+                        ))}
+                      </div>
+                      {(shipment.tracking_url || shipment.waybill_url) && <div className="flex gap-2 mt-3">{shipment.tracking_url && <a href={shipment.tracking_url} target="_blank" rel="noreferrer" className="flex-1 text-center text-xs font-semibold bg-gray-900 text-white rounded-lg py-2">Track shipment</a>}{shipment.waybill_url && <a href={shipment.waybill_url} target="_blank" rel="noreferrer" className="flex-1 text-center text-xs font-semibold border border-gray-200 text-gray-700 rounded-lg py-2">View waybill</a>}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Itemized shipping details — always shown so a mixed-method
                 order (some items flying, some by sea) is legible per item,
