@@ -538,7 +538,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               <textarea value={trackingDraft.note} onChange={e => setTrackingDraft(v => ({...v, note:e.target.value}))} rows={3} placeholder="Internal tracking note…" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs resize-none" />
               <button
                 onClick={() => {
-                  const first = selectedShipment.items?.[0]?.fulfillment_item;
                   const customer = items.find(item => item.order_id === selectedShipment.order_id);
                   setReceiptShipment({
                     shipment_code: selectedShipment.shipment_code,
