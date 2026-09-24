@@ -354,14 +354,30 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
 
       {fulfillmentTab === 'shipments' ? (
         <div className="space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
-            <div>
-              <p className="text-base font-black text-gray-900">Shipments</p>
-              <p className="text-xs text-gray-400 mt-0.5">Search and manage every shipment created from received orders.</p>
+          <div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-base font-black text-gray-900">Shipments</p>
+                <p className="text-xs text-gray-400 mt-0.5">Dispatch and track shipments created from received orders.</p>
+              </div>
+              <button type="button" onClick={() => void loadShipments()} disabled={shipmentsLoading} className="px-3.5 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                <RefreshCw className={shipmentsLoading ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
+              </button>
             </div>
-            <button type="button" onClick={() => void loadShipments()} disabled={shipmentsLoading} className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-              <RefreshCw className={shipmentsLoading ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
-            </button>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
+              {[
+                { label: 'Total', value: allShipments.length, className: 'text-gray-900' },
+                { label: 'Draft', value: allShipments.filter(s => s.status === 'draft').length, className: 'text-gray-600' },
+                { label: 'In transit', value: allShipments.filter(s => s.status === 'in_transit' || s.status === 'out_for_delivery').length, className: 'text-orange-600' },
+                { label: 'Delivered', value: allShipments.filter(s => s.status === 'delivered').length, className: 'text-emerald-600' },
+              ].map(stat => (
+                <div key={stat.label} className="bg-white rounded-xl border border-gray-100 p-3">
+                  <p className="text-[10px] text-gray-400 uppercase font-bold">{stat.label}</p>
+                  <p className={"text-xl font-black mt-0.5 " + stat.className}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2">
