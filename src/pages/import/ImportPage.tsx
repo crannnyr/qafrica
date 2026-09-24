@@ -5,7 +5,7 @@ import {
   ShoppingBag, ArrowRight, Store, BookOpen,
   Search, ShoppingCart, Zap, MessageCircle,
   Calculator, Package, CreditCard, TrendingUp,
-  Shield, Globe, CheckCircle,
+  Shield, Globe, CheckCircle, PackageSearch,
 } from 'lucide-react';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 
@@ -14,13 +14,8 @@ function Hero() {
   return (
     <section className="bg-white pt-8 pb-14 px-4 overflow-hidden">
       <div className="max-w-2xl lg:max-w-6xl mx-auto">
-
-        {/* 2-col grid */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-center mb-10">
-
-          {/* Left -- 60% */}
           <div className="md:col-span-3">
-            {/* Eyebrow */}
             <div className="inline-flex items-center gap-1.5 bg-orange-50 text-orange-600 text-xs font-bold px-3 py-1.5 rounded-full mb-5">
               <Globe className="w-3.5 h-3.5" />
               Sourced from verified Chinese manufacturers
@@ -37,7 +32,6 @@ function Hero() {
               sourcing, quality control and shipping — start to finish.
             </p>
 
-            {/* CTAs */}
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
               <Link
                 to="/recommendations"
@@ -55,18 +49,16 @@ function Hero() {
               </Link>
             </div>
 
-            <p className="text-xs text-gray-400">
-              Not sure what to import?{' '}
+            <div className="flex items-center gap-4 text-xs text-gray-400">
+              <span>Not sure what to import?</span>
               <Link to="/blog" className="text-orange-500 font-semibold hover:underline">
-                Read our guide &rarr;
+                Read our guide →
               </Link>
-            </p>
+            </div>
           </div>
 
-          {/* Right -- 40% hero image */}
           <div className="md:col-span-2 flex items-center justify-center">
             <div className="relative w-full max-w-[260px] mx-auto">
-              {/* Glow / shadow behind image */}
               <div className="absolute inset-0 rounded-2xl bg-orange-100 blur-2xl opacity-60 scale-95 translate-y-2" />
               <img
                 src="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.5249362888645752.webp"
@@ -87,46 +79,14 @@ function Hero() {
 
 // -- How It Works -------------------------------------------------------------
 const STEPS = [
-  {
-    icon: Search,
-    title: 'Browse & Pick',
-    desc: 'View our catalog and pick recommended bestseller items.',
-  },
-  {
-    icon: ShoppingCart,
-    title: 'Add to Cart',
-    desc: 'Add your selected items — order just one if that\'s all you need.',
-  },
-  {
-    icon: Zap,
-    title: 'Sign In',
-    desc: 'Quick sign up or log in — takes under a minute.',
-  },
-  {
-    icon: CreditCard,
-    title: 'Check Out',
-    desc: 'Pay by card or manual bank transfer, right on the site.',
-  },
-  {
-    icon: Calculator,
-    title: 'We Consolidate',
-    desc: 'Your order is grouped with others to cut shipping costs.',
-  },
-  {
-    icon: Package,
-    title: 'Choose Fulfillment',
-    desc: 'Ship to your address or our warehouse to sell on Jumia.',
-  },
-  {
-    icon: MessageCircle,
-    title: 'Track Your Order',
-    desc: 'Follow your order status right from your account.',
-  },
-  {
-    icon: TrendingUp,
-    title: 'Earn Payouts',
-    desc: 'Watch your sales and revenue come in.',
-  },
+  { icon: Search, title: 'Browse & Pick', desc: 'View our catalog and pick recommended bestseller items.' },
+  { icon: ShoppingCart, title: 'Add to Cart', desc: 'Add your selected items — order just one if that\'s all you need.' },
+  { icon: Zap, title: 'Sign In', desc: 'Quick sign up or log in — takes under a minute.' },
+  { icon: CreditCard, title: 'Check Out', desc: 'Pay by card or manual bank transfer, right on the site.' },
+  { icon: Calculator, title: 'We Consolidate', desc: 'Your order is grouped with others to cut shipping costs.' },
+  { icon: Package, title: 'Choose Fulfillment', desc: 'Ship to your address or our warehouse to sell on Jumia.' },
+  { icon: MessageCircle, title: 'Track Your Order', desc: 'Follow your order status right from your account.' },
+  { icon: TrendingUp, title: 'Earn Payouts', desc: 'Watch your sales and revenue come in.' },
 ];
 
 function HowItWorks() {
@@ -134,24 +94,14 @@ function HowItWorks() {
     <section className="bg-gray-50 px-4 py-14">
       <div className="max-w-2xl lg:max-w-6xl mx-auto">
         <div className="mb-8">
-          <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">
-            How It Works
-          </p>
-          <h2 className="text-xl font-black text-gray-900">
-            From browsing to payouts -- 8 simple steps
-          </h2>
+          <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">How It Works</p>
+          <h2 className="text-xl font-black text-gray-900">From browsing to payouts -- 8 simple steps</h2>
         </div>
-
-        {/* Step grid */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {STEPS.map((step, i) => {
             const Icon = step.icon;
             return (
-              <div
-                key={i}
-                className="bg-white rounded-xl p-4 border border-gray-100 relative"
-              >
-                {/* Step number */}
+              <div key={i} className="bg-white rounded-xl p-4 border border-gray-100 relative">
                 <span className="absolute top-3 right-3 text-[10px] font-black text-gray-200">
                   {String(i + 1).padStart(2, '0')}
                 </span>
@@ -164,8 +114,6 @@ function HowItWorks() {
             );
           })}
         </div>
-
-        {/* Connector line hint on desktop */}
         <div className="hidden sm:flex items-center justify-center mt-6 gap-1">
           {STEPS.map((_, i) => (
             <div key={i} className="flex items-center gap-1">
@@ -181,26 +129,10 @@ function HowItWorks() {
 
 // -- Why Trust Us -------------------------------------------------------------
 const TRUST_POINTS = [
-  {
-    icon: Shield,
-    title: 'Verified vendors only',
-    desc: 'Every supplier we work with is vetted and verified before we place a single order.',
-  },
-  {
-    icon: CheckCircle,
-    title: 'Quality checked',
-    desc: 'We inspect every shipment before it leaves our warehouse or reaches you.',
-  },
-  {
-    icon: Globe,
-    title: 'End-to-end logistics',
-    desc: "Customs, compliance, packaging -- all handled so you don't have to.",
-  },
-  {
-    icon: TrendingUp,
-    title: 'Jumia-ready fulfillment',
-    desc: "We list and fulfill on Jumia for you, no Lagos drop-off hub needed.",
-  },
+  { icon: Shield, title: 'Verified vendors only', desc: 'Every supplier we work with is vetted and verified before we place a single order.' },
+  { icon: CheckCircle, title: 'Quality checked', desc: 'We inspect every shipment before it leaves our warehouse or reaches you.' },
+  { icon: Globe, title: 'End-to-end logistics', desc: "Customs, compliance, packaging -- all handled so you don't have to." },
+  { icon: TrendingUp, title: 'Jumia-ready fulfillment', desc: "We list and fulfill on Jumia for you, no Lagos drop-off hub needed." },
 ];
 
 function WhyTrustUs() {
@@ -208,9 +140,7 @@ function WhyTrustUs() {
     <section className="bg-white px-4 py-14">
       <div className="max-w-2xl lg:max-w-6xl mx-auto">
         <div className="mb-8">
-          <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">
-            Why Trust Us?
-          </p>
+          <p className="text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">Why Trust Us?</p>
           <h2 className="text-xl font-black text-gray-900 mb-4">
             Built to close the gap between you and the world's largest wholesale market.
           </h2>
@@ -246,7 +176,6 @@ function WhyTrustUs() {
           })}
         </div>
 
-        {/* Bottom CTA */}
         <div className="mt-10 bg-orange-500 rounded-2xl p-6 text-white text-center">
           <p className="font-black text-lg mb-1">Ready to start importing?</p>
           <p className="text-orange-100 text-sm mb-5">
@@ -270,7 +199,6 @@ export default function ImportPage() {
   useImportPwaManifest();
   return (
     <div className="min-h-screen bg-white">
-      {/* Single sticky nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
         <div className="max-w-2xl lg:max-w-6xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
@@ -279,16 +207,24 @@ export default function ImportPage() {
             </div>
             <span className="font-bold text-gray-900 text-sm">QAFRICA Import</span>
           </Link>
-          <Link
-            to="/blog"
-            className="text-xs text-gray-500 hover:text-orange-500 font-medium flex items-center gap-1"
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            Blog
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link
+              to="/track"
+              className="text-xs text-gray-700 hover:text-orange-500 font-semibold flex items-center gap-1.5"
+            >
+              <PackageSearch className="w-3.5 h-3.5" />
+              Track order
+            </Link>
+            <Link
+              to="/blog"
+              className="text-xs text-gray-500 hover:text-orange-500 font-medium flex items-center gap-1"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              Blog
+            </Link>
+          </div>
         </div>
       </header>
-
       <Hero />
       <HowItWorks />
       <WhyTrustUs />
