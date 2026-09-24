@@ -110,7 +110,11 @@ serve(async (req) => {
         p_note: typeof body.note === 'string' ? body.note : null,
       })
       if (error) return json({ error: error.message }, 400)
-      return json({ success: true, shipment })
+      return json({
+        success: true,
+        status: 'updated',
+        shipment,
+      }, 200)
     }
 
     if (action === 'admin-fulfillment-shipment-create') {
