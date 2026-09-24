@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, ChevronDown, ChevronUp, Loader2, PackageCheck, RefreshCw, Search, Truck, X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
+import ShipmentReceiptSheet, { type ShipmentReceiptData } from './ShipmentReceiptSheet';
 
 type FulfillmentItem = {
   id: string;
@@ -69,6 +70,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [selectedShipment, setSelectedShipment] = useState<any | null>(null);
   const [trackingDraft, setTrackingDraft] = useState({ carrier_name: '', tracking_number: '', tracking_url: '', waybill_url: '', delivery_mode: '', note: '' });
   const [shipmentUpdating, setShipmentUpdating] = useState(false);
+  const [receiptShipment, setReceiptShipment] = useState<ShipmentReceiptData | null>(null);
 
   const shipmentItems = useMemo(() => {
     if (!shipmentOrderId) return [];
@@ -534,6 +536,35 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                 </select>
               </div>
               <textarea value={trackingDraft.note} onChange={e => setTrackingDraft(v => ({...v, note:e.target.value}))} rows={3} placeholder="Internal tracking note…" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs resize-none" />
+              <button
+                onClick={() => {
+                  const first = selectedShipment.items?.[0]?.fulfillment_item;
+                  const customer = items.find(item => item.order_id === selectedShipment.order_id);
+                  setReceiptShipment({
+                    shipment_code: selectedShipment.shipment_code,
+                    status: selectedShipment.status,
+                    created_at: selectedShipment.created_at,
+                    shipped_at: selectedShipment.shipped_at,
+                    delivered_at: selectedShipment.delivered_at,
+                    carrier_name: selectedShipment.carrier_name,
+                    tracking_number: selectedShipment.tracking_number,
+                    delivery_mode: selectedShipment.delivery_mode,
+                    notes: selectedShipment.notes,
+                    order_code: customer?.order_code ?? '—',
+                    customer_name: customer?.customer_name ?? 'Customer',
+                    customer_whatsapp: customer?.customer_whatsapp ?? null,
+                    delivery_address: selectedShipment.delivery_address ?? null,
+                    items: (selectedShipment.items ?? []).map((row: any) => ({
+                      product_name: row.fulfillment_item?.product_name ?? 'Item',
+                      quantity: row.quantity,
+                      variant_options: row.fulfillment_item?.variant_options ?? null,
+                    })),
+                  });
+                }}
+                className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-700 text-xs font-bold"
+              >
+                Print shipment receipt
+              </button>
               <div className="grid grid-cols-2 gap-2">
                 {selectedShipment.status === 'draft' && <button onClick={() => void updateShipment('ready_to_ship')} disabled={shipmentUpdating} className="py-2.5 rounded-xl border border-orange-200 text-orange-600 text-xs font-bold disabled:opacity-40">Mark ready to ship</button>}
                 {['draft','ready_to_ship'].includes(selectedShipment.status) && <button onClick={() => void updateShipment('shipped')} disabled={shipmentUpdating} className="py-2.5 rounded-xl bg-orange-500 text-white text-xs font-bold disabled:opacity-40">Dispatch shipment</button>}
@@ -547,6 +578,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
           </div>
         </div>
       )}
+      {receiptShipment && <ShipmentReceiptSheet data={receiptShipment} onClose={() => setReceiptShipment(null)} />}
     </>
   );
 }
