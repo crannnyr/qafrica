@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, Loader2, PackageCheck, RefreshCw, Search } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Loader2, PackageCheck, RefreshCw, Search, Truck, X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 
@@ -60,6 +60,82 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [acting, setActing] = useState<string | null>(null);
   const [receivedDrafts, setReceivedDrafts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
+  const [shipmentOrderId, setShipmentOrderId] = useState<string | null>(null);
+  const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({});
+  const [shipmentNotes, setShipmentNotes] = useState('');
+  const [shipmentLoading, setShipmentLoading] = useState(false);
+  const [shipmentSaving, setShipmentSaving] = useState(false);
+  const [shipments, setShipments] = useState<any[]>([]);
+
+  const shipmentItems = useMemo(() => {
+    if (!shipmentOrderId) return [];
+    return items.filter(item =>
+      item.order_id === shipmentOrderId &&
+      item.received_quantity > item.allocated_quantity
+    );
+  }, [items, shipmentOrderId]);
+
+  const openShipment = useCallback(async (orderId: string) => {
+    setShipmentOrderId(orderId);
+    setShipmentNotes('');
+    setShipmentQuantities({});
+    setShipmentLoading(true);
+    try {
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/import-fulfillment-shipments?action=admin-fulfillment-shipments-list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_id: orderId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Could not load shipments');
+      setShipments(Array.isArray(data.shipments) ? data.shipments : []);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load shipments');
+      setShipments([]);
+    } finally {
+      setShipmentLoading(false);
+    }
+  }, [token]);
+
+  const createShipment = async () => {
+    if (!shipmentOrderId) return;
+    const selected = shipmentItems
+      .map(item => ({
+        fulfillment_item_id: item.id,
+        quantity: Number(shipmentQuantities[item.id] ?? 0),
+      }))
+      .filter(item => Number.isInteger(item.quantity) && item.quantity > 0);
+
+    if (!selected.length) {
+      toast.error('Select at least one received quantity to ship');
+      return;
+    }
+
+    setShipmentSaving(true);
+    try {
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/import-fulfillment-shipments?action=admin-fulfillment-shipment-create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_token: token,
+          order_id: shipmentOrderId,
+          items: selected,
+          notes: shipmentNotes.trim() || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Could not create shipment');
+      toast.success(`Shipment ${data.shipment?.shipment_code ?? ''} created`);
+      setShipmentQuantities({});
+      setShipmentNotes('');
+      await load(true);
+      await openShipment(shipmentOrderId);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not create shipment');
+    } finally {
+      setShipmentSaving(false);
+    }
+  };
 
   const load = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
