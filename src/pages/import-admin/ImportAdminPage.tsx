@@ -3870,7 +3870,7 @@ export default function ImportAdminPage() {
                   : 'text-gray-400 hover:text-gray-700'
               }`}
             >
-              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'ai-support' ? 'AI Support' : t === 'expenses' ? 'Expenses' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
+              {t === 'total-orders' ? 'Total Orders' : t === 'confirmed-payments' ? 'Confirmed' : t === 'timed-out' ? 'Timed Out' : t === 'custom-orders' ? 'Custom Orders' : t === 'paystack-transactions' ? 'Paystack' : t === 'categories' ? 'Categories' : t === 'admin-access' ? 'Admin Access' : t === 'ai-support' ? 'AI Support' : t === 'expenses' ? 'Expenses' : t === 'fulfillment' ? 'Fulfillment' : t === 'pricing-shipping' ? 'Pricing & Shipping' : t}
             </button>
           ))}
         </div>
