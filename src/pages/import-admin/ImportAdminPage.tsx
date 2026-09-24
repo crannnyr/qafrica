@@ -29,6 +29,7 @@ import PaystackTransactions from './PaystackTransactions';
 import CategoryManager from './CategoryManager';
 import AiSupportInbox, { AiSupportAlertMonitor } from './AiSupportInbox';
 import ImportAdminExpenses from './ImportAdminExpenses';
+import ChinaImportFulfillmentManager from './ChinaImportFulfillmentManager';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const IMPORT_ADMIN_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-admin-orders`;
@@ -3737,7 +3738,7 @@ export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
   const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(token);
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access' | 'ai-support' | 'expenses'>('analytics');
+  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access' | 'ai-support' | 'expenses' | 'fulfillment'>('analytics');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -3767,9 +3768,10 @@ export default function ImportAdminPage() {
     'admin-access': 'import.admin_access.view',
     'ai-support': 'import.messages.view',
     expenses: 'import.expenses.view',
+    fulfillment: 'import.orders.view',
   } as const;
 
-  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access', 'ai-support', 'expenses'] as const;
+  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access', 'ai-support', 'expenses', 'fulfillment'] as const;
 
   const visibleTabs = allTabs.filter(t => hasPermission(tabPermissions[t]));
 
@@ -3875,6 +3877,8 @@ export default function ImportAdminPage() {
 
         {tab === 'analytics' ? (
           <ImportAdminAnalytics token={token} />
+        ) : tab === 'fulfillment' ? (
+          <ChinaImportFulfillmentManager token={token} canReceive={hasPermission('import.orders.update')} />
         ) : tab === 'confirmed-payments' ? (
           <ConfirmedPaymentsManager token={token} />
         ) : tab === 'messages' ? (
