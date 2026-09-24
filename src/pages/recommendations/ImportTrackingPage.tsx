@@ -87,6 +87,37 @@ function stageIndexFor(order: TrackedOrder): number {
   return 0;
 }
 
+function fulfillmentStatusStyle(item: TrackedFulfillmentItem) {
+  if (item.delivered_quantity >= item.ordered_quantity) {
+    return { label: 'Delivered', className: 'bg-emerald-50 text-emerald-700 border-emerald-100' };
+  }
+  if (item.delivered_quantity > 0) {
+    return { label: 'Partially delivered', className: 'bg-teal-50 text-teal-700 border-teal-100' };
+  }
+  if (item.shipped_quantity > 0) {
+    return { label: 'Shipped', className: 'bg-violet-50 text-violet-700 border-violet-100' };
+  }
+  if (item.allocated_quantity > 0) {
+    return { label: 'Preparing shipment', className: 'bg-blue-50 text-blue-700 border-blue-100' };
+  }
+  if (item.received_quantity > 0) {
+    return { label: 'Received at QAfrica HQ', className: 'bg-orange-50 text-orange-700 border-orange-100' };
+  }
+  return { label: 'Awaiting arrival', className: 'bg-amber-50 text-amber-700 border-amber-100' };
+}
+
+function shipmentStatusStyle(status: string) {
+  switch (status) {
+    case 'delivered': return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+    case 'out_for_delivery': return 'bg-teal-50 text-teal-700 border-teal-100';
+    case 'in_transit': return 'bg-blue-50 text-blue-700 border-blue-100';
+    case 'shipped': return 'bg-violet-50 text-violet-700 border-violet-100';
+    case 'ready_to_ship': return 'bg-amber-50 text-amber-700 border-amber-100';
+    case 'cancelled': return 'bg-red-50 text-red-700 border-red-100';
+    default: return 'bg-gray-100 text-gray-600 border-gray-200';
+  }
+}
+
 function daysSince(dateStr: string) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
 }
@@ -318,7 +349,7 @@ export default function ImportTrackingPage() {
                 <div className="space-y-3">
                   {order.fulfillment_items.map((item) => {
                     const remaining = Math.max(item.ordered_quantity - item.delivered_quantity, 0);
-                    const state = item.delivered_quantity >= item.ordered_quantity ? 'Delivered' : item.received_quantity > 0 ? 'Received at QAfrica HQ' : 'Awaiting arrival';
+                    const state = fulfillmentStatusStyle(item);
                     return (
                       <div key={item.id} className="rounded-xl bg-gray-50 p-3">
                         <div className="flex items-center gap-3">
@@ -326,9 +357,10 @@ export default function ImportTrackingPage() {
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-semibold text-gray-800 truncate">{item.product_name}</p>
                             {item.variant_options && Object.keys(item.variant_options).length > 0 && <p className="text-[10px] text-gray-400 truncate">{Object.values(item.variant_options).join(', ')}</p>}
-                            <p className="text-[10px] text-gray-500 mt-1">{item.delivered_quantity}/{item.ordered_quantity} delivered · {state}</p>
+                            <p className="text-[10px] text-gray-500 mt-1">{item.delivered_quantity}/{item.ordered_quantity} delivered</p>
+                            <span className={"inline-flex mt-1.5 text-[9px] font-bold px-2 py-1 rounded-full border " + state.className}>{state.label}</span>
                           </div>
-                          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white text-gray-600 flex-shrink-0">{remaining === 0 ? 'Complete' : remaining + ' left'}</span>
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white text-gray-600 border border-gray-100 flex-shrink-0">{remaining === 0 ? 'Complete' : remaining + ' left'}</span>
                         </div>
                       </div>
                     );
@@ -344,7 +376,7 @@ export default function ImportTrackingPage() {
                   {order.shipments.map((shipment) => (
                     <div key={shipment.id} className="rounded-xl border border-gray-100 p-4">
                       <div className="flex items-start justify-between gap-3">
-                        <div><p className="font-mono font-bold text-sm text-gray-900">{shipment.shipment_code}</p><p className="text-[10px] text-gray-500 mt-1">{shipment.carrier_name || 'QAfrica delivery'} · {shipment.status.replaceAll('_', ' ')}</p></div>
+                        <div><p className="font-mono font-bold text-sm text-gray-900">{shipment.shipment_code}</p><div className="flex flex-wrap items-center gap-1.5 mt-1"><p className="text-[10px] text-gray-500">{shipment.carrier_name || 'QAfrica delivery'}</p><span className={"text-[9px] font-bold px-2 py-1 rounded-full border capitalize " + shipmentStatusStyle(shipment.status)}>{shipment.status.replaceAll('_', ' ')}</span></div></div>
                         <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{shipment.items.reduce((sum, item) => sum + item.quantity, 0)} units</span>
                       </div>
                       {shipment.tracking_number && <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2"><p className="text-[10px] text-gray-400 uppercase tracking-wide">Tracking number</p><p className="font-mono text-xs font-bold text-gray-800">{shipment.tracking_number}</p></div>}
