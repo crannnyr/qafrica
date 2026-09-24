@@ -20,6 +20,7 @@ interface StoreState {
 
   // Multi-store
   getUserStores: (userId: string) => Promise<Store[]>;
+  /** Saves the choice server-side (survives reloads/devices), then loads that store. Throws on failure. */
   switchActiveStore: (storeId: string) => Promise<void>;
 
   // Products
@@ -139,19 +140,13 @@ export const useStoreStore = create<StoreState>()(
       },
 
       switchActiveStore: async (storeId) => {
-        try {
-          const { data, error } = await supabase
-            .from('stores')
-            .select('*')
-            .eq('id', storeId)
-            .single();
-
-          if (!error && data) {
-            set({ currentStore: data as Store, products: [], deliveryZones: [] });
-          }
-        } catch {
-          // silently fail — reload will re-fetch from persisted currentStore
-        }
+        // 1. Server-side: checks the account may switch and owns the store
+        const { error: switchError } = await supabase.rpc('switch_active_store', { p_store_id: storeId });
+        if (switchError) throw new Error(switchError.message);
+        // 2. Load the store and reset anything cached for the previous one
+        const { data, error } = await supabase.from('stores').select('*').eq('id', storeId).single();
+        if (error || !data) throw new Error(error?.message ?? 'Store not found');
+        set({ currentStore: data as Store, products: [], deliveryZones: [] });
       },
 
       // ── Products ───────────────────────────────────────────────────────────

@@ -9,7 +9,8 @@ import { subscribeToOrders, subscribeToStockAlerts, subscribeToWalletUpdates } f
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import ModalNotificationDisplay from '@/components/ModalNotificationDisplay';
 import { toast } from 'sonner';
-import type { StockAlert, Store } from '@/types';
+import type { StockAlert } from '@/types';
+import type { SwitchableStore } from './Layout/StoreSwitcher';
 import type { PermissionKey } from '@/lib/staffPermissions';
 
 import Sidebar from './Layout/Sidebar';
@@ -33,7 +34,7 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout }                                        = useAuthStore();
-  const { currentStore, fetchUserStore, getUserStores, switchActiveStore } = useStoreStore();
+  const { currentStore, fetchUserStore, switchActiveStore } = useStoreStore();
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [isSidebarOpen, setIsSidebarOpen]         = useState(true);
@@ -65,7 +66,7 @@ export default function DashboardLayout() {
     admin_approved: boolean; status: string; domain_name: string;
   } | null>(null);
   const [pendingDropshipCount, setPendingDropshipCount]   = useState(0);
-  const [stores, setStores]                               = useState<Store[]>([]);
+  const [stores, setStores]                               = useState<SwitchableStore[]>([]);
 
   // Staff's actual granted permissions, fetched from their store_staff row.
   // null while loading / not yet known — treated as "no access" by staffCanAccess until populated.
@@ -112,7 +113,8 @@ export default function DashboardLayout() {
       fetchUserStore(user.id);
       loadStockAlerts();
       fetchSubscriptionStatus();
-      getUserStores(user.id).then((result) => setStores(result ?? []));
+      // Empty unless this account has been granted multi-store switching (server-side check)
+      supabase.rpc('list_switchable_stores').then(({ data }) => setStores((data as SwitchableStore[] | null) ?? []));
     }
   }, [user?.id, fetchUserStore]);
 
@@ -262,8 +264,14 @@ export default function DashboardLayout() {
   };
 
   const handleStoreSwitch = async (storeId: string) => {
-    await switchActiveStore(storeId);
-    window.location.reload();
+    try {
+      await switchActiveStore(storeId);
+      const name = stores.find((s) => s.id === storeId)?.name;
+      toast.success(name ? `Switched to ${name}` : 'Store switched');
+      if (location.pathname !== '/dashboard') navigate('/dashboard');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not switch store. Please try again.');
+    }
   };
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -400,7 +408,8 @@ export default function DashboardLayout() {
                 exit={{   opacity: 0, y: -8  }}
                 transition={{ duration: 0.15 }}
               >
-                <Outlet />
+                {/* key: remount pages so nothing from the previous store lingers */}
+                <Outlet key={currentStore?.id ?? 'none'} />
               </motion.div>
             </AnimatePresence>
           </div>

@@ -1,7 +1,8 @@
 // src/pages/dashboard/Layout/DashboardHeader.tsx
 
 import { Link } from 'react-router-dom';
-import { Menu, ChevronLeft, Store, ChevronDown } from 'lucide-react';
+import { Menu, ChevronLeft, Store } from 'lucide-react';
+import StoreSwitcher, { type SwitchableStore } from './StoreSwitcher';
 import NotificationDropdown from './NotificationDropdown';
 import ProfileDropdown from './ProfileDropdown';
 import type { StockAlert } from '@/types';
@@ -23,7 +24,7 @@ interface User {
 interface Props {
   user: User | null;
   currentStore: Store_ | null;
-  stores: Store_[];
+  stores: SwitchableStore[];
   currentLabel: string;
   isSidebarOpen: boolean;
   stockAlerts: StockAlert[];
@@ -37,7 +38,7 @@ interface Props {
   onMarkAlertRead: (id: string) => void;
   onMarkAllRead: () => void;
   onLogout: () => void;
-  onStoreSwitch: (storeId: string) => void;
+  onStoreSwitch: (storeId: string) => Promise<void>;
 }
 
 export default function DashboardHeader({
@@ -88,24 +89,8 @@ export default function DashboardHeader({
             {currentLabel}
           </h1>
 
-          {/* Store switcher — only visible when user has more than 1 store */}
-          {stores.length > 1 && (
-            <div className="relative hidden sm:flex items-center">
-              <Store className="absolute left-2.5 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-              <ChevronDown className="absolute right-2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
-              <select
-                value={currentStore?.id ?? ''}
-                onChange={(e) => onStoreSwitch(e.target.value)}
-                className="pl-7 pr-7 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-100 border border-gray-200 dark:border-gray-600 rounded-lg appearance-none cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-400"
-              >
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name ?? s.slug ?? s.id}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* Store switcher: only for accounts granted multi-store access (server decides) */}
+          <StoreSwitcher stores={stores} currentStoreId={currentStore?.id} onSwitch={onStoreSwitch} />
         </div>
 
         {/* Right: notifications + profile + view store */}

@@ -141,7 +141,7 @@ export default function JumiaDashboardLayout() {
           onMarkAlertRead={handleMarkAlertRead}
           onMarkAllRead={handleMarkAllRead}
           onLogout={handleLogout}
-          onStoreSwitch={() => {}}
+          onStoreSwitch={async () => {}}
         />
 
         {/* Scrollable content — no SubscriptionBanner: Jumia-only sellers never
