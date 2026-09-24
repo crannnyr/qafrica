@@ -46,9 +46,7 @@ export default function ImportAdminLogin() {
       <div className="w-full max-w-sm">
         {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          <div className="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center">
-            <ShoppingBag className="w-6 h-6 text-white" />
-          </div>
+          <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="w-10 h-10 rounded-xl object-cover" />
           <div>
             <p className="font-black text-gray-900 leading-none">QAFRICA</p>
             <p className="text-xs text-gray-400 leading-none">Import Manager</p>
