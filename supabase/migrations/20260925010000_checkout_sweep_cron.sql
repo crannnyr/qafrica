@@ -1,0 +1,4 @@
+-- Applied live 2026-09-24: pg_cron job 'qafrica-checkout-sweep' (every 5 minutes) calls the
+-- checkout-sweep edge function with the same service Authorization header used by the existing
+-- 'qafrica-email-queue-processor' job (copied inside SQL, never written to the repo).
+-- To recreate: see the DO block used at deploy time (reads the header from cron.job).

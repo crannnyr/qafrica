@@ -7,6 +7,7 @@
 // Deploy with verify_jwt = false: Nomba cannot send a Supabase login token.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
+import { verifyAndFinalize } from '../_shared/checkout.ts';
 
 const WEBHOOK_SECRET = Deno.env.get('NOMBA_WEBHOOK_SECRET') ?? '';
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -80,7 +81,33 @@ Deno.serve(async (req) => {
     console.error('store webhook failed', error);
     return json(500, { error: 'temporarily unavailable' });
   }
-  // 23505 = duplicate: already stored, acknowledge so Nomba stops retrying
-  if (!valid) console.warn('nomba webhook with invalid/missing signature', requestId);
+  if (!valid) {
+    console.warn('nomba webhook with invalid/missing signature', requestId);
+    return json(200, { received: true }); // stored for audit, never acted on
+  }
+
+  // Checkout payments: our references start with QAF-. Processing always re-verifies with Nomba.
+  const ref = String(body?.data?.order?.orderReference ?? body?.data?.transaction?.merchantTxRef ?? '');
+  if (body?.event_type === 'payment_success' && ref.startsWith('QAF-')) {
+    const { data: ev } = await supabase
+      .from('payment_webhook_events')
+      .select('id, processed_at')
+      .eq('provider', 'nomba')
+      .eq('request_id', requestId)
+      .maybeSingle();
+    if (ev && !ev.processed_at) {
+      try {
+        const fee = Number(body?.data?.transaction?.fee);
+        const result = await verifyAndFinalize(supabase, ref, Number.isFinite(fee) ? { fee } : {});
+        await supabase.from('payment_webhook_events')
+          .update({ processed_at: new Date().toISOString(), process_error: result.status === 'paid' ? null : result.status })
+          .eq('id', ev.id);
+      } catch (e) {
+        console.error('checkout processing failed', ref, e);
+        await supabase.from('payment_webhook_events').update({ process_error: String(e).slice(0, 500) }).eq('id', ev.id);
+        return json(500, { error: 'processing failed, please retry' }); // Nomba retries with backoff
+      }
+    }
+  }
   return json(200, { received: true });
 });
