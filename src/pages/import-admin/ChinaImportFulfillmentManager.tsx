@@ -160,8 +160,11 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
         body: JSON.stringify({ manager_token: token, shipment_id: selectedShipment.id, status, ...trackingDraft }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'Could not update shipment');
+      if (res.status !== 200 || !res.ok || data.success !== true) {
+        throw new Error(data.error ?? 'Shipment status update was not confirmed');
+      }
       toast.success(status === 'shipped' ? 'Shipment dispatched' : 'Shipment marked ' + status.replaceAll('_', ' '));
+      setSelectedShipment(data.shipment ?? null);
       setSelectedShipment(null);
       await load(true);
       if (shipmentOrderId) await openShipment(shipmentOrderId);
