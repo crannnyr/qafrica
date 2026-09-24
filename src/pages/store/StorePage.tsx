@@ -17,6 +17,8 @@ import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { useCustomDomainSlug } from '@/components/CustomDomainRouter';
 import StoreLocationBanner from './StoreLocationBanner';
 import type { Store, Product } from '@/types';
+import LookStorefront from '@/components/storefront/LookStorefront';
+import { isNewLook } from '@/lib/storefrontLooks';
 
 // ── Helper: pick black or white text based on background color ────────────────
 function getContrastColor(hex: string): string {
@@ -210,6 +212,120 @@ export default function StorePage() {
     return Array.from(options);
   };
 
+  // ─── Variant picker sheet (shared by classic and the new looks) ─────────
+  const variantSheet = (
+      <AnimatePresence>
+        {selectedProduct && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm"
+              onClick={() => setSelectedProduct(null)}
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 max-h-[85vh] overflow-y-auto"
+            >
+              <div className="p-5">
+                {/* Handle */}
+                <div className="w-8 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
+
+                {/* Product header */}
+                <div className="flex gap-4 mb-6">
+                  {selectedProduct.images?.[0] && (
+                    <img
+                      src={selectedProduct.images[0]}
+                      alt={selectedProduct.name}
+                      className="w-20 h-20 object-cover rounded-xl"
+                    />
+                  )}
+                  <div>
+                    <p className="font-semibold text-gray-900 mb-1 leading-tight">{selectedProduct.name}</p>
+                    <p className="text-lg font-bold" style={{ color: primary }}>
+                      ₦{selectedProduct.selling_price.toLocaleString()}
+                    </p>
+                    {selectedProduct.stock_quantity <= 5 && selectedProduct.stock_quantity > 0 && (
+                      <p className="text-xs text-orange-500 mt-0.5">Only {selectedProduct.stock_quantity} left</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Variant options */}
+                {(selectedProduct.variants?.length ?? 0) > 0 && (
+                  <div className="space-y-4 mb-6">
+                    {Object.keys(selectedProduct.variants![0].options).map(variantName => (
+                      <div key={variantName}>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{variantName}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {getVariantOptions(variantName).map(option => (
+                            <button
+                              key={option}
+                              onClick={() => setSelectedVariants(prev => ({ ...prev, [variantName]: option }))}
+                              className="px-3.5 py-1.5 rounded-lg border text-sm font-medium transition-all"
+                              style={
+                                selectedVariants[variantName] === option
+                                  ? { borderColor: primary, backgroundColor: `${primary}15`, color: primary }
+                                  : { borderColor: '#e5e7eb', color: '#374151' }
+                              }
+                            >
+                              {option}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Quantity */}
+                <div className="mb-6">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Quantity</p>
+                  <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 transition"
+                    >
+                      <Minus className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                    <span className="w-10 text-center text-sm font-semibold">{quantity}</span>
+                    <button
+                      onClick={() => setQuantity(quantity + 1)}
+                      className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 transition"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-gray-600" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setSelectedProduct(null)}
+                    className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmVariantAdd}
+                    className="flex-1 py-3 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition hover:opacity-90"
+                    style={{ backgroundColor: primary }}
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    Add to cart
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+  );
+
   // ─── Loading ──────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -235,6 +351,57 @@ export default function StorePage() {
           </Link>
         </div>
       </div>
+    );
+  }
+
+  // ─── New storefront looks ───────────────────────────────────────────────
+  // ?sf_preview=1 lets the owner's settings screen preview unsaved choices in an
+  // iframe. It only changes what this visitor sees; nothing is saved.
+  const previewParams = new URLSearchParams(window.location.search);
+  let viewStore: Store = store;
+  if (previewParams.get('sf_preview') === '1') {
+    let previewSettings: Record<string, unknown> | undefined;
+    try {
+      const raw = previewParams.get('sf_settings');
+      const parsed = raw ? JSON.parse(raw) : undefined;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) previewSettings = parsed;
+    } catch { /* ignore bad preview params */ }
+    const look = previewParams.get('sf_look');
+    const nav = previewParams.get('sf_nav');
+    const side = previewParams.get('sf_side');
+    viewStore = {
+      ...store,
+      ...(look && (look === 'classic' || isNewLook(look)) ? { storefront_look: look as Store['storefront_look'] } : {}),
+      ...(nav === 'auto' || nav === 'bottom' || nav === 'sidebar' ? { nav_style: nav } : {}),
+      ...(side === 'left' || side === 'right' ? { sidebar_side: side } : {}),
+      ...(previewSettings ? { look_settings: previewSettings } : {}),
+    };
+  }
+
+  if (isNewLook(viewStore.storefront_look)) {
+    return (
+      <>
+        <StoreSEO
+          storeName={store.name}
+          storeDescription={store.description}
+          storeLogo={store.logo_url}
+          storeUrl={`${window.location.origin}/${slug}`}
+        />
+        <LookStorefront
+          store={viewStore}
+          slug={slug}
+          products={products}
+          primary={primary}
+          cartCount={cartCount}
+          customer={customer}
+          isAuthenticated={isAuthenticated}
+          onAddToCart={handleAddToCart}
+          isInWishlist={isInWishlist}
+          onWishlistToggle={handleWishlistToggle}
+          locationBanner={<StoreLocationBanner store={store} primary={primary} />}
+        />
+        {variantSheet}
+      </>
     );
   }
 
@@ -587,117 +754,7 @@ export default function StorePage() {
         )}
       </AnimatePresence>
 
-      {/* ── Variant Modal ── */}
-      <AnimatePresence>
-        {selectedProduct && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 z-50 backdrop-blur-sm"
-              onClick={() => setSelectedProduct(null)}
-            />
-            <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              className="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl z-50 max-h-[85vh] overflow-y-auto"
-            >
-              <div className="p-5">
-                {/* Handle */}
-                <div className="w-8 h-1 bg-gray-200 rounded-full mx-auto mb-5" />
-
-                {/* Product header */}
-                <div className="flex gap-4 mb-6">
-                  {selectedProduct.images?.[0] && (
-                    <img
-                      src={selectedProduct.images[0]}
-                      alt={selectedProduct.name}
-                      className="w-20 h-20 object-cover rounded-xl"
-                    />
-                  )}
-                  <div>
-                    <p className="font-semibold text-gray-900 mb-1 leading-tight">{selectedProduct.name}</p>
-                    <p className="text-lg font-bold" style={{ color: primary }}>
-                      ₦{selectedProduct.selling_price.toLocaleString()}
-                    </p>
-                    {selectedProduct.stock_quantity <= 5 && selectedProduct.stock_quantity > 0 && (
-                      <p className="text-xs text-orange-500 mt-0.5">Only {selectedProduct.stock_quantity} left</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Variant options */}
-                {(selectedProduct.variants?.length ?? 0) > 0 && (
-                  <div className="space-y-4 mb-6">
-                    {Object.keys(selectedProduct.variants![0].options).map(variantName => (
-                      <div key={variantName}>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{variantName}</p>
-                        <div className="flex flex-wrap gap-2">
-                          {getVariantOptions(variantName).map(option => (
-                            <button
-                              key={option}
-                              onClick={() => setSelectedVariants(prev => ({ ...prev, [variantName]: option }))}
-                              className="px-3.5 py-1.5 rounded-lg border text-sm font-medium transition-all"
-                              style={
-                                selectedVariants[variantName] === option
-                                  ? { borderColor: primary, backgroundColor: `${primary}15`, color: primary }
-                                  : { borderColor: '#e5e7eb', color: '#374151' }
-                              }
-                            >
-                              {option}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Quantity */}
-                <div className="mb-6">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Quantity</p>
-                  <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                    <button
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 transition"
-                    >
-                      <Minus className="w-3.5 h-3.5 text-gray-600" />
-                    </button>
-                    <span className="w-10 text-center text-sm font-semibold">{quantity}</span>
-                    <button
-                      onClick={() => setQuantity(quantity + 1)}
-                      className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 transition"
-                    >
-                      <Plus className="w-3.5 h-3.5 text-gray-600" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setSelectedProduct(null)}
-                    className="flex-1 py-3 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleConfirmVariantAdd}
-                    className="flex-1 py-3 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition hover:opacity-90"
-                    style={{ backgroundColor: primary }}
-                  >
-                    <ShoppingCart className="w-4 h-4" />
-                    Add to cart
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
+      {variantSheet}
     </div>
   );
 }

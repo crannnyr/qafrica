@@ -11,12 +11,16 @@ import SocialTab from './StoreSettings/SocialTab';
 import LocationTab from './StoreSettings/LocationTab';
 import PasswordTab from './StoreSettings/PasswordTab';
 import StaffTab from './StoreSettings/Staff/StaffTab';
-import type { Tab } from './StoreSettings/constants';
+import { TABS, type Tab } from './StoreSettings/constants';
 
 export default function StoreSettingsPage() {
   const { currentStore } = useStoreStore();
   const { user } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<Tab>('general');
+  // ?tab=images etc. opens a specific tab (used by links from other dashboard pages)
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    return TABS.some((x) => x.id === t) ? (t as Tab) : 'general';
+  });
 
   return (
     <div className="space-y-6 max-w-3xl">

@@ -11,6 +11,7 @@ import { useStoreStore } from '@/stores';
 import { toast } from 'sonner';
 import { AVAILABLE_THEMES, getThemeById } from '@/lib/themes';
 import { NICHE_CATEGORIES } from '@/lib/nicheCategories';
+import StorefrontLookSettings from '@/components/storefront/StorefrontLookSettings';
 
 // Template definitions - for theme preview purposes only
 const templates = [
@@ -251,11 +252,15 @@ export default function StoreTemplatesPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Store Themes</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Store design</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
-          Choose a theme that matches your brand. Your store can only have one active theme at a time.
+          Pick a layout for how your store is arranged, then a theme for its colours.
         </p>
       </div>
+
+      <StorefrontLookSettings />
+
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white pt-2">Colour theme</h2>
 
       {/* Current Store Status */}
       <motion.div
