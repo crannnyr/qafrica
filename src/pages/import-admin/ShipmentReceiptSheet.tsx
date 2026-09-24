@@ -21,10 +21,10 @@ const variants=(v:Record<string,unknown>|null|undefined)=>v?Object.entries(v).fi
 const qr=(code:string)=>'https://api.qrserver.com/v1/create-qr-code/?size=120x120&data='+encodeURIComponent('https://qafrica.store/track?code='+code);
 
 function Copy({data,label}:{data:ShipmentReceiptData;label:string}) {
-  return <div className="relative flex-1 px-5 py-4 overflow-hidden">
+  return <div className="relative w-full px-7 py-6 overflow-hidden">
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none"><span className="text-gray-100 font-black uppercase whitespace-nowrap" style={{fontSize:'3rem',transform:'rotate(-35deg)',letterSpacing:'0.05em'}}>{label}</span></div>
     <div className="relative">
-      <div className="flex items-start justify-between mb-3"><div><p className="font-black text-gray-900 text-base leading-none">QAFRICA</p><p className="text-[9px] text-gray-400 mt-1">Shipment receipt</p></div><img src={qr(data.order_code)} alt="Shipment verification QR" className="w-16 h-16"/></div>
+      <div className="flex items-start justify-between mb-3"><div><p className="font-black text-gray-900 text-lg leading-none">QAFRICA</p><p className="text-[9px] text-gray-400 mt-1">Shipment receipt</p></div><img src={qr(data.order_code)} alt="Shipment verification QR" className="w-16 h-16"/></div>
       <div className="text-center mb-3"><p className="text-[8px] text-gray-400 uppercase tracking-widest">Shipment code</p><p className="font-mono font-black text-gray-900 text-lg tracking-widest">{data.shipment_code}</p><p className="text-[9px] text-gray-400 mt-1">Order {data.order_code}</p></div>
       <div className="grid grid-cols-2 gap-2 mb-3 text-[10px]"><div><p className="text-gray-400">Customer</p><p className="font-semibold text-gray-800">{data.customer_name}</p>{data.customer_whatsapp&&<p className="text-gray-500">{data.customer_whatsapp}</p>}</div><div className="text-right"><p className="text-gray-400">Status</p><p className="font-semibold text-gray-800 capitalize">{data.status.replaceAll('_',' ')}</p><p className="text-gray-500">{new Date(data.created_at).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}</p></div></div>
       <div className="grid grid-cols-2 gap-2 mb-3 text-[10px]"><div><p className="text-gray-400">Carrier</p><p className="font-semibold text-gray-800">{data.carrier_name||'QAfrica'}</p>{data.tracking_number&&<p className="text-gray-500">Tracking: {data.tracking_number}</p>}</div><div className="text-right"><p className="text-gray-400">Delivery</p><p className="font-semibold text-gray-800 capitalize">{(data.delivery_mode||'—').replaceAll('_',' ')}</p>{data.shipped_at&&<p className="text-gray-500">Shipped {new Date(data.shipped_at).toLocaleDateString('en-NG')}</p>}</div></div>
@@ -45,10 +45,10 @@ function Copy({data,label}:{data:ShipmentReceiptData;label:string}) {
 export default function ShipmentReceiptSheet({data,onClose}:{data:ShipmentReceiptData;onClose:()=>void}) {
   return <div className="fixed inset-0 z-[90] bg-black/60 flex items-end sm:items-center justify-center sm:p-4 print:bg-white print:p-0 print:block">
     <div className="bg-white w-full sm:max-w-3xl rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col print:hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"><div><h2 className="font-bold text-gray-900 text-sm">Shipment receipt</h2><p className="text-[11px] text-gray-400 mt-0.5">Customer and QAFRICA copies.</p></div><div className="flex items-center gap-1"><button onClick={()=>window.print()} className="p-1.5 hover:bg-gray-100 rounded-lg flex items-center gap-1 text-xs font-semibold text-gray-600"><Printer className="w-4 h-4"/> Print</button><button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500"/></button></div></div>
-      <div className="overflow-y-auto p-4"><div className="border border-gray-200 rounded-xl flex divide-x divide-dashed divide-gray-300"><Copy data={data} label="Customer copy"/><Copy data={data} label="QAFRICA copy"/></div></div>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"><div><h2 className="font-bold text-gray-900 text-sm">Shipment receipt</h2><p className="text-[11px] text-gray-400 mt-0.5">Single shipment receipt with customer delivery address.</p></div><div className="flex items-center gap-1"><button onClick={()=>window.print()} className="p-1.5 hover:bg-gray-100 rounded-lg flex items-center gap-1 text-xs font-semibold text-gray-600"><Printer className="w-4 h-4"/> Print</button><button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500"/></button></div></div>
+      <div className="overflow-y-auto p-4"><div className="border border-gray-200 rounded-xl"><Copy data={data} label="Shipment receipt"/></div></div>
     </div>
-    <div className="hidden print:flex print:w-full print:h-full"><div className="flex-1 flex flex-col justify-center border-r-2 border-dashed border-gray-400"><Copy data={data} label="Customer copy"/></div><div className="flex-1 flex flex-col justify-center"><Copy data={data} label="QAFRICA copy"/></div></div>
-    <style>{'@media print { @page { size: A4 landscape; margin: 10mm; } }'}</style>
+    <div className="hidden print:block print:w-full print:min-h-screen"><Copy data={data} label="Shipment receipt"/></div>
+    <style>{'@media print { @page { size: A4 portrait; margin: 10mm; } }'}</style>
   </div>;
 }
