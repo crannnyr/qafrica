@@ -19,6 +19,7 @@ import StoreLocationBanner from './StoreLocationBanner';
 import type { Store, Product } from '@/types';
 import LookStorefront from '@/components/storefront/LookStorefront';
 import { applyPreviewOverrides, isNewLook } from '@/lib/storefrontLooks';
+import { recordStoreTouch } from '@/lib/marketplaceAttribution';
 
 // ── Helper: pick black or white text based on background color ────────────────
 function getContrastColor(hex: string): string {
@@ -211,6 +212,11 @@ export default function StorePage() {
     });
     return Array.from(options);
   };
+
+  // Marketplace attribution: remember whether this visit came from /stores (?src=mkt) or the seller's own link
+  useEffect(() => {
+    if (store?.id) recordStoreTouch(store.id);
+  }, [store?.id]);
 
   // ─── Variant picker sheet (shared by classic and the new looks) ─────────
   const variantSheet = (

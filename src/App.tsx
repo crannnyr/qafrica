@@ -110,7 +110,8 @@ const CustomerLoginPage = lazy(() => import('@/pages/customer/CustomerLoginPage'
 const CustomerSignupPage = lazy(() => import('@/pages/customer/CustomerSignupPage'));
 const CustomerDashboard = lazy(() => import('@/pages/customer/CustomerDashboard/index'));
 const CustomerOrderDetailPage = lazy(() => import('@/pages/customer/CustomerOrderDetailPage'));
-const StoreDiscoveryPage = lazy(() => import('@/pages/customer/StoreDiscoveryPage'));
+const MarketplaceHome = lazy(() => import('@/pages/marketplace/MarketplaceHome'));
+const MarketplaceCategories = lazy(() => import('@/pages/marketplace/MarketplaceCategories'));
 const UniversalCartPage = lazy(() => import('@/pages/customer/UniversalCartPage'));
 const UniversalCheckoutPage = lazy(() => import('@/pages/customer/UniversalCheckoutPage'));
 
@@ -375,7 +376,8 @@ function App() {
           <Route path="/customer/signup" element={<CustomerSignupPage />} />
           <Route path="/customer/dashboard" element={<CustomerDashboard />} />
           <Route path="/customer/orders/:orderId" element={<CustomerOrderDetailPage />} />
-          <Route path="/stores" element={<StoreDiscoveryPage />} />
+          <Route path="/stores" element={<MarketplaceHome />} />
+          <Route path="/stores/categories" element={<MarketplaceCategories />} />
           <Route path="/cart" element={<UniversalCartPage />} />
           <Route path="/checkout" element={<UniversalCheckoutPage />} />
 

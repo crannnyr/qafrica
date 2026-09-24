@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { attributionFor, type Attribution } from '@/lib/marketplaceAttribution';
 import { persist } from 'zustand/middleware';
 import { supabase } from '@/services';
 import type { Product, Store } from '@/types';
@@ -17,7 +18,9 @@ export interface CartItem {
   unitPrice: number;        
   totalPrice: number;       
   variantOptions?: Record<string, string>; // e.g., { Color: "Red", Size: "Large" }
-  addedAt: string;          
+  addedAt: string;
+  /** 'marketplace' if added after reaching this store via /stores (7% commission); set at add time */
+  attribution?: Attribution;          
 }
 
 // Wishlist item matching database structure
@@ -162,6 +165,7 @@ export const useCartStore = create<CartStore>()(
             totalPrice: unitPrice * quantity,
             variantOptions,
             addedAt: new Date().toISOString(),
+            attribution: attributionFor(store.id),
           };
 
           return { items: [...state.items, newItem] };

@@ -17,6 +17,7 @@ import type { Store as StoreType, Product, ProductVariant } from '@/types';
 import { LookPageHeader } from '@/components/storefront/StoreBrand';
 import { useStoreLook } from '@/hooks/useStoreLook';
 import { applyPreviewOverrides } from '@/lib/storefrontLooks';
+import { recordStoreTouch } from '@/lib/marketplaceAttribution';
 
 // ── Helper: pick black or white text based on background color ────────────────
 function getContrastColor(hex: string): string {
@@ -159,6 +160,9 @@ export default function ProductDetailPage() {
   // New storefront looks: use the look's fonts and header (classic = undefined, unchanged)
   const viewStore = store ? applyPreviewOverrides(store) : store; // owner preview only
   const look = useStoreLook(viewStore);
+  useEffect(() => {
+    if (store?.id) recordStoreTouch(store.id);
+  }, [store?.id]);
   const contrastText = store ? getContrastColor(primary) : '#ffffff';
 
   useEffect(() => {
