@@ -54,7 +54,7 @@ serve(async (req) => {
   try {
     const permission = action === 'admin-fulfillment-shipments-list'
       ? 'import.orders.view'
-      : action === 'admin-fulfillment-shipment-create'
+      : action === 'admin-fulfillment-shipment-create' || action === 'admin-fulfillment-shipment-update'
         ? 'import.orders.update'
         : null
     if (!permission) return json({ error: 'Unknown action' }, 400)
@@ -91,6 +91,26 @@ serve(async (req) => {
             .map((i: any) => ({ ...i, fulfillment_item: byId.get(i.fulfillment_item_id) ?? null })),
         })),
       })
+    }
+
+    if (action === 'admin-fulfillment-shipment-update') {
+      if (typeof body.shipment_id !== 'string') return json({ error: 'shipment_id is required' }, 400)
+      const allowed = ['ready_to_ship','shipped','in_transit','out_for_delivery','delivered','cancelled']
+      if (!allowed.includes(body.status)) return json({ error: 'Invalid shipment status' }, 400)
+
+      const { data: shipment, error } = await db.rpc('update_china_import_shipment_status', {
+        p_shipment_id: body.shipment_id,
+        p_status: body.status,
+        p_manager_id: managerId,
+        p_carrier_name: typeof body.carrier_name === 'string' ? body.carrier_name : null,
+        p_tracking_number: typeof body.tracking_number === 'string' ? body.tracking_number : null,
+        p_tracking_url: typeof body.tracking_url === 'string' ? body.tracking_url : null,
+        p_waybill_url: typeof body.waybill_url === 'string' ? body.waybill_url : null,
+        p_delivery_mode: typeof body.delivery_mode === 'string' ? body.delivery_mode : null,
+        p_note: typeof body.note === 'string' ? body.note : null,
+      })
+      if (error) return json({ error: error.message }, 400)
+      return json({ success: true, shipment })
     }
 
     if (action === 'admin-fulfillment-shipment-create') {
