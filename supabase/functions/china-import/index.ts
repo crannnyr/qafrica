@@ -1408,7 +1408,7 @@ serve(async (req: Request) => {
           .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
       ))
 
-      if (!cleanEmail || !/^([a-z0-9._%+-]+)@qafrica\\.store$/.test(cleanEmail)) {
+      if (!cleanEmail || !/^([a-z0-9._%+-]+)@qafrica\.store$/.test(cleanEmail)) {
         return json({ error: 'Admin email must use @qafrica.store.' }, 400)
       }
       if (!cleanName) return json({ error: 'Full name is required.' }, 400)
