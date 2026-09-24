@@ -427,8 +427,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           )}
         </div>
-      ) : (
-        {loading ? (
+      ) : loading ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
       ) : batches.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
@@ -532,7 +531,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             );
           })}
         </div>
-      )}
       )}
     </div>
 
