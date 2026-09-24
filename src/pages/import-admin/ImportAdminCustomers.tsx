@@ -22,7 +22,7 @@ const CANCEL_REASON_TEMPLATES = [
   { key: 'software_error', label: 'Software error', text: 'A software error affected the price shown for this product at checkout.' },
 ];
 const LISTS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/client-lists`;
-
+ 
 interface CustomerRow {
   id: string;
   full_name: string;
