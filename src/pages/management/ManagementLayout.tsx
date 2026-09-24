@@ -91,7 +91,7 @@ export default function ManagementLayout() {
               </div>
             </Link>
           )}
-          {collapsed && <div className="hidden lg:flex w-9 h-9 bg-orange-500 rounded-xl items-center justify-center"><Shield className="w-5 h-5 text-white" /></div>}
+          {collapsed && <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="hidden lg:block w-9 h-9 rounded-xl object-cover" />}
           <button onClick={() => setMobileOpen(false)} className="lg:hidden p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4" /></button>
         </div>
 
