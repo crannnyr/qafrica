@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom';
 import { ArrowLeft, ShoppingBag } from 'lucide-react';
 import type { Store } from '@/types';
+
+/** Just what's needed to draw a store's identity (works for marketplace listings too). */
+export type BrandStore = Pick<Store, 'name' | 'look_settings'> & { logo_url?: string | null };
 import { getContrastColor, previewSearch, splitWordmark, type LookDefinition } from '@/lib/storefrontLooks';
 
-export function StoreMark({ store, primary, className = '' }: { store: Store; primary: string; className?: string }) {
+export function StoreMark({ store, primary, className = '' }: { store: BrandStore; primary: string; className?: string }) {
   return store.logo_url ? (
     <img src={store.logo_url} alt="" className={`object-cover ${className}`} />
   ) : (
@@ -17,7 +20,7 @@ export function StoreMark({ store, primary, className = '' }: { store: Store; pr
   );
 }
 
-export function Wordmark({ store, primary }: { store: Store; primary: string }) {
+export function Wordmark({ store, primary }: { store: BrandStore; primary: string }) {
   const [dark, accent] = splitWordmark(store);
   return (
     <span className="text-[22px] font-extrabold tracking-[-0.03em] leading-none whitespace-nowrap">
@@ -28,7 +31,7 @@ export function Wordmark({ store, primary }: { store: Store; primary: string }) 
 }
 
 /** Store identity as each look shows it: wordmark, serif name, or logo + name. */
-export function StoreBrand({ store, look, primary }: { store: Store; look: LookDefinition; primary: string }) {
+export function StoreBrand({ store, look, primary }: { store: BrandStore; look: LookDefinition; primary: string }) {
   if (look.id === 'clean') return <Wordmark store={store} primary={primary} />;
   if (look.id === 'boutique')
     return (

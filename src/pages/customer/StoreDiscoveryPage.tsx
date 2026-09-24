@@ -1,143 +1,184 @@
 // src/pages/customer/StoreDiscoveryPage.tsx
+// /stores — the public marketplace of QAFRICA stores.
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/services';
-
-import DiscoveryHero from './StoreDiscovery/DiscoveryHero';
-import CategoryFilter from './StoreDiscovery/CategoryFilter';
-import StoreGridControls from './StoreDiscovery/StoreGridControls';
-import StoreGrid from './StoreDiscovery/StoreGrid';
+import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Search, Store as StoreIcon, RefreshCw } from 'lucide-react';
+import { NICHE_CATEGORIES } from '@/lib/nicheCategories';
+import { getLook, loadLookFonts } from '@/lib/storefrontLooks';
+import { useForceLightMode } from '@/hooks/useForceLightMode';
 import SellerCallToAction from './StoreDiscovery/SellerCallToAction';
-import type { StoreDisplay, SortBy } from './StoreDiscovery/constants';
+import StoreHeroCarousel from './StoreDiscovery/StoreHeroCarousel';
+import MarketplaceStoreCard from './StoreDiscovery/MarketplaceStoreCard';
+import { useMarketplaceStores } from './StoreDiscovery/useMarketplaceStores';
+
+type SortBy = 'featured' | 'newest' | 'products' | 'rating';
+const HERO_MAX = 6;
 
 export default function StoreDiscoveryPage() {
-  const [stores, setStores]                     = useState<any[]>([]);
-  const [paidOwnerIds, setPaidOwnerIds]         = useState<Set<string>>(new Set());
-  const [filteredStores, setFilteredStores]     = useState<StoreDisplay[]>([]);
-  const [isLoading, setIsLoading]               = useState(true);
-  const [searchQuery, setSearchQuery]           = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [sortBy, setSortBy]                     = useState<SortBy>('popular');
-  const [heroCollapsed, setHeroCollapsed]       = useState(false);
+  useForceLightMode();
+  const { stores, status, reload } = useMarketplaceStores();
+  const [query, setQuery] = useState('');
+  const [niche, setNiche] = useState('all');
+  const [sortBy, setSortBy] = useState<SortBy>('featured');
 
-  useEffect(() => { fetchStores(); }, []);
-  useEffect(() => { filterStores(); }, [stores, paidOwnerIds, searchQuery, selectedCategory, sortBy]);
+  // Load the fonts of every look in use so store names render in their own type
+  useEffect(() => {
+    new Set(stores.map((s) => s.storefront_look)).forEach((id) => {
+      const look = getLook(id);
+      if (look) loadLookFonts(look);
+    });
+  }, [stores]);
 
-  const fetchStores = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('stores')
-        .select('*, products(count)')
-        .eq('is_active', true)
-        .or('is_blocked.eq.false,is_blocked.is.null')
-        .order('created_at', { ascending: false });
-      const storeList = !error && data ? data : [];
-      setStores(storeList);
+  // Carousel: server order already puts verified, well-stocked stores first
+  const featured = useMemo(() => stores.filter((s) => s.banner_url).slice(0, HERO_MAX), [stores]);
 
-      // Store-section visibility requires an active PAID (non-free) plan —
-      // fetched separately since stores don't carry their own tier field.
-      const ownerIds = [...new Set(storeList.map((s: any) => s.owner_id).filter(Boolean))];
-      if (ownerIds.length > 0) {
-        const { data: subs } = await supabase
-          .from('subscriptions')
-          .select('user_id, tier, is_active, expires_at')
-          .in('user_id', ownerIds)
-          .eq('is_active', true)
-          .neq('tier', 'free');
+  // Only offer niches that listed stores actually sell in
+  const niches = useMemo(() => {
+    const counts = new Map<string, number>();
+    stores.forEach((s) => s.niches.forEach((n) => counts.set(n, (counts.get(n) ?? 0) + 1)));
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([id]) => ({ id, name: NICHE_CATEGORIES[id]?.name ?? id.charAt(0).toUpperCase() + id.slice(1) }));
+  }, [stores]);
 
-        const paidSet = new Set<string>(
-          (subs ?? [])
-            .filter((s: any) => !s.expires_at || new Date(s.expires_at) > new Date())
-            .map((s: any) => s.user_id),
-        );
-        setPaidOwnerIds(paidSet);
-      } else {
-        setPaidOwnerIds(new Set());
-      }
-    } catch (err) {
-      console.error('Failed to fetch stores:', err);
-      setStores([]);
-      setPaidOwnerIds(new Set());
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getProductCount = (productsObj: any) => {
-    if (!productsObj) return 0;
-    if (Array.isArray(productsObj) && productsObj.length > 0) return productsObj[0].count || 0;
-    if (typeof productsObj.count === 'number') return productsObj.count;
-    return 0;
-  };
-
-  const filterStores = () => {
-    if (stores.length === 0 && isLoading) return;
-
-    // Store-section visibility gate: must be on an active paid plan, have at
-    // least 5 product postings, and have both a logo and store banner set.
-    let filtered: StoreDisplay[] = stores
-      .filter((s) => {
-        const hasPaidPlan  = paidOwnerIds.has(s.owner_id);
-        const hasEnoughProducts = getProductCount(s.products) >= 5;
-        const hasBranding  = !!s.logo_url && !!s.banner_url;
-        return hasPaidPlan && hasEnoughProducts && hasBranding;
-      })
-      .map((s) => ({
-        id:            s.id,
-        name:          s.name,
-        slug:          s.slug,
-        description:   s.description,
-        logo_url:      s.logo_url   || null,
-        banner_url:    s.banner_url || null,
-        primary_color: s.primary_color,
-        niches:        s.niches     || [],
-        product_count: getProductCount(s.products),
-        rating:        4.5,
-        review_count:  100,
-        is_verified:   s.is_verified,
-        created_at:    s.created_at,
-      }));
-
-    if (searchQuery) {
-      filtered = filtered.filter((s) =>
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.description?.toLowerCase().includes(searchQuery.toLowerCase()),
-      );
-    }
-    if (selectedCategory !== 'all') {
-      filtered = filtered.filter((s) => s.niches?.includes(selectedCategory));
-    }
-    switch (sortBy) {
-      case 'rating':  filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0)); break;
-      case 'newest':  filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()); break;
-      default:        filtered.sort((a, b) => (b.review_count || 0) - (a.review_count || 0));
-    }
-    setFilteredStores(filtered);
-  };
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = stores.filter(
+      (s) =>
+        (niche === 'all' || s.niches.includes(niche)) &&
+        (!q || s.name.toLowerCase().includes(q) || s.description?.toLowerCase().includes(q)),
+    );
+    if (sortBy === 'newest') return [...list].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+    if (sortBy === 'products') return [...list].sort((a, b) => b.product_count - a.product_count);
+    if (sortBy === 'rating')
+      return [...list].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || b.review_count - a.review_count);
+    return list;
+  }, [stores, niche, query, sortBy]);
 
   return (
-    // ── No spacer div — hero is sticky, content flows naturally beneath ──
-    <div className="min-h-screen bg-gray-50">
-      <DiscoveryHero
-        searchQuery={searchQuery}
-        onSearch={setSearchQuery}
-        collapsed={heroCollapsed}
-        onCollapse={() => setHeroCollapsed(true)}
-      />
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      {/* Top bar */}
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-gray-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-3">
+          <Link to="/" className="flex items-center gap-2 shrink-0" aria-label="QAFRICA home">
+            <img src="/qafrica-bag-logo.svg" alt="" className="w-7 h-7" />
+            <span className="font-extrabold tracking-tight hidden sm:inline">QAFRICA</span>
+          </Link>
+          <div className="relative flex-1 max-w-md mx-auto">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" aria-hidden />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search stores"
+              aria-label="Search stores"
+              className="w-full pl-9 pr-3 py-2 text-sm rounded-full bg-gray-100 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+          </div>
+          <Link to="/signup" className="shrink-0 text-sm font-semibold text-orange-600 hover:text-orange-700">
+            Sell<span className="hidden sm:inline"> on QAFRICA</span>
+          </Link>
+        </div>
+      </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <CategoryFilter
-          selectedCategory={selectedCategory}
-          onSelect={setSelectedCategory}
-        />
-        <StoreGridControls
-          totalCount={filteredStores.length}
-          sortBy={sortBy}
-          onSortChange={setSortBy}
-        />
-        <StoreGrid stores={filteredStores} isLoading={isLoading} />
+      {status === 'ready' && featured.length > 0 && <StoreHeroCarousel stores={featured} />}
+      {status === 'loading' && <div className="h-[440px] sm:h-[420px] lg:h-[480px] bg-gray-200 animate-pulse" aria-hidden />}
+
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Shop independent stores</h1>
+            <p className="text-sm text-gray-600 mt-1">Every store here is run by a seller on QAFRICA.</p>
+          </div>
+          {status === 'ready' && stores.length > 1 && (
+            <label className="text-sm text-gray-600 flex items-center gap-2">
+              Sort
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortBy)}
+                className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="featured">Featured</option>
+                <option value="newest">Newest</option>
+                <option value="products">Most products</option>
+                <option value="rating">Top rated</option>
+              </select>
+            </label>
+          )}
+        </div>
+
+        {niches.length > 1 && (
+          <div className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-6 flex gap-2 overflow-x-auto scrollbar-hide" role="group" aria-label="Filter by category">
+            {[{ id: 'all', name: 'All stores' }, ...niches].map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                aria-pressed={niche === n.id}
+                onClick={() => setNiche(n.id)}
+                className={`shrink-0 px-3.5 py-1.5 rounded-full text-sm font-medium border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+                  niche === n.id ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                {n.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {status === 'loading' && (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5" aria-busy="true" aria-label="Loading stores">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-52 rounded-2xl bg-gray-200 animate-pulse" />
+            ))}
+          </div>
+        )}
+
+        {status === 'error' && (
+          <div className="text-center py-16">
+            <p className="text-gray-700">Stores couldn't load. Check your connection and try again.</p>
+            <button
+              type="button"
+              onClick={reload}
+              className="mt-4 inline-flex items-center gap-2 rounded-full bg-gray-900 text-white px-5 py-2 text-sm font-semibold"
+            >
+              <RefreshCw className="w-4 h-4" /> Try again
+            </button>
+          </div>
+        )}
+
+        {status === 'ready' && visible.length === 0 && (
+          <div className="text-center py-16">
+            <StoreIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" aria-hidden />
+            {stores.length === 0 ? (
+              <p className="text-gray-700">New stores are being set up. Check back soon.</p>
+            ) : (
+              <>
+                <p className="text-gray-700">No stores match that search.</p>
+                <button
+                  type="button"
+                  onClick={() => { setQuery(''); setNiche('all'); }}
+                  className="mt-2 text-sm font-semibold text-orange-600 underline underline-offset-4"
+                >
+                  Show all stores
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {status === 'ready' && visible.length > 0 && (
+          <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {visible.map((s) => (
+              <li key={s.id}>
+                <MarketplaceStoreCard store={s} />
+              </li>
+            ))}
+          </ul>
+        )}
+
         <SellerCallToAction />
-      </div>
+      </main>
     </div>
   );
 }

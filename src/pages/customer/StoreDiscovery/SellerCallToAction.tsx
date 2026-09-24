@@ -8,8 +8,7 @@ export default function SellerCallToAction() {
     <div className="mt-16 bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl p-8 text-white text-center">
       <h2 className="text-2xl font-bold mb-2">Have products to sell?</h2>
       <p className="text-gray-300 mb-6 max-w-lg mx-auto">
-        Join thousands of sellers on QAfrica and reach millions
-        of customers across Nigeria.
+        Open your own store on QAFRICA and sell to shoppers across Nigeria.
       </p>
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
         <Link to="/signup">
@@ -20,7 +19,7 @@ export default function SellerCallToAction() {
         <Link to="/pricing">
           <Button
             variant="outline"
-            className="border-white text-white hover:bg-white/10"
+            className="bg-transparent border-white text-white hover:bg-white/10 hover:text-white"
           >
             View Pricing
           </Button>
