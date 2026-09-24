@@ -117,7 +117,7 @@ export default function OnboardingStoreSetup() {
       const { data: store, error } = await storeService.createStore({
         owner_id:        user.id,
         name:            formData.name,
-        slug:            formData.slug,
+        slug:            formData.slug.replace(/-{2,}/g, '-').replace(/^-+|-+$/g, ''), // valid as <slug>.qafrica.store
         description:     formData.description,
         theme:           formData.theme,
         primary_color:   formData.primary_color,

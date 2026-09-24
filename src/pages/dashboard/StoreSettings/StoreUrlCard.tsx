@@ -1,4 +1,6 @@
 import { Globe, Clock, Link2, AlertCircle } from 'lucide-react';
+import CONFIG from '@/lib/config';
+import { storeSubdomainUrl } from '@/lib/storeSubdomain';
 
 interface Props {
   customDomain?: string | null;
@@ -51,6 +53,14 @@ export default function StoreUrlCard({ customDomain, domainStatus, slug, domainR
           <p className="text-xs text-orange-700 dark:text-orange-300">
             Domain <strong>{urlInfo.pendingDomain}</strong> is awaiting admin approval. Your store is accessible via the default URL until then.
           </p>
+        </div>
+      )}
+      {CONFIG.STORE_SUBDOMAINS_LIVE && slug && (
+        <div className="mt-3 flex items-center gap-2 text-sm">
+          <span className="text-gray-500 dark:text-gray-400">Short link:</span>
+          <a href={storeSubdomainUrl(slug)} target="_blank" rel="noopener noreferrer" className="font-medium text-orange-600 dark:text-orange-400 break-all">
+            {storeSubdomainUrl(slug).replace('https://', '')}
+          </a>
         </div>
       )}
       {urlInfo.status === 'default' && (

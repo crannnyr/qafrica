@@ -14,6 +14,7 @@ import ProductDetailPage from '@/pages/store/ProductDetailPage';
 import CheckoutPage from '@/pages/store/CheckoutPage';
 import StoreNotFoundPage from '@/pages/store/StoreNotFoundPage';
 import StoreClosedPage from '@/pages/store/StoreClosedPage';
+import { PLATFORM_HOST, aliasTargetPath, storeSubdomainLabel } from '@/lib/storeSubdomain';
 
 // Domains that belong to the platform itself — never treated as custom store domains
 const PLATFORM_DOMAINS = [
@@ -27,6 +28,7 @@ const PLATFORM_DOMAINS = [
 // Also treat preview hosting domains as platform domains
 const isPlatformDomain = (hostname: string) => {
   if (PLATFORM_DOMAINS.includes(hostname)) return true;
+  if (hostname.endsWith('.qafrica.store')) return true; // reserved subdomains (aliases handled above)
   if (hostname.endsWith('.bolt.host')) return true;
   if (hostname.endsWith('.netlify.app')) return true;
   if (hostname.endsWith('.vercel.app')) return true;
@@ -41,6 +43,40 @@ interface Props {
 }
 
 export default function CustomDomainRouter({ children }: Props) {
+  // <store>.qafrica.store → forward to qafrica.store/<slug>
+  const aliasLabel = storeSubdomainLabel(window.location.hostname);
+  if (aliasLabel) return <SubdomainAliasRedirect label={aliasLabel} />;
+  return <CustomDomainRoutes>{children}</CustomDomainRoutes>;
+}
+
+function SubdomainAliasRedirect({ label }: { label: string }) {
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    supabase.rpc('store_slug_for_subdomain', { p_label: label }).then(({ data, error }) => {
+      if (!alive) return;
+      if (error || typeof data !== 'string' || !data) {
+        setNotFound(true);
+        return;
+      }
+      const { pathname, search, hash } = window.location;
+      window.location.replace(`https://${PLATFORM_HOST}${aliasTargetPath(data, pathname, search, hash)}`);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [label]);
+
+  if (notFound) return <StoreNotFoundPage />;
+  return (
+    <div className="min-h-screen flex items-center justify-center" aria-busy="true" aria-label="Opening store">
+      <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+function CustomDomainRoutes({ children }: Props) {
   const hostname = window.location.hostname;
   const isCustomDomain = !isPlatformDomain(hostname);
 

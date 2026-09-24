@@ -5,6 +5,9 @@ export const CONFIG = {
   PLATFORM_URL: 'qafrica.store',
   APP_URL: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173',
   PLATFORM_EMAIL: 'support@qafrica.store',
+  // Turn on once wildcard DNS (*.qafrica.store) + hosting are set up. Shows owners their
+  // short link <slug>.qafrica.store; the redirect itself works regardless.
+  STORE_SUBDOMAINS_LIVE: false,
   
   // Supabase - FIXED: Removed trailing space
   SUPABASE_URL: 'https://bahiqhpypapvktpxrths.supabase.co',
@@ -24,8 +27,7 @@ export const CONFIG = {
   // Paystack
   PAYSTACK_PUBLIC_KEY: 'pk_live_1129941b7ea653fcbd4e1042663fcb0e57957860',
   
-  // Resend Email
-  RESEND_API_KEY: 're_2xf4TkfF_3k9sS22aaFRh98RM4j9zgvoL',
+  // Resend: the API key lives only in Supabase edge function secrets (never in browser code).
   
   // Admin Account
   ADMIN_ACCOUNT_NUMBER: '9069149803',
