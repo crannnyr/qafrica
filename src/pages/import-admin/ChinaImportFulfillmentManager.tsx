@@ -74,6 +74,8 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [fulfillmentTab, setFulfillmentTab] = useState<'receiving' | 'shipments'>('receiving');
   const [allShipments, setAllShipments] = useState<any[]>([]);
   const [shipmentsLoading, setShipmentsLoading] = useState(false);
+  const [shipmentQuery, setShipmentQuery] = useState('');
+  const [shipmentStatusFilter, setShipmentStatusFilter] = useState('all');
 
   const loadShipments = useCallback(async () => {
     setShipmentsLoading(true);
@@ -299,6 +301,22 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     }
   };
 
+  const filteredShipments = useMemo(() => {
+    const needle = shipmentQuery.trim().toLowerCase();
+    return allShipments.filter(shipment => {
+      if (shipmentStatusFilter !== 'all' && shipment.status !== shipmentStatusFilter) return false;
+      if (!needle) return true;
+      const customer = items.find(item => item.order_id === shipment.order_id);
+      return [
+        shipment.shipment_code,
+        customer?.order_code,
+        customer?.customer_name,
+        shipment.carrier_name,
+        shipment.tracking_number,
+      ].filter(Boolean).join(' ').toLowerCase().includes(needle);
+    });
+  }, [allShipments, items, shipmentQuery, shipmentStatusFilter]);
+
   const awaitingCount = items.filter(item => item.status === 'awaiting_arrival').length;
   const hqCount = items.filter(item => item.status === 'at_qafrica_hq' || item.status === 'partially_allocated' || item.status === 'fully_allocated').length;
   const orderedUnits = items.reduce((sum, item) => sum + item.ordered_quantity, 0);
@@ -307,68 +325,149 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   return (
     <>
     <div className="space-y-4">
-      <div className="flex flex-col gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <PackageCheck className="w-5 h-5 text-orange-500" />
-            <h2 className="text-lg font-black text-gray-900">China Import Fulfillment</h2>
-          </div>
-          <p className="text-xs text-gray-500 mt-1">Receive paid shipping order items at QAfrica HQ individually. Receiving an item does not change the main order status.</p>
+      <div>
+        <div className="flex items-center gap-2">
+          <PackageCheck className="w-5 h-5 text-orange-500" />
+          <h2 className="text-lg font-black text-gray-900">China Import Fulfillment</h2>
         </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <div className="bg-white rounded-xl border border-gray-100 p-3">
-            <p className="text-[10px] text-gray-400 uppercase font-bold">Awaiting</p>
-            <p className="text-xl font-black text-gray-900">{awaitingCount}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 p-3">
-            <p className="text-[10px] text-gray-400 uppercase font-bold">At HQ</p>
-            <p className="text-xl font-black text-emerald-600">{hqCount}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 p-3">
-            <p className="text-[10px] text-gray-400 uppercase font-bold">Units received</p>
-            <p className="text-xl font-black text-gray-900">{receivedUnits.toLocaleString()}<span className="text-xs text-gray-400">/{orderedUnits.toLocaleString()}</span></p>
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
-            <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search order, customer or item…" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-orange-300" />
-          </div>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)} className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white">
-            <option value="all">All fulfillment</option>
-            <option value="awaiting_arrival">Awaiting arrival</option>
-            <option value="at_qafrica_hq">At QAfrica HQ</option>
-          </select>
-          <button onClick={() => void load(true)} disabled={refreshing} className="px-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
-          </button>
-        </div>
+        <p className="text-xs text-gray-500 mt-1">Receive paid shipping order items at QAfrica HQ individually. Receiving an item does not change the main order status.</p>
       </div>
-
-      {error && <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-3 text-xs">{error}</div>}
 
       <div className="flex rounded-xl bg-gray-100 p-1 gap-1">
         <button
           type="button"
           onClick={() => setFulfillmentTab('receiving')}
-          className={fulfillmentTab === 'receiving' ? 'flex-1 py-2 rounded-lg text-xs font-bold bg-white text-gray-900 shadow-sm' : 'flex-1 py-2 rounded-lg text-xs font-bold text-gray-500'}
+          className={fulfillmentTab === 'receiving' ? 'flex-1 py-2.5 rounded-lg text-sm font-bold bg-white text-gray-900 shadow-sm' : 'flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-500'}
         >
           Receiving
         </button>
         <button
           type="button"
           onClick={() => setFulfillmentTab('shipments')}
-          className={fulfillmentTab === 'shipments' ? 'flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 bg-white text-gray-900 shadow-sm' : 'flex-1 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 text-gray-500'}
+          className={fulfillmentTab === 'shipments' ? 'flex-1 py-2.5 rounded-lg text-sm font-bold bg-white text-gray-900 shadow-sm' : 'flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-500'}
         >
-          <Truck className="w-3.5 h-3.5" />
-          Shipments
-          {allShipments.length > 0 && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600">{allShipments.length}</span>}
+          <span className="inline-flex items-center justify-center gap-1.5"><Truck className="w-4 h-4" /> Shipments</span>
         </button>
       </div>
 
+      {error && <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-3 text-xs">{error}</div>}
+
       {fulfillmentTab === 'shipments' ? (
+        <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+            <div>
+              <p className="text-base font-black text-gray-900">Shipments</p>
+              <p className="text-xs text-gray-400 mt-0.5">Search and manage every shipment created from received orders.</p>
+            </div>
+            <button type="button" onClick={() => void loadShipments()} disabled={shipmentsLoading} className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+              <RefreshCw className={shipmentsLoading ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
+            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+              <input
+                value={shipmentQuery}
+                onChange={e => setShipmentQuery(e.target.value)}
+                placeholder="Search shipment, order, customer or tracking…"
+                className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-orange-300 bg-white"
+              />
+            </div>
+            <select value={shipmentStatusFilter} onChange={e => setShipmentStatusFilter(e.target.value)} className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white">
+              <option value="all">All shipment statuses</option>
+              <option value="draft">Draft</option>
+              <option value="ready_to_ship">Ready to ship</option>
+              <option value="shipped">Shipped</option>
+              <option value="in_transit">In transit</option>
+              <option value="out_for_delivery">Out for delivery</option>
+              <option value="delivered">Delivered</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+
+          {shipmentsLoading ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+          ) : filteredShipments.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+              <Truck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <p className="text-sm font-bold text-gray-700">{allShipments.length === 0 ? 'No shipments yet' : 'No matching shipments'}</p>
+              <p className="text-xs text-gray-400 mt-1">{allShipments.length === 0 ? 'Create a shipment from Receiving after items arrive at QAfrica HQ.' : 'Try a different search or status filter.'}</p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[860px] text-left">
+                  <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wide font-black text-gray-400">Shipment</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wide font-black text-gray-400">Order / customer</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wide font-black text-gray-400">Items</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wide font-black text-gray-400">Status</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wide font-black text-gray-400">Created</th>
+                      <th className="px-4 py-3 text-[10px] uppercase tracking-wide font-black text-gray-400 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredShipments.map(shipment => {
+                      const customer = items.find(item => item.order_id === shipment.order_id);
+                      const status = String(shipment.status).replaceAll('_', ' ');
+                      const statusClass =
+                        shipment.status === 'delivered' ? 'bg-emerald-50 text-emerald-700' :
+                        shipment.status === 'cancelled' ? 'bg-red-50 text-red-600' :
+                        shipment.status === 'draft' ? 'bg-gray-100 text-gray-600' :
+                        'bg-orange-50 text-orange-700';
+                      return (
+                        <tr key={shipment.id} className="hover:bg-gray-50/70">
+                          <td className="px-4 py-3.5 align-top">
+                            <p className="text-xs font-black text-gray-900 whitespace-nowrap">{shipment.shipment_code}</p>
+                            {shipment.tracking_number && <p className="text-[10px] text-gray-400 mt-1 whitespace-nowrap">Tracking: {shipment.tracking_number}</p>}
+                          </td>
+                          <td className="px-4 py-3.5 align-top">
+                            <p className="text-xs font-bold text-gray-800 whitespace-nowrap">{customer?.order_code ?? '—'}</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5 max-w-[180px] truncate">{customer?.customer_name ?? 'Customer'}</p>
+                          </td>
+                          <td className="px-4 py-3.5 align-top">
+                            <p className="text-xs font-bold text-gray-800">{shipment.items?.length ?? 0} line{(shipment.items?.length ?? 0) === 1 ? '' : 's'}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">{(shipment.items ?? []).reduce((sum: number, row: any) => sum + Number(row.quantity ?? 0), 0)} unit{(shipment.items ?? []).reduce((sum: number, row: any) => sum + Number(row.quantity ?? 0), 0) === 1 ? '' : 's'}</p>
+                          </td>
+                          <td className="px-4 py-3.5 align-top">
+                            <span className={"inline-flex px-2 py-1 rounded-full text-[9px] font-bold capitalize " + statusClass}>{status}</span>
+                          </td>
+                          <td className="px-4 py-3.5 align-top">
+                            <p className="text-[10px] text-gray-500 whitespace-nowrap">{new Date(shipment.created_at).toLocaleDateString()}</p>
+                            <p className="text-[10px] text-gray-400 whitespace-nowrap">{new Date(shipment.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                          </td>
+                          <td className="px-4 py-3.5 align-top">
+                            <div className="flex justify-end gap-2">
+                              <button type="button" onClick={() => showShipmentReceipt(shipment)} className="px-3 py-1.5 rounded-lg border border-gray-200 text-gray-700 text-[10px] font-bold whitespace-nowrap">Receipt</button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedShipment(shipment);
+                                  setTrackingDraft({
+                                    carrier_name: shipment.carrier_name ?? '',
+                                    tracking_number: shipment.tracking_number ?? '',
+                                    tracking_url: shipment.tracking_url ?? '',
+                                    waybill_url: shipment.waybill_url ?? '',
+                                    delivery_mode: shipment.delivery_mode ?? '',
+                                    note: '',
+                                  });
+                                }}
+                                className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-[10px] font-bold whitespace-nowrap"
+                              >Manage</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div>
@@ -427,9 +526,39 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           )}
         </div>
-      ) : loading ? (
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white rounded-xl border border-gray-100 p-3">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Awaiting</p>
+              <p className="text-xl font-black text-gray-900">{awaitingCount}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">At HQ</p>
+              <p className="text-xl font-black text-emerald-600">{hqCount}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Units received</p>
+              <p className="text-xl font-black text-gray-900">{receivedUnits.toLocaleString()}<span className="text-xs text-gray-400">/{orderedUnits.toLocaleString()}</span></p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search order, customer or item…" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-orange-300 bg-white" />
+            </div>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)} className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white">
+              <option value="all">All fulfillment</option>
+              <option value="awaiting_arrival">Awaiting arrival</option>
+              <option value="at_qafrica_hq">At QAfrica HQ</option>
+            </select>
+            <button type="button" onClick={() => void load(true)} disabled={refreshing} className="px-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
+              <RefreshCw className={refreshing ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
+            </button>
+          </div>
+          {loading ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
-      ) : batches.length === 0 ? (
+          ) : batches.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
           <PackageCheck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
           <p className="text-sm font-bold text-gray-700">No fulfillment items found</p>
@@ -531,7 +660,10 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             );
           })}
         </div>
+          )}
+        </div>
       )}
+
     </div>
 
       {shipmentOrderId && (
