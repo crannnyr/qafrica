@@ -90,6 +90,9 @@ export interface StoreOwner extends User {
 // STORE TYPES
 // ============================================
 
+export type StorefrontLook = 'classic' | 'clean' | 'boutique' | 'catalog' | 'social' | 'bento';
+export type StorefrontNavStyle = 'auto' | 'bottom' | 'sidebar';
+
 export interface Store {
   id: string;
   owner_id: string;
@@ -102,6 +105,12 @@ export interface Store {
   secondary_color: string;
   niches: string[];
   theme: string;
+  // Storefront layout (separate from `theme`, which is the colour/font palette)
+  storefront_look?: StorefrontLook;
+  nav_style?: StorefrontNavStyle;
+  sidebar_side?: 'left' | 'right';
+  category_images?: Record<string, string>;
+  look_settings?: Record<string, unknown>;
   is_active: boolean;
   is_verified: boolean;
   is_blocked?: boolean;
