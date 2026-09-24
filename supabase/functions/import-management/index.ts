@@ -183,6 +183,80 @@ serve(async (req) => {
     return json({ success: true, fulfillment_item: data })
   }
 
+  if (action === 'admin-fulfillment-list') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.orders.view'))) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
+
+    const { data: fulfillment, error: fulfillmentError } = await supabase
+      .from('china_import_fulfillment_items')
+      .select('id, order_id, order_item_index, product_id, product_name, image_url, variant_options, ordered_quantity, received_quantity, allocated_quantity, shipped_quantity, delivered_quantity, status, received_at')
+      .order('created_at', { ascending: false })
+
+    if (fulfillmentError) return json({ error: fulfillmentError.message }, 500)
+
+    const rows = fulfillment ?? []
+    if (rows.length === 0) return json({ items: [] })
+
+    const orderIds = Array.from(new Set(rows.map((row: any) => row.order_id).filter(Boolean)))
+
+    const [{ data: orders, error: ordersError }, { data: paidBills, error: billsError }] = await Promise.all([
+      supabase.from('china_import_orders')
+        .select('id, code, customer_name, customer_whatsapp, user_id, batch_id, status, shipping_method')
+        .in('id', orderIds),
+      supabase.from('china_import_consolidation_bills')
+        .select('order_id')
+        .in('order_id', orderIds)
+        .eq('kind', 'consolidation_shipping')
+        .eq('status', 'paid'),
+    ])
+
+    if (ordersError) return json({ error: ordersError.message }, 500)
+    if (billsError) return json({ error: billsError.message }, 500)
+
+    const paidOrderIds = new Set((paidBills ?? []).map((row: any) => row.order_id))
+    const eligibleOrders = (orders ?? []).filter((order: any) => paidOrderIds.has(order.id))
+    const eligibleOrderIds = new Set(eligibleOrders.map((order: any) => order.id))
+
+    const customerIds = Array.from(new Set(eligibleOrders.map((order: any) => order.user_id).filter(Boolean)))
+    const batchIds = Array.from(new Set(eligibleOrders.map((order: any) => order.batch_id).filter(Boolean)))
+
+    const [{ data: customers, error: customersError }, { data: batches, error: batchesError }] = await Promise.all([
+      customerIds.length
+        ? supabase.from('customers').select('id, full_name, phone').in('id', customerIds)
+        : Promise.resolve({ data: [], error: null }),
+      batchIds.length
+        ? supabase.from('import_batches').select('id, opened_at').in('id', batchIds)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    if (customersError) return json({ error: customersError.message }, 500)
+    if (batchesError) return json({ error: batchesError.message }, 500)
+
+    const customerMap = new Map((customers ?? []).map((row: any) => [row.id, row]))
+    const batchMap = new Map((batches ?? []).map((row: any) => [row.id, row]))
+
+    const items = rows
+      .filter((row: any) => eligibleOrderIds.has(row.order_id))
+      .map((row: any) => {
+        const order = eligibleOrders.find((candidate: any) => candidate.id === row.order_id)
+        const customer = order?.user_id ? customerMap.get(order.user_id) : null
+        const batch = order?.batch_id ? batchMap.get(order.batch_id) : null
+        return {
+          ...row,
+          order_code: order?.code ?? '—',
+          customer_name: customer?.full_name || order?.customer_name || 'Customer',
+          customer_whatsapp: customer?.phone || order?.customer_whatsapp || null,
+          batch_id: order?.batch_id ?? null,
+          batch_opened_at: batch?.opened_at ?? null,
+          order_status: order?.status ?? null,
+          shipping_method: order?.shipping_method ?? null,
+        }
+      })
+
+    return json({ items })
+  }
+
   if (action === 'admin-products') {
     if (!(await requireManager(supabase, body.manager_token, 'import.products.view'))) return json({ error: 'Unauthorized' }, 401)
 
