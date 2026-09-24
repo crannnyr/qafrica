@@ -203,9 +203,7 @@ export default function ImportTrackingPage() {
       <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3.5 flex items-center gap-2">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-              <ShoppingBag className="w-4 h-4 text-white" />
-            </div>
+            <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="w-8 h-8 rounded-lg object-cover" />
             <span className="font-bold text-gray-900 text-sm">QAFRICA Track</span>
           </Link>
         </div>
