@@ -1,4 +1,6 @@
 import { X, Printer } from 'lucide-react';
+import { toast } from 'sonner';
+import { printShipmentReceipts } from './shipmentReceiptPdf';
 
 export type ShipmentReceiptData = {
   shipment_code: string;
@@ -48,7 +50,7 @@ function Copy({data,label}:{data:ShipmentReceiptData;label:string}) {
 export default function ShipmentReceiptSheet({data,onClose}:{data:ShipmentReceiptData;onClose:()=>void}) {
   return <div className="fixed inset-0 z-[90] bg-black/60 flex items-end sm:items-center justify-center sm:p-4 print:bg-white print:p-0 print:block">
     <div className="bg-white w-full sm:max-w-3xl rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col print:hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"><div><h2 className="font-bold text-gray-900 text-sm">Shipment receipt</h2><p className="text-[11px] text-gray-400 mt-0.5">Single shipment receipt with customer delivery address.</p></div><div className="flex items-center gap-1"><button onClick={()=>window.print()} className="p-1.5 hover:bg-gray-100 rounded-lg flex items-center gap-1 text-xs font-semibold text-gray-600"><Printer className="w-4 h-4"/> Print</button><button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500"/></button></div></div>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"><div><h2 className="font-bold text-gray-900 text-sm">Shipment receipt</h2><p className="text-[11px] text-gray-400 mt-0.5">Single shipment receipt with customer delivery address.</p></div><div className="flex items-center gap-1"><button onClick={async ()=>{ try { await printShipmentReceipts([{ shipment_code:data.shipment_code, status:data.status, created_at:data.created_at, shipped_at:data.shipped_at, delivered_at:data.delivered_at, carrier_name:data.carrier_name, tracking_number:data.tracking_number, delivery_mode:data.delivery_mode, notes:data.notes, delivery_address:data.delivery_address, items:data.items }], new Map([['', { order_code:data.order_code, customer_name:data.customer_name, customer_whatsapp:data.customer_whatsapp }]])); } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not open the print window'); } }} className="p-1.5 hover:bg-gray-100 rounded-lg flex items-center gap-1 text-xs font-semibold text-gray-600"><Printer className="w-4 h-4"/> Print</button><button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500"/></button></div></div>
       <div className="overflow-y-auto p-4"><div className="border border-gray-200 rounded-xl"><Copy data={data} label="Shipment receipt"/></div></div>
     </div>
     <div className="hidden print:block print:w-full print:min-h-screen"><Copy data={data} label="Shipment receipt"/></div>
