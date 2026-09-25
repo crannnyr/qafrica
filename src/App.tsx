@@ -58,7 +58,7 @@ const ImportAdminV2Orders = lazy(() => import('@/pages/import-admin-v2/Managemen
 const ImportAdminV2Settings = lazy(() => import('@/pages/import-admin-v2/ManagementSettings'));
 const ImportAdminV2Categories = lazy(() => import('@/pages/import-admin-v2/ManagementCategories'));
 const ImportAdminV2Expenses = lazy(() => import('@/pages/import-admin-v2/ManagementExpenses'));
-const ImportAdminV2ProductAdd = lazy(() => import('@/pages/import-admin-v2/ManagementProductAdd'));\nconst ImportAdminV2Fulfillment = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Fulfillment'));\nconst ImportAdminV2Support = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Support'));
+const ImportAdminV2ProductAdd = lazy(() => import('@/pages/import-admin-v2/ManagementProductAdd'));
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
 const CustomOrderRequestPage = lazy(() => import('@/pages/recommendations/CustomOrderRequestPage'));
@@ -372,7 +372,7 @@ function App() {
             <Route path="orders" element={<ImportAdminV2Orders />} />
             <Route path="categories" element={<ImportAdminV2Categories />} />
             <Route path="settings" element={<ImportAdminV2Settings />} />
-            <Route path="expenses" element={<ImportAdminV2Expenses />} />\n            <Route path="fulfillment" element={<ImportAdminV2Fulfillment />} />\n            <Route path="support" element={<ImportAdminV2Support />} />
+            <Route path="expenses" element={<ImportAdminV2Expenses />} />
             <Route path="products/add" element={<ImportAdminV2ProductAdd />} />
             <Route path="products/edit/:id" element={<ImportAdminV2ProductAdd />} />
           </Route>
