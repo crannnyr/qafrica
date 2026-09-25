@@ -30,6 +30,7 @@ import CategoryManager from './CategoryManager';
 import AiSupportInbox, { AiSupportAlertMonitor } from './AiSupportInbox';
 import ImportAdminExpenses from './ImportAdminExpenses';
 import ChinaImportFulfillmentManager from './ChinaImportFulfillmentManager';
+import { OrderDetails } from '@/pages/management/ManagementOrders';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const IMPORT_ADMIN_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-admin-orders`;
@@ -1512,6 +1513,7 @@ function OrdersList({ token }: { token: string }) {
   const [search, setSearch] = useState('');
   const [billingOrder, setBillingOrder] = useState<ImportOrder | null>(null);
   const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageCount, setPageCount] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -1591,6 +1593,7 @@ function OrdersList({ token }: { token: string }) {
   const todayCountHint = dateFilter === 'today' && filter === 'all' && !search.trim()
     ? totalCount
     : null;
+  const selectedOrder = selectedOrderId ? orders.find(o => o.id === selectedOrderId) ?? null : null;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
@@ -1728,8 +1731,8 @@ function OrdersList({ token }: { token: string }) {
               orders.map(order => (
                 <tr
                   key={order.id}
-                  onClick={() => order.user_id && setProfileCustomerId(order.user_id)}
-                  className={`hover:bg-gray-50 transition-colors ${order.user_id ? 'cursor-pointer' : ''}`}
+                  onClick={() => setSelectedOrderId(order.id)}
+                  className="hover:bg-gray-50 transition-colors cursor-pointer"
                 >
                   <td className="px-5 py-3.5 align-middle">
                     <div>
@@ -1865,6 +1868,16 @@ function OrdersList({ token }: { token: string }) {
             </button>
           </div>
         </div>
+      )}
+
+      {selectedOrder && (
+        <OrderDetails
+          token={token}
+          order={selectedOrder}
+          onClose={() => setSelectedOrderId(null)}
+          onReload={async () => { await load(page); }}
+          onOpenClient={(id) => { setSelectedOrderId(null); setProfileCustomerId(id); }}
+        />
       )}
 
       {billingOrder && (
