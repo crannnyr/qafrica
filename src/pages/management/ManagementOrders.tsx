@@ -137,7 +137,7 @@ function formatDate(value: string) {
 }
 
 
-function OrderDetails({ token, order, onClose, onReload, onOpenClient }: {
+export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: {
   token: string; order: OrderRow; onClose: () => void; onReload: () => Promise<void>; onOpenClient: (customerId: string) => void;
 }) {
   const [addressEditing, setAddressEditing] = useState(false);
