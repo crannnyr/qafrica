@@ -18,7 +18,7 @@ interface VariantGroup { id: string; name: string; options: string[]; price_delt
 interface OrderRow {
   id: string; code: string; user_id: string | null; customer_name: string;
   items: OrderItem[]; created_at: string;
-  status?: string; shipped_at?: string | null; shipping_method?: 'flight' | 'sea_freight' | null;
+  status?: string; shipped_at?: string | null; shipping_method?: 'flight' | 'sea_freight' | 'mixed' | null;
 }
 interface BreakdownRow {
   product_id: string; product_name: string; product_image: string | null;
