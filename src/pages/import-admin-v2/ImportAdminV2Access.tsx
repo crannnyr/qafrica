@@ -6,7 +6,7 @@ import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 
 const EDGE_URL = CONFIG.SUPABASE_URL + '/functions/v1/china-import';
 
-type Role = { id: string; key: string; name: string; description?: string | null; is_system?: boolean };
+type Role = { id: string; key: string; name: string; description?: string | null; is_system?: boolean; permission_ids?: string[] };
 type Permission = { id: string; key: string; name: string; description?: string | null };
 type Manager = {
   id: string;
@@ -17,6 +17,8 @@ type Manager = {
   updated_at?: string;
   role_ids?: string[];
   permission_ids?: string[];
+  denied_permission_ids?: string[];
+  permissions?: Permission[];
   roles?: Role[];
 };
 
@@ -45,7 +47,7 @@ export default function ImportAdminV2Access() {
   const [showCreate, setShowCreate] = useState(false);
   const [selected, setSelected] = useState<Manager | null>(null);
   const [draftPermissionIds, setDraftPermissionIds] = useState<string[]>([]);
-  const [createForm, setCreateForm] = useState({ full_name: '', email: '', password: '', role_id: '', permission_ids: [] as string[] });
+  const [createForm, setCreateForm] = useState({ full_name: '', email: '', password: '', role_ids: [] as string[], permission_ids: [] as string[] });
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -65,11 +67,24 @@ export default function ImportAdminV2Access() {
 
   useEffect(() => { void load(); }, [load]);
 
+  const rolePermissionIds = useCallback((roleIds: string[]) => {
+    const ids = new Set<string>();
+    for (const role of roles) {
+      if (roleIds.includes(role.id)) {
+        for (const id of role.permission_ids ?? []) ids.add(id);
+      }
+    }
+    return Array.from(ids);
+  }, [roles]);
+
   const roleNameById = useMemo(() => new Map(roles.map(r => [r.id, r.name])), [roles]);
 
   const openManager = (manager: Manager) => {
+    const roleIds = (manager.roles ?? []).map(role => role.id);
+    const inherited = rolePermissionIds(roleIds);
+    const denied = new Set(manager.denied_permission_ids ?? []);
     setSelected(manager);
-    setDraftPermissionIds(Array.isArray(manager.permission_ids) ? manager.permission_ids : []);
+    setDraftPermissionIds(inherited.filter(id => !denied.has(id)));
   };
 
   const toggleActive = async (manager: Manager) => {
@@ -78,7 +93,7 @@ export default function ImportAdminV2Access() {
     const next = !manager.is_active;
     setActing(`active:${manager.id}`);
     try {
-      await adminRequest(token!, 'admin-update-manager-permissions', {
+      await adminRequest(token!, 'admin-set-manager-status', {
         manager_id: manager.id,
         is_active: next,
       });
@@ -148,10 +163,10 @@ export default function ImportAdminV2Access() {
         email: createForm.email.trim(),
         full_name: createForm.full_name.trim(),
         password: createForm.password,
-        role_id: createForm.role_id || null,
+        role_ids: createForm.role_ids,
         permission_ids: createForm.permission_ids,
       });
-      setCreateForm({ full_name: '', email: '', password: '', role_id: '', permission_ids: [] });
+      setCreateForm({ full_name: '', email: '', password: '', role_ids: [], permission_ids: [] });
       setShowCreate(false);
       await load();
     } catch (e) {
@@ -206,7 +221,7 @@ export default function ImportAdminV2Access() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {managers.map(manager => {
-                const managerRoleIds = manager.role_ids ?? manager.roles?.map(r => r.id) ?? [];
+                const managerRoleIds = manager.roles?.map(r => r.id) ?? manager.role_ids ?? [];
                 const managerRoles = manager.roles ?? managerRoleIds.map(id => ({ id, name: roleNameById.get(id) || id } as Role));
                 const protectedAccount = manager.email.toLowerCase() === 'import@qafrica.store';
                 return (
@@ -271,10 +286,22 @@ export default function ImportAdminV2Access() {
               <input value={createForm.full_name} onChange={e => setCreateForm(v => ({ ...v, full_name: e.target.value }))} placeholder="Full name" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none" />
               <input type="email" value={createForm.email} onChange={e => setCreateForm(v => ({ ...v, email: e.target.value }))} placeholder="Email" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none" />
               <input type="password" value={createForm.password} onChange={e => setCreateForm(v => ({ ...v, password: e.target.value }))} placeholder="Temporary password" className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none" />
-              <select value={createForm.role_id} onChange={e => setCreateForm(v => ({ ...v, role_id: e.target.value }))} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm bg-white">
-                <option value="">No role</option>
-                {roles.map(role => <option key={role.id} value={role.id}>{role.name}</option>)}
-              </select>
+              <div className="border border-gray-200 rounded-xl p-3">
+                <p className="text-[11px] font-bold text-gray-700 mb-2">Roles</p>
+                <div className="space-y-2">
+                  {roles.map(role => {
+                    const checked = createForm.role_ids.includes(role.id);
+                    return <label key={role.id} className="flex items-start gap-2 text-[10px] text-gray-600">
+                      <input type="checkbox" checked={checked} onChange={e => {
+                        const roleIds = e.target.checked ? [...createForm.role_ids, role.id] : createForm.role_ids.filter(id => id !== role.id);
+                        const inherited = rolePermissionIds(roleIds);
+                        setCreateForm(v => ({ ...v, role_ids: roleIds, permission_ids: inherited }));
+                      }} className="mt-0.5 accent-orange-500" />
+                      <span><span className="font-semibold text-gray-800 block">{role.name}</span><span className="text-gray-400">{role.description || role.key}</span></span>
+                    </label>;
+                  })}
+                </div>
+              </div>
               <div className="border border-gray-200 rounded-xl p-3">
                 <p className="text-[11px] font-bold text-gray-700 mb-2">Direct permissions</p>
                 <div className="grid sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto">
@@ -295,10 +322,22 @@ export default function ImportAdminV2Access() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-5">
             <div className="flex items-center justify-between mb-1"><h3 className="font-bold text-gray-900">Permissions</h3><button onClick={() => setSelected(null)}><X className="w-4 h-4 text-gray-400" /></button></div>
             <p className="text-xs text-gray-400 mb-4">{selected.full_name || selected.email}</p>
+            <div className="mb-4 border border-gray-100 rounded-xl p-3">
+              <p className="text-[11px] font-bold text-gray-700 mb-2">Selected roles</p>
+              <div className="flex flex-wrap gap-1.5">
+                {(selected.roles ?? []).map(role => <span key={role.id} className="rounded-full bg-gray-100 px-2 py-1 text-[10px] font-bold text-gray-600">{role.name}</span>)}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2">Permissions below are inherited from these roles. Uncheck one to deny it for this admin.</p>
+            </div>
             <div className="grid sm:grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto">
               {permissions.map(permission => {
+                const inherited = rolePermissionIds((selected.roles ?? []).map(role => role.id)).includes(permission.id);
+                if (!inherited) return null;
                 const checked = draftPermissionIds.includes(permission.id);
-                return <label key={permission.id} className="flex items-start gap-2 rounded-xl border border-gray-100 p-2.5 text-[10px] text-gray-600"><input type="checkbox" checked={checked} onChange={e => setDraftPermissionIds(v => e.target.checked ? [...v, permission.id] : v.filter(id => id !== permission.id))} className="mt-0.5 accent-orange-500" /><span><span className="font-semibold text-gray-800 block">{permission.name || permission.key}</span><span className="text-gray-400">{permission.key}</span></span></label>;
+                return <label key={permission.id} className="flex items-start gap-2 rounded-xl border border-gray-100 p-2.5 text-[10px] text-gray-600">
+                  <input type="checkbox" checked={checked} onChange={e => setDraftPermissionIds(v => e.target.checked ? [...v, permission.id] : v.filter(id => id !== permission.id))} className="mt-0.5 accent-orange-500" />
+                  <span><span className="font-semibold text-gray-800 block">{permission.name || permission.key}</span><span className="text-gray-400">{permission.key}</span></span>
+                </label>;
               })}
             </div>
             <div className="flex justify-end gap-2 mt-4"><button onClick={() => setSelected(null)} className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-bold text-gray-600">Cancel</button><button onClick={() => void savePermissions()} disabled={!!acting} className="px-4 py-2 rounded-xl bg-gray-900 text-white text-xs font-bold disabled:opacity-40">{acting === `permissions:${selected.id}` ? 'Saving…' : 'Save permissions'}</button></div>
