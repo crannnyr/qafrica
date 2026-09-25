@@ -341,13 +341,15 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
                                     <p className="text-[11px] font-semibold text-gray-700">{fmt(item.price_ngn * item.quantity)}</p>
                                   </div>
                                 </a>
-                                <button
-                                  onClick={() => { setCancellingItem({ order: o, itemIndex: i, itemName: item.name }); setCancelReason(''); }}
-                                  title="Cancel just this item"
-                                  className="p-1 text-gray-300 hover:text-red-500 flex-shrink-0"
-                                >
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
+                                {o.status !== 'cancelled' && o.status !== 'refunded' && (
+                                  <button
+                                    onClick={() => { setCancellingItem({ order: o, itemIndex: i, itemName: item.name }); setCancelReason(''); }}
+                                    title="Cancel just this item"
+                                    className="p-1 text-gray-300 hover:text-red-500 flex-shrink-0"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
                               </div>
                             ))
                           )}
@@ -365,13 +367,15 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
                             Confirm Order
                           </button>
                         )}
-                        <button
-                          onClick={() => { setCancellingOrder(o); setCancelReason(''); }}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition-colors"
-                        >
-                          <X className="w-3 h-3" />
-                          Cancel Order
-                        </button>
+                        {o.status !== 'cancelled' && o.status !== 'refunded' && (
+                          <button
+                            onClick={() => { setCancellingOrder(o); setCancelReason(''); }}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-[11px] font-bold text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                            Cancel Order
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
