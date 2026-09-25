@@ -48,6 +48,17 @@ const ManagementSettings = lazy(() => import('@/pages/management/ManagementSetti
 const ManagementCategories = lazy(() => import('@/pages/management/ManagementCategories'));
 const ManagementExpenses = lazy(() => import('@/pages/management/ManagementExpenses'));
 const ManagementProductAdd = lazy(() => import('@/pages/management/ManagementProductAdd'));
+
+const ImportAdminV2Login = lazy(() => import('@/pages/import-admin-v2/ManagementLogin'));
+const ImportAdminV2Logout = lazy(() => import('@/pages/import-admin-v2/ManagementLogout'));
+const ImportAdminV2Layout = lazy(() => import('@/pages/import-admin-v2/ManagementLayout'));
+const ImportAdminV2Dashboard = lazy(() => import('@/pages/import-admin-v2/ManagementDashboard'));
+const ImportAdminV2Products = lazy(() => import('@/pages/import-admin-v2/ManagementProducts'));
+const ImportAdminV2Orders = lazy(() => import('@/pages/import-admin-v2/ManagementOrders'));
+const ImportAdminV2Settings = lazy(() => import('@/pages/import-admin-v2/ManagementSettings'));
+const ImportAdminV2Categories = lazy(() => import('@/pages/import-admin-v2/ManagementCategories'));
+const ImportAdminV2Expenses = lazy(() => import('@/pages/import-admin-v2/ManagementExpenses'));
+const ImportAdminV2ProductAdd = lazy(() => import('@/pages/import-admin-v2/ManagementProductAdd'));
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
 const CustomOrderRequestPage = lazy(() => import('@/pages/recommendations/CustomOrderRequestPage'));
@@ -347,6 +358,23 @@ function App() {
             <Route path="expenses" element={<ManagementExpenses />} />
             <Route path="products/add" element={<ManagementProductAdd />} />
             <Route path="products/edit/:id" element={<ManagementProductAdd />} />
+          </Route>
+
+          {/* ── Import Admin redesign preview ──
+              This is an isolated copy of the Management dashboard used to redesign
+              Import Admin safely. It shares the existing import-manager session/backend
+              but does not replace the current Import Admin routes. */}
+          <Route path="/import-admin-v2/login" element={<ImportAdminV2Login />} />
+          <Route path="/import-admin-v2/logout" element={<ImportAdminV2Logout />} />
+          <Route path="/import-admin-v2" element={<ImportAdminV2Layout />}>
+            <Route index element={<ImportAdminV2Dashboard />} />
+            <Route path="products" element={<ImportAdminV2Products />} />
+            <Route path="orders" element={<ImportAdminV2Orders />} />
+            <Route path="categories" element={<ImportAdminV2Categories />} />
+            <Route path="settings" element={<ImportAdminV2Settings />} />
+            <Route path="expenses" element={<ImportAdminV2Expenses />} />
+            <Route path="products/add" element={<ImportAdminV2ProductAdd />} />
+            <Route path="products/edit/:id" element={<ImportAdminV2ProductAdd />} />
           </Route>
           <Route path="/importations/dashboard" element={<ImporterDashboardPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
