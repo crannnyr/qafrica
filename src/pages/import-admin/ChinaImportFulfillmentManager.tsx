@@ -349,12 +349,41 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
         : shipmentStatusFilter.replaceAll('_', '-');
       const filename = `qafrica-shipment-receipts-${statusLabel}-${new Date().toISOString().slice(0, 10)}.pdf`;
 
+      // The shipment list already contains fulfillment_item data. For safety, rebuild
+      // the receipt item list from that payload and fall back to the fulfillment list
+      // if an older Edge Function response returns an empty items array.
+      const receiptShipments = filteredShipments.map(shipment => {
+        const apiItems = Array.isArray(shipment.items) ? shipment.items : [];
+        const receiptItems = apiItems
+          .map((row: any) => ({
+            product_name: row.fulfillment_item?.product_name ?? row.product_name ?? 'Item',
+            quantity: Number(row.quantity ?? 0),
+            variant_options: row.fulfillment_item?.variant_options ?? row.variant_options ?? null,
+          }))
+          .filter((item: any) => item.product_name && item.quantity > 0);
+
+        if (receiptItems.length > 0) {
+          return { ...shipment, items: receiptItems };
+        }
+
+        const fallbackItems = items
+          .filter(item => item.order_id === shipment.order_id)
+          .map(item => ({
+            product_name: item.product_name,
+            quantity: Math.max(0, Number(item.shipped_quantity || item.allocated_quantity || item.ordered_quantity || 0)),
+            variant_options: item.variant_options,
+          }))
+          .filter(item => item.quantity > 0);
+
+        return { ...shipment, items: fallbackItems };
+      });
+
       if (action === 'download') {
-        await downloadShipmentReceipts(filteredShipments, customerByOrder, filename);
-        toast.success(`${filteredShipments.length} receipt${filteredShipments.length === 1 ? '' : 's'} downloaded as one PDF`);
+        await downloadShipmentReceipts(receiptShipments, customerByOrder, filename);
+        toast.success(`${receiptShipments.length} receipt${receiptShipments.length === 1 ? '' : 's'} downloaded as one PDF`);
       } else {
-        await printShipmentReceipts(filteredShipments, customerByOrder);
-        toast.success(`Opened ${filteredShipments.length} receipt${filteredShipments.length === 1 ? '' : 's'} for printing`);
+        await printShipmentReceipts(receiptShipments, customerByOrder);
+        toast.success(`Opened ${receiptShipments.length} receipt${receiptShipments.length === 1 ? '' : 's'} for printing`);
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not create receipt PDF');
