@@ -10,6 +10,7 @@ import CONFIG from '@/lib/config';
 import { CustomerDetail } from './ImportAdminCustomers';
 import ClosedBatchDetail from './ClosedBatchDetail';
 import { toast } from 'sonner';
+import { OrderDetails } from '@/pages/management/ManagementOrders';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -110,6 +111,7 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
   const [closingKey, setClosingKey] = useState<string | null>(null);
   const [closingAll, setClosingAll] = useState(false);
   const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedBatchKey, setSelectedBatchKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -153,6 +155,7 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
 
   const groups = buildGroups(orders, showClosed);
   const closedBatches = buildClosedBatches(orders);
+  const selectedOrder = selectedOrderId ? orders.find(o => o.id === selectedOrderId) ?? null : null;
 
   const closeGroup = async (group: Group) => {
     setClosingKey(group.key);
@@ -353,9 +356,11 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
                   {g.buyers.map((b, i) => (
                     <button
                       key={i}
-                      onClick={() => b.userId && setProfileCustomerId(b.userId)}
-                      disabled={!b.userId}
-                      className={`w-full flex items-center justify-between text-xs text-left ${b.userId ? 'hover:underline' : 'cursor-default'}`}
+                      onClick={() => {
+                        const found = orders.find(o => o.code === b.orderCode);
+                        if (found) setSelectedOrderId(found.id);
+                      }}
+                      className="w-full flex items-center justify-between text-xs text-left hover:bg-white rounded-lg px-1.5 py-1"
                     >
                       <span className={b.userId ? 'text-orange-600' : 'text-gray-600'}>{b.name} <span className="text-gray-300 font-mono">· {b.orderCode}</span></span>
                       <span className="font-semibold text-gray-700">×{b.qty}</span>
@@ -382,6 +387,16 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
             </div>
           ))}
         </div>
+      )}
+
+      {selectedOrder && (
+        <OrderDetails
+          token={token}
+          order={selectedOrder}
+          onClose={() => setSelectedOrderId(null)}
+          onReload={async () => { await load(); }}
+          onOpenClient={(id) => { setSelectedOrderId(null); setProfileCustomerId(id); }}
+        />
       )}
 
       {profileCustomerId && (
