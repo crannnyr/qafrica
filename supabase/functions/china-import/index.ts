@@ -2258,6 +2258,57 @@ serve(async (req: Request) => {
       return json({ order: data })
     }
 
+    // Admin order-detail address editor. Kept separate from the generic update-order
+    // action so address edits can be validated and audited independently.
+    if (req.method === 'POST' && action === 'admin-update-order-address') {
+      const { manager_token, order_id, delivery_address, delivery_mode, pickup_station_id, pickup_station_name, pickup_station_address } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.orders.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!order_id || !delivery_address || typeof delivery_address !== 'object') return json({ error: 'Missing order_id or delivery_address' }, 400)
+
+      const { data: order, error: orderErr } = await supabase
+        .from('china_import_orders')
+        .select('id, status, shipped_at, delivery_type')
+        .eq('id', order_id)
+        .single()
+      if (orderErr || !order) return json({ error: 'Order not found' }, 404)
+      if (order.shipped_at || ['shipped_and_closed', 'clearance_and_closed', 'received', 'delivered'].includes(order.status)) {
+        return json({ error: 'This order has already entered fulfillment and its delivery address can no longer be changed.' }, 409)
+      }
+
+      const address = {
+        name: typeof delivery_address.name === 'string' ? delivery_address.name.trim() : '',
+        phone: typeof delivery_address.phone === 'string' ? delivery_address.phone.trim() : '',
+        address_line1: typeof delivery_address.address_line1 === 'string' ? delivery_address.address_line1.trim() : '',
+        address_line2: typeof delivery_address.address_line2 === 'string' ? delivery_address.address_line2.trim() : '',
+        city: typeof delivery_address.city === 'string' ? delivery_address.city.trim() : '',
+        state: typeof delivery_address.state === 'string' ? delivery_address.state.trim() : '',
+        landmark: typeof delivery_address.landmark === 'string' ? delivery_address.landmark.trim() : '',
+      }
+      if (!address.name || !address.phone || !address.address_line1 || !address.city || !address.state) {
+        return json({ error: 'Name, phone, address, city and state are required.' }, 400)
+      }
+
+      const updates: Record<string, unknown> = {
+        delivery_address: address,
+        updated_at: new Date().toISOString(),
+      }
+      if (delivery_mode === 'home' || delivery_mode === 'pickup_station') updates.delivery_mode = delivery_mode
+      if (delivery_mode === 'pickup_station') {
+        if (typeof pickup_station_id === 'string' && pickup_station_id) updates.pickup_station_id = pickup_station_id
+        if (typeof pickup_station_name === 'string') updates.pickup_station_name = pickup_station_name.trim()
+        if (typeof pickup_station_address === 'string') updates.pickup_station_address = pickup_station_address.trim()
+      } else if (delivery_mode === 'home') {
+        updates.pickup_station_id = null
+        updates.pickup_station_name = null
+        updates.pickup_station_address = null
+      }
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('china_import_orders').update(updates).eq('id', order_id).select().single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+      return json({ order: updated })
+    }
+
     if (req.method === 'POST' && action === 'update-order') {
       const { manager_token, id, status, shipping_ngn, admin_note, payment_status } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.orders.update'))) return json({ error: 'Unauthorized' }, 401)
