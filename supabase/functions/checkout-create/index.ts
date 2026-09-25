@@ -108,12 +108,14 @@ Deno.serve(async (req) => {
 
   // Signed-in shopper (optional)
   let customerId: string | null = shared?.created_by ?? null;
+  let payerCustomerId: string | null = null; // signed-in payer of a pay-for-me link (Cart Clearers board)
   const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  if (token && !shared) {
+  if (token) {
     const { data: u } = await supabase.auth.getUser(token);
     if (u?.user) {
       const { data: c } = await supabase.from('customers').select('id').eq('id', u.user.id).maybeSingle();
-      customerId = c?.id ?? null;
+      if (shared) payerCustomerId = c?.id ?? null;
+      else customerId = c?.id ?? null;
     }
   }
 
@@ -136,6 +138,7 @@ Deno.serve(async (req) => {
       payer_name: payer?.name ?? null,
       payer_email: payer?.email ?? null,
       payer_phone: payer?.phone ?? null,
+      payer_customer_id: payerCustomerId,
       shared_cart_id: shared?.id ?? null,
     })
     .select('id')
