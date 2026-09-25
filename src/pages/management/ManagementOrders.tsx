@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback } from 'react';
 import { Loader, Package, Users, Archive, CheckCircle2, FileDown, Eye, X, MapPin, Pencil, Save, User, CreditCard, Trash2 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { CustomerDetail } from '@/pages/import-admin/ImportAdminCustomers';
@@ -151,6 +151,22 @@ function OrderDetails({ token, order, onClose, onReload, onOpenClient }: {
   const [removingItem, setRemovingItem] = useState<number | null>(null);
 
   const items = order.items ?? [];
+
+  useEffect(() => {
+    setAddress(order.delivery_address ?? {
+      name: order.customer_name,
+      phone: order.customer_whatsapp,
+      address_line1: '',
+      address_line2: '',
+      city: '',
+      state: '',
+      landmark: '',
+    });
+    setAddressEditing(false);
+    setEditingItem(null);
+    setVariantText('');
+  }, [order.id, order.delivery_address, order.customer_name, order.customer_whatsapp]);
+
   const canEditAddress = !order.shipped_at && !['shipped_and_closed', 'clearance_and_closed', 'received', 'delivered'].includes(order.status ?? '');
 
   const saveAddress = async () => {
@@ -217,7 +233,7 @@ function OrderDetails({ token, order, onClose, onReload, onOpenClient }: {
         </div>
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
           <div className="flex flex-wrap gap-2">
-            <span className={"px-2.5 py-1 rounded-full text-[10px] font-bold capitalize " + statusClass(order.status ?? '')}>{(order.status ?? 'unknown').replaceAll('_',' ')}</span>
+            <span className={"px-2.5 py-1 rounded-full text-[10px] font-bold capitalize " + statusClass(order.status ?? '')}>{(order.status ?? 'unknown').replace(/_/g, ' ')}</span>
             <span className={"px-2.5 py-1 rounded-full text-[10px] font-bold capitalize " + statusClass(order.payment_status)}>{order.payment_status.replaceAll('_',' ')}</span>
             <span className="px-2.5 py-1 rounded-full bg-gray-50 text-gray-500 text-[10px] font-semibold">{new Date(order.created_at).toLocaleString('en-NG')}</span>
           </div>
@@ -236,7 +252,7 @@ function OrderDetails({ token, order, onClose, onReload, onOpenClient }: {
                   <div className="flex gap-3">
                     {item.image_url ? <img src={item.image_url} className="w-12 h-12 rounded-lg object-cover border border-gray-100" alt="" /> : <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center"><Package className="w-4 h-4 text-gray-300" /></div>}
                     <div className="flex-1 min-w-0"><p className="text-xs font-bold text-gray-800">{item.name}</p><p className="text-[10px] text-gray-400 mt-0.5">Qty ×{item.quantity} · {money(item.price_ngn)} each</p>{item.variant_options && Object.keys(item.variant_options).length > 0 && <p className="text-[10px] text-gray-500 mt-1">{Object.entries(item.variant_options).map(([k,v]) => k + ': ' + v).join(', ')}</p>}</div>
-                    <div className="flex items-start gap-1"><button onClick={() => { setEditingItem(editing ? null : i); setVariantText(Object.entries(item.variant_options ?? {}).map(([k,v]) => k + ': ' + v).join(', ')); }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400" title="Edit product details"><Pencil className="w-3.5 h-3.5" /></button><button disabled={removingItem === i} onClick={() => void removeItem(i)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Remove item"><Trash2 className="w-3.5 h-3.5" /></button></div>
+                    <div className="flex items-start gap-1"><button disabled={!item.variant_options || Object.keys(item.variant_options).length === 0} onClick={() => { setEditingItem(editing ? null : i); setVariantText(Object.entries(item.variant_options ?? {}).map(([k,v]) => k + ': ' + v).join(', ')); }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed" title={item.variant_options && Object.keys(item.variant_options).length > 0 ? 'Edit product details' : 'This product has no variants'}><Pencil className="w-3.5 h-3.5" /></button><button disabled={removingItem === i} onClick={() => void removeItem(i)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Remove item"><Trash2 className="w-3.5 h-3.5" /></button></div>
                   </div>
                   {editing && <div className="mt-3 pt-3 border-t border-gray-100"><label className="text-[10px] font-bold text-gray-400 uppercase">Product variant</label><input value={variantText} onChange={e => setVariantText(e.target.value)} placeholder="Color: Black, Size: Large" className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-gray-400" /><p className="text-[9px] text-gray-400 mt-1">Variant changes use the product's configured pricing.</p><div className="flex justify-end gap-2 mt-2"><button onClick={() => setEditingItem(null)} className="px-3 py-1.5 text-xs text-gray-500">Cancel</button><button disabled={savingItem} onClick={() => void saveVariant(i)} className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold flex items-center gap-1">{savingItem ? <Loader className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>} Save</button></div></div>}
                 </div>;
@@ -457,7 +473,7 @@ export default function ManagementOrders() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {groups.map(g => (
-                  <>
+                  <Fragment key={g.key}>
                     <tr key={g.key} className="hover:bg-gray-50 align-top">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5 min-w-[230px]">
@@ -492,7 +508,7 @@ export default function ManagementOrders() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
