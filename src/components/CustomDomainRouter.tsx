@@ -11,7 +11,9 @@ import { Routes, Route } from 'react-router-dom';
 import { supabase } from '@/services';
 import StorePage from '@/pages/store/StorePage';
 import ProductDetailPage from '@/pages/store/ProductDetailPage';
-import CheckoutPage from '@/pages/store/CheckoutPage';
+import ShopCheckoutPage from '@/pages/shop/CheckoutPage';
+import CheckoutCompletePage from '@/pages/shop/CheckoutCompletePage';
+import CartPage from '@/pages/shop/CartPage';
 import StoreNotFoundPage from '@/pages/store/StoreNotFoundPage';
 import StoreClosedPage from '@/pages/store/StoreClosedPage';
 import { PLATFORM_HOST, aliasTargetPath, storeSubdomainLabel } from '@/lib/storeSubdomain';
@@ -137,7 +139,10 @@ function CustomDomainRoutes({ children }: Props) {
       <Routes>
         <Route path="/" element={<StorePage />} />
         <Route path="/product/:productId" element={<ProductDetailPage />} />
-        <Route path="/checkout" element={<CheckoutPage />} />
+        {/* Same server-priced Nomba checkout as qafrica.store */}
+        <Route path="/checkout" element={<ShopCheckoutPage />} />
+        <Route path="/checkout/complete" element={<CheckoutCompletePage />} />
+        <Route path="/cart" element={<CartPage />} />
         <Route path="/store-closed" element={<StoreClosedPage />} />
         <Route path="*" element={<StorePage />} />
       </Routes>
