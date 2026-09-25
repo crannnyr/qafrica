@@ -27,7 +27,6 @@ const JumiaSignupPage = lazy(() => import('@/pages/auth/JumiaSignupPage'));
 const PrivacyPolicyPage = lazy(() => import('@/pages/legal/PrivacyPolicyPage'));
 const TermsOfServicePage = lazy(() => import('@/pages/legal/TermsOfServicePage'));
 const ImportTermsPage = lazy(() => import('@/pages/legal/ImportTermsPage'));
-const ImportTrackingPage = lazy(() => import('@/pages/recommendations/ImportTrackingPage'));
 
 // Blog Pages
 const BlogIndexPage = lazy(() => import('@/pages/blog/BlogIndexPage'));
@@ -101,7 +100,7 @@ const JumiaDashboardLayout = lazy(() => import('@/pages/dashboard/JumiaDashboard
 // Store Pages
 const StorePage = lazy(() => import('@/pages/store/StorePage'));
 const ProductDetailPage = lazy(() => import('@/pages/store/ProductDetailPage'));
-const CheckoutPage = lazy(() => import('@/pages/store/CheckoutPage'));
+const StoreCheckoutRedirect = lazy(() => import('@/pages/shop/StoreCheckoutRedirect'));
 const StoreClosedPage = lazy(() => import('@/pages/store/StoreClosedPage'));
 const StoreNotFoundPage = lazy(() => import('@/pages/store/StoreNotFoundPage'));
 
@@ -112,8 +111,11 @@ const CustomerDashboard = lazy(() => import('@/pages/customer/CustomerDashboard/
 const CustomerOrderDetailPage = lazy(() => import('@/pages/customer/CustomerOrderDetailPage'));
 const MarketplaceHome = lazy(() => import('@/pages/marketplace/MarketplaceHome'));
 const MarketplaceCategories = lazy(() => import('@/pages/marketplace/MarketplaceCategories'));
-const UniversalCartPage = lazy(() => import('@/pages/customer/UniversalCartPage'));
-const UniversalCheckoutPage = lazy(() => import('@/pages/customer/UniversalCheckoutPage'));
+const CartPage = lazy(() => import('@/pages/shop/CartPage'));
+const ShopCheckoutPage = lazy(() => import('@/pages/shop/CheckoutPage'));
+const CheckoutCompletePage = lazy(() => import('@/pages/shop/CheckoutCompletePage'));
+const OrderTrackingPage = lazy(() => import('@/pages/shop/OrderTrackingPage'));
+const TrackRouter = lazy(() => import('@/pages/shop/TrackRouter'));
 
 // Admin Pages
 const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'));
@@ -326,7 +328,8 @@ function App() {
           <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
           <Route path="/import-terms" element={<ImportTermsPage />} />
-          <Route path="/track" element={<ImportTrackingPage />} />
+          <Route path="/track" element={<TrackRouter />} />
+          <Route path="/track-order" element={<OrderTrackingPage />} />
 
           {/* ── Blog ── */}
           <Route path="/blog" element={<BlogIndexPage />} />
@@ -378,8 +381,9 @@ function App() {
           <Route path="/customer/orders/:orderId" element={<CustomerOrderDetailPage />} />
           <Route path="/stores" element={<MarketplaceHome />} />
           <Route path="/stores/categories" element={<MarketplaceCategories />} />
-          <Route path="/cart" element={<UniversalCartPage />} />
-          <Route path="/checkout" element={<UniversalCheckoutPage />} />
+          <Route path="/cart" element={<CartPage />} />
+          <Route path="/checkout" element={<ShopCheckoutPage />} />
+          <Route path="/checkout/complete" element={<CheckoutCompletePage />} />
 
           {/* ── Staff invite ── */}
           <Route path="/accept-staff-invite" element={<AcceptStaffInvitePage />} />
@@ -496,7 +500,7 @@ function App() {
           {/* ── Store Routes — must stay LAST (wildcard slugs) ── */}
           <Route path="/:slug" element={<StorePage />} />
           <Route path="/:slug/product/:productId" element={<ProductDetailPage />} />
-          <Route path="/:slug/checkout" element={<CheckoutPage />} />
+          <Route path="/:slug/checkout" element={<StoreCheckoutRedirect />} />
 
           {/* ── Catch-all ── */}
           <Route path="*" element={<StoreNotFoundPage />} />
