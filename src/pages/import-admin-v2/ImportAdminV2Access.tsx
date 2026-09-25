@@ -68,14 +68,35 @@ export default function ImportAdminV2Access() {
   useEffect(() => { void load(); }, [load]);
 
   const rolePermissionIds = useCallback((roleIds: string[]) => {
+    const selectedRoleIds = new Set(roleIds);
     const ids = new Set<string>();
+
     for (const role of roles) {
-      if (roleIds.includes(role.id)) {
-        for (const id of role.permission_ids ?? []) ids.add(id);
+      if (!selectedRoleIds.has(role.id)) continue;
+      for (const permissionId of role.permission_ids ?? []) {
+        if (permissionId) ids.add(permissionId);
       }
     }
+
     return Array.from(ids);
   }, [roles]);
+
+  // Keep the create form's permission checkboxes synchronized with the
+  // selected roles. Role permissions are inherited, not manually guessed
+  // from the role name.
+  useEffect(() => {
+    if (!showCreate) return;
+    setCreateForm(current => {
+      const inherited = rolePermissionIds(current.role_ids);
+      const directOnly = current.permission_ids.filter(id => !rolePermissionIds(current.role_ids).includes(id));
+      const nextPermissionIds = Array.from(new Set([...inherited, ...directOnly]));
+      const unchanged =
+        nextPermissionIds.length === current.permission_ids.length &&
+        nextPermissionIds.every(id => current.permission_ids.includes(id));
+
+      return unchanged ? current : { ...current, permission_ids: nextPermissionIds };
+    });
+  }, [showCreate, rolePermissionIds]);
 
   const roleNameById = useMemo(() => new Map(roles.map(r => [r.id, r.name])), [roles]);
 
@@ -302,8 +323,23 @@ export default function ImportAdminV2Access() {
                   })}
                 </div>
               </div>
+              <div className="border border-orange-100 bg-orange-50/50 rounded-xl p-3">
+                <p className="text-[11px] font-bold text-gray-700 mb-1">Inherited permissions</p>
+                <p className="text-[10px] text-gray-400 mb-2">Selecting a role automatically checks every permission assigned to that role. You can still uncheck a permission to deny it.</p>
+                <div className="grid sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto">
+                  {permissions.map(permission => {
+                    const checked = createForm.permission_ids.includes(permission.id);
+                    const inherited = rolePermissionIds(createForm.role_ids).includes(permission.id);
+                    if (!inherited) return null;
+                    return <label key={permission.id} className="flex items-start gap-2 rounded-xl border border-gray-100 bg-white p-2.5 text-[10px] text-gray-600">
+                      <input type="checkbox" checked={checked} onChange={e => setCreateForm(v => ({ ...v, permission_ids: e.target.checked ? Array.from(new Set([...v.permission_ids, permission.id])) : v.permission_ids.filter(id => id !== permission.id) }))} className="mt-0.5 accent-orange-500" />
+                      <span><span className="font-semibold text-gray-800 block">{permission.name || permission.key}</span><span className="text-gray-400">{permission.key}</span></span>
+                    </label>;
+                  })}
+                </div>
+              </div>
               <div className="border border-gray-200 rounded-xl p-3">
-                <p className="text-[11px] font-bold text-gray-700 mb-2">Direct permissions</p>
+                <p className="text-[11px] font-bold text-gray-700 mb-2">Other permissions</p>
                 <div className="grid sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto">
                   {permissions.map(permission => {
                     const checked = createForm.permission_ids.includes(permission.id);
