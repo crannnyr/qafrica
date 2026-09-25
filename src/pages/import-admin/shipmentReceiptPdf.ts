@@ -33,15 +33,15 @@ export type ReceiptShipment = {
   }>;
 };
 
-const PAGE_WIDTH = 148;
-const PAGE_HEIGHT = 210;
-const CARD_X = 6;
-const CARD_Y = 6;
-const CARD_W = 136;
-const CARD_H = 198;
-const INNER_X = 14;
-const INNER_W = 120;
-const QR_SIZE = 23;
+const PAGE_WIDTH = 105;
+const PAGE_HEIGHT = 148;
+const CARD_X = 4;
+const CARD_Y = 4;
+const CARD_W = 97;
+const CARD_H = 140;
+const INNER_X = 9;
+const INNER_W = 87;
+const QR_SIZE = 17;
 const qrCache = new Map<string, string>();
 
 function clean(value: unknown) {
@@ -103,8 +103,8 @@ function drawWatermark(doc: jsPDF) {
   doc.saveGraphicsState();
   doc.setTextColor(244, 244, 244);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(32);
-  doc.text('SHIPMENT RECEIPT', PAGE_WIDTH / 2, 132, {
+  doc.setFontSize(22);
+  doc.text('SHIPMENT RECEIPT', PAGE_WIDTH / 2, 92, {
     align: 'center',
     angle: 35,
   });
@@ -120,7 +120,7 @@ function drawLabelValue(
   align: 'left' | 'right' = 'left',
 ) {
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(6.5);
   doc.setTextColor(165, 174, 188);
   doc.text(label, x, y, { align });
 
@@ -144,94 +144,94 @@ async function addReceiptPage(
   doc.roundedRect(CARD_X, CARD_Y, CARD_W, CARD_H, 5, 5, 'S');
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(18);
+  doc.setFontSize(14);
   doc.setTextColor(17, 24, 39);
-  doc.text('QAFRICA', INNER_X, 18);
+  doc.text('QAFRICA', INNER_X, 14);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(156, 163, 175);
-  doc.text('Shipment receipt', INNER_X, 24);
+  doc.text('Shipment receipt', INNER_X, 19);
 
-  doc.addImage(qr, 'PNG', PAGE_WIDTH - INNER_X - QR_SIZE, 11, QR_SIZE, QR_SIZE);
+  doc.addImage(qr, 'PNG', PAGE_WIDTH - INNER_X - QR_SIZE, 7, QR_SIZE, QR_SIZE);
 
-  doc.setFontSize(8);
-  doc.text('SHIPMENT CODE', PAGE_WIDTH / 2, 43, { align: 'center' });
+  doc.setFontSize(6.5);
+  doc.text('SHIPMENT CODE', PAGE_WIDTH / 2, 30, { align: 'center' });
 
   doc.setFont('courier', 'bold');
-  doc.setFontSize(15);
+  doc.setFontSize(11);
   doc.setTextColor(17, 24, 39);
-  doc.text(clean(shipment.shipment_code), PAGE_WIDTH / 2, 52, { align: 'center' });
+  doc.text(clean(shipment.shipment_code), PAGE_WIDTH / 2, 37, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(7);
   doc.setTextColor(156, 163, 175);
-  doc.text(`Order ${clean(customer.order_code)}`, PAGE_WIDTH / 2, 60, { align: 'center' });
+  doc.text(`Order ${clean(customer.order_code)}`, PAGE_WIDTH / 2, 43, { align: 'center' });
 
-  drawLabelValue(doc, 'Customer', customer.customer_name, INNER_X, 72);
+  drawLabelValue(doc, 'Customer', customer.customer_name, INNER_X, 51);
   drawLabelValue(
     doc,
     'Status',
     clean(shipment.status.replaceAll('_', ' ')),
     PAGE_WIDTH - INNER_X,
-    72,
+    51,
     'right',
   );
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(7);
   doc.setTextColor(107, 114, 128);
-  if (customer.customer_whatsapp) doc.text(clean(customer.customer_whatsapp), INNER_X, 86);
-  doc.text(formatDate(shipment.created_at), PAGE_WIDTH - INNER_X, 86, { align: 'right' });
+  if (customer.customer_whatsapp) doc.text(clean(customer.customer_whatsapp), INNER_X, 62);
+  doc.text(formatDate(shipment.created_at), PAGE_WIDTH - INNER_X, 62, { align: 'right' });
 
-  drawLabelValue(doc, 'Carrier', shipment.carrier_name || 'QAfrica', INNER_X, 95);
+  drawLabelValue(doc, 'Carrier', shipment.carrier_name || 'QAfrica', INNER_X, 69);
   drawLabelValue(
     doc,
     'Delivery',
     clean((shipment.delivery_mode || '-').replaceAll('_', ' ')),
     PAGE_WIDTH - INNER_X,
-    95,
+    69,
     'right',
   );
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(7);
   doc.setTextColor(107, 114, 128);
   if (shipment.tracking_number) {
-    doc.text(`Tracking: ${clean(shipment.tracking_number)}`, INNER_X, 109);
+    doc.text(`Tracking: ${clean(shipment.tracking_number)}`, INNER_X, 80);
   }
   if (shipment.shipped_at) {
-    doc.text(`Shipped ${formatDate(shipment.shipped_at)}`, PAGE_WIDTH - INNER_X, 109, { align: 'right' });
+    doc.text(`Shipped ${formatDate(shipment.shipped_at)}`, PAGE_WIDTH - INNER_X, 80, { align: 'right' });
   }
 
   const address = shipment.delivery_address;
   if (address) {
     doc.setFillColor(250, 250, 250);
     doc.setDrawColor(235, 238, 242);
-    doc.roundedRect(INNER_X, 116, INNER_W, 28, 3, 3, 'FD');
+    doc.roundedRect(INNER_X, 84, INNER_W, 23, 2, 2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.5);
+    doc.setTextColor(156, 163, 175);
+    doc.text('DELIVER TO', INNER_X + 2, 89);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7);
-    doc.setTextColor(156, 163, 175);
-    doc.text('DELIVER TO', INNER_X + 3, 122);
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
     doc.setTextColor(31, 41, 55);
-    doc.text(clean(`${address.name} - ${address.phone}`), INNER_X + 3, 128);
+    doc.text(clean(`${address.name} - ${address.phone}`), INNER_X + 2, 95);
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
+    doc.setFontSize(6.5);
     doc.setTextColor(75, 85, 99);
     const addressText = [
       address.address_line1,
       address.address_line2,
       `${address.city}, ${address.state}`,
     ].filter(Boolean).join(', ');
-    addWrappedText(doc, addressText, INNER_X + 3, 134, INNER_W - 6, 4.2);
+    addWrappedText(doc, addressText, INNER_X + 2, 100, INNER_W - 4, 3.2);
   }
 
-  let y = address ? 151 : 121;
+  let y = address ? 111 : 86;
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
@@ -241,59 +241,59 @@ async function addReceiptPage(
 
   doc.setDrawColor(220, 224, 229);
   doc.setLineWidth(0.8);
-  doc.line(INNER_X, y + 4, PAGE_WIDTH - INNER_X, y + 4);
-  y += 11;
+  doc.line(INNER_X, y + 3, PAGE_WIDTH - INNER_X, y + 3);
+  y += 8;
 
   for (const item of shipment.items) {
     const variant = variants(item.variant_options);
-    const productLines = doc.splitTextToSize(clean(item.product_name), INNER_W - 15) as string[];
+    const productLines = doc.splitTextToSize(clean(item.product_name), INNER_W - 12) as string[];
 
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(7);
     doc.setTextColor(31, 41, 55);
     doc.text(productLines, INNER_X, y);
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
+    doc.setFontSize(8);
     doc.text(String(item.quantity), PAGE_WIDTH - INNER_X, y, { align: 'right' });
 
-    y += Math.max(5, productLines.length * 4.2);
+    y += Math.max(4, productLines.length * 3.2);
 
     if (variant) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
+      doc.setFontSize(6);
       doc.setTextColor(156, 163, 175);
-      y = addWrappedText(doc, variant, INNER_X, y, INNER_W - 15, 3.5);
+      y = addWrappedText(doc, variant, INNER_X, y, INNER_W - 12, 2.8);
     }
 
     doc.setDrawColor(235, 238, 242);
     doc.setLineWidth(0.3);
-    doc.line(INNER_X, y + 2, PAGE_WIDTH - INNER_X, y + 2);
-    y += 7;
+    doc.line(INNER_X, y + 1.5, PAGE_WIDTH - INNER_X, y + 1.5);
+    y += 4;
   }
 
   if (shipment.notes) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
+    doc.setFontSize(6);
     doc.setTextColor(107, 114, 128);
-    addWrappedText(doc, `Note: ${shipment.notes}`, INNER_X, Math.min(y, 178), INNER_W, 4);
+    addWrappedText(doc, `Note: ${shipment.notes}`, INNER_X, Math.min(y, 127), INNER_W, 3);
   }
 
   if (shipment.delivered_at) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
+    doc.setFontSize(6);
     doc.setTextColor(25, 130, 80);
     doc.text(
       `Delivered ${new Date(shipment.delivered_at).toLocaleString('en-NG')}`,
       INNER_X,
-      Math.min(y + 4, 183),
+      Math.min(y + 3, 132),
     );
   }
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(6);
   doc.setTextColor(209, 213, 219);
-  doc.text('Scan the QR code to track the order.', PAGE_WIDTH / 2, 191, { align: 'center' });
+  doc.text('Scan the QR code to track the order.', PAGE_WIDTH / 2, 142, { align: 'center' });
 }
 
 export async function createShipmentReceiptsPdf(
@@ -305,7 +305,7 @@ export async function createShipmentReceiptsPdf(
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: 'a5',
+    format: 'a6',
     compress: true,
   });
 
