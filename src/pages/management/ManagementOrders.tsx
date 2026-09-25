@@ -495,9 +495,16 @@ export default function ManagementOrders() {
                             <table className="w-full text-left">
                               <tbody className="divide-y divide-gray-100">
                                 {g.buyers.map((b, i) => (
-                                  <tr key={i}>
-                                    <td className="px-3 py-2 text-xs">{b.userId ? <button onClick={() => setProfileCustomerId(b.userId)} className="text-orange-600 hover:underline font-semibold">{b.name}</button> : <span className="text-gray-600">{b.name}</span>}</td>
-                                    <td className="px-3 py-2 text-[11px]"><button onClick={() => { const found = orders.find(o => o.code === b.orderCode); if (found) setSelectedOrderId(found.id); }} className="font-mono font-semibold text-orange-600 hover:underline">{b.orderCode}</button></td>
+                                  <tr
+                                    key={i}
+                                    onClick={() => {
+                                      const found = orders.find(o => o.code === b.orderCode);
+                                      if (found) setSelectedOrderId(found.id);
+                                    }}
+                                    className="cursor-pointer hover:bg-gray-50"
+                                  >
+                                    <td className="px-3 py-2 text-xs"><span className="text-gray-600">{b.name}</span></td>
+                                    <td className="px-3 py-2 text-[11px]"><span className="font-mono font-semibold text-orange-600 hover:underline">{b.orderCode}</span></td>
                                     <td className="px-3 py-2 text-xs text-gray-600">{b.whatsapp || '—'}</td>
                                     <td className="px-3 py-2 text-xs font-semibold text-right">×{b.qty}</td>
                                   </tr>
