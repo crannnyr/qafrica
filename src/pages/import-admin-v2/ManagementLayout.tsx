@@ -3,9 +3,9 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, Menu, X,
-  LogOut, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
+  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
 } from 'lucide-react';
-import { getManagementManager, validateManagementSession, type ManagementManager } from './ManagementAuth';
+import { getManagementManager, logoutManagementSession, validateManagementSession, type ManagementManager } from './ManagementAuth';
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
@@ -87,7 +87,7 @@ export default function ManagementLayout() {
               <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="w-9 h-9 rounded-xl object-cover" />
               <div>
                 <span className="text-sm font-bold leading-none">QAFRICA</span>
-                <p className="text-[10px] text-gray-500 leading-none mt-0.5">Import Admin</p>
+                <p className="text-[10px] text-gray-500 leading-none mt-0.5">Management</p>
               </div>
             </Link>
           )}
@@ -135,7 +135,7 @@ export default function ManagementLayout() {
               </button>
               <h1 className="text-sm font-semibold text-gray-900">{activeLabel}</h1>
             </div>
-            <div className="text-xs text-gray-500">Import Admin</div>
+            <div className="text-xs text-gray-500">Management</div>
           </div>
         </header>
 
