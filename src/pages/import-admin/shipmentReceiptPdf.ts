@@ -38,7 +38,7 @@ const PAGE_HEIGHT = 297;
 const CARD_W = 148;
 const CARD_X = (PAGE_WIDTH - CARD_W) / 2;
 const CARD_Y = 18;
-const CARD_H = 178;
+const CARD_H = 150;
 const INNER_X = CARD_X + 8;
 const INNER_W = CARD_W - 16;
 const QR_SIZE = 32;
@@ -148,7 +148,7 @@ async function addReceiptPage(
 
   doc.addImage(qr, 'PNG', CARD_X + CARD_W - 8 - QR_SIZE, CARD_Y + 10, QR_SIZE, QR_SIZE);
 
-  let y = CARD_Y + 42;
+  let y = CARD_Y + 39;
 
   // Shipment code block.
   doc.setFont('helvetica', 'normal');
@@ -156,36 +156,36 @@ async function addReceiptPage(
   doc.setTextColor(156, 163, 175);
   doc.text('SHIPMENT CODE', PAGE_WIDTH / 2, y, { align: 'center' });
 
-  y += 8;
+  y += 7;
   doc.setFont('courier', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(17, 24, 39);
   doc.text(clean(shipment.shipment_code), PAGE_WIDTH / 2, y, { align: 'center' });
 
-  y += 8;
+  y += 7;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(156, 163, 175);
   doc.text('Order ' + clean(customer.order_code), PAGE_WIDTH / 2, y, { align: 'center' });
 
-  y += 14;
+  y += 11;
 
   // Customer/status row.
   drawLabelValue(doc, 'Customer', customer.customer_name, INNER_X, y);
   drawLabelValue(doc, 'Status', clean(shipment.status.replaceAll('_', ' ')), CARD_X + CARD_W - 8, y, 'right');
 
-  y += 20;
+  y += 16;
 
   // Carrier/delivery row.
   drawLabelValue(doc, 'Carrier', shipment.carrier_name || 'QAfrica', INNER_X, y);
   drawLabelValue(doc, 'Delivery', clean((shipment.delivery_mode || '—').replaceAll('_', ' ')), CARD_X + CARD_W - 8, y, 'right');
 
-  y += 18;
+  y += 13;
 
   // Delivery address card.
   if (address) {
     const addressCardY = y - 2;
-    const addressCardH = 29;
+    const addressCardH = 25;
     doc.setDrawColor(235, 238, 242);
     doc.setFillColor(255, 255, 255);
     doc.roundedRect(INNER_X, addressCardY, INNER_W, addressCardH, 4, 4, 'FD');
@@ -193,21 +193,21 @@ async function addReceiptPage(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(6.2);
     doc.setTextColor(156, 163, 175);
-    doc.text('DELIVER TO', INNER_X + 4, addressCardY + 8);
+    doc.text('DELIVER TO', INNER_X + 4, addressCardY + 7);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(31, 41, 55);
     const recipient = [address.name, address.phone].filter(Boolean).join(' · ');
-    doc.text(clean(recipient), INNER_X + 4, addressCardY + 15);
+    doc.text(clean(recipient), INNER_X + 4, addressCardY + 14);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.2);
     doc.setTextColor(75, 85, 99);
-    doc.text(doc.splitTextToSize(clean(addressText), INNER_W - 8).slice(0, 1), INNER_X + 4, addressCardY + 21);
-    doc.text(clean(cityState), INNER_X + 4, addressCardY + 26);
+    doc.text(doc.splitTextToSize(clean(addressText), INNER_W - 8).slice(0, 1), INNER_X + 4, addressCardY + 19);
+    doc.text(clean(cityState), INNER_X + 4, addressCardY + 23);
 
-    y = addressCardY + addressCardH + 10;
+    y = addressCardY + addressCardH + 7;
   }
 
   // Product table.
@@ -221,7 +221,7 @@ async function addReceiptPage(
   doc.setLineWidth(0.45);
   doc.line(INNER_X, y + 4, CARD_X + CARD_W - 8, y + 4);
 
-  y += 12;
+  y += 9;
 
   for (const item of shipment.items) {
     const productLines = doc.splitTextToSize(clean(item.product_name), INNER_W - 16) as string[];
@@ -235,7 +235,7 @@ async function addReceiptPage(
     doc.setFontSize(8);
     doc.text(String(item.quantity), CARD_X + CARD_W - 8, y, { align: 'right' });
 
-    y += Math.max(6, Math.min(productLines.length, 2) * 4);
+    y += Math.max(5, Math.min(productLines.length, 2) * 3.4);
 
     const variant = variants(item.variant_options);
     if (variant) {
@@ -244,13 +244,13 @@ async function addReceiptPage(
       doc.setTextColor(156, 163, 175);
       const detailLines = doc.splitTextToSize(variant, INNER_W - 2) as string[];
       doc.text(detailLines.slice(0, 2), INNER_X, y);
-      y += Math.min(detailLines.length, 2) * 3.5;
+      y += Math.min(detailLines.length, 2) * 3;
     }
 
     doc.setDrawColor(235, 238, 242);
     doc.setLineWidth(0.2);
     doc.line(INNER_X, y + 2, CARD_X + CARD_W - 8, y + 2);
-    y += 8;
+    y += 5;
   }
 
   if (!shipment.items.length) {
@@ -280,7 +280,7 @@ async function addReceiptPage(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(209, 213, 219);
-  doc.text('Scan the QR code to track the order.', PAGE_WIDTH / 2, CARD_Y + CARD_H - 7, { align: 'center' });
+  doc.text('Scan the QR code to track the order.', PAGE_WIDTH / 2, CARD_Y + CARD_H - 6, { align: 'center' });
 }
 
 export async function createShipmentReceiptsPdf(
