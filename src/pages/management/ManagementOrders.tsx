@@ -45,7 +45,7 @@ interface OrderRow {
   pickup_station_address?: string | null;
   subtotal_ngn?: number;
   jumia_fee_ngn?: number;
-  shipping_ngn?: number;
+  shipping_ngn?: number | null;
   total_ngn?: number;
   payment_method?: string | null;
   payment_reference?: string | null;
