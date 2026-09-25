@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Clock, XCircle, AlertTriangle } from 'lucide-react';
-import { useCartStore } from '@/stores';
+import { useCartStore, useCustomerAuthStore } from '@/stores';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { EscrowExplainer, InfoButton } from './ui';
 import { naira } from './format';
@@ -19,6 +19,7 @@ export default function CheckoutCompletePage() {
   const [s, setS] = useState<SessionStatus | null>(null);
   const [timedOut, setTimedOut] = useState(false);
   const removeItem = useCartStore((st) => st.removeItem);
+  const { isAuthenticated } = useCustomerAuthStore();
   const started = useRef(0);
   const cleared = useRef(false);
 
@@ -92,6 +93,15 @@ export default function CheckoutCompletePage() {
             <p className="mt-3 text-[12px] text-gray-500 flex items-start gap-1.5">
               Your money is held safely until you receive your order. <InfoButton title="Buyer protection"><EscrowExplainer /></InfoButton>
             </p>
+            {forName && (
+              <div className="mt-5 rounded-lg bg-gray-900 text-white p-4 text-left">
+                <p className="text-[14px] font-bold">You're a Cart Clearer 👑</p>
+                <p className="mt-1 text-[12px] text-white/75">This clear counts on the leaderboard once {forName}'s order is delivered.</p>
+                <Link to={isAuthenticated ? '/help-pay/leaderboard' : `/help-pay/claim?ref=${encodeURIComponent(ref)}`} className="mt-3 inline-flex h-9 px-4 items-center rounded-lg bg-white text-gray-900 text-[12px] font-semibold">
+                  {isAuthenticated ? 'See the leaderboard' : 'Create an account to join the board'}
+                </Link>
+              </div>
+            )}
             <Link to="/stores" className={`${btn} mt-5 w-full justify-center`}>Continue shopping</Link>
           </div>
         }

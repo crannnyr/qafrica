@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { Search, Heart, Home, LayoutGrid, ShoppingBag, User, X } from 'lucide-react';
-import { useCartStore, useCustomerAuthStore } from '@/stores';
+import { Link, useNavigate } from 'react-router-dom';
+import { Search, Heart, X } from 'lucide-react';
+import BottomNav from '@/pages/shop/BottomNav';
+import { useCustomerAuthStore } from '@/stores';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
 
 type Props = {
@@ -15,9 +16,8 @@ export default function MarketplaceLayout({ children, initialQuery = '', subhead
   useForceLightMode();
   const navigate = useNavigate();
   const [q, setQ] = useState(initialQuery);
-  const cartCount = useCartStore((s) => s.getTotalItems());
   const { isAuthenticated } = useCustomerAuthStore();
-  const meHref = isAuthenticated ? '/customer/dashboard' : `/customer/login?return=${encodeURIComponent('/stores')}`;
+  const meHref = isAuthenticated ? '/customer/wishlist' : `/customer/login?return=${encodeURIComponent('/customer/wishlist')}`;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +25,6 @@ export default function MarketplaceLayout({ children, initialQuery = '', subhead
     navigate(term ? `/stores?q=${encodeURIComponent(term)}` : '/stores');
   };
 
-  const tab = 'flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 text-[11px] focus-visible:outline-none focus-visible:bg-gray-50';
 
   return (
     <div className="min-h-screen bg-[#F6F6F6] text-gray-900" style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}>
@@ -69,45 +68,7 @@ export default function MarketplaceLayout({ children, initialQuery = '', subhead
 
       <main className="max-w-6xl mx-auto pb-24">{children}</main>
 
-      <nav
-        aria-label="Marketplace"
-        className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
-      >
-        <div className="max-w-6xl mx-auto flex">
-          <NavLink to="/stores" end className={({ isActive }) => `${tab} ${isActive ? 'text-gray-900 font-semibold' : 'text-gray-500'}`}>
-            {({ isActive }) => (
-              <>
-                <Home className="w-6 h-6" strokeWidth={isActive ? 2.25 : 1.75} fill={isActive ? 'currentColor' : 'none'} />
-                Shop
-              </>
-            )}
-          </NavLink>
-          <NavLink to="/stores/categories" className={({ isActive }) => `${tab} ${isActive ? 'text-gray-900 font-semibold' : 'text-gray-500'}`}>
-            {({ isActive }) => (
-              <>
-                <LayoutGrid className="w-6 h-6" strokeWidth={isActive ? 2.25 : 1.75} />
-                Category
-              </>
-            )}
-          </NavLink>
-          <Link to="/cart" className={`${tab} text-gray-500`}>
-            <span className="relative">
-              <ShoppingBag className="w-6 h-6" strokeWidth={1.75} />
-              {cartCount > 0 && (
-                <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-[#FA6338] text-white text-[10px] font-bold flex items-center justify-center">
-                  {cartCount > 99 ? '99+' : cartCount}
-                </span>
-              )}
-            </span>
-            Cart
-          </Link>
-          <Link to={meHref} className={`${tab} text-gray-500`}>
-            <User className="w-6 h-6" strokeWidth={1.75} />
-            Me
-          </Link>
-        </div>
-      </nav>
+      <BottomNav />
     </div>
   );
 }

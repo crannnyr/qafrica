@@ -1,7 +1,8 @@
 // /cart/share: turn the selected cart items into a pay-for-me link.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Copy, Check, Share2, MessageCircle, ShieldCheck } from 'lucide-react';
+import { Copy, Check, Share2, MessageCircle, ShieldCheck, HandHeart } from 'lucide-react';
+import { supabase } from '@/services';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
 import CONFIG from '@/lib/config';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
@@ -15,7 +16,7 @@ const STATES: string[] = (CONFIG as unknown as { NIGERIAN_STATES: string[] }).NI
 export default function ShareCartPage() {
   useForceLightMode();
   const allItems = useCartStore((s) => s.items);
-  const { customer } = useCustomerAuthStore();
+  const { customer, isAuthenticated } = useCustomerAuthStore();
   const items = useMemo(() => {
     try {
       const ids: string[] = JSON.parse(sessionStorage.getItem(CHECKOUT_SELECTION_KEY) ?? 'null');
@@ -39,6 +40,7 @@ export default function ShareCartPage() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ code: string; amount: number } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [posted, setPosted] = useState(false);
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +97,23 @@ export default function ShareCartPage() {
               <Share2 className="w-4 h-4" /> More options
             </button>
           </div>
+          {isAuthenticated ? (
+            <button
+              type="button"
+              onClick={async () => {
+                const { error } = await supabase.rpc('set_help_pay_public', { p_code: result.code, p_public: true });
+                if (error) setError(error.message);
+                else setPosted(true);
+              }}
+              disabled={posted}
+              className="mt-2 w-full h-11 rounded-lg bg-[#FA6338] text-white text-[13px] font-semibold inline-flex items-center justify-center gap-2 disabled:opacity-60"
+            >
+              <HandHeart className="w-4 h-4" /> {posted ? 'Posted on Help Pay' : 'Also post on Help Pay'}
+            </button>
+          ) : (
+            <p className="mt-3 text-[12px] text-gray-500"><Link to={`/customer/login?return=${encodeURIComponent('/customer/links')}`} className="underline">Sign in</Link> to also post your cart on Help Pay, where anyone can clear it.</p>
+          )}
+          {error && <p className="mt-2 text-[12px] text-[#C4320A]">{error}</p>}
           <ul className="mt-6 space-y-2 text-[12px] text-gray-600">
             <li className="flex gap-2"><ShieldCheck className="w-4 h-4 text-[#1A7F37] shrink-0" aria-hidden />They only see your first name, city, the items and your note. Never your address or phone.</li>
             <li className="flex gap-2"><ShieldCheck className="w-4 h-4 text-[#1A7F37] shrink-0" aria-hidden />The link works for 7 days and stops once someone pays.</li>

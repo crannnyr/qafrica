@@ -105,10 +105,17 @@ const StoreClosedPage = lazy(() => import('@/pages/store/StoreClosedPage'));
 const StoreNotFoundPage = lazy(() => import('@/pages/store/StoreNotFoundPage'));
 
 // Customer Pages
-const CustomerLoginPage = lazy(() => import('@/pages/customer/CustomerLoginPage'));
-const CustomerSignupPage = lazy(() => import('@/pages/customer/CustomerSignupPage'));
-const CustomerDashboard = lazy(() => import('@/pages/customer/CustomerDashboard/index'));
-const CustomerOrderDetailPage = lazy(() => import('@/pages/customer/CustomerOrderDetailPage'));
+const ShopAuthPage = lazy(() => import('@/pages/shop/account/AuthPage'));
+const MePage = lazy(() => import('@/pages/shop/account/MePage'));
+const ShopOrdersPage = lazy(() => import('@/pages/shop/account/OrdersPages').then((m) => ({ default: m.OrdersPage })));
+const ShopOrderPage = lazy(() => import('@/pages/shop/account/OrdersPages').then((m) => ({ default: m.OrderPage })));
+const ShopWishlistPage = lazy(() => import('@/pages/shop/account/SimplePages').then((m) => ({ default: m.WishlistPage })));
+const ShopAddressesPage = lazy(() => import('@/pages/shop/account/SimplePages').then((m) => ({ default: m.AddressesPage })));
+const ShopProfilePage = lazy(() => import('@/pages/shop/account/SimplePages').then((m) => ({ default: m.ProfilePage })));
+const MyLinksPage = lazy(() => import('@/pages/shop/account/SimplePages').then((m) => ({ default: m.MyLinksPage })));
+const HelpPayPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.HelpPayPage })));
+const LeaderboardPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.LeaderboardPage })));
+const ClaimClearPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.ClaimClearPage })));
 const MarketplaceHome = lazy(() => import('@/pages/marketplace/MarketplaceHome'));
 const MarketplaceCategories = lazy(() => import('@/pages/marketplace/MarketplaceCategories'));
 const CartPage = lazy(() => import('@/pages/shop/CartPage'));
@@ -377,10 +384,18 @@ function App() {
           <Route path="/payment/callback" element={<PaymentCallbackPage />} />
 
           {/* ── Customer ── */}
-          <Route path="/customer/login" element={<CustomerLoginPage />} />
-          <Route path="/customer/signup" element={<CustomerSignupPage />} />
-          <Route path="/customer/dashboard" element={<CustomerDashboard />} />
-          <Route path="/customer/orders/:orderId" element={<CustomerOrderDetailPage />} />
+          <Route path="/customer/login" element={<ShopAuthPage mode="login" />} />
+          <Route path="/customer/signup" element={<ShopAuthPage mode="signup" />} />
+          <Route path="/customer/dashboard" element={<MePage />} />
+          <Route path="/customer/orders" element={<ShopOrdersPage />} />
+          <Route path="/customer/orders/:orderId" element={<ShopOrderPage />} />
+          <Route path="/customer/wishlist" element={<ShopWishlistPage />} />
+          <Route path="/customer/addresses" element={<ShopAddressesPage />} />
+          <Route path="/customer/profile" element={<ShopProfilePage />} />
+          <Route path="/customer/links" element={<MyLinksPage />} />
+          <Route path="/help-pay" element={<HelpPayPage />} />
+          <Route path="/help-pay/leaderboard" element={<LeaderboardPage />} />
+          <Route path="/help-pay/claim" element={<ClaimClearPage />} />
           <Route path="/stores" element={<MarketplaceHome />} />
           <Route path="/stores/categories" element={<MarketplaceCategories />} />
           <Route path="/cart" element={<CartPage />} />
