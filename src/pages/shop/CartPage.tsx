@@ -1,7 +1,7 @@
 // /cart: one cart across all stores, grouped by store (SHEIN-style).
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Trash2, ShieldCheck, ChevronRight, ShoppingBag, AlertCircle } from 'lucide-react';
+import { Trash2, ShieldCheck, ChevronRight, ShoppingBag, AlertCircle, Gift } from 'lucide-react';
 import { useCartStore } from '@/stores';
 import type { CartItem } from '@/stores/cartStore';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
@@ -57,12 +57,13 @@ export default function CartPage() {
       return next;
     });
 
-  const checkout = () => {
+  const goWithSelection = (path: string) => {
     try {
       sessionStorage.setItem(CHECKOUT_SELECTION_KEY, JSON.stringify(selected.map((i) => i.id)));
     } catch { /* ignore */ }
-    navigate('/checkout');
+    navigate(path);
   };
+  const checkout = () => goWithSelection('/checkout');
 
   if (items.length === 0) {
     return (
@@ -149,6 +150,22 @@ export default function CartPage() {
             </section>
           );
         })}
+        <div className="mt-2 bg-white px-4 py-3 flex items-center gap-3">
+          <Gift className="w-5 h-5 text-[#FA6338] shrink-0" aria-hidden />
+          <div className="flex-1 min-w-0">
+            <p className="text-[13px] font-semibold flex items-center gap-1">
+              Ask someone to pay
+              <InfoButton title="Pay-for-me link">
+                <p>Get a private link for the selected items and send it to a friend or family member. They pay without an account, and the order is delivered to you.</p>
+                <p>They only see your first name, city, the items and your note.</p>
+              </InfoButton>
+            </p>
+            <p className="text-[12px] text-gray-500">Share a link. They pay, you receive.</p>
+          </div>
+          <button type="button" onClick={() => goWithSelection('/cart/share')} disabled={selected.length === 0} className="h-9 px-3 rounded-lg border border-gray-900 text-[12px] font-semibold disabled:opacity-40">
+            Get link
+          </button>
+        </div>
         <p className="px-4 py-4 text-[11px] text-gray-500">Delivery fees are added at checkout once you choose your state.</p>
       </div>
 

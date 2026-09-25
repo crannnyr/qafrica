@@ -50,6 +50,7 @@ export type CheckoutDetails = {
   return_slug?: string | null;
   payer?: { name: string; email: string; phone?: string } | null;
   shared_cart_id?: string | null;
+  shared_cart_code?: string;
 };
 
 export type CreateResult =
@@ -127,3 +128,49 @@ export function saveDetails(d: Pick<CheckoutDetails, 'customer' | 'delivery'>) {
     localStorage.setItem(DETAILS_KEY, JSON.stringify(d));
   } catch { /* ignore */ }
 }
+
+// ── Pay-for-me links ──────────────────────────────────────────────────────────
+export type SharedCartView = {
+  code: string;
+  status: 'active' | 'paid' | 'cancelled' | 'expired';
+  expires_at: string;
+  first_name: string;
+  city: string | null;
+  state: string | null;
+  note: string | null;
+  quote: Quote | null;
+};
+
+export async function createSharedCart(
+  items: CartItem[],
+  recipient: { name: string; email: string; phone: string },
+  delivery: { address: string; city: string; state: string; landmark?: string },
+  note: string,
+): Promise<{ ok: true; code: string; amount: number } | { ok: false; error: string }> {
+  const { data, error } = await supabase.rpc('create_shared_cart', {
+    p_items: toQuoteItems(items),
+    p_recipient: recipient,
+    p_delivery: delivery,
+    p_note: note || null,
+  });
+  if (error) return { ok: false, error: error.message || 'Could not create the link. Please try again.' };
+  return { ok: true, code: data.code, amount: Number(data.amount) };
+}
+
+export async function getSharedCart(code: string): Promise<SharedCartView | null> {
+  const { data, error } = await supabase.rpc('get_shared_cart', { p_code: code });
+  if (error || !data) return null;
+  return data as SharedCartView;
+}
+
+export async function paySharedCart(code: string, payer: { name: string; email: string; phone?: string }): Promise<CreateResult> {
+  // Items, recipient and address are taken from the saved link on the server
+  return createCheckout([] as ReturnType<typeof toQuoteItems>, {
+    customer: { name: '', email: '', phone: '' },
+    delivery: { address: '', city: '', state: '' },
+    shared_cart_code: code,
+    payer,
+  });
+}
+
+export const shareUrl = (code: string) => `${window.location.origin}/pay/${code}`;

@@ -3,6 +3,8 @@
 import { Palette, Type, Store } from 'lucide-react';
 
 export const RESERVED_SLUGS = new Set([
+  // Shopper pages (marketplace, cart, checkout, pay-for-me, tracking, Help Pay)
+  'pay', 'cart', 'checkout', 'track', 'track-order', 'stores', 'help-pay', 'leaderboard', 'account',
   'admin','finance','api','store','shop','dashboard','login','signup',
   'register','auth','payment','checkout','wallet','support','help',
   'billing','account','settings','staff','developer','dev','test',

@@ -5,38 +5,12 @@ import { Lock, ShieldCheck, AlertCircle, Tag, ChevronDown } from 'lucide-react';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
 import CONFIG from '@/lib/config';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
-import { EscrowExplainer, InfoButton, PageHeader } from './ui';
+import { EscrowExplainer, Field, InfoButton, PageHeader } from './ui';
 import { naira } from './format';
 import { CHECKOUT_SELECTION_KEY } from './CartPage';
 import { createCheckout, fetchQuote, loadSavedDetails, rememberPending, saveDetails, type Quote } from './checkoutApi';
 
 const STATES: string[] = (CONFIG as unknown as { NIGERIAN_STATES: string[] }).NIGERIAN_STATES ?? [];
-
-function Field(props: {
-  id: string; label: string; value: string; onChange: (v: string) => void; error?: string;
-  type?: string; autoComplete?: string; inputMode?: 'text' | 'email' | 'tel'; placeholder?: string; optional?: boolean;
-}) {
-  return (
-    <div>
-      <label htmlFor={props.id} className="block text-[12px] font-medium text-gray-700 mb-1">
-        {props.label} {props.optional && <span className="text-gray-400 font-normal">(optional)</span>}
-      </label>
-      <input
-        id={props.id}
-        type={props.type ?? 'text'}
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-        autoComplete={props.autoComplete}
-        inputMode={props.inputMode}
-        placeholder={props.placeholder}
-        aria-invalid={!!props.error}
-        aria-describedby={props.error ? `${props.id}-err` : undefined}
-        className={`w-full h-11 px-3 rounded-lg border bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-gray-900 ${props.error ? 'border-[#C4320A]' : 'border-gray-300'}`}
-      />
-      {props.error && <p id={`${props.id}-err`} className="mt-1 text-[12px] text-[#C4320A]">{props.error}</p>}
-    </div>
-  );
-}
 
 export default function CheckoutPage() {
   useForceLightMode();

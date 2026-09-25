@@ -2,6 +2,7 @@
 // Body: { items: [{product_id, store_id, quantity, variant_options?, attribution?}],
 //         customer: {name, email, phone}, delivery: {address, city, state, landmark?},
 //         coupons?: {[store_id]: code}, return_slug?, payer?: {name, email, phone} }
+//   or   { shared_cart_code, payer: {name, email, phone?} }   (pay-for-me link)
 // Deploy with verify_jwt = false (guests can check out); a signed-in shopper's token is optional.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -41,17 +42,34 @@ Deno.serve(async (req) => {
     return json(400, { error: 'Invalid request' });
   }
 
-  const customer = {
-    name: clean(body?.customer?.name, 80),
-    email: clean(body?.customer?.email, 120).toLowerCase(),
-    phone: normPhone(clean(body?.customer?.phone, 20)),
-  };
-  const delivery = {
-    address: clean(body?.delivery?.address, 200),
-    city: clean(body?.delivery?.city, 60),
-    state: clean(body?.delivery?.state, 40),
-    landmark: clean(body?.delivery?.landmark, 120),
-  };
+  // Pay-for-me link: items, recipient and address come ONLY from the saved link, never the payer's browser
+  // deno-lint-ignore no-explicit-any
+  let shared: any = null;
+  const sharedCode = clean(body?.shared_cart_code, 20).toUpperCase();
+  if (sharedCode) {
+    const { data: sc } = await supabase.from('shared_carts').select('*').eq('code', sharedCode).maybeSingle();
+    if (!sc) return json(404, { error: 'This payment link was not found' });
+    if (sc.status === 'paid') return json(410, { error: 'This cart has already been paid for' });
+    if (sc.status !== 'active' || new Date(sc.expires_at).getTime() < Date.now()) return json(410, { error: 'This payment link has expired' });
+    if (!body?.payer) return json(400, { error: 'Please enter your details', field_errors: { payer_name: 'Enter your name' } });
+    shared = sc;
+  }
+
+  const customer = shared
+    ? { name: shared.recipient_name as string, email: shared.recipient_email as string, phone: shared.recipient_phone as string }
+    : {
+        name: clean(body?.customer?.name, 80),
+        email: clean(body?.customer?.email, 120).toLowerCase(),
+        phone: normPhone(clean(body?.customer?.phone, 20)),
+      };
+  const delivery = shared
+    ? { address: shared.delivery.address, city: shared.delivery.city, state: shared.delivery.state, landmark: shared.delivery.landmark ?? '' }
+    : {
+        address: clean(body?.delivery?.address, 200),
+        city: clean(body?.delivery?.city, 60),
+        state: clean(body?.delivery?.state, 40),
+        landmark: clean(body?.delivery?.landmark, 120),
+      };
   const fieldErrors: Record<string, string> = {};
   if (customer.name.length < 2) fieldErrors.name = 'Enter your full name';
   if (!isEmail(customer.email)) fieldErrors.email = 'Enter a valid email address';
@@ -69,15 +87,16 @@ Deno.serve(async (req) => {
   }
   if (Object.keys(fieldErrors).length) return json(400, { error: 'Please check your details', field_errors: fieldErrors });
 
-  if (!Array.isArray(body?.items) || body.items.length === 0) return json(400, { error: 'Your cart is empty' });
-  const items = body.items.slice(0, 60).map((i: Record<string, unknown>) => ({
+  const rawItems = shared ? shared.items : body?.items;
+  if (!Array.isArray(rawItems) || rawItems.length === 0) return json(400, { error: 'Your cart is empty' });
+  const items = rawItems.slice(0, 60).map((i: Record<string, unknown>) => ({
     product_id: String(i.product_id ?? ''),
     store_id: String(i.store_id ?? ''),
     quantity: Number(i.quantity ?? 1),
     variant_options: i.variant_options && typeof i.variant_options === 'object' ? i.variant_options : null,
     attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own',
   }));
-  const coupons = body?.coupons && typeof body.coupons === 'object' ? body.coupons : {};
+  const coupons = !shared && body?.coupons && typeof body.coupons === 'object' ? body.coupons : {};
 
   // Server-side price, stock, delivery and coupon check
   const { data: quote, error: qErr } = await supabase.rpc('checkout_quote', { p_items: items, p_state: delivery.state, p_coupons: coupons });
@@ -88,9 +107,9 @@ Deno.serve(async (req) => {
   if (!quote?.ok) return json(409, { error: 'Some items need your attention', quote });
 
   // Signed-in shopper (optional)
-  let customerId: string | null = null;
+  let customerId: string | null = shared?.created_by ?? null;
   const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  if (token) {
+  if (token && !shared) {
     const { data: u } = await supabase.auth.getUser(token);
     if (u?.user) {
       const { data: c } = await supabase.from('customers').select('id').eq('id', u.user.id).maybeSingle();
@@ -117,7 +136,7 @@ Deno.serve(async (req) => {
       payer_name: payer?.name ?? null,
       payer_email: payer?.email ?? null,
       payer_phone: payer?.phone ?? null,
-      shared_cart_id: typeof body?.shared_cart_id === 'string' ? body.shared_cart_id : null,
+      shared_cart_id: shared?.id ?? null,
     })
     .select('id')
     .single();
@@ -135,7 +154,7 @@ Deno.serve(async (req) => {
           amount: Number(quote.amount).toFixed(2),
           currency: 'NGN',
           customerEmail: payer?.email ?? customer.email,
-          callbackUrl: `${SITE}/checkout/complete?ref=${encodeURIComponent(reference)}`,
+          callbackUrl: `${SITE}/checkout/complete?ref=${encodeURIComponent(reference)}${shared ? '&for=' + encodeURIComponent(shared.recipient_name.split(' ')[0]) : ''}`,
         },
       },
     });

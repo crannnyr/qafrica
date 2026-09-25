@@ -116,6 +116,8 @@ const ShopCheckoutPage = lazy(() => import('@/pages/shop/CheckoutPage'));
 const CheckoutCompletePage = lazy(() => import('@/pages/shop/CheckoutCompletePage'));
 const OrderTrackingPage = lazy(() => import('@/pages/shop/OrderTrackingPage'));
 const TrackRouter = lazy(() => import('@/pages/shop/TrackRouter'));
+const ShareCartPage = lazy(() => import('@/pages/shop/ShareCartPage'));
+const PaySharedCartPage = lazy(() => import('@/pages/shop/PaySharedCartPage'));
 
 // Admin Pages
 const AdminLayout = lazy(() => import('@/pages/admin/AdminLayout'));
@@ -382,6 +384,8 @@ function App() {
           <Route path="/stores" element={<MarketplaceHome />} />
           <Route path="/stores/categories" element={<MarketplaceCategories />} />
           <Route path="/cart" element={<CartPage />} />
+          <Route path="/cart/share" element={<ShareCartPage />} />
+          <Route path="/pay/:code" element={<PaySharedCartPage />} />
           <Route path="/checkout" element={<ShopCheckoutPage />} />
           <Route path="/checkout/complete" element={<CheckoutCompletePage />} />
 

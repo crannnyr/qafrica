@@ -15,6 +15,7 @@ export default function CheckoutCompletePage() {
   useForceLightMode();
   const [params] = useSearchParams();
   const ref = params.get('ref') ?? params.get('orderReference') ?? readPending()?.reference ?? '';
+  const forName = (params.get('for') ?? '').slice(0, 40);
   const [s, setS] = useState<SessionStatus | null>(null);
   const [timedOut, setTimedOut] = useState(false);
   const removeItem = useCartStore((st) => st.removeItem);
@@ -76,8 +77,8 @@ export default function CheckoutCompletePage() {
     body = (
       <Result
         icon={<CheckCircle2 className="w-12 h-12 text-[#1A7F37]" />}
-        title="Payment received"
-        text={`${naira(s.amount)} paid. We've emailed your receipt.`}
+        title={forName ? `You paid for ${forName}'s cart` : 'Payment received'}
+        text={forName ? `${naira(s.amount)} paid. ${forName} will get the order updates and delivery. Thank you!` : `${naira(s.amount)} paid. We've emailed your receipt.`}
         foot={
           <div className="mt-5 w-full text-left">
             <ul className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
