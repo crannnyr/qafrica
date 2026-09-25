@@ -823,6 +823,9 @@ export interface Review {
   admin_responded_at?: string;
   created_at: string;
   updated_at: string;
+  seller_reply?: string | null;
+  seller_replied_at?: string | null;
+  tags?: string[];
   product?: {
     name: string;
     images: string[];

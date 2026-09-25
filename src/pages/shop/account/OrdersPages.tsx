@@ -9,6 +9,7 @@ import CONFIG from '@/lib/config';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { EscrowExplainer, InfoButton, PageHeader } from '../ui';
 import { naira } from '../format';
+import ReviewWriter from './ReviewWriter';
 import { BUCKETS, bucketOf, fetchOrder, productImages, statusLabel, useMyOrders, type Bucket, type MyOrder } from './data';
 
 const fmt = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
@@ -172,6 +173,8 @@ export function OrderPage() {
             <p className="mt-3 text-[12px] text-gray-600">Delivering to {[o.delivery_address.address, o.delivery_address.city, o.delivery_address.state].filter(Boolean).join(', ')}</p>
           )}
         </section>
+
+        {(o.status === 'delivered' || o.is_escrow_released) && <ReviewWriter orderId={o.id} />}
 
         {reporting && (
           <section className="bg-white px-4 py-4">

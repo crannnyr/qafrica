@@ -47,7 +47,7 @@ export default function ReviewsPage() {
       const avgRating = total > 0 ? totalRating / total : 0;
       
       // Calculate response rate based on approved reviews (or all reviews that could be responded to)
-      const responded = reviews.filter(r => r.admin_response).length;
+      const responded = reviews.filter(r => r.seller_reply).length;
       const responseRate = total > 0 ? (responded / total) * 100 : 0;
 
       setStats({
@@ -306,27 +306,9 @@ export default function ReviewsPage() {
                 {/* Actions */}
                 <div className="flex items-center gap-2">
                   {!review.is_approved && (
-                    <>
-                      <Button
-                        size="sm"
-                        onClick={() => handleApprove(review.id)}
-                        className="bg-green-500 hover:bg-green-600 text-white"
-                      >
-                        <Check className="w-4 h-4 mr-1" />
-                        Approve
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleReject(review.id)}
-                        className="text-red-600 border-red-200 hover:bg-red-50"
-                      >
-                        <X className="w-4 h-4 mr-1" />
-                        Reject
-                      </Button>
-                    </>
+                    <span className="text-xs text-gray-500">Hidden by QAFRICA</span>
                   )}
-                  {review.is_approved && !review.admin_response && (
+                  {review.is_approved && !review.seller_reply && (
                     <Button
                       size="sm"
                       variant="outline"
@@ -372,13 +354,13 @@ export default function ReviewsPage() {
               </div>
 
               {/* Admin Response */}
-              {review.admin_response && (
+              {review.seller_reply && (
                 <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
                   <p className="text-sm font-medium text-gray-900 dark:text-white mb-1">
                     Your Response
                   </p>
                   <p className="text-sm text-gray-700 dark:text-gray-300">
-                    {review.admin_response}
+                    {review.seller_reply}
                   </p>
                   {review.admin_responded_at && (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
