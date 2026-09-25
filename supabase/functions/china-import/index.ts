@@ -1569,12 +1569,16 @@ serve(async (req: Request) => {
 
       if (assignmentsError) return json({ error: assignmentsError.message }, 500)
 
-      const roleIds = Array.from(new Set((assignments ?? []).map((row: any) => row.role_id).filter(Boolean)))
-      const { data: rolePermissionRows, error: rolePermissionError } = roleIds.length
+      // Load permissions for every role, not only roles currently assigned
+      // to a manager. The Admin Access create form needs the complete role
+      // catalogue so selecting a newly unused role can still inherit its
+      // permissions immediately.
+      const allRoleIds = (roles ?? []).map((role: any) => role.id).filter(Boolean)
+      const { data: rolePermissionRows, error: rolePermissionError } = allRoleIds.length
         ? await supabase
             .from('import_admin_role_permissions')
             .select('role_id, permission_id')
-            .in('role_id', roleIds)
+            .in('role_id', allRoleIds)
         : { data: [], error: null }
 
       if (rolePermissionError) return json({ error: rolePermissionError.message }, 500)
