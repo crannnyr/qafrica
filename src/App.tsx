@@ -135,6 +135,7 @@ const AdminProducts = lazy(() => import('@/pages/admin/AdminProducts'));
 const AdminOrders = lazy(() => import('@/pages/admin/AdminOrders'));
 const AdminWithdrawals = lazy(() => import('@/pages/admin/AdminWithdrawals'));
 const AdminFailures = lazy(() => import('@/pages/admin/AdminFailures'));
+const AdminIssues = lazy(() => import('@/pages/admin/AdminIssues'));
 const AdminSubscriptions = lazy(() => import('@/pages/admin/AdminSubscriptions'));
 const AdminDomainRequests = lazy(() => import('@/pages/admin/AdminDomainRequests'));
 const AdminEmailControls = lazy(() => import('@/pages/admin/AdminEmailControls'));
@@ -475,6 +476,7 @@ function App() {
             <Route path="orders" element={<AdminOrders />} />
             <Route path="withdrawals" element={<AdminWithdrawals />} />
             <Route path="failures" element={<AdminFailures />} />
+            <Route path="issues" element={<AdminIssues />} />
             <Route path="subscriptions" element={<AdminSubscriptions />} />
             <Route path="domain-requests" element={<AdminDomainRequests />} />
             <Route path="email-controls" element={<AdminEmailControls />} />
