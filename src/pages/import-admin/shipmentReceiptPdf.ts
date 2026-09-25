@@ -310,7 +310,7 @@ export async function createShipmentReceiptsPdf(
   });
 
   for (let index = 0; index < shipments.length; index += 1) {
-    if (index > 0) doc.addPage('a5', 'portrait');
+    if (index > 0) doc.addPage('a6', 'portrait');
 
     const shipment = shipments[index];
     const customer = customerByOrder.get(shipment.order_id ?? '') ?? {
