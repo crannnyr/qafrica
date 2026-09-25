@@ -253,7 +253,7 @@ export default function ClosedBatchDetail({
   }, [token]);
 
   const orderShippingMethod = useMemo(() => {
-    const map = new Map<string, 'flight' | 'sea_freight' | null>();
+    const map = new Map<string, 'flight' | 'sea_freight' | 'mixed' | null>();
     for (const o of orders) map.set(o.id, o.shipping_method ?? null);
     return map;
   }, [orders]);
