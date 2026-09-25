@@ -1,4 +1,6 @@
 import { X, Printer } from 'lucide-react';
+import { toast } from 'sonner';
+import { printShipmentReceipts } from './shipmentReceiptPdf';
 
 export type ShipmentReceiptData = {
   shipment_code: string;
@@ -13,7 +15,7 @@ export type ShipmentReceiptData = {
   order_code: string;
   customer_name: string;
   customer_whatsapp?: string | null;
-  delivery_address?: Record<string, unknown> | null;
+  delivery_address?: { name: string; phone: string; address_line1: string; address_line2?: string; city: string; state: string; landmark?: string } | null;
   items: Array<{ product_name: string; quantity: number; variant_options?: Record<string, unknown> | null }>;
 };
 
@@ -28,7 +30,17 @@ function Copy({data,label}:{data:ShipmentReceiptData;label:string}) {
       <div className="text-center mb-3"><p className="text-[8px] text-gray-400 uppercase tracking-widest">Shipment code</p><p className="font-mono font-black text-gray-900 text-lg tracking-widest">{data.shipment_code}</p><p className="text-[9px] text-gray-400 mt-1">Order {data.order_code}</p></div>
       <div className="grid grid-cols-2 gap-2 mb-3 text-[10px]"><div><p className="text-gray-400">Customer</p><p className="font-semibold text-gray-800">{data.customer_name}</p>{data.customer_whatsapp&&<p className="text-gray-500">{data.customer_whatsapp}</p>}</div><div className="text-right"><p className="text-gray-400">Status</p><p className="font-semibold text-gray-800 capitalize">{data.status.replaceAll('_',' ')}</p><p className="text-gray-500">{new Date(data.created_at).toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'})}</p></div></div>
       <div className="grid grid-cols-2 gap-2 mb-3 text-[10px]"><div><p className="text-gray-400">Carrier</p><p className="font-semibold text-gray-800">{data.carrier_name||'QAfrica'}</p>{data.tracking_number&&<p className="text-gray-500">Tracking: {data.tracking_number}</p>}</div><div className="text-right"><p className="text-gray-400">Delivery</p><p className="font-semibold text-gray-800 capitalize">{(data.delivery_mode||'—').replaceAll('_',' ')}</p>{data.shipped_at&&<p className="text-gray-500">Shipped {new Date(data.shipped_at).toLocaleDateString('en-NG')}</p>}</div></div>
-      {data.delivery_address&&<div className="bg-white/70 rounded-lg p-2 mb-3 text-[10px] border border-gray-100"><p className="text-[8px] font-bold text-gray-500 uppercase tracking-wide mb-1">Delivery address</p><p className="text-gray-700">{Object.values(data.delivery_address).filter(x=>typeof x==='string'&&x.trim()).join(', ')}</p></div>}
+      {data.delivery_address && (
+        <div className="bg-white/70 rounded-lg p-2 mb-3 text-[10px] border border-gray-100">
+          <p className="text-[8px] font-bold text-gray-400 uppercase tracking-wide mb-0.5">Deliver to</p>
+          <p className="font-semibold text-gray-800">{data.delivery_address.name} · {data.delivery_address.phone}</p>
+          <p className="text-gray-600">
+            {data.delivery_address.address_line1}
+            {data.delivery_address.address_line2 ? `, ${data.delivery_address.address_line2}` : ''}
+          </p>
+          <p className="text-gray-600">{data.delivery_address.city}, {data.delivery_address.state}</p>
+        </div>
+      )}
       <table className="w-full text-[10px] border-collapse mb-2"><thead><tr className="border-b-2 border-gray-200"><th className="text-left font-bold text-gray-500 uppercase tracking-wide text-[8px] py-1">Item</th><th className="text-center font-bold text-gray-500 uppercase tracking-wide text-[8px] py-1 w-8">Qty</th></tr></thead><tbody>{data.items.map((item,i)=><tr key={i} className="border-b border-gray-100"><td className="py-1 pr-1"><p className="text-gray-800">{item.product_name}</p>{variants(item.variant_options)&&<p className="text-[8px] text-gray-400">{variants(item.variant_options)}</p>}</td><td className="py-1 text-center font-semibold text-gray-800">{item.quantity}</td></tr>)}</tbody></table>
       {data.notes&&<p className="text-[9px] text-gray-500 mt-2">Note: {data.notes}</p>}{data.delivered_at&&<p className="text-[9px] text-emerald-600 font-semibold mt-2">Delivered {new Date(data.delivered_at).toLocaleString('en-NG')}</p>}<p className="text-center text-[8px] text-gray-300 mt-2">Scan the QR code to track the order.</p>
     </div>
@@ -38,7 +50,7 @@ function Copy({data,label}:{data:ShipmentReceiptData;label:string}) {
 export default function ShipmentReceiptSheet({data,onClose}:{data:ShipmentReceiptData;onClose:()=>void}) {
   return <div className="fixed inset-0 z-[90] bg-black/60 flex items-end sm:items-center justify-center sm:p-4 print:bg-white print:p-0 print:block">
     <div className="bg-white w-full sm:max-w-3xl rounded-t-3xl sm:rounded-2xl max-h-[90vh] flex flex-col print:hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"><div><h2 className="font-bold text-gray-900 text-sm">Shipment receipt</h2><p className="text-[11px] text-gray-400 mt-0.5">Single shipment receipt with customer delivery address.</p></div><div className="flex items-center gap-1"><button onClick={()=>window.print()} className="p-1.5 hover:bg-gray-100 rounded-lg flex items-center gap-1 text-xs font-semibold text-gray-600"><Printer className="w-4 h-4"/> Print</button><button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500"/></button></div></div>
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"><div><h2 className="font-bold text-gray-900 text-sm">Shipment receipt</h2><p className="text-[11px] text-gray-400 mt-0.5">Single shipment receipt with customer delivery address.</p></div><div className="flex items-center gap-1"><button onClick={async ()=>{ try { await printShipmentReceipts([{ shipment_code:data.shipment_code, status:data.status, created_at:data.created_at, shipped_at:data.shipped_at, delivered_at:data.delivered_at, carrier_name:data.carrier_name, tracking_number:data.tracking_number, delivery_mode:data.delivery_mode, notes:data.notes, delivery_address:data.delivery_address, items:data.items }], new Map([['', { order_code:data.order_code, customer_name:data.customer_name, customer_whatsapp:data.customer_whatsapp }]])); } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not open the print window'); } }} className="p-1.5 hover:bg-gray-100 rounded-lg flex items-center gap-1 text-xs font-semibold text-gray-600"><Printer className="w-4 h-4"/> Print</button><button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-4 h-4 text-gray-500"/></button></div></div>
       <div className="overflow-y-auto p-4"><div className="border border-gray-200 rounded-xl"><Copy data={data} label="Shipment receipt"/></div></div>
     </div>
     <div className="hidden print:block print:w-full print:min-h-screen"><Copy data={data} label="Shipment receipt"/></div>

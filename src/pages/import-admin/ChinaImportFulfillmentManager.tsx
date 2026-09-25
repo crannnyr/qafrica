@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, Loader2, PackageCheck, RefreshCw, Search, Truck, X, Plus } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Download, Loader2, PackageCheck, Printer, RefreshCw, Search, Truck, X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import ShipmentReceiptSheet, { type ShipmentReceiptData } from './ShipmentReceiptSheet';
+import { downloadShipmentReceipts, printShipmentReceipts } from './shipmentReceiptPdf';
 
 type FulfillmentItem = {
   id: string;
@@ -76,6 +77,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [shipmentsLoading, setShipmentsLoading] = useState(false);
   const [shipmentQuery, setShipmentQuery] = useState('');
   const [shipmentStatusFilter, setShipmentStatusFilter] = useState('all');
+  const [bulkReceiptAction, setBulkReceiptAction] = useState<'download' | 'print' | null>(null);
 
   const loadShipments = useCallback(async () => {
     setShipmentsLoading(true);
@@ -320,6 +322,76 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     });
   }, [allShipments, items, shipmentQuery, shipmentStatusFilter]);
 
+  const customerByOrder = useMemo(() => {
+    const map = new Map<string, { order_code: string; customer_name: string; customer_whatsapp: string | null }>();
+    for (const item of items) {
+      if (!map.has(item.order_id)) {
+        map.set(item.order_id, {
+          order_code: item.order_code,
+          customer_name: item.customer_name,
+          customer_whatsapp: item.customer_whatsapp,
+        });
+      }
+    }
+    return map;
+  }, [items]);
+
+  const runBulkReceiptAction = async (action: 'download' | 'print') => {
+    if (!filteredShipments.length) {
+      toast.error('There are no matching shipments to include');
+      return;
+    }
+
+    setBulkReceiptAction(action);
+    try {
+      const statusLabel = shipmentStatusFilter === 'all'
+        ? 'all'
+        : shipmentStatusFilter.replaceAll('_', '-');
+      const filename = `qafrica-shipment-receipts-${statusLabel}-${new Date().toISOString().slice(0, 10)}.pdf`;
+
+      // The shipment list already contains fulfillment_item data. For safety, rebuild
+      // the receipt item list from that payload and fall back to the fulfillment list
+      // if an older Edge Function response returns an empty items array.
+      const receiptShipments = filteredShipments.map(shipment => {
+        const apiItems = Array.isArray(shipment.items) ? shipment.items : [];
+        const receiptItems = apiItems
+          .map((row: any) => ({
+            product_name: row.fulfillment_item?.product_name ?? row.product_name ?? 'Item',
+            quantity: Number(row.quantity ?? 0),
+            variant_options: row.fulfillment_item?.variant_options ?? row.variant_options ?? null,
+          }))
+          .filter((item: any) => item.product_name && item.quantity > 0);
+
+        if (receiptItems.length > 0) {
+          return { ...shipment, items: receiptItems };
+        }
+
+        const fallbackItems = items
+          .filter(item => item.order_id === shipment.order_id)
+          .map(item => ({
+            product_name: item.product_name,
+            quantity: Math.max(0, Number(item.shipped_quantity || item.allocated_quantity || item.ordered_quantity || 0)),
+            variant_options: item.variant_options,
+          }))
+          .filter(item => item.quantity > 0);
+
+        return { ...shipment, items: fallbackItems };
+      });
+
+      if (action === 'download') {
+        await downloadShipmentReceipts(receiptShipments, customerByOrder, filename);
+        toast.success(`${receiptShipments.length} receipt${receiptShipments.length === 1 ? '' : 's'} downloaded as one PDF`);
+      } else {
+        await printShipmentReceipts(receiptShipments, customerByOrder);
+        toast.success(`Opened ${receiptShipments.length} receipt${receiptShipments.length === 1 ? '' : 's'} for printing`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not create receipt PDF');
+    } finally {
+      setBulkReceiptAction(null);
+    }
+  };
+
   const awaitingCount = items.filter(item => item.status === 'awaiting_arrival').length;
   const hqCount = items.filter(item => item.status === 'at_qafrica_hq' || item.status === 'partially_allocated' || item.status === 'fully_allocated').length;
   const orderedUnits = items.reduce((sum, item) => sum + item.ordered_quantity, 0);
@@ -403,6 +475,26 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               <option value="delivered">Delivered</option>
               <option value="cancelled">Cancelled</option>
             </select>
+            <div className="flex gap-2 sm:ml-auto">
+              <button
+                type="button"
+                onClick={() => void runBulkReceiptAction('download')}
+                disabled={!filteredShipments.length || bulkReceiptAction !== null}
+                className="px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40"
+              >
+                <Download className="w-3.5 h-3.5" />
+                {bulkReceiptAction === 'download' ? 'Building PDF…' : 'Download all'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void runBulkReceiptAction('print')}
+                disabled={!filteredShipments.length || bulkReceiptAction !== null}
+                className="px-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                {bulkReceiptAction === 'print' ? 'Preparing…' : `Print all (${filteredShipments.length})`}
+              </button>
+            </div>
           </div>
 
           {shipmentsLoading ? (
