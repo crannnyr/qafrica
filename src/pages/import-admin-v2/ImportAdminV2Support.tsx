@@ -1,4 +1,4 @@
-import AiSupportInbox, { AiSupportAlertMonitor } from '@/pages/import-admin/AiSupportInbox';
+import AiSupportInbox from '@/pages/import-admin/AiSupportInbox';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import { getManagementToken } from './ManagementAuth';
 
