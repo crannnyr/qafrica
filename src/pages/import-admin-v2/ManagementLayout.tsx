@@ -3,9 +3,11 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck,
-  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText, Truck,
+  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText, Truck, MessageCircle,
 } from 'lucide-react';
-import { getManagementManager, logoutManagementSession, validateManagementSession, type ManagementManager } from './ManagementAuth';
+import { getManagementManager, logoutManagementSession, validateManagementSession, getManagementToken, type ManagementManager } from './ManagementAuth';
+import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
+import { AiSupportAlertMonitor } from '@/pages/import-admin/AiSupportInbox';
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
@@ -16,6 +18,7 @@ const NAV = [
   { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings' },
   { icon: Truck, label: 'Pricing & Shipping', path: '/import-admin-v2/pricing-shipping' },
   { icon: PackageCheck, label: 'Fulfillment', path: '/import-admin-v2/fulfillment' },
+  { icon: MessageCircle, label: 'Support', path: '/import-admin-v2/support' },
 ];
 
 export default function ManagementLayout() {
@@ -25,6 +28,8 @@ export default function ManagementLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [manager, setManager] = useState<ManagementManager | null>(getManagementManager());
+  const managementToken = getManagementToken();
+  const { hasPermission } = useImportAdminPermissions(managementToken);
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
@@ -72,6 +77,7 @@ export default function ManagementLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
+      <AiSupportAlertMonitor token={managementToken || ''} enabled={hasPermission('import.messages.view')} />
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
