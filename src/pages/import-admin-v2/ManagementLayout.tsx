@@ -13,6 +13,7 @@ const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
   { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
   { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
+  { icon: ClipboardList, label: 'Custom Orders', path: '/import-admin-v2/custom-orders' },
   { icon: Tags, label: 'Categories', path: '/import-admin-v2/categories' },
   { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },
   { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings' },
