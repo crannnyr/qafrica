@@ -34,14 +34,13 @@ export type ReceiptShipment = {
 };
 
 const PAGE_WIDTH = 210;
-const PAGE_HEIGHT = 74;
+const PAGE_HEIGHT = 297;
 const CARD_X = 6;
-const CARD_Y = 3;
+const CARD_Y = 10;
 const CARD_W = 198;
-const CARD_H = 68;
+const CARD_H = 140;
 const INNER_X = 14;
 const INNER_W = 182;
-const QR_SIZE = 16;
 const qrCache = new Map<string, string>();
 
 function clean(value: unknown) {
@@ -101,10 +100,10 @@ async function loadQr(orderCode: string) {
 
 function drawWatermark(doc: jsPDF) {
   doc.saveGraphicsState();
-  doc.setTextColor(244, 244, 244);
+  doc.setTextColor(229, 231, 235);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('SHIPMENT RECEIPT', PAGE_WIDTH / 2, 50, {
+  doc.setFontSize(22);
+  doc.text('SHIPMENT RECEIPT', PAGE_WIDTH / 2, 88, {
     align: 'center',
     angle: 35,
   });
@@ -141,63 +140,63 @@ async function addReceiptPage(
   doc.setDrawColor(224, 228, 234);
   doc.setLineWidth(0.35);
   doc.roundedRect(CARD_X, CARD_Y, CARD_W, CARD_H, 3, 3, 'S');
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(17, 24, 39);
-  doc.text('QAFRICA', INNER_X, 10);
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(156, 163, 175);
-  doc.text('Shipment receipt', INNER_X, 14);
-  doc.addImage(qr, 'PNG', PAGE_WIDTH - INNER_X - QR_SIZE, 5, QR_SIZE, QR_SIZE);
-  doc.setFontSize(4.8); doc.setTextColor(156, 163, 175);
-  doc.text('SHIPMENT CODE', PAGE_WIDTH / 2, 19, { align: 'center' });
-  doc.setFont('courier', 'bold'); doc.setFontSize(7.5); doc.setTextColor(17, 24, 39);
-  doc.text(clean(shipment.shipment_code), PAGE_WIDTH / 2, 24, { align: 'center' });
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(5); doc.setTextColor(107, 114, 128);
-  doc.text('Order ' + clean(customer.order_code), PAGE_WIDTH / 2, 28, { align: 'center' });
-  drawLabelValue(doc, 'Customer', customer.customer_name, INNER_X, 32);
-  drawLabelValue(doc, 'Status', clean(shipment.status.replaceAll('_', ' ')), PAGE_WIDTH - INNER_X, 32, 'right');
-  doc.setFontSize(5); doc.setTextColor(107, 114, 128);
-  if (shipment.carrier_name) doc.text('Carrier: ' + clean(shipment.carrier_name), INNER_X, 40);
-  if (shipment.delivery_mode) doc.text('Delivery: ' + clean(shipment.delivery_mode.replaceAll('_', ' ')), PAGE_WIDTH - INNER_X, 40, { align: 'right' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(17, 24, 39);
+  doc.text('QAFRICA', INNER_X, 23);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(156, 163, 175);
+  doc.text('Shipment receipt', INNER_X, 29);
+  doc.addImage(qr, 'PNG', PAGE_WIDTH - INNER_X - 24, 17, 24, 24);
+  doc.setFontSize(6.5); doc.setTextColor(156, 163, 175);
+  doc.text('SHIPMENT CODE', PAGE_WIDTH / 2, 25, { align: 'center' });
+  doc.setFont('courier', 'bold'); doc.setFontSize(10); doc.setTextColor(17, 24, 39);
+  doc.text(clean(shipment.shipment_code), PAGE_WIDTH / 2, 32, { align: 'center' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(107, 114, 128);
+  doc.text('Order ' + clean(customer.order_code), PAGE_WIDTH / 2, 38, { align: 'center' });
+  drawLabelValue(doc, 'Customer', customer.customer_name, INNER_X, 48);
+  drawLabelValue(doc, 'Status', clean(shipment.status.replaceAll('_', ' ')), PAGE_WIDTH - INNER_X, 48, 'right');
+  doc.setFontSize(6.5); doc.setTextColor(107, 114, 128);
+  if (shipment.carrier_name) doc.text('Carrier: ' + clean(shipment.carrier_name), INNER_X, 61);
+  if (shipment.delivery_mode) doc.text('Delivery: ' + clean(shipment.delivery_mode.replaceAll('_', ' ')), PAGE_WIDTH - INNER_X, 61, { align: 'right' });
   const address = shipment.delivery_address;
   const addressText = address ? [address.address_line1, address.address_line2, address.city, address.state].filter(Boolean).join(', ') : '';
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(5); doc.setTextColor(156, 163, 175);
-  doc.text('PRODUCT DETAILS', INNER_X, 46);
-  doc.text('QTY', PAGE_WIDTH - INNER_X, 46, { align: 'right' });
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(156, 163, 175);
+  doc.text('PRODUCT DETAILS', INNER_X, 79);
+  doc.text('QTY', PAGE_WIDTH - INNER_X, 79, { align: 'right' });
   doc.setDrawColor(220, 224, 229); doc.setLineWidth(0.45);
-  doc.line(INNER_X, 48, PAGE_WIDTH - INNER_X, 48);
-  let y = 51;
+  doc.line(INNER_X, 82, PAGE_WIDTH - INNER_X, 82);
+  let y = 89;
   for (const item of shipment.items) {
     const variant = variants(item.variant_options);
-    const productLines = doc.splitTextToSize(clean(item.product_name), INNER_W - 14) as string[];
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(5.8); doc.setTextColor(31, 41, 55);
+    const productLines = doc.splitTextToSize(clean(item.product_name), INNER_W - 20) as string[];
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); doc.setTextColor(31, 41, 55);
     doc.text(productLines.slice(0, 2), INNER_X, y);
-    doc.setFontSize(5.6); doc.setTextColor(75, 85, 99);
+    doc.setFontSize(6.5); doc.setTextColor(75, 85, 99);
     doc.text('Qty: ' + item.quantity, PAGE_WIDTH - INNER_X, y, { align: 'right' });
-    y += Math.max(4.2, Math.min(productLines.length, 2) * 2.8);
+    y += Math.max(6, Math.min(productLines.length, 2) * 3.8);
     if (variant) {
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(5.1); doc.setTextColor(75, 85, 99);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.setTextColor(75, 85, 99);
       const detailLines = doc.splitTextToSize('Details: ' + variant, INNER_W - 2) as string[];
       doc.text(detailLines.slice(0, 2), INNER_X, y);
-      y += Math.min(detailLines.length, 2) * 2.5;
+      y += Math.min(detailLines.length, 2) * 3.2;
     }
     doc.setDrawColor(235, 238, 242); doc.setLineWidth(0.2);
-    doc.line(INNER_X, y + 0.8, PAGE_WIDTH - INNER_X, y + 0.8); y += 2.6;
-    if (y > 62) break;
+    doc.line(INNER_X, y + 1.2, PAGE_WIDTH - INNER_X, y + 1.2); y += 4;
+    if (y > 116) break;
   }
   if (!shipment.items.length) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(5.1); doc.setTextColor(156, 163, 175);
     doc.text('No product details available for this shipment.', INNER_X, y);
   }
   if (addressText) {
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(4.6); doc.setTextColor(107, 114, 128);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.setTextColor(107, 114, 128);
     const addressLines = doc.splitTextToSize('Deliver to: ' + addressText, INNER_W) as string[];
-    doc.text(addressLines.slice(0, 2), INNER_X, 64);
+    doc.text(addressLines.slice(0, 2), INNER_X, 126);
   }
   if (shipment.tracking_number) {
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(4.6); doc.setTextColor(107, 114, 128);
-    doc.text('Tracking: ' + clean(shipment.tracking_number), INNER_X, 69);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(6.2); doc.setTextColor(107, 114, 128);
+    doc.text('Tracking: ' + clean(shipment.tracking_number), INNER_X, 135);
   }
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(4.5); doc.setTextColor(170, 176, 185);
-  doc.text('Scan the QR code to track the order.', PAGE_WIDTH - INNER_X, 71, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(5.8); doc.setTextColor(170, 176, 185);
+  doc.text('Scan the QR code to track the order.', PAGE_WIDTH - INNER_X, 143, { align: 'right' });
 }
 export async function createShipmentReceiptsPdf(
   shipments: ReceiptShipment[],
@@ -208,14 +207,14 @@ export async function createShipmentReceiptsPdf(
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
-    format: [PAGE_WIDTH, PAGE_HEIGHT],
+    format: 'a4',
     compress: true,
   });
 
   doc.viewerPreferences({ PrintScaling: 'None', NumCopies: 1 });
 
   for (let index = 0; index < shipments.length; index += 1) {
-    if (index > 0) doc.addPage([PAGE_WIDTH, PAGE_HEIGHT], 'portrait');
+    if (index > 0) doc.addPage('a4', 'portrait');
 
     const shipment = shipments[index];
     const customer = customerByOrder.get(shipment.order_id ?? '') ?? {
