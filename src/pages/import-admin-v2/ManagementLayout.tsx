@@ -5,16 +5,14 @@ import {
   LayoutDashboard, Package, ShoppingCart, Menu, X,
   LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
 } from 'lucide-react';
-import { getManagementManager, logoutManagementSession, validateManagementSession, getManagementToken, type ManagementManager } from './ManagementAuth';
-import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
-import { AiSupportAlertMonitor } from '@/pages/import-admin/AiSupportInbox';
+import { getManagementManager, logoutManagementSession, validateManagementSession, type ManagementManager } from './ManagementAuth';
 
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
   { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
   { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
   { icon: Tags, label: 'Categories', path: '/import-admin-v2/categories' },
-  { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },\n  { icon: Truck, label: 'Fulfillment', path: '/import-admin-v2/fulfillment' },\n  { icon: MessageCircle, label: 'AI Support', path: '/import-admin-v2/support' },
+  { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },
   { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings' },
 ];
 
@@ -25,8 +23,6 @@ export default function ManagementLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [manager, setManager] = useState<ManagementManager | null>(getManagementManager());
-  const token = getManagementToken();
-  const { hasPermission } = useImportAdminPermissions(token);
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
@@ -61,8 +57,7 @@ export default function ManagementLayout() {
       ? location.pathname === '/import-admin-v2'
       : location.pathname === path || location.pathname.startsWith(path + '/');
 
-  const visibleNav = NAV.filter(item => !item.permission || hasPermission(item.permission));
-  const activeLabel = visibleNav.find(n => isActive(n.path))?.label || 'Dashboard';
+  const activeLabel = NAV.find(n => isActive(n.path))?.label || 'Dashboard';
   const managerName = manager?.full_name || manager?.name || 'Manager';
 
   if (checkingSession) {
@@ -75,7 +70,6 @@ export default function ManagementLayout() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <AiSupportAlertMonitor token={token || ''} enabled={Boolean(token && hasPermission('import.messages.view'))} />
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
@@ -102,7 +96,7 @@ export default function ManagementLayout() {
         </div>
 
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto min-h-0">
-          {visibleNav.map(item => {
+          {NAV.map(item => {
             const active = isActive(item.path);
             return (
               <Link key={item.path} to={item.path} title={collapsed ? item.label : undefined}
