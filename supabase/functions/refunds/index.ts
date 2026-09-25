@@ -214,6 +214,26 @@ async function reverseUnitsSold(supabase: any, items: any[]) {
 // last remaining item in an order (which is equivalent to cancelling the
 // whole order).
 async function cancelFullOrder(supabase: any, order: any, reason: string, cancellationType: 'full_order' | 'item' = 'full_order') {
+  if (order.status === 'cancelled' || order.status === 'refunded') {
+    return { error: 'This order has already been cancelled.', status: 409 };
+  }
+
+  const { data: existingRefund, error: existingRefundError } = await supabase
+    .from('china_import_refunds')
+    .select('id, status')
+    .eq('original_order_id', order.id)
+    .in('status', ['pending', 'submitted'])
+    .limit(1)
+    .maybeSingle();
+
+  if (existingRefundError) {
+    return { error: `Unable to check existing refund: ${existingRefundError.message}`, status: 500 };
+  }
+
+  if (existingRefund) {
+    return { error: 'A refund for this order is already in progress.', status: 409 };
+  }
+
   const refundDecision = await calculateRefundDecision(
     supabase,
     order,
@@ -268,7 +288,34 @@ async function cancelFullOrder(supabase: any, order: any, reason: string, cancel
     await reverseUnitsSold(supabase, order.items)
   }
 
-  // Keep the cancelled order for audit/history. A DB trigger changes it to\n  // `refunded` only when the full refund reaches `paid`.\n  await supabase.from('china_import_orders')\n    .update({ status: 'cancelled', updated_at: new Date().toISOString() })\n    .eq('id', order.id)\n\n  // Prevent a cancelled order from leaving an outstanding bill behind.\n  await supabase.from('china_import_consolidation_bills')\n    .update({ status: 'cancelled', updated_at: new Date().toISOString() })\n    .eq('order_id', order.id)\n    .neq('status', 'cancelled')
+  // Keep the cancelled order for audit/history. A DB trigger changes it to
+  // `refunded` only when the full refund reaches `paid`.
+  const { error: orderCancelError } = await supabase
+    .from('china_import_orders')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', order.id);
+
+  if (orderCancelError) {
+    await supabase.from('china_import_refunds').delete().eq('id', refund.id);
+    return { error: `Unable to cancel order: ${orderCancelError.message}`, status: 500 };
+  }
+
+  const { error: billCancelError } = await supabase
+    .from('china_import_consolidation_bills')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('order_id', order.id)
+    .neq('status', 'cancelled');
+
+  if (billCancelError) {
+    return { error: `Order was cancelled, but its outstanding bill could not be closed: ${billCancelError.message}`, status: 500 };
+  }
+
+  const { error: batchReconcileError } = await supabase
+    .rpc('reconcile_import_batch_after_order_cancel', { p_order_id: order.id });
+
+  if (batchReconcileError) {
+    return { error: `Order was cancelled, but batch billing could not be reconciled: ${batchReconcileError.message}`, status: 500 };
+  }
 
   const refundAmount = Number(refundDecision.refundAmount);
   const cancellationFee = Number(refundDecision.cancellationFee);
@@ -411,6 +458,12 @@ serve(async (req: Request) => {
         })
         .eq('id', order_id)
       if (updateErr) return json({ error: updateErr.message }, 500)
+
+      const { error: itemBatchReconcileError } = await supabase
+        .rpc('reconcile_import_batch_after_order_cancel', { p_order_id: order.id });
+      if (itemBatchReconcileError) {
+        return json({ error: `Item was cancelled, but batch billing could not be reconciled: ${itemBatchReconcileError.message}` }, 500);
+      }
 
       if (order.user_id) {
         const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', order.user_id).single()
