@@ -231,12 +231,12 @@ async function addReceiptPage(
     addWrappedText(doc, addressText, INNER_X + 2, 100, INNER_W - 4, 3.2);
   }
 
-  let y = address ? 111 : 86;
+  let y = address ? 109 : 86;
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(6.5);
   doc.setTextColor(156, 163, 175);
-  doc.text('ITEM', INNER_X, y);
+  doc.text('PRODUCT DETAILS', INNER_X, y);
   doc.text('QTY', PAGE_WIDTH - INNER_X, y, { align: 'right' });
 
   doc.setDrawColor(220, 224, 229);
@@ -246,30 +246,39 @@ async function addReceiptPage(
 
   for (const item of shipment.items) {
     const variant = variants(item.variant_options);
-    const productLines = doc.splitTextToSize(clean(item.product_name), INNER_W - 12) as string[];
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(31, 41, 55);
-    doc.text(productLines, INNER_X, y);
+    const productLines = doc.splitTextToSize(clean(item.product_name), INNER_W - 18) as string[];
 
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.text(String(item.quantity), PAGE_WIDTH - INNER_X, y, { align: 'right' });
+    doc.setFontSize(7);
+    doc.setTextColor(31, 41, 55);
+    doc.text(productLines, INNER_X, y + 5);
 
-    y += Math.max(4, productLines.length * 3.2);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text(`Qty: ${item.quantity}`, PAGE_WIDTH - INNER_X, y + 5, { align: 'right' });
+
+    y += Math.max(8, productLines.length * 3.2 + 3);
 
     if (variant) {
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(6);
-      doc.setTextColor(156, 163, 175);
-      y = addWrappedText(doc, variant, INNER_X, y, INNER_W - 12, 2.8);
+      doc.setFontSize(6.2);
+      doc.setTextColor(75, 85, 99);
+      y = addWrappedText(doc, `Details: ${variant}`, INNER_X, y, INNER_W, 2.8);
     }
 
     doc.setDrawColor(235, 238, 242);
     doc.setLineWidth(0.3);
     doc.line(INNER_X, y + 1.5, PAGE_WIDTH - INNER_X, y + 1.5);
     y += 4;
+  }
+
+  if (!shipment.items.length) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(156, 163, 175);
+    doc.text('No product details available for this shipment.', INNER_X, y + 5);
+    y += 10;
   }
 
   if (shipment.notes) {
