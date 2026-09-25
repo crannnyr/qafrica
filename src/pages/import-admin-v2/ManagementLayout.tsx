@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard, Package, ShoppingCart, Menu, X,
+  LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck,
   LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText, Truck,
 } from 'lucide-react';
 import { getManagementManager, logoutManagementSession, validateManagementSession, type ManagementManager } from './ManagementAuth';
@@ -15,6 +15,7 @@ const NAV = [
   { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },
   { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings' },
   { icon: Truck, label: 'Pricing & Shipping', path: '/import-admin-v2/pricing-shipping' },
+  { icon: PackageCheck, label: 'Fulfillment', path: '/import-admin-v2/fulfillment' },
 ];
 
 export default function ManagementLayout() {
