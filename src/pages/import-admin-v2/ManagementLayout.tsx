@@ -12,7 +12,7 @@ const NAV = [
   { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
   { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
   { icon: Tags, label: 'Categories', path: '/import-admin-v2/categories' },
-  { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },
+  { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },\n  { icon: Truck, label: 'Fulfillment', path: '/import-admin-v2/fulfillment' },\n  { icon: MessageCircle, label: 'AI Support', path: '/import-admin-v2/support' },
   { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings' },
 ];
 
