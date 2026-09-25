@@ -33,15 +33,15 @@ export type ReceiptShipment = {
   }>;
 };
 
-const PAGE_WIDTH = 105;
+const PAGE_WIDTH = 210;
 const PAGE_HEIGHT = 74;
-const CARD_X = 3;
+const CARD_X = 6;
 const CARD_Y = 3;
-const CARD_W = 99;
+const CARD_W = 198;
 const CARD_H = 68;
-const INNER_X = 7;
-const INNER_W = 91;
-const QR_SIZE = 12;
+const INNER_X = 14;
+const INNER_W = 182;
+const QR_SIZE = 16;
 const qrCache = new Map<string, string>();
 
 function clean(value: unknown) {
