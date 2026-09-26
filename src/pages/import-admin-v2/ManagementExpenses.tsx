@@ -8,7 +8,7 @@ type Expense={id:string;title:string;description:string|null;amount:number;expen
 const money=(n:number)=>'₦'+Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})
 
 export default function ManagementExpenses(){
- const [expenses,setExpenses]=useState<Expense[]>([]),[title,setTitle]=useState(''),[description,setDescription]=useState(''),[amount,setAmount]=useState(''),[expenseDate,setExpenseDate]=useState(new Date().toISOString().slice(0,10)),[file,setFile]=useState<File|null>(null),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState('')
+ const [activeTab,setActiveTab]=useState<'add'|'view'>('add'),[expenses,setExpenses]=useState<Expense[]>([]),[title,setTitle]=useState(''),[description,setDescription]=useState(''),[amount,setAmount]=useState(''),[expenseDate,setExpenseDate]=useState(new Date().toISOString().slice(0,10)),[file,setFile]=useState<File|null>(null),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState('')
  const inputRef=useRef<HTMLInputElement>(null)
  const load=async()=>{const token=getManagementToken();if(!token){setError('Management session expired.');setLoading(false);return}try{const res=await fetch(EDGE_URL+'?action=list-mine',{headers:{'x-manager-token':token}});const data=await res.json();if(!res.ok)throw new Error(data.error||'Could not load expenses');setExpenses(data.expenses||[])}catch(e){setError(e instanceof Error?e.message:'Could not load expenses')}finally{setLoading(false)}}
  useEffect(()=>{void load()},[])
