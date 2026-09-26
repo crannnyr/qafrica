@@ -1,195 +1,33 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Loader, Send } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertCircle, Check, CheckCircle2, ClipboardList, Clock3, ExternalLink, Link2, Loader, PackageCheck, RefreshCw, Send, ShoppingBag, UserRound } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
 
-const CUSTOM_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/custom-orders`;
+const EDGE = CONFIG.SUPABASE_URL + '/functions/v1/custom-orders';
+interface Item { id:string; image_url:string; description:string; quantity:number; estimated_budget_ngn:number|null; product_url:string|null; product_name:string|null; }
+interface Request { id:string; status:'pending'|'in_progress'|'ready'; created_at:string; ready_at:string|null; custom_order_items:Item[]; customer_name:string|null; customer_email:string|null; customer_phone:string|null; }
+const money=(n:number|null)=>n==null?'—':'₦'+Number(n).toLocaleString();
+const age=(d:string)=>{const h=Math.max(0,Math.floor((Date.now()-new Date(d).getTime())/3600000));return h<1?'Just now':h<24?h+'h ago':Math.floor(h/24)+'d ago';};
+const meta={pending:{label:'New request',cls:'bg-violet-50 text-violet-700 border-violet-100',dot:'bg-violet-500'},in_progress:{label:'Sourcing',cls:'bg-amber-50 text-amber-700 border-amber-100',dot:'bg-amber-500'},ready:{label:'Ready',cls:'bg-emerald-50 text-emerald-700 border-emerald-100',dot:'bg-emerald-500'}};
 
-interface CustomOrderItemRow {
-  id: string;
-  image_url: string;
-  description: string;
-  quantity: number;
-  estimated_budget_ngn: number | null;
-  product_url: string | null;
-  product_name: string | null;
-}
-
-interface CustomOrderRequestRow {
-  id: string;
-  status: 'pending' | 'in_progress' | 'ready';
-  created_at: string;
-  ready_at: string | null;
-  custom_order_items: CustomOrderItemRow[];
-  customer_name: string | null;
-  customer_email: string | null;
-  customer_phone: string | null;
-}
-
-export default function ImportAdminV2CustomOrders() {
-  const token = getManagementToken();
-  const [requests, setRequests] = useState<CustomOrderRequestRow[]>([]);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'ready'>('all');
-  const [isLoading, setIsLoading] = useState(true);
-  const [linkDrafts, setLinkDrafts] = useState<Record<string, string>>({});
-  const [savingItemId, setSavingItemId] = useState<string | null>(null);
-  const [markingReadyId, setMarkingReadyId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!token) return;
-    setIsLoading(true);
-    try {
-      const res = await fetch(`${CUSTOM_ORDERS_EDGE_URL}?action=admin-list-requests`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, status: statusFilter === 'all' ? undefined : statusFilter }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error(data.error ?? 'Could not load custom orders');
-        return;
-      }
-      setRequests(data.requests ?? []);
-    } catch {
-      toast.error('Could not load custom orders');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [token, statusFilter]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const saveLink = async (item: CustomOrderItemRow) => {
-    const url = (linkDrafts[item.id] ?? item.product_url ?? '').trim();
-    if (!url) { toast.error('Paste a product link first'); return; }
-
-    setSavingItemId(item.id);
-    try {
-      const res = await fetch(`${CUSTOM_ORDERS_EDGE_URL}?action=admin-set-item-link`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, item_id: item.id, product_url: url }),
-      });
-      const data = await res.json();
-      if (!res.ok) { toast.error(data.error ?? 'Could not save link'); return; }
-      toast.success('Link saved');
-      await load();
-    } catch {
-      toast.error('Could not save link');
-    } finally {
-      setSavingItemId(null);
-    }
-  };
-
-  const markReady = async (request: CustomOrderRequestRow) => {
-    setMarkingReadyId(request.id);
-    try {
-      const res = await fetch(`${CUSTOM_ORDERS_EDGE_URL}?action=admin-mark-ready`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, request_id: request.id }),
-      });
-      const data = await res.json();
-      if (!res.ok) { toast.error(data.error ?? 'Could not mark ready'); return; }
-      toast.success('Marked ready — customer notified');
-      await load();
-    } catch {
-      toast.error('Could not mark ready');
-    } finally {
-      setMarkingReadyId(null);
-    }
-  };
-
-  if (!token) return null;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {(['all', 'pending', 'in_progress', 'ready'] as const).map(status => (
-          <button
-            key={status}
-            onClick={() => setStatusFilter(status)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors capitalize ${statusFilter === status ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
-          >
-            {status.replace('_', ' ')}
-          </button>
-        ))}
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center py-10"><Loader className="w-5 h-5 animate-spin text-gray-300" /></div>
-      ) : requests.length === 0 ? (
-        <div className="text-center py-10">
-          <p className="text-sm text-gray-400">No custom order requests here.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {requests.map(request => {
-            const unlinkedCount = request.custom_order_items.filter(item => !item.product_url).length;
-            return (
-              <div key={request.id} className="bg-white rounded-2xl border border-gray-100 p-4">
-                <div className="flex items-start justify-between gap-2 mb-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-gray-900 truncate">{request.customer_name ?? 'Unknown customer'}</p>
-                    <p className="text-[11px] text-gray-400 truncate">
-                      {request.customer_email ?? 'no email'}{request.customer_phone ? ` · ${request.customer_phone}` : ''}
-                    </p>
-                    <p className="text-[10px] text-gray-300 mt-0.5">{new Date(request.created_at).toLocaleString()}</p>
-                  </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${
-                    request.status === 'ready' ? 'bg-emerald-50 text-emerald-700' :
-                    request.status === 'in_progress' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {request.status.replace('_', ' ')}
-                  </span>
-                </div>
-
-                <div className="space-y-2.5">
-                  {request.custom_order_items.map(item => (
-                    <div key={item.id} className="flex gap-2.5 bg-gray-50 rounded-xl p-2.5">
-                      <img src={item.image_url} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0 border border-gray-100" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs text-gray-700">{item.description}</p>
-                        <p className="text-[10px] text-gray-400 mb-1.5">
-                          Qty {item.quantity}{item.estimated_budget_ngn ? ` · up to ₦${Number(item.estimated_budget_ngn).toLocaleString()} each` : ''}
-                        </p>
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="text"
-                            value={linkDrafts[item.id] ?? item.product_url ?? ''}
-                            onChange={e => setLinkDrafts(prev => ({ ...prev, [item.id]: e.target.value }))}
-                            placeholder="Paste QAFRICA product link…"
-                            className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg border border-gray-200 text-[11px]"
-                          />
-                          <button
-                            onClick={() => void saveLink(item)}
-                            disabled={savingItemId === item.id}
-                            className="flex-shrink-0 px-2.5 py-1.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg"
-                          >
-                            {savingItemId === item.id ? '…' : item.product_url ? 'Update' : 'Save'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {request.status !== 'ready' && (
-                  <button
-                    onClick={() => void markReady(request)}
-                    disabled={unlinkedCount > 0 || markingReadyId === request.id}
-                    className="w-full mt-3 py-2.5 bg-orange-500 hover:bg-orange-600 disabled:opacity-30 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    {markingReadyId === request.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                    {unlinkedCount > 0 ? `${unlinkedCount} item${unlinkedCount > 1 ? 's' : ''} still need a link` : 'Mark ready & notify customer'}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
+export default function ImportAdminV2CustomOrders(){
+ const token=getManagementToken(); const [requests,setRequests]=useState<Request[]>([]); const [filter,setFilter]=useState<'all'|'pending'|'in_progress'|'ready'>('all'); const [loading,setLoading]=useState(true); const [saving,setSaving]=useState<string|null>(null); const [readying,setReadying]=useState<string|null>(null); const [drafts,setDrafts]=useState<Record<string,string>>({});
+ const load=useCallback(async()=>{if(!token)return;setLoading(true);try{const res=await fetch(EDGE+'?action=admin-list-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manager_token:token,status:filter==='all'?undefined:filter})});const d=await res.json();if(!res.ok)throw new Error(d.error||'Could not load custom orders');setRequests(d.requests||[]);}catch(e){toast.error(e instanceof Error?e.message:'Could not load custom orders')}finally{setLoading(false)}},[token,filter]);
+ useEffect(()=>{void load()},[load]);
+ const saveLink=async(item:Item)=>{const url=(drafts[item.id]||item.product_url||'').trim();if(!url)return toast.error('Paste a product link first');setSaving(item.id);try{const res=await fetch(EDGE+'?action=admin-set-item-link',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manager_token:token,item_id:item.id,product_url:url})});const d=await res.json();if(!res.ok)throw new Error(d.error||'Could not save link');toast.success('Product link saved');await load()}catch(e){toast.error(e instanceof Error?e.message:'Could not save link')}finally{setSaving(null)}};
+ const markReady=async(r:Request)=>{const missing=r.custom_order_items.filter(i=>!i.product_url).length;if(missing)return toast.error(missing+' item'+(missing>1?'s':'')+' still need a product link');setReadying(r.id);try{const res=await fetch(EDGE+'?action=admin-mark-ready',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manager_token:token,request_id:r.id})});const d=await res.json();if(!res.ok)throw new Error(d.error||'Could not mark ready');toast.success((r.customer_name||'Customer')+' notified — request is ready');await load()}catch(e){toast.error(e instanceof Error?e.message:'Could not mark ready')}finally{setReadying(null)}};
+ const totals=useMemo(()=>({all:requests.length,pending:requests.filter(r=>r.status==='pending').length,in_progress:requests.filter(r=>r.status==='in_progress').length,ready:requests.filter(r=>r.status==='ready').length,unlinked:requests.reduce((n,r)=>n+r.custom_order_items.filter(i=>!i.product_url).length,0)}),[requests]);
+ if(!token)return null;
+ return <div className="space-y-5">
+  <div className="relative overflow-hidden rounded-3xl bg-gray-950 text-white p-6 md:p-7"><div className="absolute -right-12 -top-16 w-48 h-48 rounded-full bg-orange-500/20 blur-2xl"/><div className="relative flex flex-col md:flex-row md:items-end md:justify-between gap-5"><div><div className="flex items-center gap-2 text-orange-300 text-[11px] font-bold uppercase tracking-[0.16em]"><ShoppingBag className="w-4 h-4"/> Custom order desk</div><h1 className="text-2xl md:text-3xl font-black mt-2">Turn requests into products.</h1><p className="text-sm text-gray-400 mt-1 max-w-xl">Source requests, connect the right QAFRICA products, and move ready orders forward.</p></div><button onClick={()=>void load()} className="self-start inline-flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-2.5 text-xs font-bold"><RefreshCw className="w-3.5 h-3.5"/> Refresh</button></div></div>
+  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[['New requests',totals.pending,ClipboardList,'text-violet-600 bg-violet-50'],['Being sourced',totals.in_progress,Clock3,'text-amber-600 bg-amber-50'],['Ready to go',totals.ready,PackageCheck,'text-emerald-600 bg-emerald-50'],['Need product links',totals.unlinked,Link2,'text-orange-600 bg-orange-50']].map(([label,value,Icon,cls])=><div key={String(label)} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm"><div className={'w-9 h-9 rounded-xl flex items-center justify-center '+String(cls)}><Icon className="w-4 h-4"/></div><p className="text-2xl font-black text-gray-900 mt-3">{value as number}</p><p className="text-[11px] font-semibold text-gray-400">{String(label)}</p></div>)}</div>
+  <div className="bg-white rounded-2xl border border-gray-100 p-2 flex items-center gap-1 overflow-x-auto">{(['all','pending','in_progress','ready'] as const).map(s=><button key={s} onClick={()=>setFilter(s)} className={'px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap '+(filter===s?'bg-gray-900 text-white shadow-sm':'text-gray-500 hover:bg-gray-50')}>{s==='all'?'All · '+totals.all:meta[s].label+' · '+totals[s]}</button>)}</div>
+  {loading?<div className="grid gap-4">{[1,2,3].map(i=><div key={i} className="h-52 bg-white rounded-2xl border border-gray-100 animate-pulse"/>)}</div>:requests.length===0?<div className="bg-white rounded-3xl border border-dashed border-gray-200 p-14 text-center"><ShoppingBag className="w-8 h-8 mx-auto text-gray-200"/><h3 className="font-bold text-gray-800 mt-4">No requests in this queue</h3><p className="text-xs text-gray-400 mt-1">New custom-order requests will appear here automatically.</p></div>:
+  <div className="grid xl:grid-cols-2 gap-4">{requests.map(r=>{const m=meta[r.status];const missing=r.custom_order_items.filter(i=>!i.product_url).length;const units=r.custom_order_items.reduce((n,i)=>n+i.quantity,0);return <article key={r.id} className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+   <div className="p-5 border-b border-gray-50"><div className="flex items-start justify-between gap-3"><div className="flex gap-3 min-w-0"><div className="w-11 h-11 rounded-2xl bg-gray-100 flex items-center justify-center"><UserRound className="w-5 h-5 text-gray-400"/></div><div className="min-w-0"><h2 className="font-black text-gray-900 truncate">{r.customer_name||'Unknown customer'}</h2><p className="text-[11px] text-gray-400 truncate">{r.customer_email||'No email'}{r.customer_phone?' · '+r.customer_phone:''}</p></div></div><span className={'flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold whitespace-nowrap '+m.cls}><span className={'w-1.5 h-1.5 rounded-full '+m.dot}/>{m.label}</span></div><div className="flex items-center gap-3 mt-4 text-[10px] font-semibold text-gray-400"><span>{units} unit{units!==1?'s':''}</span><span>•</span><span>{r.custom_order_items.length} request item{r.custom_order_items.length!==1?'s':''}</span><span>•</span><span>{age(r.created_at)}</span></div></div>
+   <div className="p-4 space-y-3">{r.custom_order_items.map(item=><div key={item.id} className="rounded-2xl border border-gray-100 bg-gray-50/70 p-3"><div className="flex gap-3"><img src={item.image_url} alt="" className="w-16 h-16 rounded-xl object-cover border border-gray-100 bg-white flex-shrink-0"/><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-gray-800">{item.description}</p><div className="flex flex-wrap gap-x-3 mt-1 text-[10px] text-gray-400"><span>Qty <b className="text-gray-600">{item.quantity}</b></span>{item.estimated_budget_ngn!=null&&<span>Budget <b className="text-gray-600">{money(item.estimated_budget_ngn)}</b></span>}</div>{item.product_url?<div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-emerald-700"><CheckCircle2 className="w-3 h-3"/> Product linked <a href={item.product_url} target="_blank" rel="noreferrer"><ExternalLink className="w-3 h-3 text-gray-400"/></a></div>:<div className="mt-2 flex items-center gap-1.5 text-[10px] font-bold text-orange-600"><AlertCircle className="w-3 h-3"/> Product link needed</div>}</div></div><div className="flex gap-2 mt-3"><input value={drafts[item.id]||item.product_url||''} onChange={e=>setDrafts(d=>({...d,[item.id]:e.target.value}))} placeholder="Paste QAFRICA product link…" className="flex-1 min-w-0 bg-white border border-gray-200 rounded-xl px-3 py-2 text-[11px] outline-none focus:border-gray-400"/><button onClick={()=>void saveLink(item)} disabled={saving===item.id} className="px-3 rounded-xl bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">{saving===item.id?<Loader className="w-3.5 h-3.5 animate-spin"/>:item.product_url?'Update':'Link'}</button></div></div>)}</div>
+   <div className="px-5 py-4 bg-gray-50/70 border-t border-gray-100">{r.status==='ready'?<div className="flex items-center justify-between text-xs"><span className="font-bold text-emerald-700 flex items-center gap-2"><Check className="w-4 h-4"/> Customer notified and ready</span><span className="text-gray-400">{r.ready_at?new Date(r.ready_at).toLocaleDateString():''}</span></div>:<button onClick={()=>void markReady(r)} disabled={!!missing||readying===r.id} className="w-full flex items-center justify-center gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white py-3 text-xs font-black disabled:opacity-30">{readying===r.id?<Loader className="w-4 h-4 animate-spin"/>:<Send className="w-4 h-4"/>}{missing?'Link '+missing+' remaining item'+(missing>1?'s':'')+' to continue':'Mark ready & notify customer'}</button>}</div>
+  </article>})}</div>}
+ </div>;
 }
