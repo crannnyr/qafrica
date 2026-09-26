@@ -64,6 +64,7 @@ const ImportAdminV2Categories = lazy(() => import('@/pages/import-admin-v2/Manag
 const ImportAdminV2Expenses = lazy(() => import('@/pages/import-admin-v2/ManagementExpenses'));
 const ImportAdminV2CustomOrders = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2CustomOrders'));
 const ImportAdminV2Refunds = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Refunds'));
+const ImportAdminV2PaymentRecovery = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2PaymentRecovery'));
 const ImportAdminV2ProductAdd = lazy(() => import('@/pages/import-admin-v2/ManagementProductAdd'));
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
@@ -385,6 +386,7 @@ function App() {
             <Route path="expenses" element={<ImportAdminV2Expenses />} />
             <Route path="custom-orders" element={<ImportAdminV2CustomOrders />} />
             <Route path="refunds" element={<ImportAdminV2Refunds />} />
+            <Route path="payment-recovery" element={<ImportAdminV2PaymentRecovery />} />
             <Route path="products/add" element={<ImportAdminV2ProductAdd />} />
             <Route path="products/edit/:id" element={<ImportAdminV2ProductAdd />} />
           </Route>
