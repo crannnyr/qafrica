@@ -3,6 +3,7 @@ import TrendingManager from '@/pages/import-admin/TrendingManager';
 import { getManagementToken } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import { getManagementManager } from './ManagementAuth';
+import ManagementAnalytics from './ManagementAnalytics';
 
 export default function ManagementDashboard() {
   const manager = getManagementManager();
@@ -21,6 +22,8 @@ export default function ManagementDashboard() {
       {token && hasPermission('import.trending.view') && (
         <div>
           <TrendingManager token={token} />
+
+      <ManagementAnalytics />
         </div>
       )}
 
