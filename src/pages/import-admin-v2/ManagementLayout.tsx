@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck, CheckCircle2,
+  LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck, CheckCircle2, Boxes,
   LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
   Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard, Mail, Megaphone, CircleHelp, Users, TrendingUp,
 } from 'lucide-react';
@@ -17,6 +17,7 @@ const NAV = [
   { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
   { icon: Users, label: 'Users', path: '/import-admin-v2/users' },
   { icon: TrendingUp, label: 'Trending', path: '/import-admin-v2/trending' },
+  { icon: Boxes, label: 'Inventory', path: '/import-admin-v2/inventory' },
   { icon: CheckCircle2, label: 'Confirmed Payments', path: '/import-admin-v2/confirmed-payments' },
   { icon: ClipboardList, label: 'Batch Orders', path: '/import-admin-v2/batch-orders' },
   { icon: ClipboardList, label: 'Custom Orders', path: '/import-admin-v2/custom-orders' },
