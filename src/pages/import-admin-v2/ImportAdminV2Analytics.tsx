@@ -292,8 +292,8 @@ export default function ImportAdminV2Analytics() {
                   <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={40} allowDecimals={false} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 4 }} />
-                  <Bar dataKey="users" name="New users" fill="#0EA5E9" radius={[4, 4, 0, 0]} maxBarSize={28} />
-                </BarChart>
+                  <Line type="monotone" dataKey="users" name="New users" stroke="#0EA5E9" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                </LineChart>
               </ResponsiveContainer>
             )}
           </ChartCard>
