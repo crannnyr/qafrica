@@ -2391,10 +2391,33 @@ serve(async (req: Request) => {
       if (date_to) customerQuery = customerQuery.lte('created_at', date_to)
       const { count: newCustomersCount } = await customerQuery
 
+      // Build the daily new-user series from the same customer scope used by
+      // the New customers KPI so the chart and KPI always agree.
+      let customerTrendQuery = supabase
+        .from('customers')
+        .select('created_at')
+        .eq('signup_source', 'importation')
+      if (date_from) customerTrendQuery = customerTrendQuery.gte('created_at', date_from)
+      if (date_to) customerTrendQuery = customerTrendQuery.lte('created_at', date_to)
+
+      const { data: customerTrendRows, error: customerTrendError } = await customerTrendQuery
+      if (customerTrendError) return json({ error: customerTrendError.message }, 500)
+
+      const customerTrendMap = new Map<string, number>()
+      for (const customer of customerTrendRows ?? []) {
+        if (!customer.created_at) continue
+        const day = new Date(customer.created_at).toISOString().slice(0, 10)
+        customerTrendMap.set(day, (customerTrendMap.get(day) ?? 0) + 1)
+      }
+      const customer_daily_trend = Array.from(customerTrendMap.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([date, users]) => ({ date, users }))
+
       return json({
         analytics: {
           ...analyticsJson,
           new_customers_count: newCustomersCount ?? 0,
+          customer_daily_trend,
         },
       })
     }
