@@ -197,17 +197,42 @@ serve(async (req) => {
 
     const ids = (products ?? []).map((p: any) => p.id)
     const { data: inventory, error: inventoryError } = ids.length
-      ? await supabase.from('china_import_inventory').select('product_id,quantity,updated_at').in('product_id', ids)
+      ? await supabase.from('china_import_inventory').select('product_id,variant_options,quantity,updated_at').in('product_id', ids)
       : { data: [], error: null }
 
     if (inventoryError) return json({ error: inventoryError.message }, 500)
 
-    const stockMap = new Map((inventory ?? []).map((row: any) => [row.product_id, row]))
-    const rows = (products ?? []).map((product: any) => ({
-      ...product,
-      stock_quantity: Number(stockMap.get(product.id)?.quantity ?? 0),
-      stock_updated_at: stockMap.get(product.id)?.updated_at ?? null,
-    }))
+    const stockMap = new Map((inventory ?? []).map((row: any) => [
+      row.product_id + '|' + JSON.stringify(row.variant_options ?? {}),
+      row,
+    ]))
+
+    const rows = (products ?? []).flatMap((product: any) => {
+      const groups = Array.isArray(product.variants) ? product.variants : []
+      const combinations = groups.length
+        ? groups.reduce((acc: Array<Record<string, string>>, group: any) => {
+            const options = Array.isArray(group?.options) ? group.options.filter((v: any) => typeof v === 'string' && v.trim()) : []
+            if (!options.length) return acc
+            if (!acc.length) return options.map((option: string) => ({ [group.name]: option }))
+            return acc.flatMap((current: Record<string, string>) =>
+              options.map((option: string) => ({ ...current, [group.name]: option }))
+            )
+          }, [])
+        : [{}]
+
+      return combinations.map((variant_options: Record<string, string>) => {
+        const stock = stockMap.get(product.id + '|' + JSON.stringify(variant_options))
+        return {
+          ...product,
+          variant_options,
+          variant_label: Object.keys(variant_options).length
+            ? Object.entries(variant_options).map(([k, v]) => k + ': ' + v).join(', ')
+            : 'Base / no variant',
+          stock_quantity: Number(stock?.quantity ?? 0),
+          stock_updated_at: stock?.updated_at ?? null,
+        }
+      })
+    })
 
     const total = Number(count ?? 0)
     return json({
@@ -221,6 +246,10 @@ serve(async (req) => {
       return json({ error: 'Unauthorized' }, 401)
     }
     if (!body.product_id) return json({ error: 'Missing product id' }, 400)
+
+    const variantOptions = body.variant_options && typeof body.variant_options === 'object' && !Array.isArray(body.variant_options)
+      ? Object.fromEntries(Object.entries(body.variant_options).filter(([key, value]) => typeof key === 'string' && typeof value === 'string' && key.trim() && value.trim()))
+      : {}
 
     const quantity = Number(body.quantity)
     if (!Number.isInteger(quantity) || quantity < 0) return json({ error: 'Stock quantity must be a non-negative whole number' }, 400)
@@ -238,11 +267,12 @@ serve(async (req) => {
       .from('china_import_inventory')
       .upsert({
         product_id: body.product_id,
+        variant_options: variantOptions,
         quantity,
         updated_by: session.manager_id,
         updated_at: new Date().toISOString(),
-      }, { onConflict: 'product_id' })
-      .select('product_id,quantity,updated_at')
+      }, { onConflict: 'product_id,variant_options' })
+      .select('product_id,variant_options,quantity,updated_at')
       .single()
 
     if (error) return json({ error: error.message }, 400)
@@ -296,7 +326,7 @@ serve(async (req) => {
         ? supabase.from('import_batches').select('id, opened_at').in('id', batchIds)
         : Promise.resolve({ data: [], error: null }),
       productIds.length
-        ? supabase.from('china_import_inventory').select('product_id, quantity').in('product_id', productIds)
+        ? supabase.from('china_import_inventory').select('product_id, variant_options, quantity').in('product_id', productIds)
         : Promise.resolve({ data: [], error: null }),
     ])
 
@@ -306,7 +336,10 @@ serve(async (req) => {
 
     const customerMap = new Map((customers ?? []).map((row: any) => [row.id, row]))
     const batchMap = new Map((batches ?? []).map((row: any) => [row.id, row]))
-    const inventoryMap = new Map((inventory ?? []).map((row: any) => [row.product_id, row.quantity]))
+    const inventoryMap = new Map((inventory ?? []).map((row: any) => [
+      row.product_id + '|' + JSON.stringify(row.variant_options ?? {}),
+      Number(row.quantity ?? 0),
+    ]))
 
     const items = rows
       .filter((row: any) => eligibleOrderIds.has(row.order_id))
@@ -323,7 +356,7 @@ serve(async (req) => {
           batch_opened_at: batch?.opened_at ?? null,
           order_status: order?.status ?? null,
           shipping_method: order?.shipping_method ?? null,
-          stock_quantity: Number(inventoryMap.get(row.product_id) ?? 0),
+          stock_quantity: Number(inventoryMap.get(row.product_id + '|' + JSON.stringify(row.variant_options ?? {})) ?? 0),
         }
       })
 
