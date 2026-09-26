@@ -2400,39 +2400,40 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'admin-customers') {
-      const { manager_token, search } = await req.json()
+      const { manager_token, search, page = 1, page_size = 50 } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.clients.view'))) return json({ error: 'Unauthorized' }, 401)
 
-      const buildCustQuery = (from: number, to: number) => {
-        let q = supabase.from('customers')
-          .select('id, full_name, email, phone, avatar_url, created_at')
-          .eq('signup_source', 'importation')
-          .order('created_at', { ascending: false })
-          .range(from, to)
-        if (search && typeof search === 'string' && search.trim()) {
-          const s = search.trim()
-          q = q.or(`full_name.ilike.%${s}%,email.ilike.%${s}%,phone.ilike.%${s}%`)
-        }
-        return q
+      const safePage = Math.max(1, Number(page) || 1)
+      const safePageSize = Math.min(100, Math.max(1, Number(page_size) || 50))
+      const from = (safePage - 1) * safePageSize
+      const to = from + safePageSize - 1
+
+      let customerQuery = supabase
+        .from('customers')
+        .select('id, full_name, email, phone, avatar_url, created_at', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to)
+
+      if (search && typeof search === 'string' && search.trim()) {
+        const s = search.trim()
+        customerQuery = customerQuery.or(`full_name.ilike.%${s}%,email.ilike.%${s}%,phone.ilike.%${s}%`)
       }
-      let customers: any[]
-      try {
-        customers = await fetchAllRows(buildCustQuery)
-      } catch (e: any) {
-        return json({ error: e?.message ?? 'Failed to fetch customers' }, 500)
-      }
+
+      const { data: customers, error: customerError, count } = await customerQuery
+      if (customerError) return json({ error: customerError.message }, 500)
 
       const ids = (customers ?? []).map((c: any) => c.id)
       let orders: any[] = []
       if (ids.length) {
-        try {
-          orders = await fetchAllRows((from, to) =>
-            supabase.from('china_import_orders').select('user_id, total_ngn, payment_status, status, created_at').in('user_id', ids).range(from, to)
-          )
-        } catch (e: any) {
-          return json({ error: e?.message ?? 'Failed to fetch order stats' }, 500)
-        }
+        const { data, error } = await supabase
+          .from('china_import_orders')
+          .select('user_id, total_ngn, payment_status, status, created_at')
+          .in('user_id', ids)
+          .order('created_at', { ascending: false })
+        if (error) return json({ error: error.message }, 500)
+        orders = data ?? []
       }
+
       const [{ data: favorites }, { data: failedOrders }] = await Promise.all([
         supabase.from('import_admin_favorite_customers').select('customer_id'),
         ids.length
@@ -2447,7 +2448,7 @@ serve(async (req: Request) => {
 
       const favoriteSet = new Set((favorites ?? []).map((f: any) => f.customer_id))
       const orderStatsMap = new Map<string, { order_count: number; total_spent_ngn: number; last_order_at: string | null; awaiting_confirmation: number }>()
-      for (const o of (orders ?? [])) {
+      for (const o of orders) {
         const entry = orderStatsMap.get(o.user_id) ?? { order_count: 0, total_spent_ngn: 0, last_order_at: null, awaiting_confirmation: 0 }
         entry.order_count += 1
         if (o.payment_status === 'paid') entry.total_spent_ngn += Number(o.total_ngn ?? 0)
@@ -2470,7 +2471,7 @@ serve(async (req: Request) => {
         }
       })
 
-      return json({ customers: result })
+      return json({ customers: result, total: count ?? 0, page: safePage, page_size: safePageSize })
     }
 
     if (req.method === 'POST' && action === 'admin-toggle-favorite') {
