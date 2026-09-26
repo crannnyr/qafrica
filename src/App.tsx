@@ -21,7 +21,8 @@ const PostSignupChoice = lazy(() => import('@/pages/auth/PostSignupChoice'));
 const PricingPage = lazy(() => import('@/pages/auth/PricingPage'));
 const PaymentCallbackPage = lazy(() => import('@/pages/auth/PaymentCallbackPage'));
 const AcceptStaffInvitePage = lazy(() => import('@/pages/auth/AcceptStaffInvitePage'));
-const JumiaSignupPage = lazy(() => import('@/pages/auth/JumiaSignupPage'));
+// Paused while Sell-on-Jumia is "coming soon" — restore the routes below to re-enable.
+// const JumiaSignupPage = lazy(() => import('@/pages/auth/JumiaSignupPage'));
 
 // Legal Pages
 const PrivacyPolicyPage = lazy(() => import('@/pages/legal/PrivacyPolicyPage'));
@@ -145,11 +146,12 @@ const NicheCustomizationPage = lazy(() => import('@/pages/dashboard/NicheCustomi
 
 // Marketplace Dashboard Pages
 const JumiaPage = lazy(() => import('@/pages/dashboard/JumiaPage'));
-const JumiaAddItemPage = lazy(() => import('@/pages/dashboard/JumiaAddItemPage'));
+// const JumiaAddItemPage = lazy(() => import('@/pages/dashboard/JumiaAddItemPage'));
 const JumiaDropOffLocationsPage = lazy(() => import('@/pages/dashboard/JumiaDropOffLocationsPage'));
 const JumiaWalletPage = lazy(() => import('@/pages/dashboard/JumiaWalletPage'));
 const JumiaHowToScalePage = lazy(() => import('@/pages/dashboard/JumiaHowToScalePage'));
 const JumiaItemDetailPage = lazy(() => import('@/pages/dashboard/Jumia/JumiaItemDetailPage'));
+const JumiaComingSoon = lazy(() => import('@/pages/dashboard/Jumia/JumiaComingSoon'));
 const KongaPage = lazy(() => import('@/pages/dashboard/KongaPage'));
 const JijiPage = lazy(() => import('@/pages/dashboard/JijiPage'));
 
@@ -375,7 +377,8 @@ function App() {
           <Route path="/store-owners" element={<StoreOwnersPage />} />
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
-          <Route path="/signup/jumia" element={<PublicRoute><JumiaSignupPage /></PublicRoute>} />
+          {/* Sell-on-Jumia is coming soon: new Jumia signups show the explainer instead of the form. */}
+          <Route path="/signup/jumia" element={<PublicRoute><div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-8"><JumiaComingSoon backTo="/" /></div></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
@@ -518,7 +521,7 @@ function App() {
             <Route path="how-to-use" element={<HowToUsePage />} />
             <Route path="manual-sales" element={<ManualSalesPage />} />
             <Route path="jumia" element={<JumiaPage />} />
-            <Route path="jumia/add" element={<JumiaAddItemPage />} />
+            <Route path="jumia/add" element={<JumiaComingSoon />} />
             <Route path="jumia/locations" element={<JumiaDropOffLocationsPage />} />
             <Route path="jumia/wallet" element={<JumiaWalletPage />} />
             <Route path="jumia/how-to-scale" element={<JumiaHowToScalePage />} />
@@ -538,7 +541,7 @@ function App() {
             <ProtectedRoute isJumiaRoute={true}><JumiaDashboardLayout /></ProtectedRoute>
           }>
             <Route index element={<JumiaPage />} />
-            <Route path="add" element={<JumiaAddItemPage />} />
+            <Route path="add" element={<JumiaComingSoon />} />
             <Route path="locations" element={<JumiaDropOffLocationsPage />} />
             <Route path="wallet" element={<JumiaWalletPage />} />
             <Route path="how-to-scale" element={<JumiaHowToScalePage />} />
