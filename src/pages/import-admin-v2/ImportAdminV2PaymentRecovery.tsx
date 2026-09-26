@@ -136,8 +136,10 @@ export default function ImportAdminV2PaymentRecovery() {
       </div>
 
       {loading ? (
-        <div className="grid xl:grid-cols-2 gap-4">
-          {[1, 2, 3, 4].map(i => <div key={i} className="h-60 bg-white rounded-3xl border border-gray-100 animate-pulse" />)}
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <div className="divide-y divide-gray-100">
+            {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-16 animate-pulse bg-gray-50/70" />)}
+          </div>
         </div>
       ) : orders.length === 0 ? (
         <div className="bg-white rounded-3xl border border-dashed border-gray-200 p-14 text-center">
@@ -146,63 +148,74 @@ export default function ImportAdminV2PaymentRecovery() {
           <p className="text-xs text-gray-400 mt-1">When an order times out, it will appear here for review.</p>
         </div>
       ) : (
-        <div className="grid xl:grid-cols-2 gap-4">
-          {orders.map(order => (
-            <article key={order.id} className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex gap-3 min-w-0">
-                    <div className="w-11 h-11 rounded-2xl bg-amber-50 flex items-center justify-center flex-shrink-0">
-                      <Clock3 className="w-5 h-5 text-amber-600" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-mono font-black text-sm text-gray-900">{order.code}</p>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <UserRound className="w-3 h-3 text-gray-300" />
-                        <p className="text-xs font-semibold text-gray-700 truncate">{order.customer_name}</p>
+        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] text-left">
+              <thead className="bg-gray-50/80 border-b border-gray-100">
+                <tr>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Order</th>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Customer</th>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Amount</th>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Payment</th>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Delivery</th>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400">Expired</th>
+                  <th className="px-4 py-3 text-[10px] font-black uppercase tracking-wider text-gray-400 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {orders.map(order => (
+                  <tr key={order.id} className="hover:bg-gray-50/60 transition-colors">
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center flex-shrink-0">
+                          <Clock3 className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <div>
+                          <p className="font-mono font-bold text-xs text-gray-900">{order.code}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">Created {new Date(order.order_created_at).toLocaleDateString()}</p>
+                        </div>
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1 truncate">
-                        {order.customer_email || 'No email'}{order.customer_phone ? ' · ' + order.customer_phone : ''}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="text-lg font-black text-gray-900 flex-shrink-0">{money(order.total_ngn)}</p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
-                    {order.payment_method === 'manual' ? 'Manual transfer' : order.payment_method === 'paystack' ? 'Paystack' : 'Unknown payment'}
-                  </span>
-                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-gray-100 text-gray-600">
-                    {order.delivery_type === 'to_qafrica' ? 'To QAFRICA / Jumia' : 'To customer'}
-                  </span>
-                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700">
-                    Timed out {timeSince(order.failed_at)}
-                  </span>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-gray-50 flex items-center justify-between text-[10px] text-gray-400">
-                  <span>Original order {new Date(order.order_created_at).toLocaleDateString()}</span>
-                  <span>Expired {new Date(order.failed_at).toLocaleDateString()}</span>
-                </div>
-              </div>
-
-              <div className="px-5 py-4 bg-gray-50/70 border-t border-gray-100">
-                {hasPermission('import.timed_out.manage') ? (
-                  <button
-                    onClick={() => void restore(order)}
-                    disabled={restoringId === order.id}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white py-3 text-xs font-black disabled:opacity-40"
-                  >
-                    {restoringId === order.id ? <Loader className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                    Restore & mark paid
-                  </button>
-                ) : (
-                  <p className="text-center text-[11px] font-semibold text-gray-400">View-only access · recovery permission required to restore</p>
-                )}
-              </div>
-            </article>
-          ))}
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="text-xs font-semibold text-gray-800">{order.customer_name}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5 max-w-[190px] truncate">{order.customer_email || order.customer_phone || 'No contact details'}</p>
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="text-sm font-black text-gray-900">{money(order.total_ngn)}</p>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="inline-flex px-2.5 py-1 rounded-full bg-gray-100 text-[10px] font-bold text-gray-600">
+                        {order.payment_method === 'manual' ? 'Manual transfer' : order.payment_method === 'paystack' ? 'Paystack' : 'Unknown'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className="text-[10px] font-semibold text-gray-500">
+                        {order.delivery_type === 'to_qafrica' ? 'QAFRICA / Jumia' : 'Customer'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="text-xs font-semibold text-amber-700">{timeSince(order.failed_at)}</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5">{new Date(order.failed_at).toLocaleDateString()}</p>
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      {hasPermission('import.timed_out.manage') ? (
+                        <button
+                          onClick={() => void restore(order)}
+                          disabled={restoringId === order.id}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white px-3 py-2 text-[10px] font-black disabled:opacity-40 whitespace-nowrap"
+                        >
+                          {restoringId === order.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                          Restore & pay
+                        </button>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-gray-400">View only</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
