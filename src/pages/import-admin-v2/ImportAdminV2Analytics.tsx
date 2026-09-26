@@ -24,6 +24,7 @@ interface Analytics {
   margin_pct: number;
   new_customers_count: number;
   daily_trend: { date: string; orders: number; revenue_ngn: number }[];
+  customer_daily_trend: { date: string; users: number }[];
   payment_method_breakdown: { method: string; orders: number; revenue_ngn: number }[];
   delivery_type_breakdown: { type: string; orders: number; revenue_ngn: number }[];
   status_breakdown: { status: string; count: number }[];
@@ -158,6 +159,10 @@ export default function ImportAdminV2Analytics() {
     ...d,
     label: new Date(d.date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' }),
   }));
+  const usersTrendFormatted = (data?.customer_daily_trend ?? []).map(d => ({
+    ...d,
+    label: new Date(d.date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' }),
+  }));
 
   const paymentPieData = (data?.payment_method_breakdown ?? []).map(p => ({
     name: PAYMENT_LABELS[p.method] ?? p.method, value: p.orders,
@@ -269,6 +274,23 @@ export default function ImportAdminV2Analytics() {
                     tickFormatter={(v) => fmtCompact(v)} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 4 }} />
                   <Bar dataKey="revenue_ngn" name="Revenue" fill="#F97316" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </ChartCard>
+
+          {/* New users trend */}
+          <ChartCard title="New users trend">
+            {usersTrendFormatted.length === 0 ? (
+              <p className="text-xs text-gray-300 py-8 text-center">No new users in this range yet.</p>
+            ) : (
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={usersTrendFormatted} barCategoryGap="30%">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
+                  <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={40} allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 4 }} />
+                  <Bar dataKey="users" name="New users" fill="#0EA5E9" radius={[4, 4, 0, 0]} maxBarSize={28} />
                 </BarChart>
               </ResponsiveContainer>
             )}
