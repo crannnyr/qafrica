@@ -1,7 +1,7 @@
 import { Fragment, useState, useEffect, useCallback } from 'react';
 import { Loader, Package, Users, Archive, CheckCircle2, FileDown, Eye, X, MapPin, Pencil, Save, User, CreditCard, Trash2 } from 'lucide-react';
 import CONFIG from '@/lib/config';
-import { CustomerDetail } from '@/pages/import-admin/ImportAdminCustomers';
+import { CustomerDetail } from './ImportAdminCustomers';
 import ClosedBatchDetail from './ClosedBatchDetail';
 import { toast } from 'sonner';
 
