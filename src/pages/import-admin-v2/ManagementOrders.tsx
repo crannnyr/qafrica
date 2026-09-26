@@ -395,8 +395,8 @@ export default function ManagementOrders() {
     <div className="w-full space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">Orders</h2>
-          <p className="text-xs text-gray-400">Paid import orders grouped for sourcing and batch processing.</p>
+          <h2 className="text-lg font-bold text-gray-900">Batch Orders</h2>
+          <p className="text-xs text-gray-400">Paid import orders grouped for sourcing and batch processing. Use this tab to create and manage sourcing batches.</p>
         </div>
         <div className="flex items-center gap-2">
           {!showClosed && groups.length > 0 && (
