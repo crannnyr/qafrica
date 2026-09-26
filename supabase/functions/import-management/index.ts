@@ -396,6 +396,42 @@ serve(async (req) => {
     return json({ product: data })
   }
 
+  if (action === 'admin-product-upload-image') {
+    const allowed = await requireManager(supabase, body.manager_token, 'import.products.update')
+      || await requireManager(supabase, body.manager_token, 'import.products.create')
+    if (!allowed) return json({ error: 'Unauthorized' }, 401)
+    if (!body.image_base64) return json({ error: 'Missing image data' }, 400)
+
+    const extension = typeof body.extension === 'string'
+      ? body.extension.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8)
+      : 'jpg'
+    const mime = extension === 'png' ? 'image/png'
+      : extension === 'webp' ? 'image/webp'
+      : extension === 'gif' ? 'image/gif'
+      : 'image/jpeg'
+
+    let rawBytes: Uint8Array
+    try {
+      rawBytes = Uint8Array.from(atob(String(body.image_base64)), c => c.charCodeAt(0))
+    } catch {
+      return json({ error: 'Invalid image data' }, 400)
+    }
+
+    if (rawBytes.length === 0 || rawBytes.length > 2_000_000) {
+      return json({ error: 'Image is empty or too large' }, 400)
+    }
+
+    const path = 'china-import/' + crypto.randomUUID() + '.' + (extension || 'jpg')
+    const { error } = await supabase.storage.from('product-images').upload(path, rawBytes, {
+      contentType: mime,
+      upsert: false,
+    })
+    if (error) return json({ error: error.message }, 500)
+
+    const { data: pub } = supabase.storage.from('product-images').getPublicUrl(path)
+    return json({ url: pub.publicUrl })
+  }
+
   if (action === 'admin-product-create') {
     if (!(await requireManager(supabase, body.manager_token, 'import.products.create'))) return json({ error: 'Unauthorized' }, 401)
 
