@@ -1,27 +1,11 @@
-import {
-  LayoutDashboard,
-  Package,
-  ShoppingCart,
-  Menu,
-  X,
-  PackageCheck,
-  LogOut,
-  Shield,
-  ChevronLeft,
-  User,
-  Loader,
-  Settings,
-  Tags,
-  ReceiptText,
-  Truck,
-  MessageCircle,
-  UserCog,
-  ClipboardList,
-  RotateCcw,
-  WalletCards,
-  CreditCard,
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck,
+  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
+  Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck,
