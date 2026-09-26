@@ -251,8 +251,9 @@ serve(async (req) => {
       ? Object.fromEntries(Object.entries(body.variant_options).filter(([key, value]) => typeof key === 'string' && typeof value === 'string' && key.trim() && value.trim()))
       : {}
 
-    const quantity = Number(body.quantity)
-    if (!Number.isInteger(quantity) || quantity < 0) return json({ error: 'Stock quantity must be a non-negative whole number' }, 400)
+    const quantityToAdd = Number(body.quantity_to_add ?? body.quantity)
+    if (!Number.isInteger(quantityToAdd) || quantityToAdd < 0) return json({ error: 'Stock to add must be a non-negative whole number' }, 400)
+    if (quantityToAdd === 0) return json({ error: 'Enter an amount of stock to add' }, 400)
 
     const { data: session, error: sessionError } = await supabase
       .from('import_admin_sessions')
@@ -263,20 +264,15 @@ serve(async (req) => {
 
     if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
 
-    const { data, error } = await supabase
-      .from('china_import_inventory')
-      .upsert({
-        product_id: body.product_id,
-        variant_options: variantOptions,
-        quantity,
-        updated_by: session.manager_id,
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'product_id,variant_options' })
-      .select('product_id,variant_options,quantity,updated_at')
-      .single()
+    const { data, error } = await supabase.rpc('add_china_import_inventory_stock', {
+      p_product_id: body.product_id,
+      p_variant_options: variantOptions,
+      p_quantity_to_add: quantityToAdd,
+      p_manager_id: session.manager_id,
+    })
 
     if (error) return json({ error: error.message }, 400)
-    return json({ inventory: data })
+    return json({ inventory: data, added_quantity: quantityToAdd })
   }
 
   if (action === 'admin-fulfillment-list') {
