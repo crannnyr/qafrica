@@ -148,17 +148,11 @@ serve(async (req) => {
 
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
-  if (action === 'admin-fulfillment-receive') {
+  if (action === 'admin-fulfillment-receive-from-stock') {
     if (!(await requireManager(supabase, body.manager_token, 'import.orders.update'))) {
       return json({ error: 'Unauthorized' }, 401)
     }
-
     if (!body.fulfillment_item_id) return json({ error: 'Missing fulfillment item id' }, 400)
-
-    const requestedQuantity = Number(body.received_quantity)
-    if (!Number.isInteger(requestedQuantity) || requestedQuantity < 0) {
-      return json({ error: 'received_quantity must be a non-negative integer' }, 400)
-    }
 
     const { data: session, error: sessionError } = await supabase
       .from('import_admin_sessions')
@@ -167,20 +161,92 @@ serve(async (req) => {
       .gt('expires_at', new Date().toISOString())
       .maybeSingle()
 
-    if (sessionError || !session?.manager_id) {
-      return json({ error: 'Valid manager session required' }, 401)
-    }
+    if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
 
-    const { data, error } = await supabase.rpc('receive_china_import_fulfillment_item', {
+    const { data, error } = await supabase.rpc('receive_china_import_fulfillment_item_from_stock', {
       p_fulfillment_item_id: body.fulfillment_item_id,
-      p_received_quantity: requestedQuantity,
       p_manager_id: session.manager_id,
       p_note: typeof body.note === 'string' ? body.note.trim() || null : null,
     })
 
     if (error) return json({ error: error.message }, 400)
+    return json(data)
+  }
 
-    return json({ success: true, fulfillment_item: data })
+  if (action === 'admin-inventory-list') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.products.view'))) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
+
+    const requestedPage = Number(body.page)
+    const requestedPerPage = Number(body.per_page)
+    const page = Number.isFinite(requestedPage) && requestedPage >= 1 ? Math.floor(requestedPage) : 1
+    const perPage = Number.isFinite(requestedPerPage) && requestedPerPage >= 1 ? Math.min(50, Math.floor(requestedPerPage)) : 50
+    const search = typeof body.search === 'string' ? body.search.trim() : ''
+
+    let query = supabase.from('china_import_products')
+      .select('id,name,image_url,category,parent_category,is_active,moq,created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+
+    if (search) query = query.ilike('name', '%' + search + '%')
+
+    const from = (page - 1) * perPage
+    const to = from + perPage - 1
+    const { data: products, error: productsError, count } = await query.range(from, to)
+    if (productsError) return json({ error: productsError.message }, 500)
+
+    const ids = (products ?? []).map((p: any) => p.id)
+    const { data: inventory, error: inventoryError } = ids.length
+      ? await supabase.from('china_import_inventory').select('product_id,quantity,updated_at').in('product_id', ids)
+      : { data: [], error: null }
+
+    if (inventoryError) return json({ error: inventoryError.message }, 500)
+
+    const stockMap = new Map((inventory ?? []).map((row: any) => [row.product_id, row]))
+    const rows = (products ?? []).map((product: any) => ({
+      ...product,
+      stock_quantity: Number(stockMap.get(product.id)?.quantity ?? 0),
+      stock_updated_at: stockMap.get(product.id)?.updated_at ?? null,
+    }))
+
+    const total = Number(count ?? 0)
+    return json({
+      products: rows,
+      pagination: { page, per_page: perPage, total, page_count: Math.max(1, Math.ceil(total / perPage)) },
+    })
+  }
+
+  if (action === 'admin-inventory-set') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.products.update'))) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
+    if (!body.product_id) return json({ error: 'Missing product id' }, 400)
+
+    const quantity = Number(body.quantity)
+    if (!Number.isInteger(quantity) || quantity < 0) return json({ error: 'Stock quantity must be a non-negative whole number' }, 400)
+
+    const { data: session, error: sessionError } = await supabase
+      .from('import_admin_sessions')
+      .select('manager_id')
+      .eq('token', body.manager_token)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+
+    if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
+
+    const { data, error } = await supabase
+      .from('china_import_inventory')
+      .upsert({
+        product_id: body.product_id,
+        quantity,
+        updated_by: session.manager_id,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'product_id' })
+      .select('product_id,quantity,updated_at')
+      .single()
+
+    if (error) return json({ error: error.message }, 400)
+    return json({ inventory: data })
   }
 
   if (action === 'admin-fulfillment-list') {
