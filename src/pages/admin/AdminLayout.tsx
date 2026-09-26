@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Store, Package, ShoppingCart,
   CreditCard, Crown, LogOut, Menu, X, Shield, Globe,
   ChevronLeft, User, Bell, FileText, Truck, ShoppingBag,
-  Mail, AlertTriangle, AlertTriangle, Wallet,
+  Mail, AlertTriangle, Wallet,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores';
 import { toast } from 'sonner';
