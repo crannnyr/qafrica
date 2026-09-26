@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Boxes, Search, RefreshCw, ChevronLeft, ChevronRight, Loader, Save } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Boxes, Search, RefreshCw, ChevronLeft, ChevronRight, Loader, Save, Plus, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
@@ -30,6 +31,7 @@ const variantLabel = (row: InventoryRow) => row.variant_label || (
 );
 
 export default function ImportAdminV2Inventory() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<InventoryRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [pagination, setPagination] = useState<Pagination>({ page: 1, per_page: PAGE_SIZE, total: 0, page_count: 1 });
@@ -145,13 +147,14 @@ export default function ImportAdminV2Inventory() {
                 <th className="px-4 py-3 font-bold">In stock</th>
                 <th className="px-4 py-3 font-bold">Register / adjust</th>
                 <th className="px-4 py-3 font-bold">Status</th>
+                <th className="px-4 py-3 font-bold">Variants</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {loading ? (
-                <tr><td colSpan={5} className="px-5 py-12 text-center"><Loader className="w-5 h-5 text-orange-500 animate-spin mx-auto" /></td></tr>
+                <tr><td colSpan={6} className="px-5 py-12 text-center"><Loader className="w-5 h-5 text-orange-500 animate-spin mx-auto" /></td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-gray-400">No inventory products found.</td></tr>
+                <tr><td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-400">No inventory products found.</td></tr>
               ) : rows.map(row => (
                 <tr key={row.id} className="hover:bg-gray-50">
                   <td className="px-5 py-3">
@@ -173,6 +176,16 @@ export default function ImportAdminV2Inventory() {
                     </div>
                   </td>
                   <td className="px-4 py-3"><span className={row.is_active ? 'inline-flex px-2 py-1 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-600' : 'inline-flex px-2 py-1 rounded-full text-[9px] font-bold bg-gray-100 text-gray-500'}>{row.is_active ? 'Active product' : 'Inactive product'}</span></td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => navigate('/import-admin-v2/products/edit/' + row.id)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 text-[11px] font-bold hover:border-orange-300 hover:text-orange-600 whitespace-nowrap"
+                      title={variantLabel(row) === 'Base / no variant' ? 'Add variant to this product' : 'Edit this product\'s variants'}
+                    >
+                      {variantLabel(row) === 'Base / no variant' ? <Plus className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                      {variantLabel(row) === 'Base / no variant' ? 'Add variant' : 'Edit variants'}
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
