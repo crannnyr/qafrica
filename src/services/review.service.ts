@@ -85,17 +85,9 @@ export const reviewService = {
   },
 
   async respondToReview(reviewId: string, response: string) {
-    const { data, error } = await supabase
-      .from('reviews')
-      .update({
-        admin_response: response,
-        admin_responded_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', reviewId)
-      .select()
-      .single();
-    return { data, error };
+    // One reply per review, only for your own products (server-checked)
+    const { error } = await supabase.rpc('reply_to_review', { p_review_id: reviewId, p_reply: response });
+    return { data: null, error };
   },
 
   async markHelpful(reviewId: string) {
