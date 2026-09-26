@@ -76,12 +76,12 @@ const STATUS_LABELS: Record<string, string> = {
   pending: 'Pending', confirmed: 'Confirmed', billed: 'Billed', to_review: 'To Review', unknown: 'Unknown',
 };
 
-function KpiCard({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {
+function KpiCard({ icon: Icon, label, value, sub, iconBg = 'bg-gray-50', iconColor = 'text-gray-400' }: { icon: any; label: string; value: string; sub?: string; iconBg?: string; iconColor?: string }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-4">
       <div className="flex items-center gap-2 mb-2">
-        <div className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center">
-          <Icon className="w-3.5 h-3.5 text-gray-400" />
+        <div className={`w-7 h-7 rounded-lg ${iconBg} flex items-center justify-center`}>
+          <Icon className={`w-3.5 h-3.5 ${iconColor}`} />
         </div>
         <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
       </div>
@@ -210,10 +210,10 @@ export default function ImportAdminV2Analytics() {
         <>
           {/* KPI grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <KpiCard icon={DollarSign} label="Revenue" value={fmtCompact(data.revenue_ngn)} sub={`${data.orders_count} paid orders`} />
-            <KpiCard icon={TrendingUp} label="Profit" value={fmtCompact(data.profit_ngn)} sub={`${data.margin_pct}% margin`} />
-            <KpiCard icon={Package} label="Units sold" value={data.units_sold.toLocaleString()} sub={`Cost ${fmtCompact(data.cost_ngn)}`} />
-            <KpiCard icon={Users} label="New customers" value={data.new_customers_count.toLocaleString()} sub="in this range" />
+            <KpiCard icon={DollarSign} label="Revenue" value={fmtCompact(data.revenue_ngn)} sub={`${data.orders_count} paid orders`} iconBg="bg-emerald-50" iconColor="text-emerald-600" />
+            <KpiCard icon={TrendingUp} label="Profit" value={fmtCompact(data.profit_ngn)} sub={`${data.margin_pct}% margin`} iconBg="bg-violet-50" iconColor="text-violet-600" />
+            <KpiCard icon={Package} label="Units sold" value={data.units_sold.toLocaleString()} sub={`Cost ${fmtCompact(data.cost_ngn)}`} iconBg="bg-blue-50" iconColor="text-blue-600" />
+            <KpiCard icon={Users} label="New customers" value={data.new_customers_count.toLocaleString()} sub="in this range" iconBg="bg-cyan-50" iconColor="text-cyan-600" />
           </div>
 
           {/* Live operational snapshot */}
@@ -226,12 +226,12 @@ export default function ImportAdminV2Analytics() {
               <span className="text-[10px] font-semibold text-gray-400">Live snapshot</span>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiCard icon={ShoppingCart} label="All orders" value={liveNumber(data.live_operations?.all_orders_count)} sub="all import orders" />
-              <KpiCard icon={Clock3} label="Unpaid orders" value={liveNumber(data.live_operations?.unpaid_orders_count)} sub={fmtCompact(data.live_operations?.unpaid_orders_value_ngn ?? 0) + ' outstanding'} />
-              <KpiCard icon={Package} label="Inventory on hand" value={liveNumber(data.live_operations?.inventory_units)} sub="units available" />
-              <KpiCard icon={Truck} label="Active shipments" value={liveNumber(data.live_operations?.active_shipments_count)} sub={liveNumber(data.live_operations?.in_transit_shipments_count) + ' in transit'} />
-              <KpiCard icon={ReceiptText} label="Pending bills" value={liveNumber(data.live_operations?.pending_bills_count)} sub={fmtCompact(data.live_operations?.pending_bills_value_ngn ?? 0) + ' awaiting'} />
-              <KpiCard icon={RotateCcw} label="Pending refunds" value={liveNumber(data.live_operations?.pending_refunds_count)} sub={fmtCompact(data.live_operations?.pending_refunds_value_ngn ?? 0) + ' to process'} />
+              <KpiCard icon={ShoppingCart} label="All orders" value={liveNumber(data.live_operations?.all_orders_count)} sub="all import orders" iconBg="bg-indigo-50" iconColor="text-indigo-600" />
+              <KpiCard icon={Clock3} label="Unpaid orders" value={liveNumber(data.live_operations?.unpaid_orders_count)} sub={fmtCompact(data.live_operations?.unpaid_orders_value_ngn ?? 0) + ' outstanding'} iconBg="bg-amber-50" iconColor="text-amber-600" />
+              <KpiCard icon={Package} label="Inventory on hand" value={liveNumber(data.live_operations?.inventory_units)} sub="units available" iconBg="bg-sky-50" iconColor="text-sky-600" />
+              <KpiCard icon={Truck} label="Active shipments" value={liveNumber(data.live_operations?.active_shipments_count)} sub={liveNumber(data.live_operations?.in_transit_shipments_count) + ' in transit'} iconBg="bg-orange-50" iconColor="text-orange-600" />
+              <KpiCard icon={ReceiptText} label="Pending bills" value={liveNumber(data.live_operations?.pending_bills_count)} sub={fmtCompact(data.live_operations?.pending_bills_value_ngn ?? 0) + ' awaiting'} iconBg="bg-rose-50" iconColor="text-rose-600" />
+              <KpiCard icon={RotateCcw} label="Pending refunds" value={liveNumber(data.live_operations?.pending_refunds_count)} sub={fmtCompact(data.live_operations?.pending_refunds_value_ngn ?? 0) + ' to process'} iconBg="bg-teal-50" iconColor="text-teal-600" />
             </div>
           </div>
 
@@ -242,10 +242,10 @@ export default function ImportAdminV2Analytics() {
               <p className="text-[11px] text-gray-400 mt-0.5">Live movement from China arrival through allocation at QAFRICA.</p>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiCard icon={Boxes} label="Awaiting arrival" value={liveNumber(data.live_operations?.units_awaiting_arrival)} sub={liveNumber(data.live_operations?.fulfillment_open_lines) + ' open lines'} />
-              <KpiCard icon={Package} label="At QAFRICA HQ" value={liveNumber(data.live_operations?.fulfillment_hq_units)} sub="units received" />
-              <KpiCard icon={Truck} label="Allocated" value={liveNumber(data.live_operations?.fulfillment_allocated_units)} sub="units fully allocated" />
-              <KpiCard icon={Layers3} label="Active batches" value={liveNumber(data.live_operations?.active_batches_count)} sub="batches in progress" />
+              <KpiCard icon={Boxes} label="Awaiting arrival" value={liveNumber(data.live_operations?.units_awaiting_arrival)} sub={liveNumber(data.live_operations?.fulfillment_open_lines) + ' open lines'} iconBg="bg-fuchsia-50" iconColor="text-fuchsia-600" />
+              <KpiCard icon={Package} label="At QAFRICA HQ" value={liveNumber(data.live_operations?.fulfillment_hq_units)} sub="units received" iconBg="bg-lime-50" iconColor="text-lime-600" />
+              <KpiCard icon={Truck} label="Allocated" value={liveNumber(data.live_operations?.fulfillment_allocated_units)} sub="units fully allocated" iconBg="bg-purple-50" iconColor="text-purple-600" />
+              <KpiCard icon={Layers3} label="Active batches" value={liveNumber(data.live_operations?.active_batches_count)} sub="batches in progress" iconBg="bg-red-50" iconColor="text-red-600" />
             </div>
           </div>
 
@@ -256,10 +256,10 @@ export default function ImportAdminV2Analytics() {
               <p className="text-[11px] text-gray-400 mt-0.5">Live WhatsApp AI and human-support workload.</p>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiCard icon={MessageCircle} label="AI handling" value={liveNumber(data.live_operations?.support_ai_count)} sub="AI conversations" />
-              <KpiCard icon={MessageCircle} label="Waiting for human" value={liveNumber(data.live_operations?.support_waiting_count)} sub="customer requests" />
-              <KpiCard icon={Users} label="Human active" value={liveNumber(data.live_operations?.support_human_active_count)} sub="agent conversations" />
-              <KpiCard icon={CheckCircle2} label="Resolved" value={liveNumber(data.live_operations?.support_resolved_count)} sub="resolved conversations" />
+              <KpiCard icon={MessageCircle} label="AI handling" value={liveNumber(data.live_operations?.support_ai_count)} sub="AI conversations" iconBg="bg-yellow-50" iconColor="text-yellow-600" />
+              <KpiCard icon={MessageCircle} label="Waiting for human" value={liveNumber(data.live_operations?.support_waiting_count)} sub="customer requests" iconBg="bg-green-50" iconColor="text-green-600" />
+              <KpiCard icon={Users} label="Human active" value={liveNumber(data.live_operations?.support_human_active_count)} sub="agent conversations" iconBg="bg-blue-50" iconColor="text-blue-600" />
+              <KpiCard icon={CheckCircle2} label="Resolved" value={liveNumber(data.live_operations?.support_resolved_count)} sub="resolved conversations" iconBg="bg-slate-50" iconColor="text-slate-600" />
             </div>
           </div>
 
