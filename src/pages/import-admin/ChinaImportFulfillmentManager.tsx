@@ -15,6 +15,7 @@ type FulfillmentItem = {
   variant_options: Record<string, unknown> | null;
   ordered_quantity: number;
   received_quantity: number;
+  stock_quantity: number;
   allocated_quantity: number;
   shipped_quantity: number;
   delivered_quantity: number;
@@ -60,7 +61,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [statusFilter, setStatusFilter] = useState<'all' | 'awaiting_arrival' | 'at_qafrica_hq'>('all');
   const [openBatches, setOpenBatches] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
-  const [receivedDrafts, setReceivedDrafts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [shipmentOrderId, setShipmentOrderId] = useState<string | null>(null);
   const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({});
@@ -275,32 +275,43 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   }, [filtered]);
 
   const receive = async (item: FulfillmentItem) => {
-    const raw = receivedDrafts[item.id] ?? String(item.received_quantity);
-    const quantity = Number(raw);
-    if (!Number.isInteger(quantity) || quantity < item.received_quantity || quantity > item.ordered_quantity) {
-      toast.error(`Received quantity must be between ${item.received_quantity} and ${item.ordered_quantity}`);
+    if (!item.product_id) {
+      toast.error('This item is not linked to a product in inventory');
       return;
     }
+    if (item.stock_quantity <= 0) {
+      toast.error('No inventory stock is registered for this product');
+      return;
+    }
+    if (item.received_quantity >= item.ordered_quantity) {
+      toast.success('This item has already been fully received');
+      return;
+    }
+
     setActing(item.id);
     try {
-      const res = await fetch(`${EDGE_URL}?action=admin-fulfillment-receive`, {
+      const res = await fetch(`${EDGE_URL}?action=admin-fulfillment-receive-from-stock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           manager_token: token,
           fulfillment_item_id: item.id,
-          received_quantity: quantity,
           note: notes[item.id]?.trim() || null,
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'Could not record receipt');
+      if (!res.ok) throw new Error(data.error ?? 'Could not receive from inventory');
       const updated = data.fulfillment_item as FulfillmentItem;
-      setItems(current => current.map(row => row.id === item.id ? { ...row, ...updated } : row));
-      setReceivedDrafts(current => ({ ...current, [item.id]: String(updated.received_quantity) }));
-      toast.success(updated.received_quantity === updated.ordered_quantity ? 'Item fully received at QAfrica HQ' : 'Received quantity updated');
+      setItems(current => current.map(row => row.id === item.id
+        ? { ...row, ...updated, stock_quantity: Number(data.stock_remaining ?? 0) }
+        : row));
+      toast.success(
+        Number(data.received_now ?? 0) >= (item.ordered_quantity - item.received_quantity)
+          ? 'Item fully received at QAfrica HQ'
+          : 'Available stock received; item remains partially received'
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not record receipt');
+      toast.error(e instanceof Error ? e.message : 'Could not receive from inventory');
     } finally {
       setActing(null);
     }
@@ -405,7 +416,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
           <PackageCheck className="w-5 h-5 text-orange-500" />
           <h2 className="text-lg font-black text-gray-900">China Import Fulfillment</h2>
         </div>
-        <p className="text-xs text-gray-500 mt-1">Receive paid shipping order items at QAfrica HQ individually. Receiving an item does not change the main order status.</p>
+        <p className="text-xs text-gray-500 mt-1">Receive paid shipping order items from registered HQ inventory. The Receive button automatically consumes the available stock for that product.</p>
       </div>
 
       <div className="flex rounded-xl bg-gray-100 p-1 gap-1">
