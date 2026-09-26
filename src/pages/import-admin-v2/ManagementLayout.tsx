@@ -10,6 +10,7 @@ import { getManagementManager, logoutManagementSession, validateManagementSessio
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import { AiSupportAlertMonitor } from '@/pages/import-admin/AiSupportInbox';
 
+// Import Admin v2 navigation
 const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
   { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
