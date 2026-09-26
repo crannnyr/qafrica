@@ -14,6 +14,7 @@ const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
   { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
   { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
+  { icon: ClipboardList, label: 'Batch Orders', path: '/import-admin-v2/batch-orders' },
   { icon: ClipboardList, label: 'Custom Orders', path: '/import-admin-v2/custom-orders' },
   { icon: CreditCard, label: 'Payment Transactions', path: '/import-admin-v2/payment-transactions' },
   { icon: Mail, label: 'Email Templates', path: '/import-admin-v2/email-templates' },
