@@ -11,7 +11,7 @@ import SocialTab from './StoreSettings/SocialTab';
 import LocationTab from './StoreSettings/LocationTab';
 import PasswordTab from './StoreSettings/PasswordTab';
 import StaffTab from './StoreSettings/Staff/StaffTab';
-import type { Tab } from './StoreSettings/constants';
+import { TABS, type Tab } from './StoreSettings/constants';
 
 export default function StoreSettingsPage() {
   const { currentStore } = useStoreStore();
