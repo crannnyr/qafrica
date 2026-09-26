@@ -1,9 +1,14 @@
 import { User, ShieldCheck } from 'lucide-react';
+import TrendingManager from '@/pages/import-admin/TrendingManager';
+import { getManagementToken } from './ManagementAuth';
+import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import ManagementAnalytics from './ManagementAnalytics';
 import { getManagementManager } from './ManagementAuth';
 
 export default function ManagementDashboard() {
   const manager = getManagementManager();
+  const token = getManagementToken();
+  const { hasPermission } = useImportAdminPermissions(token);
   const name = manager?.full_name || manager?.name || 'Manager';
 
   return (
@@ -15,6 +20,12 @@ export default function ManagementDashboard() {
       </div>
 
       <ManagementAnalytics />
+
+      {token && hasPermission('import.trending.view') && (
+        <div>
+          <TrendingManager token={token} />
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-4">
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
