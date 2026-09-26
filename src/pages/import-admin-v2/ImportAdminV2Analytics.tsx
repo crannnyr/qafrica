@@ -221,12 +221,10 @@ export default function ImportAdminV2Analytics() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <KpiCard icon={ShoppingCart} label="All orders" value={liveNumber(data.live_operations?.all_orders_count)} sub="all import orders" />
               <KpiCard icon={Clock3} label="Unpaid orders" value={liveNumber(data.live_operations?.unpaid_orders_count)} sub={fmtCompact(data.live_operations?.unpaid_orders_value_ngn ?? 0) + ' outstanding'} />
-              <KpiCard icon={Boxes} label="Awaiting arrival" value={liveNumber(data.live_operations?.units_awaiting_arrival)} sub="units outstanding" />
               <KpiCard icon={Package} label="Inventory on hand" value={liveNumber(data.live_operations?.inventory_units)} sub="units available" />
               <KpiCard icon={Truck} label="Active shipments" value={liveNumber(data.live_operations?.active_shipments_count)} sub={liveNumber(data.live_operations?.in_transit_shipments_count) + ' in transit'} />
               <KpiCard icon={ReceiptText} label="Pending bills" value={liveNumber(data.live_operations?.pending_bills_count)} sub={fmtCompact(data.live_operations?.pending_bills_value_ngn ?? 0) + ' awaiting'} />
               <KpiCard icon={RotateCcw} label="Pending refunds" value={liveNumber(data.live_operations?.pending_refunds_count)} sub={fmtCompact(data.live_operations?.pending_refunds_value_ngn ?? 0) + ' to process'} />
-              <KpiCard icon={Layers3} label="Active batches" value={liveNumber(data.live_operations?.active_batches_count)} sub="batches in progress" />
             </div>
           </div>
 
