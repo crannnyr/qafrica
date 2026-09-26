@@ -342,15 +342,18 @@ export default function ClosedBatchDetail({
   }, [itemBills]);
 
   const customerPriceFor = (customerId: string, productId: string, kind: BillKind): string => {
+    const def = defaultPriceMapByKind[kind].get(productId);
+    // Consolidation & shipping uses only the batch shipping price.
+    // Per-customer overrides are intentionally ignored for this bill kind.
+    if (kind === 'consolidation_shipping') return def != null ? String(def) : '';
     const draft = customerPriceDrafts[`${customerId}:${productId}:${kind}`];
     if (draft !== undefined) return draft;
     const override = overrideMapByKind[kind].get(`${customerId}:${productId}`);
     if (override != null) return String(override);
-    const def = defaultPriceMapByKind[kind].get(productId);
     return def != null ? String(def) : '';
   };
   const isOverridden = (customerId: string, productId: string, kind: BillKind) =>
-    overrideMapByKind[kind].has(`${customerId}:${productId}`);
+    kind !== 'consolidation_shipping' && overrideMapByKind[kind].has(`${customerId}:${productId}`);
 
   const saveCustomerPrice = async (customerId: string, productId: string, productName: string, value: string, kind: BillKind) => {
     const amount = Number(value);
@@ -1440,10 +1443,10 @@ function CustomerCard({
                     <input
                       type="number" inputMode="decimal"
                       value={priceStr}
-                      disabled={billed}
+                      disabled={billed || billKind === 'consolidation_shipping'}
                       onChange={e => setCustomerPriceDrafts(prev => ({ ...prev, [`${id}:${line.product_id}:${billKind}`]: e.target.value }))}
                       onBlur={e => e.target.value && saveCustomerPrice(id, line.product_id, line.product_name, e.target.value, billKind)}
-                      placeholder={billKind === 'clearance' ? 'default' : 'shipping default'}
+                      placeholder={billKind === 'clearance' ? 'default' : 'batch shipping price'}
                       className="w-20 px-2 py-1 rounded-lg border border-gray-200 text-[11px] text-right disabled:bg-gray-50 disabled:text-gray-400"
                     />
                     {overridden && !billed && (
