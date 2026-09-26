@@ -1,3 +1,5 @@
+import { attributionFor, type Attribution } from '@/lib/marketplaceAttribution';
+
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from '@/services';
@@ -35,6 +37,7 @@ export interface WishlistItem {
 
 interface CartStore {
   items: CartItem[];
+  attribution?: Attribution;
   wishlist: WishlistItem[];
   wishlistProductIds: string[]; // Simple array for quick lookup
   isLoading: boolean;
