@@ -964,7 +964,7 @@ export default function ClosedBatchDetail({
                             <div className="px-2.5 pb-3 space-y-3 border-t border-gray-100 pt-3">
                               <div>
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">
-                                  Price per unit ({billKind === 'clearance' ? 'clearance' : 'consolidation & shipping'})
+                                  {billKind === 'clearance' ? 'Clearance price per unit' : 'Shipping price per unit'}
                                 </p>
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-xs text-gray-400">₦</span>
@@ -972,12 +972,12 @@ export default function ClosedBatchDetail({
                                     type="number" inputMode="decimal"
                                     defaultValue={priceFor(r.product_id, billKind)}
                                     onBlur={e => e.target.value && savePrice(r.product_id, r.product_name, e.target.value, billKind)}
-                                    placeholder="Set price"
+                                    placeholder={billKind === 'clearance' ? 'Set clearance price' : 'Set shipping price'}
                                     className="flex-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs"
                                   />
                                 </div>
                                 <p className="text-[10px] text-gray-400 mt-1">
-                                  Applies to every customer not yet billed. If this is the last unpriced item for a customer, they're billed immediately.
+                                  Applies to every customer not yet billed. For consolidation & shipping, this amount is a shipping charge only — the product price already paid by the customer is never billed again. If this is the last unpriced item for a customer, they're billed immediately.
                                 </p>
                               </div>
 
@@ -1436,14 +1436,14 @@ function CustomerCard({
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 mt-2">
-                    <span className="text-[10px] text-gray-400">Bill price ₦</span>
+                    <span className="text-[10px] text-gray-400">{billKind === 'clearance' ? 'Clearance price ₦' : 'Shipping price ₦'}</span>
                     <input
                       type="number" inputMode="decimal"
                       value={priceStr}
                       disabled={billed}
                       onChange={e => setCustomerPriceDrafts(prev => ({ ...prev, [`${id}:${line.product_id}:${billKind}`]: e.target.value }))}
                       onBlur={e => e.target.value && saveCustomerPrice(id, line.product_id, line.product_name, e.target.value, billKind)}
-                      placeholder="default"
+                      placeholder={billKind === 'clearance' ? 'default' : 'shipping default'}
                       className="w-20 px-2 py-1 rounded-lg border border-gray-200 text-[11px] text-right disabled:bg-gray-50 disabled:text-gray-400"
                     />
                     {overridden && !billed && (
