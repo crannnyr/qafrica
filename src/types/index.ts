@@ -90,6 +90,9 @@ export interface StoreOwner extends User {
 // STORE TYPES
 // ============================================
 
+export type StorefrontLook = 'classic' | 'clean' | 'boutique' | 'catalog' | 'social' | 'bento';
+export type StorefrontNavStyle = 'auto' | 'bottom' | 'sidebar';
+
 export interface Store {
   id: string;
   owner_id: string;
