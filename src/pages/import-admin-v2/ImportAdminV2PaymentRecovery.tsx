@@ -33,6 +33,8 @@ export default function ImportAdminV2PaymentRecovery() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
 
   const load = useCallback(async () => {
     if (!token || !hasPermission('import.timed_out.view')) return;
@@ -54,9 +56,18 @@ export default function ImportAdminV2PaymentRecovery() {
   }, [token, search, hasPermission]);
 
   useEffect(() => {
+    setCurrentPage(1);
     const timer = window.setTimeout(() => void load(), 250);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  const totalPages = Math.max(1, Math.ceil(orders.length / PAGE_SIZE));
+  const pageStart = (currentPage - 1) * PAGE_SIZE;
+  const paginatedOrders = orders.slice(pageStart, pageStart + PAGE_SIZE);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   const restore = async (order: FailedOrder) => {
     if (!hasPermission('import.timed_out.manage')) {
@@ -163,7 +174,7 @@ export default function ImportAdminV2PaymentRecovery() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {orders.map(order => (
+                {paginatedOrders.map(order => (
                   <tr key={order.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2.5">
@@ -215,6 +226,32 @@ export default function ImportAdminV2PaymentRecovery() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-gray-100 px-4 py-3 bg-gray-50/50">
+            <p className="text-[11px] text-gray-400">
+              Showing {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, orders.length)} of {orders.length} expired orders
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCurrentPage(page => Math.max(1, page - 1))}
+                disabled={currentPage === 1}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="px-2 text-[10px] font-bold text-gray-500">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage(page => Math.min(totalPages, page + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-[10px] font-bold text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       )}
