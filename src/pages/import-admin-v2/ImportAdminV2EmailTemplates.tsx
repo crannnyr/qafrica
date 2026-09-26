@@ -1,5 +1,5 @@
 import { Mail, ShieldCheck } from 'lucide-react';
-import MessageTemplatesEditor from '@/pages/import-admin/MessageTemplatesEditor';
+import ConfirmedOrderMessagingManager from '@/pages/import-admin/ConfirmedOrderMessagingManager';
 import { getManagementToken } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 
@@ -40,13 +40,13 @@ export default function ImportAdminV2EmailTemplates() {
             <p className="text-[11px] uppercase tracking-[0.18em] font-bold text-orange-400">Customer communications</p>
             <h2 className="text-2xl font-black tracking-tight mt-1">Email Templates</h2>
             <p className="text-sm text-gray-400 mt-1 max-w-2xl">
-              Manage the email wording customers receive throughout the import process. Updates take effect on the next email send.
+              Send customer emails and edit the templates used throughout the import process from one place.
             </p>
           </div>
         </div>
       </div>
 
-      <MessageTemplatesEditor token={token} />
+      <ConfirmedOrderMessagingManager token={token} />
     </div>
   );
 }
