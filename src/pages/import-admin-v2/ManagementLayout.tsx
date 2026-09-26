@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck,
   LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
-  Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard, Mail, Megaphone, CircleHelp, Users,
+  Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard, Mail, Megaphone, CircleHelp, Users, TrendingUp,
 } from 'lucide-react';
 import { getManagementManager, logoutManagementSession, validateManagementSession, getManagementToken, type ManagementManager } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
@@ -15,6 +15,7 @@ const NAV = [
   { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
   { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
   { icon: Users, label: 'Users', path: '/import-admin-v2/users' },
+  { icon: TrendingUp, label: 'Trending', path: '/import-admin-v2/trending' },
   { icon: ClipboardList, label: 'Batch Orders', path: '/import-admin-v2/batch-orders' },
   { icon: ClipboardList, label: 'Custom Orders', path: '/import-admin-v2/custom-orders' },
   { icon: CreditCard, label: 'Payment Transactions', path: '/import-admin-v2/payment-transactions' },
