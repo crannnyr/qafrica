@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck, CheckCircle2, Boxes,
   LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
-  Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard, Mail, Megaphone, CircleHelp, Users, TrendingUp, BarChart3,
+  Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard, Mail, Megaphone, CircleHelp, Users, TrendingUp,
 } from 'lucide-react';
 import { getManagementManager, logoutManagementSession, validateManagementSession, getManagementToken, type ManagementManager } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
@@ -16,7 +16,6 @@ const NAV = [
     section: 'Overview',
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
-      { icon: BarChart3, label: 'Analytics', path: '/import-admin-v2/analytics' },
     ],
   },
   {
