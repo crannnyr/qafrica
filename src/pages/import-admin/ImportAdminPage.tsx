@@ -1505,7 +1505,7 @@ function formatOrderDate(dateStr: string) {
   });
 }
 
-function OrdersList({ token }: { token: string }) {
+export function OrdersList({ token }: { token: string }) {
   const [orders, setOrders] = useState<ImportOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState('all');
