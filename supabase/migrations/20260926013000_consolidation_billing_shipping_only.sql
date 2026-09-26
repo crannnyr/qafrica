@@ -62,7 +62,7 @@ begin
         sum(
           case
             when p_kind = 'clearance'
-              then ib.unit_amount_ngn * b.qty
+              then coalesce(cip.unit_amount_ngn, ib.unit_amount_ngn) * b.qty
             else 0
           end
         ) as items_total,
@@ -80,7 +80,7 @@ begin
         jsonb_agg(
           jsonb_build_object(
             'label', b.product_name || ' × ' || b.qty,
-            'amount_ngn', round(ib.unit_amount_ngn * b.qty, 2),
+            'amount_ngn', round(coalesce(cip.unit_amount_ngn, ib.unit_amount_ngn) * b.qty, 2),
             'shipping_method', b.item_shipping_method
           )
           order by b.product_name
