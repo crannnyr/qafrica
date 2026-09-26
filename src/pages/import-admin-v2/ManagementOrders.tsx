@@ -2,7 +2,7 @@ import { Fragment, useState, useEffect, useCallback } from 'react';
 import { Loader, Package, Users, Archive, CheckCircle2, FileDown, Eye, X, MapPin, Pencil, Save, User, CreditCard, Trash2 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { CustomerDetail } from '@/pages/import-admin/ImportAdminCustomers';
-import ClosedBatchDetail from '@/pages/import-admin/ClosedBatchDetail';
+import ClosedBatchDetail from './ClosedBatchDetail';
 import { toast } from 'sonner';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
