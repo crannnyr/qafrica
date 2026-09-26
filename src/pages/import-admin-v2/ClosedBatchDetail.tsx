@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { toast } from 'sonner';
-import { CustomerDetail } from './ImportAdminCustomers';
+import { CustomerDetail } from '@/pages/import-admin/ImportAdminCustomers';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const BATCH_VIEW_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-batch-view`;
