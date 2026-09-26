@@ -116,5 +116,5 @@ begin
 end;
 $$;
 
-revoke all on function public.receive_china_import_fulfillment_item_from_stock(uuid, uuid, text) from public;
+revoke all on function public.receive_china_import_fulfillment_item_from_stock(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.receive_china_import_fulfillment_item_from_stock(uuid, uuid, text) to service_role;
