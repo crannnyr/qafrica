@@ -12,28 +12,63 @@ import { AiSupportAlertMonitor } from '@/pages/import-admin/AiSupportInbox';
 
 // Import Admin v2 navigation
 const NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
-  { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
-  { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
-  { icon: Users, label: 'Users', path: '/import-admin-v2/users' },
-  { icon: TrendingUp, label: 'Trending', path: '/import-admin-v2/trending' },
-  { icon: Boxes, label: 'Inventory', path: '/import-admin-v2/inventory' },
-  { icon: CheckCircle2, label: 'Confirmed Payments', path: '/import-admin-v2/confirmed-payments' },
-  { icon: ClipboardList, label: 'Batch Orders', path: '/import-admin-v2/batch-orders' },
-  { icon: ClipboardList, label: 'Custom Orders', path: '/import-admin-v2/custom-orders' },
-  { icon: CreditCard, label: 'Payment Transactions', path: '/import-admin-v2/payment-transactions' },
-  { icon: Mail, label: 'Email Templates', path: '/import-admin-v2/email-templates' },
-  { icon: Megaphone, label: 'Broadcast', path: '/import-admin-v2/broadcast' },
-  { icon: CircleHelp, label: 'Product FAQ', path: '/import-admin-v2/product-faq' },
-  { icon: RotateCcw, label: 'Refunds', path: '/import-admin-v2/refunds' },
-  { icon: WalletCards, label: 'Payment Recovery', path: '/import-admin-v2/payment-recovery' },
-  { icon: Tags, label: 'Categories', path: '/import-admin-v2/categories' },
-  { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },
-  { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings' },
-  { icon: Truck, label: 'Pricing & Shipping', path: '/import-admin-v2/pricing-shipping' },
-  { icon: PackageCheck, label: 'Fulfillment', path: '/import-admin-v2/fulfillment' },
-  { icon: MessageCircle, label: 'Support', path: '/import-admin-v2/support' },
-  { icon: UserCog, label: 'Admin Access', path: '/import-admin-v2/admin-access' },
+  {
+    section: 'Overview',
+    items: [
+      { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
+    ],
+  },
+  {
+    section: 'Orders & Payments',
+    items: [
+      { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
+      { icon: ClipboardList, label: 'Batch Orders', path: '/import-admin-v2/batch-orders' },
+      { icon: CheckCircle2, label: 'Confirmed Payments', path: '/import-admin-v2/confirmed-payments' },
+      { icon: CreditCard, label: 'Payment Transactions', path: '/import-admin-v2/payment-transactions' },
+      { icon: WalletCards, label: 'Payment Recovery', path: '/import-admin-v2/payment-recovery' },
+      { icon: RotateCcw, label: 'Refunds', path: '/import-admin-v2/refunds' },
+      { icon: ClipboardList, label: 'Custom Orders', path: '/import-admin-v2/custom-orders' },
+    ],
+  },
+  {
+    section: 'Fulfillment',
+    items: [
+      { icon: PackageCheck, label: 'Fulfillment', path: '/import-admin-v2/fulfillment' },
+      { icon: Boxes, label: 'Inventory', path: '/import-admin-v2/inventory' },
+    ],
+  },
+  {
+    section: 'Products',
+    items: [
+      { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
+      { icon: Tags, label: 'Categories', path: '/import-admin-v2/categories' },
+      { icon: TrendingUp, label: 'Trending', path: '/import-admin-v2/trending' },
+    ],
+  },
+  {
+    section: 'Customers & Support',
+    items: [
+      { icon: Users, label: 'Users', path: '/import-admin-v2/users' },
+      { icon: MessageCircle, label: 'Support', path: '/import-admin-v2/support' },
+      { icon: CircleHelp, label: 'Product FAQ', path: '/import-admin-v2/product-faq' },
+    ],
+  },
+  {
+    section: 'Communications',
+    items: [
+      { icon: Mail, label: 'Email Templates', path: '/import-admin-v2/email-templates' },
+      { icon: Megaphone, label: 'Broadcast', path: '/import-admin-v2/broadcast' },
+    ],
+  },
+  {
+    section: 'Finance & Administration',
+    items: [
+      { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },
+      { icon: Truck, label: 'Pricing & Shipping', path: '/import-admin-v2/pricing-shipping' },
+      { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings' },
+      { icon: UserCog, label: 'Admin Access', path: '/import-admin-v2/admin-access' },
+    ],
+  },
 ];
 
 export default function ManagementLayout() {
@@ -79,7 +114,7 @@ export default function ManagementLayout() {
       ? location.pathname === '/import-admin-v2'
       : location.pathname === path || location.pathname.startsWith(path + '/');
 
-  const activeLabel = NAV.find(n => isActive(n.path))?.label || 'Dashboard';
+  const activeLabel = NAV.flatMap(section => section.items).find(n => isActive(n.path))?.label || 'Dashboard';
   const managerName = manager?.full_name || manager?.name || 'Manager';
 
   if (checkingSession) {
@@ -119,16 +154,25 @@ export default function ManagementLayout() {
         </div>
 
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto min-h-0">
-          {NAV.map(item => {
-            const active = isActive(item.path);
-            return (
-              <Link key={item.path} to={item.path} title={collapsed ? item.label : undefined}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm ${active ? 'bg-orange-500 text-white font-medium' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'} ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}>
-                <item.icon className="w-4 h-4 flex-shrink-0" />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </Link>
-            );
-          })}
+          {NAV.map(section => (
+            <div key={section.section} className="mb-3">
+              {!collapsed && (
+                <p className="px-3 pt-2 pb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
+                  {section.section}
+                </p>
+              )}
+              {section.items.map(item => {
+                const active = isActive(item.path);
+                return (
+                  <Link key={item.path} to={item.path} title={collapsed ? item.label : undefined}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm ${active ? 'bg-orange-500 text-white font-medium' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'} ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}>
+                    <item.icon className="w-4 h-4 flex-shrink-0" />
+                    {!collapsed && <span className="truncate">{item.label}</span>}
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
         </nav>
 
         <div className={`px-3 py-3 border-t border-gray-200 flex-shrink-0 ${collapsed ? 'lg:px-2' : ''}`}>
