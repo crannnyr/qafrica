@@ -549,6 +549,8 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [creatingList, setCreatingList] = useState(false);
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
 
   const loadLists = useCallback(async () => {
     try {
@@ -662,9 +664,6 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
     // Favorites always float to top within whatever filter is active
     return [...list].sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0));
   }, [customers, filter, lists]);
-
-  const PAGE_SIZE = 50;
-  const [page, setPage] = useState(1);
 
   useEffect(() => { setPage(1); }, [search, filter]);
 
