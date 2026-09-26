@@ -13,7 +13,6 @@ import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
-import ImportAdminAnalytics from './ImportAdminAnalytics';
 import ImportAdminCustomers from './ImportAdminCustomers';
 import { CustomerDetail } from './ImportAdminCustomers';
 import QuestionsManager from './QuestionsManager';
@@ -3751,7 +3750,7 @@ export default function ImportAdminPage() {
   useImportPwaManifest();
   const { token, manager, isLegacyManager, isSupabaseAdmin, authChecked, logout } = useImportAuth();
   const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(token);
-  const [tab, setTab] = useState<'analytics' | 'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access' | 'ai-support' | 'expenses' | 'fulfillment'>('analytics');
+  const [tab, setTab] = useState<'confirmed-payments' | 'messages' | 'broadcast' | 'orders' | 'total-orders' | 'products' | 'trending' | 'clients' | 'questions' | 'refunds' | 'paystack-transactions' | 'timed-out' | 'settings' | 'pricing-shipping' | 'custom-orders' | 'categories' | 'admin-access' | 'ai-support' | 'expenses' | 'fulfillment'>('confirmed-payments');
   // Lets TotalOrdersView route a product click straight into the Products
   // tab's edit form, and OrdersList/TotalOrdersView route a buyer click
   // into the customer detail sheet.
@@ -3761,7 +3760,6 @@ export default function ImportAdminPage() {
   if (!isLegacyManager && !isSupabaseAdmin) return null;
 
   const tabPermissions = {
-    analytics: 'import.analytics.view',
     'confirmed-payments': 'import.confirmed_payments.view',
     messages: 'import.messages.view',
     broadcast: 'import.broadcast.view',
@@ -3784,7 +3782,7 @@ export default function ImportAdminPage() {
     fulfillment: 'import.orders.view',
   } as const;
 
-  const allTabs = ['analytics', 'confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access', 'ai-support', 'expenses', 'fulfillment'] as const;
+  const allTabs = ['confirmed-payments', 'messages', 'broadcast', 'orders', 'total-orders', 'products', 'trending', 'clients', 'questions', 'refunds', 'paystack-transactions', 'timed-out', 'settings', 'pricing-shipping', 'custom-orders', 'categories', 'admin-access', 'ai-support', 'expenses', 'fulfillment'] as const;
 
   const visibleTabs = allTabs.filter(t => hasPermission(tabPermissions[t]));
 
@@ -3888,9 +3886,7 @@ export default function ImportAdminPage() {
           ))}
         </div>
 
-        {tab === 'analytics' ? (
-          <ImportAdminAnalytics token={token} />
-        ) : tab === 'fulfillment' ? (
+        {tab === 'fulfillment' ? (
           <ChinaImportFulfillmentManager token={token} canReceive={hasPermission('import.orders.update')} />
         ) : tab === 'confirmed-payments' ? (
           <ConfirmedPaymentsManager token={token} />
