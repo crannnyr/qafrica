@@ -1,153 +1,35 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Loader, Landmark, Clock, CheckCircle2, Copy } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, Banknote, CheckCircle2, Clock3, Copy, CreditCard, Landmark, Loader, RefreshCw, RotateCcw, Search, ShieldAlert, WalletCards } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
-
-const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/refunds`;
-
-interface Refund {
-  id: string; code: string; customer_name: string;
-  items: Array<{ name: string; quantity: number }>;
-  total_ngn: number; refund_amount_ngn: number; cancellation_fee_ngn: number; refund_policy: string | null;
-  cancel_reason: string;
-  status: 'pending' | 'submitted' | 'paid';
-  payment_method: 'paystack' | 'manual' | null; payment_reference: string | null;
-  refund_method: 'paystack' | 'bank' | null;
-  bank_account_number: string | null; bank_account_name: string | null; bank_name: string | null;
-  bank_details_submitted_at: string | null;
-  paystack_refund_id: string | null; paystack_refund_status: string | null; paystack_refunded_at: string | null;
-  refund_error: string | null; paid_at: string | null; cancelled_at: string;
-}
-
-const fmt = (n: number) => `₦${Math.round(Number(n || 0)).toLocaleString()}`;
-const STATUS_LABELS: Record<string, string> = { pending: 'Awaiting refund', submitted: 'Ready to refund', paid: 'Refunded' };
-const STATUS_COLORS: Record<string, string> = { pending: 'bg-gray-100 text-gray-500', submitted: 'bg-amber-50 text-amber-700', paid: 'bg-emerald-50 text-emerald-700' };
-
-function paystackStatusLabel(status: string | null) {
-  if (!status) return null;
-  switch (status.toLowerCase()) {
-    case 'processing': return 'Processing';
-    case 'processed': return 'Processed';
-    case 'completed': return 'Completed';
-    case 'refunded': return 'Refunded';
-    case 'needs_attention': return 'Needs attention';
-    case 'failed': return 'Failed';
-    default: return status;
-  }
-}
-
-export default function ImportAdminV2Refunds() {
-  const token = getManagementToken();
-  const [refunds, setRefunds] = useState<Refund[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'submitted' | 'paid'>('submitted');
-  const [payingId, setPayingId] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!token) return;
-    setIsLoading(true);
-    try {
-      const res = await fetch(`${EDGE_URL}?action=admin-list-refunds`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ manager_token: token }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to load refunds');
-      setRefunds(data.refunds ?? []);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to load refunds');
-    } finally { setIsLoading(false); }
-  }, [token]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const markPaid = async (refund: Refund) => {
-    if (refund.payment_method !== 'manual') return toast.error('This refund is not a manual bank refund.');
-    if (!refund.bank_account_number) return toast.error('Customer bank details have not been submitted.');
-    setPayingId(refund.id);
-    try {
-      const res = await fetch(`${EDGE_URL}?action=admin-mark-paid`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, refund_id: refund.id }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.refund) throw new Error(data.error || 'Failed to mark refund as paid');
-      toast.success(`Marked ${refund.code} as paid — customer notified`);
-      await load();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to mark refund as paid'); }
-    finally { setPayingId(null); }
-  };
-
-  const refundViaPaystack = async (refund: Refund) => {
-    if (refund.payment_method !== 'paystack') return toast.error('This refund was not paid through Paystack.');
-    if (!refund.payment_reference) return toast.error('Original Paystack payment reference is missing.');
-    if (!refund.refund_amount_ngn || refund.refund_amount_ngn <= 0) return toast.error('Invalid refund amount.');
-    if (refund.paystack_refund_id || ['processing','processed','completed','refunded'].includes(refund.paystack_refund_status || '')) {
-      return toast.error('A Paystack refund has already been submitted.');
-    }
-    setPayingId(refund.id);
-    try {
-      const res = await fetch(`${EDGE_URL}?action=admin-refund-paystack`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, refund_id: refund.id }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || 'Paystack refund failed');
-      toast.success(`${refund.code}: ${fmt(refund.refund_amount_ngn)} refund submitted to Paystack`);
-      await load();
-    } catch (error) { toast.error(error instanceof Error ? error.message : 'Paystack refund failed'); }
-    finally { setPayingId(null); }
-  };
-
-  const copyDetails = (refund: Refund) => {
-    navigator.clipboard.writeText([refund.bank_account_name, refund.bank_account_number, refund.bank_name].filter(Boolean).join('\n'))
-      .then(() => toast.success('Bank details copied')).catch(() => toast.error('Could not copy bank details'));
-  };
-
-  const filtered = filter === 'all' ? refunds : refunds.filter(refund => refund.status === filter);
-  const counts = {
-    pending: refunds.filter(r => r.status === 'pending').length,
-    submitted: refunds.filter(r => r.status === 'submitted').length,
-    paid: refunds.filter(r => r.status === 'paid').length,
-  };
-
-  return (
-    <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-1.5 overflow-x-auto">
-        {(['submitted','pending','paid','all'] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)} className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap ${filter === f ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500'}`}>
-            {f === 'all' ? `All (${refunds.length})` : `${STATUS_LABELS[f]} (${counts[f]})`}
-          </button>
-        ))}
-      </div>
-      <div className="divide-y divide-gray-50 max-h-[600px] overflow-y-auto">
-        {isLoading ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="px-5 py-4 animate-pulse h-20" />)
-        : filtered.length === 0 ? <div className="px-5 py-12 text-center"><p className="text-sm text-gray-300">No refunds in this view.</p></div>
-        : filtered.map(r => (
-          <div key={r.id} className="px-5 py-4">
-            <div className="flex items-center justify-between gap-2 mb-1.5"><span className="font-mono text-xs font-bold text-gray-800">{r.code}</span><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${STATUS_COLORS[r.status]}`}>{STATUS_LABELS[r.status]}</span></div>
-            <p className="text-sm font-semibold text-gray-900">{r.customer_name}</p>
-            <p className="text-xs text-gray-400 mb-2">Cancelled {new Date(r.cancelled_at).toLocaleDateString()}</p>
-            <div className="bg-gray-50 rounded-xl p-3 mb-2 space-y-1.5">
-              <div className="flex justify-between text-xs"><span className="text-gray-500">Original amount</span><span className="font-semibold text-gray-800">{fmt(r.total_ngn)}</span></div>
-              {r.cancellation_fee_ngn > 0 && <div className="flex justify-between text-xs"><span className="text-gray-500">Cancellation fee</span><span className="font-semibold text-red-600">-{fmt(r.cancellation_fee_ngn)}</span></div>}
-              <div className="border-t border-gray-200 pt-1.5 flex justify-between text-sm"><span className="font-semibold text-gray-700">Refund amount</span><span className="font-bold text-gray-900">{fmt(r.refund_amount_ngn)}</span></div>
-              {r.refund_policy && <p className="text-[10px] text-gray-400">Policy {r.refund_policy}</p>}
-            </div>
-            <p className="text-xs text-red-600 bg-red-50 rounded-lg px-2.5 py-1.5 mb-2">{r.cancel_reason}</p>
-            <div className="flex items-center gap-2 mb-2"><span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">Payment</span><span className="text-xs font-semibold text-gray-700">{r.payment_method === 'paystack' ? 'Paystack' : r.payment_method === 'manual' ? 'Manual / Bank' : 'Unknown'}</span></div>
-            {r.payment_method === 'paystack' && <div className="bg-blue-50 rounded-xl p-3 mb-2"><div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold text-blue-800">Paystack payment</p>{r.paystack_refund_status && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white text-blue-700">{paystackStatusLabel(r.paystack_refund_status)}</span>}</div>{r.payment_reference && <p className="text-[11px] text-blue-600 mt-1 font-mono break-all">{r.payment_reference}</p>}{r.paystack_refund_id && <p className="text-[10px] text-blue-500 mt-1 font-mono break-all">Refund ID: {r.paystack_refund_id}</p>}{r.refund_error && <p className="text-[11px] text-red-600 mt-2">{r.refund_error}</p>}</div>}
-            {r.payment_method === 'manual' && r.status === 'pending' && <p className="text-[11px] text-gray-400 flex items-center gap-1"><Clock className="w-3 h-3" />Waiting for customer to submit bank details.</p>}
-            {r.payment_method === 'manual' && (r.status === 'submitted' || r.status === 'paid') && r.bank_account_number && <div className="bg-gray-50 rounded-xl p-3 flex items-start justify-between gap-2"><div className="text-xs text-gray-700 space-y-0.5"><p className="font-semibold">{r.bank_account_name}</p><p className="font-mono">{r.bank_account_number}</p><p className="text-gray-500">{r.bank_name}</p></div><button onClick={() => copyDetails(r)} className="p-1.5 hover:bg-gray-200 rounded-lg" title="Copy bank details"><Copy className="w-3.5 h-3.5 text-gray-500" /></button></div>}
-            {r.payment_method === 'paystack' && r.status !== 'paid' && !r.paystack_refund_id && !['processing','processed','completed','refunded'].includes(r.paystack_refund_status || '') && <button onClick={() => void refundViaPaystack(r)} disabled={payingId === r.id} className="mt-2 flex items-center gap-1.5 text-xs font-bold text-white bg-gray-900 hover:bg-gray-700 disabled:opacity-40 px-3 py-2 rounded-lg">{payingId === r.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Landmark className="w-3.5 h-3.5" />}Refund {fmt(r.refund_amount_ngn)} via Paystack</button>}
-            {r.payment_method === 'paystack' && r.paystack_refund_status === 'processing' && <div className="mt-2 flex items-center gap-1.5 text-[11px] text-blue-600"><Loader className="w-3 h-3 animate-spin" />Paystack refund is processing...</div>}
-            {r.payment_method === 'paystack' && r.paystack_refund_status === 'needs_attention' && <div className="mt-2 bg-amber-50 text-amber-700 rounded-lg px-3 py-2 text-[11px]">Paystack requires attention for this refund. Check the Paystack refund status before retrying.</div>}
-            {r.payment_method === 'paystack' && r.paystack_refund_status === 'failed' && <div className="mt-2 bg-red-50 text-red-600 rounded-lg px-3 py-2 text-[11px]">Paystack refund failed.{r.refund_error ? ` ${r.refund_error}` : ''}</div>}
-            {r.payment_method === 'manual' && r.status === 'submitted' && <button onClick={() => void markPaid(r)} disabled={payingId === r.id} className="mt-2 flex items-center gap-1.5 text-xs font-bold text-white bg-gray-900 hover:bg-gray-700 disabled:opacity-40 px-3 py-2 rounded-lg">{payingId === r.id ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Landmark className="w-3.5 h-3.5" />}Mark as Paid</button>}
-            {r.status === 'paid' && <p className="mt-2 text-[11px] text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Refunded {r.paid_at ? new Date(r.paid_at).toLocaleDateString() : ''}</p>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
+const EDGE=CONFIG.SUPABASE_URL+'/functions/v1/refunds';
+interface Refund{id:string;code:string;customer_name:string;items:Array<{name:string;quantity:number}>;total_ngn:number;refund_amount_ngn:number;cancellation_fee_ngn:number;refund_policy:string|null;cancel_reason:string;status:'pending'|'submitted'|'paid';payment_method:'paystack'|'manual'|null;payment_reference:string|null;refund_method:'paystack'|'bank'|null;bank_account_number:string|null;bank_account_name:string|null;bank_name:string|null;bank_details_submitted_at:string|null;paystack_refund_id:string|null;paystack_refund_status:string|null;paystack_refunded_at:string|null;refund_error:string|null;paid_at:string|null;cancelled_at:string;}
+const money=(n:number)=>'₦'+Math.round(Number(n||0)).toLocaleString(); const label:Record<string,string>={pending:'Awaiting details',submitted:'Action needed',paid:'Refunded'}; const pay=(s:string|null)=>!s?'':s.replace('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
+export default function ImportAdminV2Refunds(){const token=getManagementToken();const[refunds,setRefunds]=useState<Refund[]>([]);const[loading,setLoading]=useState(true);const[filter,setFilter]=useState<'all'|'pending'|'submitted'|'paid'>('submitted');const[paying,setPaying]=useState<string|null>(null);const[q,setQ]=useState('');
+const load=useCallback(async()=>{if(!token)return;setLoading(true);try{const res=await fetch(EDGE+'?action=admin-list-refunds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manager_token:token})});const d=await res.json();if(!res.ok)throw new Error(d.error||'Failed to load refunds');setRefunds(d.refunds||[])}catch(e){toast.error(e instanceof Error?e.message:'Failed to load refunds')}finally{setLoading(false)}},[token]);useEffect(()=>{void load()},[load]);
+const markPaid=async(r:Refund)=>{if(r.payment_method!=='manual')return toast.error('This refund is not a manual bank refund.');if(!r.bank_account_number)return toast.error('Customer bank details have not been submitted.');setPaying(r.id);try{const res=await fetch(EDGE+'?action=admin-mark-paid',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manager_token:token,refund_id:r.id})});const d=await res.json();if(!res.ok||!d.refund)throw new Error(d.error||'Failed to mark refund as paid');toast.success(r.code+' marked as paid — customer notified');await load()}catch(e){toast.error(e instanceof Error?e.message:'Failed to mark refund as paid')}finally{setPaying(null)}};
+const refundPaystack=async(r:Refund)=>{if(r.payment_method!=='paystack')return toast.error('This refund was not paid through Paystack.');if(!r.payment_reference)return toast.error('Original Paystack payment reference is missing.');if(!r.refund_amount_ngn||r.refund_amount_ngn<=0)return toast.error('Invalid refund amount.');if(r.paystack_refund_id||['processing','processed','completed','refunded'].includes(r.paystack_refund_status||''))return toast.error('A Paystack refund has already been submitted.');setPaying(r.id);try{const res=await fetch(EDGE+'?action=admin-refund-paystack',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manager_token:token,refund_id:r.id})});const d=await res.json();if(!res.ok||!d.success)throw new Error(d.error||'Paystack refund failed');toast.success(r.code+': '+money(r.refund_amount_ngn)+' refund submitted to Paystack');await load()}catch(e){toast.error(e instanceof Error?e.message:'Paystack refund failed')}finally{setPaying(null)}};
+const copy=(r:Refund)=>navigator.clipboard.writeText([r.bank_account_name,r.bank_account_number,r.bank_name].filter(Boolean).join('\n')).then(()=>toast.success('Bank details copied')).catch(()=>toast.error('Could not copy bank details'));
+const counts=useMemo(()=>({pending:refunds.filter(r=>r.status==='pending').length,submitted:refunds.filter(r=>r.status==='submitted').length,paid:refunds.filter(r=>r.status==='paid').length,attention:refunds.filter(r=>r.paystack_refund_status==='failed'||r.paystack_refund_status==='needs_attention').length}),[refunds]);
+const filtered=useMemo(()=>refunds.filter(r=>(filter==='all'||r.status===filter)&&(r.code+' '+r.customer_name+' '+r.cancel_reason).toLowerCase().includes(q.toLowerCase())),[refunds,filter,q]);
+if(!token)return null;return <div className="space-y-5">
+<div className="relative overflow-hidden rounded-3xl bg-gray-950 text-white p-6 md:p-7"><div className="absolute -right-10 -top-20 w-56 h-56 rounded-full bg-emerald-500/15 blur-3xl"/><div className="relative flex flex-col md:flex-row md:justify-between gap-5"><div><div className="flex items-center gap-2 text-emerald-300 text-[11px] font-bold uppercase tracking-[0.16em]"><RotateCcw className="w-4 h-4"/> Refund operations</div><h1 className="text-2xl md:text-3xl font-black mt-2">Move every refund to closure.</h1><p className="text-sm text-gray-400 mt-1 max-w-xl">See what needs action, what is processing, and what has reached the customer.</p></div><button onClick={()=>void load()} className="self-start inline-flex items-center gap-2 rounded-xl bg-white/10 px-3.5 py-2.5 text-xs font-bold"><RefreshCw className="w-3.5 h-3.5"/> Refresh</button></div></div>
+<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{[['Action needed',counts.submitted,Landmark,'text-amber-600 bg-amber-50'],['Awaiting details',counts.pending,Clock3,'text-gray-600 bg-gray-100'],['Refunded',counts.paid,CheckCircle2,'text-emerald-600 bg-emerald-50'],['Needs attention',counts.attention,ShieldAlert,'text-red-600 bg-red-50']].map(([l,v,I,c])=><div key={String(l)} className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm"><div className={'w-9 h-9 rounded-xl flex items-center justify-center '+String(c)}><I className="w-4 h-4"/></div><p className="text-2xl font-black text-gray-900 mt-3">{v as number}</p><p className="text-[11px] font-semibold text-gray-400">{String(l)}</p></div>)}</div>
+<div className="bg-white border border-gray-100 rounded-2xl p-2 flex flex-col md:flex-row gap-2"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search refund code, customer or reason…" className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-gray-50 text-xs outline-none"/></div><div className="flex gap-1 overflow-x-auto">{(['submitted','pending','paid','all'] as const).map(f=><button key={f} onClick={()=>setFilter(f)} className={'px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap '+(filter===f?'bg-gray-900 text-white':'text-gray-500 hover:bg-gray-50')}>{f==='all'?'All · '+refunds.length:label[f]+' · '+counts[f]}</button>)}</div></div>
+{loading?<div className="grid xl:grid-cols-2 gap-4">{[1,2,3,4].map(i=><div key={i} className="h-72 rounded-3xl bg-white border border-gray-100 animate-pulse"/>)}</div>:filtered.length===0?<div className="bg-white rounded-3xl border border-dashed border-gray-200 p-14 text-center"><RotateCcw className="w-8 h-8 mx-auto text-gray-200"/><h3 className="font-bold text-gray-800 mt-4">Nothing in this queue</h3><p className="text-xs text-gray-400 mt-1">Try another status or search term.</p></div>:<div className="grid xl:grid-cols-2 gap-4">{filtered.map(r=><article key={r.id} className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+<div className="p-5 border-b border-gray-50"><div className="flex justify-between gap-3"><div><p className="font-mono text-xs font-black text-gray-800">{r.code}</p><h2 className="font-black text-gray-900 mt-1">{r.customer_name}</h2><p className="text-[11px] text-gray-400 mt-0.5">Cancelled {new Date(r.cancelled_at).toLocaleDateString()}</p></div><span className={'h-fit px-2.5 py-1 rounded-full text-[10px] font-bold '+(r.status==='paid'?'bg-emerald-50 text-emerald-700':r.status==='submitted'?'bg-amber-50 text-amber-700':'bg-gray-100 text-gray-500')}>{label[r.status]}</span></div><div className="mt-4 flex items-end justify-between"><div><p className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Customer receives</p><p className="text-2xl font-black text-gray-900">{money(r.refund_amount_ngn)}</p></div><div className="text-right"><p className="text-[10px] text-gray-400">Original</p><p className="text-xs font-bold text-gray-600">{money(r.total_ngn)}</p>{r.cancellation_fee_ngn>0&&<p className="text-[10px] text-red-500">Fee −{money(r.cancellation_fee_ngn)}</p>}</div></div></div>
+<div className="p-4"><div className="flex gap-2 mb-4">{[1,2,3].map(n=><div key={n} className={'h-1.5 flex-1 rounded-full '+(r.status==='paid'||(n===1&&r.status!=='pending')?'bg-emerald-500':n===1?'bg-amber-400':'bg-gray-100')}/>)}</div><div className="flex justify-between text-[9px] font-bold text-gray-400 mb-4"><span>REQUEST</span><span>REVIEW</span><span>COMPLETE</span></div>
+<div className="rounded-2xl bg-red-50 border border-red-100 p-3 mb-3"><div className="flex items-center gap-2 text-[10px] font-bold text-red-700"><AlertTriangle className="w-3.5 h-3.5"/> Cancellation reason</div><p className="text-xs text-red-700/80 mt-1">{r.cancel_reason}</p></div>
+<div className="rounded-2xl border border-gray-100 p-3"><div className="flex items-center justify-between"><div className="flex items-center gap-2"><span className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">{r.payment_method==='paystack'?<CreditCard className="w-4 h-4 text-gray-500"/>:<Banknote className="w-4 h-4 text-gray-500"/>}</span><div><p className="text-xs font-bold text-gray-800">{r.payment_method==='paystack'?'Paystack payment':'Manual bank refund'}</p><p className="text-[10px] text-gray-400">{r.payment_reference||'No payment reference'}</p></div></div>{r.paystack_refund_status&&<span className="text-[10px] font-bold px-2 py-1 rounded-full bg-gray-50 text-gray-500">{pay(r.paystack_refund_status)}</span>}</div>
+{r.payment_method==='paystack'&&r.refund_error&&<p className="mt-2 text-[11px] text-red-600 bg-red-50 rounded-lg p-2">{r.refund_error}</p>}
+{r.payment_method==='manual'&&(r.status==='submitted'||r.status==='paid')&&r.bank_account_number&&<div className="mt-3 bg-gray-50 rounded-xl p-3 flex justify-between"><div className="text-xs space-y-0.5"><p className="font-bold">{r.bank_account_name}</p><p className="font-mono">{r.bank_account_number}</p><p className="text-gray-500">{r.bank_name}</p></div><button onClick={()=>copy(r)} className="p-2 rounded-lg hover:bg-gray-200"><Copy className="w-4 h-4 text-gray-500"/></button></div>}
+{r.payment_method==='manual'&&r.status==='pending'&&<p className="mt-2 text-[11px] text-gray-400 flex items-center gap-1"><Clock3 className="w-3 h-3"/> Waiting for customer bank details.</p>}
+{r.payment_method==='paystack'&&r.status!=='paid'&&!r.paystack_refund_id&&!['processing','processed','completed','refunded'].includes(r.paystack_refund_status||'')&&<button onClick={()=>void refundPaystack(r)} disabled={paying===r.id} className="w-full mt-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-black flex justify-center gap-2 items-center disabled:opacity-40">{paying===r.id?<Loader className="w-4 h-4 animate-spin"/>:<WalletCards className="w-4 h-4"/>}Refund {money(r.refund_amount_ngn)} via Paystack</button>}
+{r.payment_method==='manual'&&r.status==='submitted'&&<button onClick={()=>void markPaid(r)} disabled={paying===r.id} className="w-full mt-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-black flex justify-center gap-2 items-center disabled:opacity-40">{paying===r.id?<Loader className="w-4 h-4 animate-spin"/>:<Landmark className="w-4 h-4"/>} Mark refund as paid</button>}
+{r.status==='paid'&&<p className="mt-3 text-xs font-bold text-emerald-600 flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/> Refund completed {r.paid_at?new Date(r.paid_at).toLocaleDateString():''}</p>}
+{r.payment_method==='paystack'&&r.paystack_refund_status==='processing'&&<p className="mt-3 text-xs font-semibold text-blue-600 flex items-center gap-2"><Loader className="w-3.5 h-3.5 animate-spin"/> Paystack refund is processing</p>}
+{r.payment_method==='paystack'&&r.paystack_refund_status==='needs_attention'&&<p className="mt-3 text-xs font-bold text-amber-700 bg-amber-50 rounded-xl p-3 flex gap-2"><AlertTriangle className="w-4 h-4 flex-shrink-0"/> Paystack requires attention before this can be considered complete.</p>}
+{r.payment_method==='paystack'&&r.paystack_refund_status==='failed'&&<p className="mt-3 text-xs font-bold text-red-700 bg-red-50 rounded-xl p-3 flex gap-2"><ShieldAlert className="w-4 h-4 flex-shrink-0"/> Paystack refund failed. Review the error before retrying.</p>}
+</div></div></article>)}</div>}
+</div>}
