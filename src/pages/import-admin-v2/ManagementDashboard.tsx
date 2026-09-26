@@ -2,7 +2,6 @@ import { User, ShieldCheck } from 'lucide-react';
 import TrendingManager from '@/pages/import-admin/TrendingManager';
 import { getManagementToken } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
-import ManagementAnalytics from './ManagementAnalytics';
 import { getManagementManager } from './ManagementAuth';
 
 export default function ManagementDashboard() {
@@ -18,8 +17,6 @@ export default function ManagementDashboard() {
         <h2 className="text-2xl font-black text-gray-900 mt-1">Welcome back, {name.split(' ')[0]}</h2>
         <p className="text-sm text-gray-500 mt-1">Import performance for today, yesterday, or the last 7 days.</p>
       </div>
-
-      <ManagementAnalytics />
 
       {token && hasPermission('import.trending.view') && (
         <div>
