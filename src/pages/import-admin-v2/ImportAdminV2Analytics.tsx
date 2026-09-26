@@ -4,7 +4,7 @@
 // revenue trend. All data comes from china-import's admin-analytics action.
 import { useState, useEffect, useCallback } from 'react';
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import {
@@ -287,13 +287,13 @@ export default function ImportAdminV2Analytics() {
               <p className="text-xs text-gray-300 py-8 text-center">No new users in this range yet.</p>
             ) : (
               <ResponsiveContainer width="100%" height={180}>
-                <LineChart data={usersTrendFormatted}>
+                <AreaChart data={usersTrendFormatted}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
                   <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} interval="preserveStartEnd" />
                   <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={40} allowDecimals={false} />
                   <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.04)', radius: 4 }} />
-                  <Line type="monotone" dataKey="users" name="New users" stroke="#0EA5E9" strokeWidth={2.5} fill="none" dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                </LineChart>
+                  <Area type="monotone" dataKey="users" name="New users" stroke="#0EA5E9" strokeWidth={2.5} fill="#0EA5E9" fillOpacity={0.12} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                </AreaChart>
               </ResponsiveContainer>
             )}
           </ChartCard>
