@@ -32,7 +32,7 @@ interface Analytics {
 function fmt(n: number) {
   return `₦${Math.round(n).toLocaleString()}`;
 }
-function fmtCompact(n: number) {
+function liveNumber(n: number | null | undefined) {\n  return Math.round(Number(n ?? 0)).toLocaleString();\n}\n\nfunction fmtCompact(n: number) {
   if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `₦${(n / 1_000).toFixed(0)}K`;
   return `₦${Math.round(n)}`;
@@ -184,7 +184,7 @@ export default function ImportAdminV2Analytics() {
             <KpiCard icon={Users} label="New customers" value={data.new_customers_count.toLocaleString()} sub="in this range" />
           </div>
 
-          {/* Revenue trend */}
+          {/* Live operational snapshot */}\n          <div>\n            <div className="flex items-end justify-between gap-3 mb-3">\n              <div>\n                <p className="text-sm font-black text-gray-900">Live operations</p>\n                <p className="text-[11px] text-gray-400 mt-0.5">Current operational workload, inventory and payment queues.</p>\n              </div>\n              <span className="text-[10px] font-semibold text-gray-400">Live snapshot</span>\n            </div>\n            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">\n              <KpiCard icon={ShoppingCart} label="All orders" value={liveNumber(data.live_operations?.all_orders_count)} sub="all import orders" />\n              <KpiCard icon={Clock3} label="Unpaid orders" value={liveNumber(data.live_operations?.unpaid_orders_count)} sub={fmtCompact(data.live_operations?.unpaid_orders_value_ngn ?? 0) + ' outstanding'} />\n              <KpiCard icon={Boxes} label="Awaiting arrival" value={liveNumber(data.live_operations?.units_awaiting_arrival)} sub="units outstanding" />\n              <KpiCard icon={Package} label="Inventory on hand" value={liveNumber(data.live_operations?.inventory_units)} sub="units available" />\n              <KpiCard icon={Truck} label="Active shipments" value={liveNumber(data.live_operations?.active_shipments_count)} sub={liveNumber(data.live_operations?.in_transit_shipments_count) + ' in transit'} />\n              <KpiCard icon={ReceiptText} label="Pending bills" value={liveNumber(data.live_operations?.pending_bills_count)} sub={fmtCompact(data.live_operations?.pending_bills_value_ngn ?? 0) + ' awaiting'} />\n              <KpiCard icon={RotateCcw} label="Pending refunds" value={liveNumber(data.live_operations?.pending_refunds_count)} sub={fmtCompact(data.live_operations?.pending_refunds_value_ngn ?? 0) + ' to process'} />\n              <KpiCard icon={Layers3} label="Active batches" value={liveNumber(data.live_operations?.active_batches_count)} sub="batches in progress" />\n            </div>\n          </div>\n\n          {/* Revenue trend */}
           <ChartCard title="Revenue trend">
             {trendFormatted.length === 0 ? (
               <p className="text-xs text-gray-300 py-8 text-center">No paid orders in this range yet.</p>
