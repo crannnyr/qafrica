@@ -105,6 +105,12 @@ export interface Store {
   secondary_color: string;
   niches: string[];
   theme: string;
+  // Storefront layout/look configuration. Optional for legacy stores.
+  storefront_look?: StorefrontLook;
+  nav_style?: StorefrontNavStyle;
+  sidebar_side?: 'left' | 'right';
+  look_settings?: Record<string, unknown>;
+  category_images?: Record<string, string>;
   is_active: boolean;
   is_verified: boolean;
   is_blocked?: boolean;
