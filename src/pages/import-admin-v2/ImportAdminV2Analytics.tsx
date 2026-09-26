@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
+import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
@@ -101,6 +102,7 @@ const RANGE_PRESETS = [
 
 export default function ImportAdminV2Analytics() {
   const token = getManagementToken() || '';
+  const { hasPermission, loading: permissionsLoading } = useImportAdminPermissions(token);
   const [range, setRange] = useState<typeof RANGE_PRESETS[number]['key']>('30d');
   const [data, setData] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -119,6 +121,7 @@ export default function ImportAdminV2Analytics() {
         body: JSON.stringify(body),
       });
       const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not load analytics.');
       setData(json.analytics ?? null);
     } catch {
       setData(null);
@@ -143,6 +146,14 @@ export default function ImportAdminV2Analytics() {
   const statusBarData = (data?.status_breakdown ?? []).map(s => ({
     name: STATUS_LABELS[s.status] ?? s.status, count: s.count,
   }));
+
+  if (permissionsLoading) {
+    return <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-500">Checking Analytics access…</div>;
+  }
+
+  if (!hasPermission('import.analytics.view')) {
+    return <div className="bg-white rounded-2xl border border-red-100 p-8 text-center"><p className="text-sm font-semibold text-gray-700">Analytics access is not assigned to this account.</p><p className="text-xs text-gray-400 mt-1">Required permission: import.analytics.view</p></div>;
+  }
 
   return (
     <div className="space-y-4">
