@@ -6,11 +6,6 @@ import {
   LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
   Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import {
-  LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck,
-  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText, Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard,
-} from 'lucide-react';
 import { getManagementManager, logoutManagementSession, validateManagementSession, getManagementToken, type ManagementManager } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import { AiSupportAlertMonitor } from '@/pages/import-admin/AiSupportInbox';
