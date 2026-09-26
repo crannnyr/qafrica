@@ -539,7 +539,9 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
 // ── Main panel ────────────────────────────────────────────────────────────
 export default function ImportAdminCustomers({ token }: { token: string }) {
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [totalCustomers, setTotalCustomers] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -610,20 +612,25 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
 
   const load = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch(`${EDGE_URL}?action=admin-customers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, search: search.trim() || undefined }),
+        body: JSON.stringify({ manager_token: token, search: search.trim() || undefined, page, page_size: 50 }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to load users');
       setCustomers(data.customers ?? []);
-    } catch {
+      setTotalCustomers(Number(data.total ?? 0));
+    } catch (e: any) {
       setCustomers([]);
+      setTotalCustomers(0);
+      setLoadError(e?.message ?? 'Failed to load users');
     } finally {
       setIsLoading(false);
     }
-  }, [token, search]);
+  }, [token, search, page]);
 
   useEffect(() => {
     const t = setTimeout(load, 300); // debounce search
@@ -661,8 +668,8 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
 
   useEffect(() => { setPage(1); }, [search, filter]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const visibleCustomers = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageCount = Math.max(1, Math.ceil(totalCustomers / PAGE_SIZE));
+  const visibleCustomers = filtered;
 
   return (
     <div className="space-y-3">
@@ -730,7 +737,7 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
             <p className="text-sm font-bold text-gray-900">Users</p>
-            <p className="text-[11px] text-gray-400">{filtered.length.toLocaleString()} users · 50 per page</p>
+            <p className="text-[11px] text-gray-400">{totalCustomers.toLocaleString()} users · 50 per page</p>
           </div>
           <span className="text-[11px] text-gray-400">Page {Math.min(page, pageCount)} of {pageCount}</span>
         </div>
@@ -756,6 +763,8 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
                     <td key={j} className="px-5 py-4"><div className="h-3 bg-gray-100 rounded w-20" /></td>
                   )}</tr>
                 ))
+              ) : loadError ? (
+                <tr><td colSpan={8} className="px-5 py-12 text-center"><p className="text-sm font-semibold text-red-500">{loadError}</p><p className="text-xs text-gray-400 mt-1">The users data could not be fetched from the customers table.</p><button onClick={load} className="mt-3 px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold">Retry</button></td></tr>
               ) : visibleCustomers.length === 0 ? (
                 <tr><td colSpan={8} className="px-5 py-12 text-center"><UserPlus className="w-6 h-6 text-gray-200 mx-auto mb-2" /><p className="text-sm text-gray-300">No users match this view.</p></td></tr>
               ) : visibleCustomers.map(c => (
