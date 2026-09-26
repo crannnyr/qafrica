@@ -1,8 +1,7 @@
 import { User, ShieldCheck } from 'lucide-react';
 import TrendingManager from '@/pages/import-admin/TrendingManager';
 import { getManagementToken } from './ManagementAuth';
-import ManagementAnalytics from './ManagementAnalytics';
-import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
+import { useImportAdminPermissions from '@/hooks/useImportAdminPermissions';
 import { getManagementManager } from './ManagementAuth';
 import ManagementAnalytics from './ManagementAnalytics';
 
@@ -26,7 +25,6 @@ export default function ManagementDashboard() {
         <div>
           <TrendingManager token={token} />
 
-      <ManagementAnalytics />
         </div>
       )}
 
