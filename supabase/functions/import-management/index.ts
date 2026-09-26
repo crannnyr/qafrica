@@ -148,17 +148,11 @@ serve(async (req) => {
 
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
-  if (action === 'admin-fulfillment-receive') {
+  if (action === 'admin-fulfillment-receive-from-stock') {
     if (!(await requireManager(supabase, body.manager_token, 'import.orders.update'))) {
       return json({ error: 'Unauthorized' }, 401)
     }
-
     if (!body.fulfillment_item_id) return json({ error: 'Missing fulfillment item id' }, 400)
-
-    const requestedQuantity = Number(body.received_quantity)
-    if (!Number.isInteger(requestedQuantity) || requestedQuantity < 0) {
-      return json({ error: 'received_quantity must be a non-negative integer' }, 400)
-    }
 
     const { data: session, error: sessionError } = await supabase
       .from('import_admin_sessions')
@@ -167,20 +161,118 @@ serve(async (req) => {
       .gt('expires_at', new Date().toISOString())
       .maybeSingle()
 
-    if (sessionError || !session?.manager_id) {
-      return json({ error: 'Valid manager session required' }, 401)
-    }
+    if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
 
-    const { data, error } = await supabase.rpc('receive_china_import_fulfillment_item', {
+    const { data, error } = await supabase.rpc('receive_china_import_fulfillment_item_from_stock', {
       p_fulfillment_item_id: body.fulfillment_item_id,
-      p_received_quantity: requestedQuantity,
       p_manager_id: session.manager_id,
       p_note: typeof body.note === 'string' ? body.note.trim() || null : null,
     })
 
     if (error) return json({ error: error.message }, 400)
+    return json(data)
+  }
 
-    return json({ success: true, fulfillment_item: data })
+  if (action === 'admin-inventory-list') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.products.view'))) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
+
+    const requestedPage = Number(body.page)
+    const requestedPerPage = Number(body.per_page)
+    const page = Number.isFinite(requestedPage) && requestedPage >= 1 ? Math.floor(requestedPage) : 1
+    const perPage = Number.isFinite(requestedPerPage) && requestedPerPage >= 1 ? Math.min(50, Math.floor(requestedPerPage)) : 50
+    const search = typeof body.search === 'string' ? body.search.trim() : ''
+
+    let query = supabase.from('china_import_products')
+      .select('id,name,image_url,category,parent_category,is_active,moq,has_variants,variants,created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+
+    if (search) query = query.ilike('name', '%' + search + '%')
+
+    const from = (page - 1) * perPage
+    const to = from + perPage - 1
+    const { data: products, error: productsError, count } = await query.range(from, to)
+    if (productsError) return json({ error: productsError.message }, 500)
+
+    const ids = (products ?? []).map((p: any) => p.id)
+    const { data: inventory, error: inventoryError } = ids.length
+      ? await supabase.from('china_import_inventory').select('product_id,variant_options,quantity,updated_at').in('product_id', ids)
+      : { data: [], error: null }
+
+    if (inventoryError) return json({ error: inventoryError.message }, 500)
+
+    const stockMap = new Map((inventory ?? []).map((row: any) => [
+      row.product_id + '|' + JSON.stringify(row.variant_options ?? {}),
+      row,
+    ]))
+
+    const rows = (products ?? []).flatMap((product: any) => {
+      const groups = Array.isArray(product.variants) ? product.variants : []
+      const combinations = groups.length
+        ? groups.reduce((acc: Array<Record<string, string>>, group: any) => {
+            const options = Array.isArray(group?.options) ? group.options.filter((v: any) => typeof v === 'string' && v.trim()) : []
+            if (!options.length) return acc
+            if (!acc.length) return options.map((option: string) => ({ [group.name]: option }))
+            return acc.flatMap((current: Record<string, string>) =>
+              options.map((option: string) => ({ ...current, [group.name]: option }))
+            )
+          }, [])
+        : [{}]
+
+      return combinations.map((variant_options: Record<string, string>) => {
+        const stock = stockMap.get(product.id + '|' + JSON.stringify(variant_options))
+        return {
+          ...product,
+          variant_options,
+          variant_label: Object.keys(variant_options).length
+            ? Object.entries(variant_options).map(([k, v]) => k + ': ' + v).join(', ')
+            : 'Base / no variant',
+          stock_quantity: Number(stock?.quantity ?? 0),
+          stock_updated_at: stock?.updated_at ?? null,
+        }
+      })
+    })
+
+    const total = Number(count ?? 0)
+    return json({
+      products: rows,
+      pagination: { page, per_page: perPage, total, page_count: Math.max(1, Math.ceil(total / perPage)) },
+    })
+  }
+
+  if (action === 'admin-inventory-set') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.products.update'))) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
+    if (!body.product_id) return json({ error: 'Missing product id' }, 400)
+
+    const variantOptions = body.variant_options && typeof body.variant_options === 'object' && !Array.isArray(body.variant_options)
+      ? Object.fromEntries(Object.entries(body.variant_options).filter(([key, value]) => typeof key === 'string' && typeof value === 'string' && key.trim() && value.trim()))
+      : {}
+
+    const quantityToAdd = Number(body.quantity_to_add ?? body.quantity)
+    if (!Number.isInteger(quantityToAdd) || quantityToAdd < 0) return json({ error: 'Stock to add must be a non-negative whole number' }, 400)
+    if (quantityToAdd === 0) return json({ error: 'Enter an amount of stock to add' }, 400)
+
+    const { data: session, error: sessionError } = await supabase
+      .from('import_admin_sessions')
+      .select('manager_id')
+      .eq('token', body.manager_token)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+
+    if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
+
+    const { data, error } = await supabase.rpc('add_china_import_inventory_stock', {
+      p_product_id: body.product_id,
+      p_variant_options: variantOptions,
+      p_quantity_to_add: quantityToAdd,
+      p_manager_id: session.manager_id,
+    })
+
+    if (error) return json({ error: error.message }, 400)
+    return json({ inventory: data, added_quantity: quantityToAdd })
   }
 
   if (action === 'admin-fulfillment-list') {
@@ -220,21 +312,30 @@ serve(async (req) => {
 
     const customerIds = Array.from(new Set(eligibleOrders.map((order: any) => order.user_id).filter(Boolean)))
     const batchIds = Array.from(new Set(eligibleOrders.map((order: any) => order.batch_id).filter(Boolean)))
+    const productIds = Array.from(new Set(rows.map((row: any) => row.product_id).filter(Boolean)))
 
-    const [{ data: customers, error: customersError }, { data: batches, error: batchesError }] = await Promise.all([
+    const [{ data: customers, error: customersError }, { data: batches, error: batchesError }, { data: inventory, error: inventoryError }] = await Promise.all([
       customerIds.length
         ? supabase.from('customers').select('id, full_name, phone').in('id', customerIds)
         : Promise.resolve({ data: [], error: null }),
       batchIds.length
         ? supabase.from('import_batches').select('id, opened_at').in('id', batchIds)
         : Promise.resolve({ data: [], error: null }),
+      productIds.length
+        ? supabase.from('china_import_inventory').select('product_id, variant_options, quantity').in('product_id', productIds)
+        : Promise.resolve({ data: [], error: null }),
     ])
 
     if (customersError) return json({ error: customersError.message }, 500)
     if (batchesError) return json({ error: batchesError.message }, 500)
+    if (inventoryError) return json({ error: inventoryError.message }, 500)
 
     const customerMap = new Map((customers ?? []).map((row: any) => [row.id, row]))
     const batchMap = new Map((batches ?? []).map((row: any) => [row.id, row]))
+    const inventoryMap = new Map((inventory ?? []).map((row: any) => [
+      row.product_id + '|' + JSON.stringify(row.variant_options ?? {}),
+      Number(row.quantity ?? 0),
+    ]))
 
     const items = rows
       .filter((row: any) => eligibleOrderIds.has(row.order_id))
@@ -251,6 +352,7 @@ serve(async (req) => {
           batch_opened_at: batch?.opened_at ?? null,
           order_status: order?.status ?? null,
           shipping_method: order?.shipping_method ?? null,
+          stock_quantity: Number(inventoryMap.get(row.product_id + '|' + JSON.stringify(row.variant_options ?? {})) ?? 0),
         }
       })
 

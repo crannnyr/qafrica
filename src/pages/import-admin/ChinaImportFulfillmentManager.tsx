@@ -15,6 +15,7 @@ type FulfillmentItem = {
   variant_options: Record<string, unknown> | null;
   ordered_quantity: number;
   received_quantity: number;
+  stock_quantity: number;
   allocated_quantity: number;
   shipped_quantity: number;
   delivered_quantity: number;
@@ -60,7 +61,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [statusFilter, setStatusFilter] = useState<'all' | 'awaiting_arrival' | 'at_qafrica_hq'>('all');
   const [openBatches, setOpenBatches] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
-  const [receivedDrafts, setReceivedDrafts] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [shipmentOrderId, setShipmentOrderId] = useState<string | null>(null);
   const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({});
@@ -275,32 +275,43 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   }, [filtered]);
 
   const receive = async (item: FulfillmentItem) => {
-    const raw = receivedDrafts[item.id] ?? String(item.received_quantity);
-    const quantity = Number(raw);
-    if (!Number.isInteger(quantity) || quantity < item.received_quantity || quantity > item.ordered_quantity) {
-      toast.error(`Received quantity must be between ${item.received_quantity} and ${item.ordered_quantity}`);
+    if (!item.product_id) {
+      toast.error('This item is not linked to a product in inventory');
       return;
     }
+    if (item.stock_quantity <= 0) {
+      toast.error('No inventory stock is registered for this product');
+      return;
+    }
+    if (item.received_quantity >= item.ordered_quantity) {
+      toast.success('This item has already been fully received');
+      return;
+    }
+
     setActing(item.id);
     try {
-      const res = await fetch(`${EDGE_URL}?action=admin-fulfillment-receive`, {
+      const res = await fetch(`${EDGE_URL}?action=admin-fulfillment-receive-from-stock`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           manager_token: token,
           fulfillment_item_id: item.id,
-          received_quantity: quantity,
           note: notes[item.id]?.trim() || null,
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'Could not record receipt');
+      if (!res.ok) throw new Error(data.error ?? 'Could not receive from inventory');
       const updated = data.fulfillment_item as FulfillmentItem;
-      setItems(current => current.map(row => row.id === item.id ? { ...row, ...updated } : row));
-      setReceivedDrafts(current => ({ ...current, [item.id]: String(updated.received_quantity) }));
-      toast.success(updated.received_quantity === updated.ordered_quantity ? 'Item fully received at QAfrica HQ' : 'Received quantity updated');
+      setItems(current => current.map(row => row.id === item.id
+        ? { ...row, ...updated, stock_quantity: Number(data.stock_remaining ?? 0) }
+        : row));
+      toast.success(
+        Number(data.received_now ?? 0) >= (item.ordered_quantity - item.received_quantity)
+          ? 'Item fully received at QAfrica HQ'
+          : 'Available stock received; item remains partially received'
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not record receipt');
+      toast.error(e instanceof Error ? e.message : 'Could not receive from inventory');
     } finally {
       setActing(null);
     }
@@ -405,7 +416,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
           <PackageCheck className="w-5 h-5 text-orange-500" />
           <h2 className="text-lg font-black text-gray-900">China Import Fulfillment</h2>
         </div>
-        <p className="text-xs text-gray-500 mt-1">Receive paid shipping order items at QAfrica HQ individually. Receiving an item does not change the main order status.</p>
+        <p className="text-xs text-gray-500 mt-1">Receive paid shipping order items from registered HQ inventory. The Receive button automatically consumes the available stock for that product.</p>
       </div>
 
       <div className="flex rounded-xl bg-gray-100 p-1 gap-1">
@@ -649,7 +660,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                         <div className="border-t border-gray-50 divide-y divide-gray-50">
                           {batch.items.map(item => {
                             const currentReceived = item.received_quantity;
-                            const draft = receivedDrafts[item.id] ?? String(currentReceived);
                             const complete = currentReceived >= item.ordered_quantity;
                             return (
                               <div key={item.id} className="p-4">
@@ -678,12 +688,17 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                   </div>
                                   {canReceive && !complete && (
                                     <>
-                                      <div className="flex gap-2 mt-2">
-                                        <input type="number" min={currentReceived} max={item.ordered_quantity} step={1} value={draft} onChange={e => setReceivedDrafts(current => ({ ...current, [item.id]: e.target.value }))} className="w-24 px-2.5 py-2 rounded-lg border border-gray-200 text-xs" />
-                                        <button onClick={() => void receive(item)} disabled={acting === item.id} className="flex-1 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-                                          {acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Record received
+                                      <div className="flex items-center justify-between gap-3 mt-2">
+                                        <div>
+                                          <p className="text-[10px] font-bold text-gray-500 uppercase">Available inventory</p>
+                                          <p className={"text-xs mt-0.5 font-bold " + (item.stock_quantity > 0 ? 'text-emerald-700' : 'text-red-500')}>{item.stock_quantity} unit{item.stock_quantity === 1 ? '' : 's'}</p>
+                                        </div>
+                                        <button onClick={() => void receive(item)} disabled={acting === item.id || item.stock_quantity <= 0} className="flex-1 max-w-[240px] py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40">
+                                          {acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                          {item.stock_quantity > 0 ? 'Receive from inventory' : 'No stock available'}
                                         </button>
                                       </div>
+                                      <p className="text-[10px] text-gray-400 mt-1">One tap receives up to the remaining order quantity and automatically deducts the same units from inventory.</p>
                                       <textarea value={notes[item.id] ?? ''} onChange={e => setNotes(current => ({ ...current, [item.id]: e.target.value }))} rows={2} placeholder="Optional internal note…" className="w-full mt-2 px-2.5 py-2 rounded-lg border border-gray-200 text-xs resize-none" />
                                     </>
                                   )}

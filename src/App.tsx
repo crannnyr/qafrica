@@ -1,5 +1,5 @@
 // src/App.tsx
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { useAuthStore } from '@/stores';
@@ -35,7 +35,6 @@ const BlogPostPage = lazy(() => import('@/pages/blog/BlogPostPage'));
 
 // China Import / Recommendations Pages
 const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
-const ImportAdminLogin = lazy(() => import('@/pages/import-admin/ImportAdminLogin'));
 const ImportAdminPage = lazy(() => import('@/pages/import-admin/ImportAdminPage'));
 const ImportSourcingSharePage = lazy(() => import('@/pages/import-admin/ImportSourcingSharePage'));
 const ManagementLogin = lazy(() => import('@/pages/management/ManagementLogin'));
@@ -49,16 +48,42 @@ const ManagementCategories = lazy(() => import('@/pages/management/ManagementCat
 const ManagementExpenses = lazy(() => import('@/pages/management/ManagementExpenses'));
 const ManagementProductAdd = lazy(() => import('@/pages/management/ManagementProductAdd'));
 
+// Import Admin v2 routes
 const ImportAdminV2Login = lazy(() => import('@/pages/import-admin-v2/ManagementLogin'));
 const ImportAdminV2Logout = lazy(() => import('@/pages/import-admin-v2/ManagementLogout'));
 const ImportAdminV2Layout = lazy(() => import('@/pages/import-admin-v2/ManagementLayout'));
 const ImportAdminV2Dashboard = lazy(() => import('@/pages/import-admin-v2/ManagementDashboard'));
 const ImportAdminV2Products = lazy(() => import('@/pages/import-admin-v2/ManagementProducts'));
-const ImportAdminV2Orders = lazy(() => import('@/pages/import-admin-v2/ManagementOrders'));
+const ImportAdminV2Orders = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Orders'));
+const ImportAdminV2Users = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Users'));
+const ImportAdminV2BatchOrders = lazy(() => import('@/pages/import-admin-v2/ManagementOrders'));
 const ImportAdminV2Settings = lazy(() => import('@/pages/import-admin-v2/ManagementSettings'));
+const ImportAdminV2PricingShipping = lazy(() => import('@/pages/import-admin-v2/ManagementPricingShipping'));
+const ImportAdminV2Fulfillment = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Fulfillment'));
+const ImportAdminV2Support = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Support'));
+const ImportAdminV2Access = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Access'));
 const ImportAdminV2Categories = lazy(() => import('@/pages/import-admin-v2/ManagementCategories'));
 const ImportAdminV2Expenses = lazy(() => import('@/pages/import-admin-v2/ManagementExpenses'));
+const ImportAdminV2CustomOrders = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2CustomOrders'));
+const ImportAdminV2Refunds = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Refunds'));
+const ImportAdminV2PaymentRecovery = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2PaymentRecovery'));
+const ImportAdminV2PaymentTransactions = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2PaymentTransactions'));
+const ImportAdminV2EmailTemplates = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2EmailTemplates'));
+const ImportAdminV2Broadcast = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Broadcast'));
+const ImportAdminV2ProductFAQ = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2ProductFAQ'));
+const ImportAdminV2Trending = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Trending'));
+const ImportAdminV2Inventory = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Inventory'));
+const ImportAdminV2ConfirmedPayments = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2ConfirmedPayments'));
 const ImportAdminV2ProductAdd = lazy(() => import('@/pages/import-admin-v2/ManagementProductAdd'));
+
+// The new management UI replaces the normal Import Admin route. Existing
+// packing-slip QR links that carry load_code stay on the legacy screen so
+// those links remain functional while the legacy source folder is preserved.
+function ImportAdminRouteBridge() {
+  const [searchParams] = useSearchParams();
+  if (searchParams.get('load_code')) return <ImportAdminPage />;
+  return <Navigate to="/import-admin-v2" replace />;
+}
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
 const CustomOrderRequestPage = lazy(() => import('@/pages/recommendations/CustomOrderRequestPage'));
@@ -344,8 +369,10 @@ function App() {
 
           {/* ── China Import & Recommendations — public, no auth needed ── */}
           <Route path="/importations" element={<ImportPage />} />
-          <Route path="/importations/admin/login" element={<ImportAdminLogin />} />
-          <Route path="/importations/admin" element={<ImportAdminPage />} />
+          <Route path="/importations/admin/login" element={<ImportAdminV2Login />} />
+          <Route path="/importations/admin/logout" element={<ImportAdminV2Logout />} />
+          <Route path="/importations/admin" element={<ImportAdminRouteBridge />} />
+          {/* Legacy source remains in src/pages/import-admin for rollback/QR compatibility. */}
           <Route path="/importations/sourcing/:token" element={<ImportSourcingSharePage />} />
           <Route path="/management/login" element={<ManagementLogin />} />
           <Route path="/management/logout" element={<ManagementLogout />} />
@@ -370,9 +397,25 @@ function App() {
             <Route index element={<ImportAdminV2Dashboard />} />
             <Route path="products" element={<ImportAdminV2Products />} />
             <Route path="orders" element={<ImportAdminV2Orders />} />
+            <Route path="users" element={<ImportAdminV2Users />} />
+            <Route path="trending" element={<ImportAdminV2Trending />} />
+  <Route path="inventory" element={<ImportAdminV2Inventory />} />
+            <Route path="confirmed-payments" element={<ImportAdminV2ConfirmedPayments />} />
+            <Route path="batch-orders" element={<ImportAdminV2BatchOrders />} />
             <Route path="categories" element={<ImportAdminV2Categories />} />
             <Route path="settings" element={<ImportAdminV2Settings />} />
+            <Route path="pricing-shipping" element={<ImportAdminV2PricingShipping />} />
+            <Route path="fulfillment" element={<ImportAdminV2Fulfillment />} />
+            <Route path="support" element={<ImportAdminV2Support />} />
+            <Route path="admin-access" element={<ImportAdminV2Access />} />
             <Route path="expenses" element={<ImportAdminV2Expenses />} />
+            <Route path="custom-orders" element={<ImportAdminV2CustomOrders />} />
+            <Route path="refunds" element={<ImportAdminV2Refunds />} />
+            <Route path="payment-recovery" element={<ImportAdminV2PaymentRecovery />} />
+            <Route path="payment-transactions" element={<ImportAdminV2PaymentTransactions />} />
+            <Route path="email-templates" element={<ImportAdminV2EmailTemplates />} />
+            <Route path="broadcast" element={<ImportAdminV2Broadcast />} />
+            <Route path="product-faq" element={<ImportAdminV2ProductFAQ />} />
             <Route path="products/add" element={<ImportAdminV2ProductAdd />} />
             <Route path="products/edit/:id" element={<ImportAdminV2ProductAdd />} />
           </Route>

@@ -539,7 +539,9 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
 // ── Main panel ────────────────────────────────────────────────────────────
 export default function ImportAdminCustomers({ token }: { token: string }) {
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
+  const [totalCustomers, setTotalCustomers] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('All');
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -547,6 +549,8 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [creatingList, setCreatingList] = useState(false);
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(1);
 
   const loadLists = useCallback(async () => {
     try {
@@ -610,20 +614,25 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
 
   const load = useCallback(async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const res = await fetch(`${EDGE_URL}?action=admin-customers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, search: search.trim() || undefined }),
+        body: JSON.stringify({ manager_token: token, search: search.trim() || undefined, page, page_size: 50 }),
       });
       const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || 'Failed to load users');
       setCustomers(data.customers ?? []);
-    } catch {
+      setTotalCustomers(Number(data.total ?? 0));
+    } catch (e: any) {
       setCustomers([]);
+      setTotalCustomers(0);
+      setLoadError(e?.message ?? 'Failed to load users');
     } finally {
       setIsLoading(false);
     }
-  }, [token, search]);
+  }, [token, search, page]);
 
   useEffect(() => {
     const t = setTimeout(load, 300); // debounce search
@@ -656,9 +665,13 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
     return [...list].sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0));
   }, [customers, filter, lists]);
 
+  useEffect(() => { setPage(1); }, [search, filter]);
+
+  const pageCount = Math.max(1, Math.ceil(totalCustomers / PAGE_SIZE));
+  const visibleCustomers = filtered;
+
   return (
     <div className="space-y-3">
-      {/* Search */}
       <div className="relative">
         <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input
@@ -668,7 +681,6 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
         />
       </div>
 
-      {/* Filters */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {BUILT_IN_FILTERS.map(f => {
           const count = f === 'Favorites' ? customers.filter(c => c.is_favorite).length
@@ -678,49 +690,35 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
           const isActive = filter === f;
           return (
             <button key={f} onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors flex-shrink-0 flex items-center gap-1 ${
-                isActive ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-500'
-              }`}>
-              {f}
-              <span className="text-[9px] text-gray-300">{count}</span>
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors flex-shrink-0 flex items-center gap-1 ${isActive ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-500'}`}>
+              {f}<span className="text-[9px] text-gray-300">{count}</span>
             </button>
           );
         })}
-
         {lists.map(l => {
           const isActive = typeof filter === 'object' && filter.listId === l.id;
           return (
             <button key={l.id} onClick={() => setFilter({ listId: l.id, name: l.name })}
-              className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors flex-shrink-0 flex items-center gap-1 ${
-                isActive ? 'bg-orange-500 text-white' : 'bg-white border border-orange-200 text-orange-600'
-              }`}>
-              <Tag className="w-2.5 h-2.5" />
-              {l.name}
+              className={`px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors flex-shrink-0 flex items-center gap-1 ${isActive ? 'bg-orange-500 text-white' : 'bg-white border border-orange-200 text-orange-600'}`}>
+              <Tag className="w-2.5 h-2.5" />{l.name}
               <span className={`text-[9px] ${isActive ? 'text-orange-100' : 'text-orange-300'}`}>{l.customer_ids.length}</span>
             </button>
           );
         })}
-
         <button onClick={() => setShowNewList(v => !v)}
           className="px-3 py-1.5 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors flex-shrink-0 flex items-center gap-1 bg-white border border-dashed border-gray-300 text-gray-400 hover:border-gray-400 hover:text-gray-600">
-          <Plus className="w-3 h-3" />
-          New list
+          <Plus className="w-3 h-3" />New list
         </button>
       </div>
 
       {showNewList && (
         <div className="flex items-center gap-2">
-          <input
-            type="text" value={newListName} onChange={e => setNewListName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && createList()}
-            placeholder="List name, e.g. VIP customers"
-            autoFocus
-            className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none"
-          />
+          <input type="text" value={newListName} onChange={e => setNewListName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && createList()} placeholder="List name, e.g. VIP customers" autoFocus
+            className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none" />
           <button onClick={createList} disabled={creatingList || !newListName.trim()}
             className="px-3 py-2 rounded-xl bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white text-xs font-bold flex items-center gap-1.5">
-            {creatingList ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <ListPlus className="w-3.5 h-3.5" />}
-            Create
+            {creatingList ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <ListPlus className="w-3.5 h-3.5" />}Create
           </button>
         </div>
       )}
@@ -734,70 +732,97 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
         </div>
       )}
 
-      {/* List */}
-      <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
-        {isLoading && customers.length === 0 ? (
-          Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="px-4 py-3.5 animate-pulse flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-gray-100" />
-              <div className="flex-1 space-y-1.5">
-                <div className="h-2.5 w-32 bg-gray-100 rounded" />
-                <div className="h-2 w-20 bg-gray-100 rounded" />
-              </div>
-            </div>
-          ))
-        ) : filtered.length === 0 ? (
-          <div className="px-5 py-10 text-center">
-            <UserPlus className="w-6 h-6 text-gray-200 mx-auto mb-2" />
-            <p className="text-sm text-gray-300">No clients match this view.</p>
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-bold text-gray-900">Users</p>
+            <p className="text-[11px] text-gray-400">{totalCustomers.toLocaleString()} users · 50 per page</p>
           </div>
-        ) : (
-          filtered.map(c => (
-            <button key={c.id} onClick={() => setDetailId(c.id)}
-              className="w-full px-4 py-3.5 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left">
-              <button onClick={(e) => toggleFavorite(c.id, e)} className="flex-shrink-0 p-0.5">
-                <Star className={`w-4 h-4 ${c.is_favorite ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}`} />
-              </button>
-              <div className="w-9 h-9 rounded-full bg-gray-100 overflow-hidden flex-shrink-0">
-                {c.avatar_url
-                  ? <AvatarImage avatarUrl={c.avatar_url} className="w-full h-full object-cover" />
-                  : <div className="w-full h-full flex items-center justify-center font-bold text-gray-400 text-xs">{c.full_name?.[0] ?? '?'}</div>}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <p className="font-medium text-gray-800 text-sm truncate">{c.full_name}</p>
-                  {c.awaiting_confirmation_count > 0 && (
-                    <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
-                      <Clock className="w-2.5 h-2.5" /> {c.awaiting_confirmation_count}
-                    </span>
-                  )}
-                  {c.failed_order_count > 0 && (
-                    <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded-full">
-                      <X className="w-2.5 h-2.5" /> {c.failed_order_count} failed
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-gray-400 truncate">
-                  {c.order_count} order{c.order_count !== 1 ? 's' : ''} · {fmt(c.total_spent_ngn)} · joined {timeAgo(c.joined_at)}
-                </p>
-              </div>
-              <ChevronRight className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
-            </button>
-          ))
-        )}
+          <span className="text-[11px] text-gray-400">Page {Math.min(page, pageCount)} of {pageCount}</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                <th className="px-5 py-3">User</th>
+                <th className="px-5 py-3">Phone</th>
+                <th className="px-5 py-3">Orders</th>
+                <th className="px-5 py-3">Spent</th>
+                <th className="px-5 py-3">Awaiting</th>
+                <th className="px-5 py-3">Last order</th>
+                <th className="px-5 py-3">Joined</th>
+                <th className="px-5 py-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {isLoading && customers.length === 0 ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={i} className="animate-pulse">{Array.from({ length: 8 }).map((__, j) =>
+                    <td key={j} className="px-5 py-4"><div className="h-3 bg-gray-100 rounded w-20" /></td>
+                  )}</tr>
+                ))
+              ) : loadError ? (
+                <tr><td colSpan={8} className="px-5 py-12 text-center"><p className="text-sm font-semibold text-red-500">{loadError}</p><p className="text-xs text-gray-400 mt-1">The users data could not be fetched from the customers table.</p><button onClick={load} className="mt-3 px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold">Retry</button></td></tr>
+              ) : visibleCustomers.length === 0 ? (
+                <tr><td colSpan={8} className="px-5 py-12 text-center"><UserPlus className="w-6 h-6 text-gray-200 mx-auto mb-2" /><p className="text-sm text-gray-300">No users match this view.</p></td></tr>
+              ) : visibleCustomers.map(c => (
+                <tr key={c.id} onClick={() => setDetailId(c.id)} className="hover:bg-gray-50 transition-colors cursor-pointer">
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <button onClick={e => toggleFavorite(c.id, e)} className="flex-shrink-0 p-0.5">
+                        <Star className={`w-4 h-4 ${c.is_favorite ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}`} />
+                      </button>
+                      <div className="w-9 h-9 rounded-full bg-gray-100 overflow-hidden flex-shrink-0">
+                        {c.avatar_url ? <AvatarImage avatarUrl={c.avatar_url} className="w-full h-full object-cover" /> :
+                          <div className="w-full h-full flex items-center justify-center font-bold text-gray-400 text-xs">{c.full_name?.[0] ?? '?'}</div>}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-800 text-sm truncate max-w-[220px]">{c.full_name}</p>
+                        <p className="text-[10px] text-gray-400 truncate max-w-[220px]">{c.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3.5 text-xs text-gray-600">{c.phone || '—'}</td>
+                  <td className="px-5 py-3.5 text-xs font-semibold text-gray-700">{c.order_count}</td>
+                  <td className="px-5 py-3.5 text-xs font-semibold text-gray-800">{fmt(c.total_spent_ngn)}</td>
+                  <td className="px-5 py-3.5">
+                    {c.awaiting_confirmation_count > 0 ? <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-full">{c.awaiting_confirmation_count}</span> : <span className="text-xs text-gray-300">—</span>}
+                  </td>
+                  <td className="px-5 py-3.5 text-xs text-gray-500">{timeAgo(c.last_order_at)}</td>
+                  <td className="px-5 py-3.5 text-xs text-gray-500">{timeAgo(c.joined_at)}</td>
+                  <td className="px-5 py-3.5 text-right"><span className="text-[11px] font-semibold text-orange-600">View</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-100 overflow-x-auto">
+          <div className="min-w-max flex items-center justify-between gap-6">
+            <p className="text-[11px] text-gray-400 whitespace-nowrap">
+              Showing {totalCustomers === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalCustomers)} of {totalCustomers.toLocaleString()} users
+            </p>
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-30 hover:bg-gray-50">Previous</button>
+              {Array.from({ length: Math.min(5, pageCount) }).map((_, index) => {
+                let pageNumber = index + 1;
+                if (pageCount > 5) pageNumber = page <= 3 ? index + 1 : page >= pageCount - 2 ? pageCount - 4 + index : page - 2 + index;
+                return <button type="button" key={pageNumber} onClick={() => setPage(pageNumber)}
+                  className={`min-w-8 h-8 px-2 rounded-lg text-xs font-semibold ${page === pageNumber ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>{pageNumber}</button>;
+              })}
+              <button type="button" onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={page >= pageCount}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-30">Next</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <AnimatePresence>
-        {detailId && (
-          <CustomerDetail
-            token={token}
-            customerId={detailId}
-            onClose={() => setDetailId(null)}
-            onFavoriteToggled={(id, val) => setCustomers(prev => prev.map(c => c.id === id ? { ...c, is_favorite: val } : c))}
-            lists={lists}
-            onToggleListMember={toggleListMember}
-          />
-        )}
+        {detailId && <CustomerDetail token={token} customerId={detailId} onClose={() => setDetailId(null)}
+          onFavoriteToggled={(id, val) => setCustomers(prev => prev.map(c => c.id === id ? { ...c, is_favorite: val } : c))}
+          lists={lists} onToggleListMember={toggleListMember} />}
       </AnimatePresence>
     </div>
   );
