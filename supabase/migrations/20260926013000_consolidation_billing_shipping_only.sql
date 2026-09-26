@@ -58,11 +58,11 @@ begin
         b.customer_name,
 
         -- Consolidation & shipping: NEVER bill the product price again.
-        -- The batch/per-customer price is the shipping price per unit.
+        -- The batch item bill price is the shipping price per unit. Customer-specific overrides are ignored.
         sum(
           case
             when p_kind = 'clearance'
-              then coalesce(cip.unit_amount_ngn, ib.unit_amount_ngn) * b.qty
+              then ib.unit_amount_ngn * b.qty
             else 0
           end
         ) as items_total,
@@ -72,7 +72,7 @@ begin
             when p_kind = 'consolidation_shipping'
               and coalesce(o.prepaid_shipping_ngn, 0) <= 0
               and b.item_shipping_method in ('sea_freight', 'flight')
-              then coalesce(cip.unit_amount_ngn, ib.unit_amount_ngn) * b.qty
+              then ib.unit_amount_ngn * b.qty
             else 0
           end
         ) as shipping_total,
@@ -80,7 +80,7 @@ begin
         jsonb_agg(
           jsonb_build_object(
             'label', b.product_name || ' × ' || b.qty,
-            'amount_ngn', round(coalesce(cip.unit_amount_ngn, ib.unit_amount_ngn) * b.qty, 2),
+            'amount_ngn', round(ib.unit_amount_ngn * b.qty, 2),
             'shipping_method', b.item_shipping_method
           )
           order by b.product_name
@@ -97,7 +97,7 @@ begin
                 else 'Shipping fee — ' || b.product_name || ' × ' || b.qty
               end,
             'amount_ngn',
-              round(coalesce(cip.unit_amount_ngn, ib.unit_amount_ngn) * b.qty, 2),
+              round(ib.unit_amount_ngn * b.qty, 2),
             'shipping_method', b.item_shipping_method,
             'billing_type', 'shipping'
           )
@@ -106,7 +106,7 @@ begin
           where p_kind = 'consolidation_shipping'
             and coalesce(o.prepaid_shipping_ngn, 0) <= 0
             and b.item_shipping_method in ('sea_freight', 'flight')
-            and coalesce(cip.unit_amount_ngn, ib.unit_amount_ngn) > 0
+            and ib.unit_amount_ngn > 0
         ) as shipping_lines
 
       from get_batch_customer_breakdown(p_batch_key) b
