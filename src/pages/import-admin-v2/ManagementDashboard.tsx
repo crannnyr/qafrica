@@ -1,7 +1,7 @@
 import { User, ShieldCheck } from 'lucide-react';
 import TrendingManager from '@/pages/import-admin/TrendingManager';
 import { getManagementToken } from './ManagementAuth';
-import { useImportAdminPermissions from '@/hooks/useImportAdminPermissions';
+import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import { getManagementManager } from './ManagementAuth';
 import ManagementAnalytics from './ManagementAnalytics';
 
@@ -47,3 +47,5 @@ export default function ManagementDashboard() {
     </div>
   );
 }
+
+// Build verification trigger: source is unchanged; this comment only creates a fresh deployment commit.
