@@ -286,21 +286,27 @@ serve(async (req) => {
 
     const customerIds = Array.from(new Set(eligibleOrders.map((order: any) => order.user_id).filter(Boolean)))
     const batchIds = Array.from(new Set(eligibleOrders.map((order: any) => order.batch_id).filter(Boolean)))
+    const productIds = Array.from(new Set(rows.map((row: any) => row.product_id).filter(Boolean)))
 
-    const [{ data: customers, error: customersError }, { data: batches, error: batchesError }] = await Promise.all([
+    const [{ data: customers, error: customersError }, { data: batches, error: batchesError }, { data: inventory, error: inventoryError }] = await Promise.all([
       customerIds.length
         ? supabase.from('customers').select('id, full_name, phone').in('id', customerIds)
         : Promise.resolve({ data: [], error: null }),
       batchIds.length
         ? supabase.from('import_batches').select('id, opened_at').in('id', batchIds)
         : Promise.resolve({ data: [], error: null }),
+      productIds.length
+        ? supabase.from('china_import_inventory').select('product_id, quantity').in('product_id', productIds)
+        : Promise.resolve({ data: [], error: null }),
     ])
 
     if (customersError) return json({ error: customersError.message }, 500)
     if (batchesError) return json({ error: batchesError.message }, 500)
+    if (inventoryError) return json({ error: inventoryError.message }, 500)
 
     const customerMap = new Map((customers ?? []).map((row: any) => [row.id, row]))
     const batchMap = new Map((batches ?? []).map((row: any) => [row.id, row]))
+    const inventoryMap = new Map((inventory ?? []).map((row: any) => [row.product_id, row.quantity]))
 
     const items = rows
       .filter((row: any) => eligibleOrderIds.has(row.order_id))
@@ -317,6 +323,7 @@ serve(async (req) => {
           batch_opened_at: batch?.opened_at ?? null,
           order_status: order?.status ?? null,
           shipping_method: order?.shipping_method ?? null,
+          stock_quantity: Number(inventoryMap.get(row.product_id) ?? 0),
         }
       })
 
