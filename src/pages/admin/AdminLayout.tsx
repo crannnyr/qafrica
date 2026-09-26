@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, Store, Package, ShoppingCart,
   CreditCard, Crown, LogOut, Menu, X, Shield, Globe,
   ChevronLeft, User, Bell, FileText, Truck, ShoppingBag,
-  Mail, AlertTriangle, Wallet,
+  Mail, AlertTriangle, AlertTriangle, Wallet,
 } from 'lucide-react';
 import { useAuthStore } from '@/stores';
 import { toast } from 'sonner';
@@ -17,6 +17,7 @@ const NAV = [
   { icon: Store,           label: 'Stores',            path: '/admin/stores' },
   { icon: Package,         label: 'Products',          path: '/admin/products' },
   { icon: ShoppingCart,    label: 'Orders',            path: '/admin/orders' },
+  { icon: AlertTriangle,   label: 'Reported problems', path: '/admin/issues' },
   { icon: CreditCard,      label: 'Withdrawals',       path: '/admin/withdrawals' },
   { icon: AlertTriangle,   label: 'Failures',          path: '/admin/failures' },
   { icon: Crown,           label: 'Subscriptions',     path: '/admin/subscriptions' },
