@@ -800,7 +800,7 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
         </div>
 
         <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
-          <p className="text-[11px] text-gray-400">Showing {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length.toLocaleString()} users</p>
+          <p className="text-[11px] text-gray-400">Showing {totalCustomers === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalCustomers)} of {totalCustomers.toLocaleString()} users</p>
           <div className="flex items-center gap-1.5">
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
               className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-30 hover:bg-gray-50">Previous</button>
