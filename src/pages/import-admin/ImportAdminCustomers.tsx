@@ -799,21 +799,23 @@ export default function ImportAdminCustomers({ token }: { token: string }) {
           </table>
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <p className="text-[11px] text-gray-400 whitespace-nowrap">
-            Showing {totalCustomers === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalCustomers)} of {totalCustomers.toLocaleString()} users
-          </p>
-          <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
-            <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-30 hover:bg-gray-50 whitespace-nowrap">Previous</button>
-            {Array.from({ length: Math.min(5, pageCount) }).map((_, index) => {
-              let pageNumber = index + 1;
-              if (pageCount > 5) pageNumber = page <= 3 ? index + 1 : page >= pageCount - 2 ? pageCount - 4 + index : page - 2 + index;
-              return <button type="button" key={pageNumber} onClick={() => setPage(pageNumber)}
-                className={`min-w-8 h-8 px-2 rounded-lg text-xs font-semibold ${page === pageNumber ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>{pageNumber}</button>;
-            })}
-            <button type="button" onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={page >= pageCount}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-30 hover:bg-gray-50 whitespace-nowrap">Next</button>
+        <div className="px-5 py-3 border-t border-gray-100 overflow-x-auto">
+          <div className="min-w-max flex items-center justify-between gap-6">
+            <p className="text-[11px] text-gray-400 whitespace-nowrap">
+              Showing {totalCustomers === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalCustomers)} of {totalCustomers.toLocaleString()} users
+            </p>
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-30 hover:bg-gray-50">Previous</button>
+              {Array.from({ length: Math.min(5, pageCount) }).map((_, index) => {
+                let pageNumber = index + 1;
+                if (pageCount > 5) pageNumber = page <= 3 ? index + 1 : page >= pageCount - 2 ? pageCount - 4 + index : page - 2 + index;
+                return <button type="button" key={pageNumber} onClick={() => setPage(pageNumber)}
+                  className={`min-w-8 h-8 px-2 rounded-lg text-xs font-semibold ${page === pageNumber ? 'bg-gray-900 text-white' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>{pageNumber}</button>;
+              })}
+              <button type="button" onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={page >= pageCount}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-30">Next</button>
+            </div>
           </div>
         </div>
       </div>
