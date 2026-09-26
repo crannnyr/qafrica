@@ -185,7 +185,7 @@ serve(async (req) => {
     const search = typeof body.search === 'string' ? body.search.trim() : ''
 
     let query = supabase.from('china_import_products')
-      .select('id,name,image_url,category,parent_category,is_active,moq,created_at', { count: 'exact' })
+      .select('id,name,image_url,category,parent_category,is_active,moq,has_variants,variants,created_at', { count: 'exact' })
       .order('created_at', { ascending: false })
 
     if (search) query = query.ilike('name', '%' + search + '%')
