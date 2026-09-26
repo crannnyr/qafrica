@@ -1,5 +1,5 @@
 // src/App.tsx
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { useAuthStore } from '@/stores';
@@ -76,6 +76,15 @@ const ImportAdminV2Trending = lazy(() => import('@/pages/import-admin-v2/ImportA
 const ImportAdminV2Inventory = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Inventory'));
 const ImportAdminV2ConfirmedPayments = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2ConfirmedPayments'));
 const ImportAdminV2ProductAdd = lazy(() => import('@/pages/import-admin-v2/ManagementProductAdd'));
+
+// The new management UI replaces the normal Import Admin route. Existing
+// packing-slip QR links that carry load_code stay on the legacy screen so
+// those links remain functional while the legacy source folder is preserved.
+function ImportAdminRouteBridge() {
+  const [searchParams] = useSearchParams();
+  if (searchParams.get('load_code')) return <ImportAdminPage />;
+  return <Navigate to="/import-admin-v2" replace />;
+}
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
 const CustomOrderRequestPage = lazy(() => import('@/pages/recommendations/CustomOrderRequestPage'));
@@ -361,8 +370,10 @@ function App() {
 
           {/* ── China Import & Recommendations — public, no auth needed ── */}
           <Route path="/importations" element={<ImportPage />} />
-          <Route path="/importations/admin/login" element={<ImportAdminLogin />} />
-          <Route path="/importations/admin" element={<ImportAdminPage />} />
+          <Route path="/importations/admin/login" element={<ImportAdminV2Login />} />
+          <Route path="/importations/admin/logout" element={<ImportAdminV2Logout />} />
+          <Route path="/importations/admin" element={<ImportAdminRouteBridge />} />
+          {/* Legacy source remains in src/pages/import-admin for rollback/QR compatibility. */}
           <Route path="/importations/sourcing/:token" element={<ImportSourcingSharePage />} />
           <Route path="/management/login" element={<ManagementLogin />} />
           <Route path="/management/logout" element={<ManagementLogout />} />
