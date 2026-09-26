@@ -155,6 +155,8 @@ export default function ImportAdminV2Analytics() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Both charts consume the same response produced by the top range selector.
+  // This keeps Revenue trend and New users trend on exactly the same date window.
   const trendFormatted = (data?.daily_trend ?? []).map(d => ({
     ...d,
     label: new Date(d.date).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' }),
