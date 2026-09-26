@@ -71,6 +71,7 @@ const ImportAdminV2PaymentTransactions = lazy(() => import('@/pages/import-admin
 const ImportAdminV2EmailTemplates = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2EmailTemplates'));
 const ImportAdminV2Broadcast = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Broadcast'));
 const ImportAdminV2ProductFAQ = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2ProductFAQ'));
+const ImportAdminV2Trending = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Trending'));
 const ImportAdminV2ProductAdd = lazy(() => import('@/pages/import-admin-v2/ManagementProductAdd'));
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
@@ -384,6 +385,7 @@ function App() {
             <Route path="products" element={<ImportAdminV2Products />} />
             <Route path="orders" element={<ImportAdminV2Orders />} />
             <Route path="users" element={<ImportAdminV2Users />} />
+            <Route path="trending" element={<ImportAdminV2Trending />} />
             <Route path="batch-orders" element={<ImportAdminV2BatchOrders />} />
             <Route path="categories" element={<ImportAdminV2Categories />} />
             <Route path="settings" element={<ImportAdminV2Settings />} />
