@@ -35,6 +35,6 @@ export default function ManagementExpenses(){
   </form>}
   {activeTab==='view' && <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden"><div className="px-5 py-4 border-b border-gray-100"><p className="font-bold text-gray-900">My submissions</p></div>
    {loading?<div className="py-12 flex justify-center"><Loader className="w-5 h-5 animate-spin text-gray-300"/></div>:expenses.length===0?<div className="py-12 text-center text-sm text-gray-400">No expenses submitted yet.</div>:<div className="divide-y divide-gray-100">{expenses.map(x=><div key={x.id} className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3"><div className="flex-1 min-w-0"><p className="font-semibold text-sm text-gray-900">{x.title}</p><p className="text-xs text-gray-400 mt-1">{x.expense_date}{x.receipt_name?' · '+x.receipt_name:''}</p></div><div className="font-bold text-sm">{money(x.amount)}</div><span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${x.status==='paid'?'bg-green-50 text-green-700':x.status==='rejected'?'bg-red-50 text-red-700':'bg-amber-50 text-amber-700'}`}>{x.status}</span></div>)}</div>}
-  </div>
+  </div>}
  </div>
 }
