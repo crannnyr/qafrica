@@ -660,7 +660,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                         <div className="border-t border-gray-50 divide-y divide-gray-50">
                           {batch.items.map(item => {
                             const currentReceived = item.received_quantity;
-                            const draft = receivedDrafts[item.id] ?? String(currentReceived);
                             const complete = currentReceived >= item.ordered_quantity;
                             return (
                               <div key={item.id} className="p-4">
@@ -689,12 +688,17 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                   </div>
                                   {canReceive && !complete && (
                                     <>
-                                      <div className="flex gap-2 mt-2">
-                                        <input type="number" min={currentReceived} max={item.ordered_quantity} step={1} value={draft} onChange={e => setReceivedDrafts(current => ({ ...current, [item.id]: e.target.value }))} className="w-24 px-2.5 py-2 rounded-lg border border-gray-200 text-xs" />
-                                        <button onClick={() => void receive(item)} disabled={acting === item.id} className="flex-1 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-                                          {acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />} Record received
+                                      <div className="flex items-center justify-between gap-3 mt-2">
+                                        <div>
+                                          <p className="text-[10px] font-bold text-gray-500 uppercase">Available inventory</p>
+                                          <p className={"text-xs mt-0.5 font-bold " + (item.stock_quantity > 0 ? 'text-emerald-700' : 'text-red-500')}>{item.stock_quantity} unit{item.stock_quantity === 1 ? '' : 's'}</p>
+                                        </div>
+                                        <button onClick={() => void receive(item)} disabled={acting === item.id || item.stock_quantity <= 0} className="flex-1 max-w-[240px] py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40">
+                                          {acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                          {item.stock_quantity > 0 ? 'Receive from inventory' : 'No stock available'}
                                         </button>
                                       </div>
+                                      <p className="text-[10px] text-gray-400 mt-1">One tap receives up to the remaining order quantity and automatically deducts the same units from inventory.</p>
                                       <textarea value={notes[item.id] ?? ''} onChange={e => setNotes(current => ({ ...current, [item.id]: e.target.value }))} rows={2} placeholder="Optional internal note…" className="w-full mt-2 px-2.5 py-2 rounded-lg border border-gray-200 text-xs resize-none" />
                                     </>
                                   )}
