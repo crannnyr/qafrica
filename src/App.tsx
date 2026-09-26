@@ -49,6 +49,7 @@ const ManagementCategories = lazy(() => import('@/pages/management/ManagementCat
 const ManagementExpenses = lazy(() => import('@/pages/management/ManagementExpenses'));
 const ManagementProductAdd = lazy(() => import('@/pages/management/ManagementProductAdd'));
 
+// Import Admin v2 routes
 const ImportAdminV2Login = lazy(() => import('@/pages/import-admin-v2/ManagementLogin'));
 const ImportAdminV2Logout = lazy(() => import('@/pages/import-admin-v2/ManagementLogout'));
 const ImportAdminV2Layout = lazy(() => import('@/pages/import-admin-v2/ManagementLayout'));
