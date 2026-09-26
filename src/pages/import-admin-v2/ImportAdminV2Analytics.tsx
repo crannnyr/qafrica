@@ -8,7 +8,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import {
-  TrendingUp, Package, Users, DollarSign, RefreshCw, Calendar, ShoppingCart, Clock3, Boxes, Truck, ReceiptText, RotateCcw, Layers3,
+  TrendingUp, Package, Users, DollarSign, RefreshCw, Calendar, ShoppingCart, Clock3, Boxes, Truck, ReceiptText, RotateCcw, Layers3, MessageCircle, CheckCircle2,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
@@ -40,6 +40,13 @@ interface Analytics {
     pending_refunds_count: number;
     pending_refunds_value_ngn: number;
     active_batches_count: number;
+    fulfillment_open_lines: number;
+    fulfillment_hq_units: number;
+    fulfillment_allocated_units: number;
+    support_ai_count: number;
+    support_waiting_count: number;
+    support_human_active_count: number;
+    support_resolved_count: number;
   };
 }
 
@@ -223,7 +230,35 @@ export default function ImportAdminV2Analytics() {
             </div>
           </div>
 
-          {/* Revenue trend */}
+          {/* Fulfillment */}
+          <div>
+            <div className="mb-3">
+              <p className="text-sm font-black text-gray-900">Fulfillment</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Live movement from China arrival through allocation at QAFRICA.</p>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <KpiCard icon={Boxes} label="Awaiting arrival" value={liveNumber(data.live_operations?.units_awaiting_arrival)} sub={liveNumber(data.live_operations?.fulfillment_open_lines) + ' open lines'} />
+              <KpiCard icon={Package} label="At QAFRICA HQ" value={liveNumber(data.live_operations?.fulfillment_hq_units)} sub="units received" />
+              <KpiCard icon={Truck} label="Allocated" value={liveNumber(data.live_operations?.fulfillment_allocated_units)} sub="units fully allocated" />
+              <KpiCard icon={Layers3} label="Active batches" value={liveNumber(data.live_operations?.active_batches_count)} sub="batches in progress" />
+            </div>
+          </div>
+
+          {/* Support */}
+          <div>
+            <div className="mb-3">
+              <p className="text-sm font-black text-gray-900">Customer support</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Live WhatsApp AI and human-support workload.</p>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <KpiCard icon={MessageCircle} label="AI handling" value={liveNumber(data.live_operations?.support_ai_count)} sub="AI conversations" />
+              <KpiCard icon={MessageCircle} label="Waiting for human" value={liveNumber(data.live_operations?.support_waiting_count)} sub="customer requests" />
+              <KpiCard icon={Users} label="Human active" value={liveNumber(data.live_operations?.support_human_active_count)} sub="agent conversations" />
+              <KpiCard icon={CheckCircle2} label="Resolved" value={liveNumber(data.live_operations?.support_resolved_count)} sub="resolved conversations" />
+            </div>
+          </div>
+
+                    {/* Revenue trend */}
           <ChartCard title="Revenue trend">
             {trendFormatted.length === 0 ? (
               <p className="text-xs text-gray-300 py-8 text-center">No paid orders in this range yet.</p>
