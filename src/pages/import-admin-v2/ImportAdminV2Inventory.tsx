@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Boxes, Search, RefreshCw, ChevronLeft, ChevronRight, Loader, Save, Plus, Pencil } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Boxes, Search, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Loader, Plus, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
@@ -15,30 +14,57 @@ type InventoryRow = {
   category?: string | null;
   parent_category?: string | null;
   is_active?: boolean;
+  has_variants?: boolean;
   variant_options?: Record<string, string> | null;
   variant_label?: string;
   stock_quantity: number;
   stock_updated_at?: string | null;
 };
 
+type ProductGroup = {
+  id: string;
+  name: string;
+  image_url?: string | null;
+  category?: string | null;
+  parent_category?: string | null;
+  is_active?: boolean;
+  variants: InventoryRow[];
+};
+
 type Pagination = { page: number; per_page: number; total: number; page_count: number };
 
 const variantKey = (row: InventoryRow) => row.id + '|' + JSON.stringify(row.variant_options ?? {});
-const variantLabel = (row: InventoryRow) => row.variant_label || (
-  row.variant_options && Object.keys(row.variant_options).length
-    ? Object.entries(row.variant_options).map(([key, value]) => key + ': ' + value).join(', ')
-    : 'Base / no variant'
-);
 
 export default function ImportAdminV2Inventory() {
-  const navigate = useNavigate();
   const [rows, setRows] = useState<InventoryRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pagination, setPagination] = useState<Pagination>({ page: 1, per_page: PAGE_SIZE, total: 0, page_count: 1 });
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  const products = useMemo<ProductGroup[]>(() => {
+    const map = new Map<string, ProductGroup>();
+    rows.forEach(row => {
+      const existing = map.get(row.id);
+      if (existing) {
+        existing.variants.push(row);
+      } else {
+        map.set(row.id, {
+          id: row.id,
+          name: row.name,
+          image_url: row.image_url,
+          category: row.category,
+          parent_category: row.parent_category,
+          is_active: row.is_active,
+          variants: [row],
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [rows]);
 
   const load = useCallback(async (page = 1, signal?: AbortSignal) => {
     const token = getManagementToken();
@@ -56,7 +82,7 @@ export default function ImportAdminV2Inventory() {
       if (!res.ok) throw new Error(data.error ?? 'Could not load inventory');
       const next = Array.isArray(data.products) ? data.products : [];
       setRows(next);
-      setDrafts(Object.fromEntries(next.map((row: InventoryRow) => [variantKey(row), String(row.stock_quantity ?? 0)])));
+      setDrafts(Object.fromEntries(next.map((row: InventoryRow) => [variantKey(row), ''])));
       setPagination(data.pagination ?? { page, per_page: PAGE_SIZE, total: 0, page_count: 1 });
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
@@ -79,29 +105,35 @@ export default function ImportAdminV2Inventory() {
       toast.error('Management session expired');
       return;
     }
-    const quantity = Number(drafts[variantKey(row)]);
-    if (!Number.isInteger(quantity) || quantity < 0) {
-      toast.error('Stock must be a non-negative whole number');
+    const quantityToAdd = Number(drafts[variantKey(row)] || 0);
+    if (!Number.isInteger(quantityToAdd) || quantityToAdd <= 0) {
+      toast.error('Enter a whole number greater than 0 to add');
       return;
     }
 
-    setSaving(row.id);
+    const key = variantKey(row);
+    setSaving(key);
     try {
       const res = await fetch(EDGE_URL + '?action=admin-inventory-set', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, product_id: row.id, variant_options: row.variant_options ?? {}, quantity }),
+        body: JSON.stringify({
+          manager_token: token,
+          product_id: row.id,
+          variant_options: row.variant_options ?? {},
+          quantity_to_add: quantityToAdd,
+        }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'Could not update stock');
-      const nextQuantity = Number(data.inventory?.quantity ?? quantity);
-      setRows(current => current.map(item => variantKey(item) === variantKey(row)
+      if (!res.ok) throw new Error(data.error ?? 'Could not add stock');
+      const nextQuantity = Number(data.inventory?.quantity ?? row.stock_quantity + quantityToAdd);
+      setRows(current => current.map(item => variantKey(item) === key
         ? { ...item, stock_quantity: nextQuantity, stock_updated_at: data.inventory?.updated_at ?? new Date().toISOString() }
         : item));
-      setDrafts(current => ({ ...current, [variantKey(row)]: String(nextQuantity) }));
-      toast.success(row.name + ' stock updated');
+      setDrafts(current => ({ ...current, [key]: '' }));
+      toast.success('Added ' + quantityToAdd.toLocaleString() + ' unit' + (quantityToAdd === 1 ? '' : 's') + '. New stock: ' + nextQuantity.toLocaleString());
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not update stock');
+      toast.error(e instanceof Error ? e.message : 'Could not add stock');
     } finally {
       setSaving(null);
     }
@@ -118,9 +150,9 @@ export default function ImportAdminV2Inventory() {
             <div className="flex items-center gap-2">
               <Boxes className="w-5 h-5 text-orange-500" />
               <h1 className="font-bold text-gray-900 text-sm">Inventory</h1>
-              <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">{pagination.total.toLocaleString()} products · {rows.length.toLocaleString()} variants shown</span>
+              <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">{pagination.total.toLocaleString()} products</span>
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">Register physical stock at QAfrica HQ by product variant. Fulfillment consumes the exact ordered variant when an item is received.</p>
+            <p className="text-[11px] text-gray-400 mt-1">Tap a product to view and add stock to each variant combination.</p>
           </div>
           <button onClick={() => void load(pagination.page)} disabled={loading} className="p-2 hover:bg-gray-100 rounded-lg" title="Refresh inventory">
             <RefreshCw className={loading ? 'w-4 h-4 text-gray-400 animate-spin' : 'w-4 h-4 text-gray-400'} />
@@ -139,55 +171,120 @@ export default function ImportAdminV2Inventory() {
         {error && <div className="mx-5 mt-4 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs">{error}</div>}
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left">
+          <table className="w-full min-w-[720px] text-left">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr className="text-[10px] uppercase tracking-wide text-gray-400">
                 <th className="px-5 py-3 font-bold">Product</th>
                 <th className="px-4 py-3 font-bold">Category</th>
-                <th className="px-4 py-3 font-bold">In stock</th>
-                <th className="px-4 py-3 font-bold">Register / adjust</th>
-                <th className="px-4 py-3 font-bold">Status</th>
+                <th className="px-4 py-3 font-bold">Total stock</th>
                 <th className="px-4 py-3 font-bold">Variants</th>
+                <th className="px-4 py-3 font-bold">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={6} className="px-5 py-12 text-center"><Loader className="w-5 h-5 text-orange-500 animate-spin mx-auto" /></td></tr>
-              ) : rows.length === 0 ? (
-                <tr><td colSpan={6} className="px-5 py-12 text-center text-sm text-gray-400">No inventory products found.</td></tr>
-              ) : rows.map(row => (
-                <tr key={row.id} className="hover:bg-gray-50">
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">{row.image_url ? <img src={row.image_url} alt="" className="w-full h-full object-cover" /> : null}</div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate max-w-[330px]">{row.name}</p>
-                        <p className="text-[11px] font-semibold text-orange-600 mt-0.5">{variantLabel(row)}</p>
-                        <p className="text-[10px] text-gray-400">{row.stock_updated_at ? 'Updated ' + new Date(row.stock_updated_at).toLocaleString('en-NG') : 'Stock not registered yet'}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-xs text-gray-600">{row.parent_category || row.category || '—'}</td>
-                  <td className="px-4 py-3"><span className={row.stock_quantity > 0 ? 'inline-flex min-w-[52px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700' : 'inline-flex min-w-[52px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-gray-100 text-gray-500'}>{row.stock_quantity.toLocaleString()}</span></td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <input type="number" min="0" step="1" value={drafts[variantKey(row)] ?? String(row.stock_quantity)} onChange={e => setDrafts(current => ({ ...current, [variantKey(row)]: e.target.value }))} className="w-28 px-3 py-2 rounded-lg border border-gray-200 text-sm font-semibold outline-none focus:border-orange-500" />
-                      <button onClick={() => void saveStock(row)} disabled={saving === row.id} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-900 text-white text-[11px] font-bold disabled:opacity-40"><Save className="w-3.5 h-3.5" />{saving === row.id ? 'Saving…' : 'Save'}</button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3"><span className={row.is_active ? 'inline-flex px-2 py-1 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-600' : 'inline-flex px-2 py-1 rounded-full text-[9px] font-bold bg-gray-100 text-gray-500'}>{row.is_active ? 'Active product' : 'Inactive product'}</span></td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => navigate('/import-admin-v2/products/edit/' + row.id)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-700 text-[11px] font-bold hover:border-orange-300 hover:text-orange-600 whitespace-nowrap"
-                      title={variantLabel(row) === 'Base / no variant' ? 'Add variant to this product' : 'Edit this product\'s variants'}
-                    >
-                      {variantLabel(row) === 'Base / no variant' ? <Plus className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
-                      {variantLabel(row) === 'Base / no variant' ? 'Add variant' : 'Edit variants'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                <tr><td colSpan={5} className="px-5 py-12 text-center"><Loader className="w-5 h-5 text-orange-500 animate-spin mx-auto" /></td></tr>
+              ) : products.length === 0 ? (
+                <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-gray-400">No inventory products found.</td></tr>
+              ) : products.map(product => {
+                const isOpen = !!expanded[product.id];
+                const productStock = product.variants.reduce((sum, row) => sum + Number(row.stock_quantity || 0), 0);
+                const hasRealVariants = product.variants.some(row => row.variant_options && Object.keys(row.variant_options).length > 0);
+                const optionNames = Array.from(new Set(product.variants.flatMap(row => Object.keys(row.variant_options ?? {}))));
+                return (
+                  <tr key={product.id} className="align-top">
+                    <td colSpan={5} className="p-0">
+                      <button
+                        type="button"
+                        onClick={() => setExpanded(current => ({ ...current, [product.id]: !isOpen }))}
+                        className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-gray-50"
+                      >
+                        <ChevronDown className={isOpen ? 'w-4 h-4 text-orange-500 transition-transform' : 'w-4 h-4 text-gray-400 -rotate-90 transition-transform'} />
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
+                          {product.image_url ? <img src={product.image_url} alt="" className="w-full h-full object-cover" /> : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{product.name}</p>
+                          <p className="text-[10px] text-gray-400 mt-0.5">{hasRealVariants ? product.variants.length.toLocaleString() + ' variant combinations' : 'No variants'}</p>
+                        </div>
+                        <div className="hidden sm:block w-28 text-xs text-gray-600">{product.parent_category || product.category || '—'}</div>
+                        <span className={productStock > 0 ? 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700' : 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-gray-100 text-gray-500'}>{productStock.toLocaleString()}</span>
+                        <span className="inline-flex min-w-[110px] justify-center px-2.5 py-1.5 rounded-lg bg-orange-50 text-orange-600 text-[10px] font-bold">
+                          {isOpen ? 'Hide variants' : hasRealVariants ? 'View variants' : 'View stock'}
+                        </span>
+                      </button>
+
+                      {isOpen && (
+                        <div className="bg-gray-50/70 border-t border-gray-100 px-5 py-3">
+                          <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-bold text-gray-800">{hasRealVariants ? 'Variant inventory' : 'Base inventory'}</p>
+                                <p className="text-[10px] text-gray-400">Adding stock increases the current quantity; it never replaces it.</p>
+                              </div>
+                              <span className="text-[10px] font-semibold text-gray-500">{productStock.toLocaleString()} total units</span>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full min-w-[560px] text-left">
+                                <thead className="bg-gray-50">
+                                  <tr className="text-[9px] uppercase tracking-wide text-gray-400">
+                                    {optionNames.map(name => <th key={name} className="px-4 py-2.5 font-bold">{name}</th>)}
+                                    {!optionNames.length && <th className="px-4 py-2.5 font-bold">Stock type</th>}
+                                    <th className="px-4 py-2.5 font-bold">Stock</th>
+                                    <th className="px-4 py-2.5 font-bold">Add stock</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                  {product.variants.map(row => {
+                                    const key = variantKey(row);
+                                    const options = row.variant_options ?? {};
+                                    return (
+                                      <tr key={key}>
+                                        {optionNames.map(name => <td key={name} className="px-4 py-3 text-xs font-semibold text-gray-700">{options[name] || '—'}</td>)}
+                                        {!optionNames.length && <td className="px-4 py-3 text-xs font-semibold text-gray-700">Base / no variant</td>}
+                                        <td className="px-4 py-3">
+                                          <span className={row.stock_quantity > 0 ? 'inline-flex min-w-[48px] justify-center px-2 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-black' : 'inline-flex min-w-[48px] justify-center px-2 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-xs font-black'}>
+                                            {row.stock_quantity.toLocaleString()}
+                                          </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <div className="flex items-center gap-2">
+                                            <div className="relative">
+                                              <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                placeholder="0"
+                                                value={drafts[key] ?? ''}
+                                                onChange={e => setDrafts(current => ({ ...current, [key]: e.target.value }))}
+                                                className="w-24 pl-7 pr-2 py-2 rounded-lg border border-gray-200 text-sm font-semibold outline-none focus:border-orange-500"
+                                              />
+                                            </div>
+                                            <button
+                                              onClick={() => void saveStock(row)}
+                                              disabled={saving === key}
+                                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40"
+                                            >
+                                              <Save className="w-3.5 h-3.5" />
+                                              {saving === key ? 'Adding…' : 'Add'}
+                                            </button>
+                                          </div>
+                                          <p className="text-[9px] text-gray-400 mt-1">{row.stock_updated_at ? 'Updated ' + new Date(row.stock_updated_at).toLocaleString('en-NG') : 'No stock registered yet'}</p>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
