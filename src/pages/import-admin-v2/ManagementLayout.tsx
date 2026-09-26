@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck,
-  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText, Truck, MessageCircle, UserCog,
+  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText, Truck, MessageCircle, UserCog, ClipboardList, RotateCcw,
 } from 'lucide-react';
 import { getManagementManager, logoutManagementSession, validateManagementSession, getManagementToken, type ManagementManager } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
@@ -13,7 +13,8 @@ const NAV = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
   { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
   { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
-  { icon: ClipboardList, RotateCcw, label: 'Custom Orders', path: '/import-admin-v2/custom-orders' },
+  { icon: ClipboardList, label: 'Custom Orders', path: '/import-admin-v2/custom-orders' },
+  { icon: RotateCcw, label: 'Refunds', path: '/import-admin-v2/refunds' },
   { icon: Tags, label: 'Categories', path: '/import-admin-v2/categories' },
   { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },
   { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings' },
