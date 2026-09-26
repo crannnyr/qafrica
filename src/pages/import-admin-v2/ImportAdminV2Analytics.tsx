@@ -8,7 +8,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import {
-  TrendingUp, Package, Users, DollarSign, RefreshCw, Calendar,
+  TrendingUp, Package, Users, DollarSign, RefreshCw, Calendar, ShoppingCart, Clock3, Boxes, Truck, ReceiptText, RotateCcw, Layers3,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
@@ -27,12 +27,30 @@ interface Analytics {
   payment_method_breakdown: { method: string; orders: number; revenue_ngn: number }[];
   delivery_type_breakdown: { type: string; orders: number; revenue_ngn: number }[];
   status_breakdown: { status: string; count: number }[];
+  live_operations?: {
+    all_orders_count: number;
+    unpaid_orders_count: number;
+    unpaid_orders_value_ngn: number;
+    units_awaiting_arrival: number;
+    inventory_units: number;
+    active_shipments_count: number;
+    in_transit_shipments_count: number;
+    pending_bills_count: number;
+    pending_bills_value_ngn: number;
+    pending_refunds_count: number;
+    pending_refunds_value_ngn: number;
+    active_batches_count: number;
+  };
 }
 
 function fmt(n: number) {
   return `₦${Math.round(n).toLocaleString()}`;
 }
-function liveNumber(n: number | null | undefined) {\n  return Math.round(Number(n ?? 0)).toLocaleString();\n}\n\nfunction fmtCompact(n: number) {
+function liveNumber(n: number | null | undefined) {
+  return Math.round(Number(n ?? 0)).toLocaleString();
+}
+
+function fmtCompact(n: number) {
   if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `₦${(n / 1_000).toFixed(0)}K`;
   return `₦${Math.round(n)}`;
@@ -184,7 +202,28 @@ export default function ImportAdminV2Analytics() {
             <KpiCard icon={Users} label="New customers" value={data.new_customers_count.toLocaleString()} sub="in this range" />
           </div>
 
-          {/* Live operational snapshot */}\n          <div>\n            <div className="flex items-end justify-between gap-3 mb-3">\n              <div>\n                <p className="text-sm font-black text-gray-900">Live operations</p>\n                <p className="text-[11px] text-gray-400 mt-0.5">Current operational workload, inventory and payment queues.</p>\n              </div>\n              <span className="text-[10px] font-semibold text-gray-400">Live snapshot</span>\n            </div>\n            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">\n              <KpiCard icon={ShoppingCart} label="All orders" value={liveNumber(data.live_operations?.all_orders_count)} sub="all import orders" />\n              <KpiCard icon={Clock3} label="Unpaid orders" value={liveNumber(data.live_operations?.unpaid_orders_count)} sub={fmtCompact(data.live_operations?.unpaid_orders_value_ngn ?? 0) + ' outstanding'} />\n              <KpiCard icon={Boxes} label="Awaiting arrival" value={liveNumber(data.live_operations?.units_awaiting_arrival)} sub="units outstanding" />\n              <KpiCard icon={Package} label="Inventory on hand" value={liveNumber(data.live_operations?.inventory_units)} sub="units available" />\n              <KpiCard icon={Truck} label="Active shipments" value={liveNumber(data.live_operations?.active_shipments_count)} sub={liveNumber(data.live_operations?.in_transit_shipments_count) + ' in transit'} />\n              <KpiCard icon={ReceiptText} label="Pending bills" value={liveNumber(data.live_operations?.pending_bills_count)} sub={fmtCompact(data.live_operations?.pending_bills_value_ngn ?? 0) + ' awaiting'} />\n              <KpiCard icon={RotateCcw} label="Pending refunds" value={liveNumber(data.live_operations?.pending_refunds_count)} sub={fmtCompact(data.live_operations?.pending_refunds_value_ngn ?? 0) + ' to process'} />\n              <KpiCard icon={Layers3} label="Active batches" value={liveNumber(data.live_operations?.active_batches_count)} sub="batches in progress" />\n            </div>\n          </div>\n\n          {/* Revenue trend */}
+          {/* Live operational snapshot */}
+          <div>
+            <div className="flex items-end justify-between gap-3 mb-3">
+              <div>
+                <p className="text-sm font-black text-gray-900">Live operations</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Current operational workload, inventory and payment queues.</p>
+              </div>
+              <span className="text-[10px] font-semibold text-gray-400">Live snapshot</span>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <KpiCard icon={ShoppingCart} label="All orders" value={liveNumber(data.live_operations?.all_orders_count)} sub="all import orders" />
+              <KpiCard icon={Clock3} label="Unpaid orders" value={liveNumber(data.live_operations?.unpaid_orders_count)} sub={fmtCompact(data.live_operations?.unpaid_orders_value_ngn ?? 0) + ' outstanding'} />
+              <KpiCard icon={Boxes} label="Awaiting arrival" value={liveNumber(data.live_operations?.units_awaiting_arrival)} sub="units outstanding" />
+              <KpiCard icon={Package} label="Inventory on hand" value={liveNumber(data.live_operations?.inventory_units)} sub="units available" />
+              <KpiCard icon={Truck} label="Active shipments" value={liveNumber(data.live_operations?.active_shipments_count)} sub={liveNumber(data.live_operations?.in_transit_shipments_count) + ' in transit'} />
+              <KpiCard icon={ReceiptText} label="Pending bills" value={liveNumber(data.live_operations?.pending_bills_count)} sub={fmtCompact(data.live_operations?.pending_bills_value_ngn ?? 0) + ' awaiting'} />
+              <KpiCard icon={RotateCcw} label="Pending refunds" value={liveNumber(data.live_operations?.pending_refunds_count)} sub={fmtCompact(data.live_operations?.pending_refunds_value_ngn ?? 0) + ' to process'} />
+              <KpiCard icon={Layers3} label="Active batches" value={liveNumber(data.live_operations?.active_batches_count)} sub="batches in progress" />
+            </div>
+          </div>
+
+          {/* Revenue trend */}
           <ChartCard title="Revenue trend">
             {trendFormatted.length === 0 ? (
               <p className="text-xs text-gray-300 py-8 text-center">No paid orders in this range yet.</p>
