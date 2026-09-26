@@ -155,9 +155,7 @@ function ThemePreview({ themeId, isSelected, onClick }: { themeId: string; isSel
     >
       {/* Premium Badge */}
       {theme.is_premium && (
-        <StorefrontLookSettings />
-
-    <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-amber-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
+        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-amber-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
           <Crown className="w-3 h-3" />
           PRO
         </div>
@@ -330,6 +328,9 @@ export default function StoreTemplatesPage() {
           </button>
         ))}
       </div>
+
+      {/* Storefront layout/look settings */}
+      <StorefrontLookSettings />
 
       {/* Templates Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
