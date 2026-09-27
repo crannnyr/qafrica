@@ -220,7 +220,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
         if (cancelled) return;
         const map: Record<string, VariantGroup[]> = {};
         for (const product of products) {
-          if (product.has_variants && Array.isArray(product.variants) && product.variants.length > 0) {
+          if (Array.isArray(product.variants) && product.variants.length > 0) {
             map[product.id] = product.variants;
           }
         }
