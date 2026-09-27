@@ -240,7 +240,7 @@ export default function ClosedBatchDetail({
             customer_name: order.customer_name,
             first_order_at: order.created_at,
             order_count: orders.filter(o => o.user_id === order.user_id).length,
-            shipping_method: (item.shipping_method ?? order.shipping_method ?? null) as CustomerLine['shipping_method'],
+            shipping_method: (order.shipping_method ?? null) as CustomerLine['shipping_method'],
             order_id: order.id,
             order_code: order.code,
             product_id: item.id,
