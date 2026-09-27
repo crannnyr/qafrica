@@ -16,7 +16,7 @@ interface OrderItem {
   variant_options?: Record<string, string>;
   shipping_method?: 'flight' | 'sea_freight' | string | null;
 }
-interface DeliveryAddress {
+export interface DeliveryAddress {
   name: string;
   phone: string;
   email?: string;
@@ -32,7 +32,7 @@ interface VariantGroup {
   options: string[];
   price_deltas?: Record<string, number>;
 }
-interface OrderRow {
+export interface OrderRow {
   id: string;
   code: string;
   user_id: string | null;
