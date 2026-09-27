@@ -24,6 +24,7 @@ type FulfillmentItem = {
   order_code: string;
   customer_name: string;
   customer_whatsapp: string | null;
+  customer_email: string | null;
   batch_id: string | null;
   batch_opened_at: string | null;
   order_status: string;
@@ -113,6 +114,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       order_code: customer?.order_code ?? '—',
       customer_name: customer?.customer_name ?? 'Customer',
       customer_whatsapp: customer?.customer_whatsapp ?? null,
+      customer_email: customer?.customer_email ?? null,
       delivery_address: shipment.delivery_address ?? null,
       items: (shipment.items ?? []).map((row: any) => ({
         product_name: row.fulfillment_item?.product_name ?? 'Item',
@@ -334,13 +336,14 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   }, [allShipments, items, shipmentQuery, shipmentStatusFilter]);
 
   const customerByOrder = useMemo(() => {
-    const map = new Map<string, { order_code: string; customer_name: string; customer_whatsapp: string | null }>();
+    const map = new Map<string, { order_code: string; customer_name: string; customer_whatsapp: string | null; customer_email: string | null }>();
     for (const item of items) {
       if (!map.has(item.order_id)) {
         map.set(item.order_id, {
           order_code: item.order_code,
           customer_name: item.customer_name,
           customer_whatsapp: item.customer_whatsapp,
+          customer_email: item.customer_email,
         });
       }
     }
