@@ -607,27 +607,57 @@ export default function ClosedBatchDetail({
 
   const [customerSearch, setCustomerSearch] = useState('');
 
+  // Keep a search-only customer index that is independent of both the
+  // shipping filter and the billing-status tabs. Searching for an order code
+  // must search the entire closed batch, not the currently visible subset.
+  const allCustomersForSearch = useMemo(() => {
+    const byCustomer = new Map<string, {
+      customerId: string; name: string; firstOrderAt: string;
+      orderCount: number; lines: CustomerLine[];
+    }>();
+
+    for (const line of customerLines) {
+      if (!line.customer_id) continue;
+      const entry = byCustomer.get(line.customer_id) ?? {
+        customerId: line.customer_id,
+        name: line.customer_name,
+        firstOrderAt: line.first_order_at,
+        orderCount: line.order_count,
+        lines: [],
+      };
+      entry.lines.push(line);
+      byCustomer.set(line.customer_id, entry);
+    }
+
+    return Array.from(byCustomer.values());
+  }, [customerLines]);
+
   const visibleCustomers = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
 
-    // Order-code search is a direct lookup against the customer-breakdown
-    // rows returned by Supabase. Do this before billing/status filters so an
-    // order can never disappear merely because its customer is billed,
-    // paid, or otherwise outside the selected status tab.
     if (q) {
+      // Use both sources: orders is the batch's authoritative order list,
+      // while customerLines supplies the customer/product detail to display.
+      // This also bypasses shipping and billing filters during search.
       const matchedCustomerIds = new Set(
-        customerLines
-          .filter(line => line.order_code.toLowerCase().includes(q))
-          .map(line => line.customer_id)
+        orders
+          .filter(o => o.code?.toLowerCase().includes(q) && o.user_id)
+          .map(o => o.user_id as string)
       );
 
-      if (matchedCustomerIds.size > 0) {
-        return customersForList.filter(c => matchedCustomerIds.has(c.customerId));
+      for (const line of customerLines) {
+        if (line.order_code?.toLowerCase().includes(q) && line.customer_id) {
+          matchedCustomerIds.add(line.customer_id);
+        }
       }
 
-      return customersForList.filter(c =>
+      if (matchedCustomerIds.size > 0) {
+        return allCustomersForSearch.filter(c => matchedCustomerIds.has(c.customerId));
+      }
+
+      return allCustomersForSearch.filter(c =>
         c.name.toLowerCase().includes(q) ||
-        c.lines.some(l => l.order_code.toLowerCase().includes(q))
+        c.lines.some(l => l.order_code?.toLowerCase().includes(q))
       );
     }
 
@@ -639,7 +669,7 @@ export default function ClosedBatchDetail({
       if (billStatusTab === 'paid') return status === 'paid';
       return status !== 'paid';
     });
-  }, [customersForList, customerLines, billStatusTab, billKind, ledgerByCustomerActive, customerSearch]);
+  }, [customersForList, allCustomersForSearch, customerLines, orders, billStatusTab, billKind, ledgerByCustomerActive, customerSearch]);
 
   const billStatusCounts = useMemo(() => {
     let unbilled = 0, billed = 0, paid = 0;
