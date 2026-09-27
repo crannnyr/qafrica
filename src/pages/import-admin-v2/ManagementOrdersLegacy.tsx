@@ -149,7 +149,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
 }) {
   const [addressEditing, setAddressEditing] = useState(false);
   const [address, setAddress] = useState<DeliveryAddress>(() => {
-    const existing = order.delivery_address ?? {};
+    const existing: Partial<DeliveryAddress> = order.delivery_address ?? {};
     return {
       ...existing,
       name: existing.name ?? order.customer_name,
@@ -173,7 +173,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   const items = order.items ?? [];
 
   useEffect(() => {
-    const existing = order.delivery_address ?? {};
+    const existing: Partial<DeliveryAddress> = order.delivery_address ?? {};
     setAddress({
       ...existing,
       name: existing.name ?? order.customer_name,
