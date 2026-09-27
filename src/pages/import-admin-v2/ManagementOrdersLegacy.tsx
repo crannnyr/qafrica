@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useCallback } from 'react';
+import { Fragment, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { Loader, Package, Users, Archive, CheckCircle2, FileDown, Eye, X, MapPin, Pencil, Save, User, CreditCard, Trash2 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { CustomerDetail } from '@/pages/import-admin/ImportAdminCustomers';
@@ -272,7 +272,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   );
 }
 
-export default function ManagementOrders() {
+export default function ManagementOrders({ belowTabs }: { belowTabs?: ReactNode }) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showClosed, setShowClosed] = useState(false);
@@ -421,6 +421,8 @@ export default function ManagementOrders() {
           Closed
         </button>
       </div>
+
+      {belowTabs}
 
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
         {isLoading ? (
