@@ -4,6 +4,7 @@ export type ReceiptCustomer = {
   order_code: string;
   customer_name: string;
   customer_whatsapp?: string | null;
+  customer_email?: string | null;
 };
 
 export type ReceiptShipment = {
@@ -172,9 +173,12 @@ async function addReceiptPage(
 
   // Customer/status row.
   drawLabelValue(doc, 'Customer', customer.customer_name, INNER_X, y);
+  if (customer.customer_email) {
+    drawLabelValue(doc, 'Email', customer.customer_email, INNER_X, y + 11);
+  }
   drawLabelValue(doc, 'Status', clean(shipment.status.replaceAll('_', ' ')), CARD_X + CARD_W - 8, y, 'right');
 
-  y += 16;
+  y += customer.customer_email ? 27 : 16;
 
   // Carrier/delivery row.
   drawLabelValue(doc, 'Carrier', shipment.carrier_name || 'QAfrica', INNER_X, y);
