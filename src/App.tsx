@@ -152,6 +152,7 @@ const JumiaDropOffLocationsPage = lazy(() => import('@/pages/dashboard/JumiaDrop
 const JumiaWalletPage = lazy(() => import('@/pages/dashboard/JumiaWalletPage'));
 const JumiaHowToScalePage = lazy(() => import('@/pages/dashboard/JumiaHowToScalePage'));
 const JumiaItemDetailPage = lazy(() => import('@/pages/dashboard/Jumia/JumiaItemDetailPage'));
+const SellOnMarketplacePage = lazy(() => import('@/pages/dashboard/SellOnMarketplacePage'));
 const JumiaComingSoon = lazy(() => import('@/pages/dashboard/Jumia/JumiaComingSoon'));
 const KongaPage = lazy(() => import('@/pages/dashboard/KongaPage'));
 const JijiPage = lazy(() => import('@/pages/dashboard/JijiPage'));
@@ -517,6 +518,7 @@ function App() {
             <Route path="analytics" element={<StaffGuard permission="can_view_analytics"><AnalyticsPage /></StaffGuard>} />
             <Route path="tax-expenses" element={<StaffGuard permission="can_manage_wallet"><TaxExpensesPage /></StaffGuard>} />
             <Route path="settings" element={<StaffGuard><StoreSettingsPage /></StaffGuard>} />
+            <Route path="marketplace" element={<StaffGuard permission="can_manage_settings"><SellOnMarketplacePage /></StaffGuard>} />
             <Route path="themes" element={<StaffGuard permission="can_manage_settings"><StoreTemplatesPage /></StaffGuard>} />
             <Route path="templates" element={<Navigate to="/dashboard/themes" replace />} />
             <Route path="subscription" element={<StaffGuard><SubscriptionPage /></StaffGuard>} />

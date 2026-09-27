@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore, useStoreStore } from '@/stores';
 import { stockAlertService, supabase } from '@/services';
 import { subscribeToOrders, subscribeToStockAlerts, subscribeToWalletUpdates } from '@/services/realtime';
+import ConfirmEmailBanner from '@/components/ConfirmEmailBanner';
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import ModalNotificationDisplay from '@/components/ModalNotificationDisplay';
 import { toast } from 'sonner';
@@ -391,6 +392,7 @@ export default function DashboardLayout() {
         {/* Scrollable content */}
         <main className="flex-1 overflow-y-auto">
           <SubscriptionBanner />
+          <ConfirmEmailBanner />
           <div className="p-4 lg:p-6">
             <AnimatePresence mode="wait">
               <motion.div
