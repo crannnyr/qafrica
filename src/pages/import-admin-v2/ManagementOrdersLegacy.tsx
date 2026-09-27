@@ -148,8 +148,19 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   token: string; order: OrderRow; onClose: () => void; onReload: () => Promise<void>; onOpenClient: (customerId: string) => void;
 }) {
   const [addressEditing, setAddressEditing] = useState(false);
-  const [address, setAddress] = useState<DeliveryAddress>(order.delivery_address ?? {
-    name: order.customer_name, phone: order.customer_whatsapp, email: order.customer_email ?? '', address_line1: '', address_line2: '', city: '', state: '', landmark: ''
+  const [address, setAddress] = useState<DeliveryAddress>(() => {
+    const existing = order.delivery_address ?? {};
+    return {
+      ...existing,
+      name: existing.name ?? order.customer_name,
+      phone: existing.phone ?? order.customer_whatsapp,
+      email: order.customer_email ?? existing.email ?? '',
+      address_line1: existing.address_line1 ?? '',
+      address_line2: existing.address_line2 ?? '',
+      city: existing.city ?? '',
+      state: existing.state ?? '',
+      landmark: existing.landmark ?? '',
+    };
   });
   const [savingAddress, setSavingAddress] = useState(false);
   const [editingItem, setEditingItem] = useState<number | null>(null);
@@ -162,15 +173,18 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   const items = order.items ?? [];
 
   useEffect(() => {
-    setAddress(order.delivery_address ?? {
-      name: order.customer_name,
-      phone: order.customer_whatsapp,
-      email: order.customer_email ?? '',
-      address_line1: '',
-      address_line2: '',
-      city: '',
-      state: '',
-      landmark: '',
+    const existing = order.delivery_address ?? {};
+    setAddress({
+      ...existing,
+      name: existing.name ?? order.customer_name,
+      phone: existing.phone ?? order.customer_whatsapp,
+      // Customer profile email is authoritative for the Order Details editor.
+      email: order.customer_email ?? existing.email ?? '',
+      address_line1: existing.address_line1 ?? '',
+      address_line2: existing.address_line2 ?? '',
+      city: existing.city ?? '',
+      state: existing.state ?? '',
+      landmark: existing.landmark ?? '',
     });
     setAddressEditing(false);
     setEditingItem(null);
@@ -179,22 +193,46 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
 
   useEffect(() => {
     let cancelled = false;
-    setVariantsLoading(true);
-    fetch(EDGE_URL + '?action=admin-products', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ manager_token: token }),
-    })
-      .then(res => res.json())
-      .then(data => {
+    const loadVariantGroups = async () => {
+      setVariantsLoading(true);
+      try {
+        const firstRes = await fetch(EDGE_URL + '?action=admin-products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ manager_token: token, page: 1, per_page: 50 }),
+        });
+        const first = await firstRes.json();
+        if (!firstRes.ok || first.error) throw new Error(first.error ?? 'Could not load products');
+
+        const products = [...(first.products ?? [])];
+        const pageCount = Math.max(1, Number(first.pagination?.page_count ?? 1));
+        for (let page = 2; page <= pageCount; page += 1) {
+          const res = await fetch(EDGE_URL + '?action=admin-products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ manager_token: token, page, per_page: 50 }),
+          });
+          const data = await res.json();
+          if (!res.ok || data.error) throw new Error(data.error ?? 'Could not load products');
+          products.push(...(data.products ?? []));
+        }
+
         if (cancelled) return;
         const map: Record<string, VariantGroup[]> = {};
-        for (const product of data.products ?? []) {
-          if (product.has_variants && Array.isArray(product.variants) && product.variants.length > 0) map[product.id] = product.variants;
+        for (const product of products) {
+          if (product.has_variants && Array.isArray(product.variants) && product.variants.length > 0) {
+            map[product.id] = product.variants;
+          }
         }
         setVariantGroups(map);
-      })
-      .catch(() => { if (!cancelled) setVariantGroups({}); })
-      .finally(() => { if (!cancelled) setVariantsLoading(false); });
+      } catch {
+        if (!cancelled) setVariantGroups({});
+      } finally {
+        if (!cancelled) setVariantsLoading(false);
+      }
+    };
+
+    void loadVariantGroups();
     return () => { cancelled = true; };
   }, [token]);
 
