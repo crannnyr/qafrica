@@ -112,9 +112,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       delivery_mode: shipment.delivery_mode,
       notes: shipment.notes,
       order_code: customer?.order_code ?? '—',
-      customer_name: customer?.customer_name ?? 'Customer',
-      customer_whatsapp: customer?.customer_whatsapp ?? null,
-      customer_email: customer?.customer_email ?? null,
+      customer_name: shipment.customer_name ?? customer?.customer_name ?? 'Customer',
+      customer_whatsapp: shipment.customer_whatsapp ?? customer?.customer_whatsapp ?? null,
+      customer_email: shipment.customer_email ?? customer?.customer_email ?? null,
       delivery_address: shipment.delivery_address ?? null,
       items: (shipment.items ?? []).map((row: any) => ({
         product_name: row.fulfillment_item?.product_name ?? 'Item',
