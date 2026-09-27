@@ -19,11 +19,18 @@ interface OrderItem {
 interface DeliveryAddress {
   name: string;
   phone: string;
+  email?: string;
   address_line1: string;
   address_line2?: string;
   city: string;
   state: string;
   landmark?: string;
+}
+interface VariantGroup {
+  id: string;
+  name: string;
+  options: string[];
+  price_deltas?: Record<string, number>;
 }
 interface OrderRow {
   id: string;
@@ -31,6 +38,7 @@ interface OrderRow {
   user_id: string | null;
   customer_name: string;
   customer_whatsapp: string;
+  customer_email?: string | null;
   items: OrderItem[];
   payment_status: string;
   staged_at: string | null;
@@ -136,17 +144,18 @@ function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-
 export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: {
   token: string; order: OrderRow; onClose: () => void; onReload: () => Promise<void>; onOpenClient: (customerId: string) => void;
 }) {
   const [addressEditing, setAddressEditing] = useState(false);
   const [address, setAddress] = useState<DeliveryAddress>(order.delivery_address ?? {
-    name: order.customer_name, phone: order.customer_whatsapp, address_line1: '', address_line2: '', city: '', state: '', landmark: ''
+    name: order.customer_name, phone: order.customer_whatsapp, email: order.customer_email ?? '', address_line1: '', address_line2: '', city: '', state: '', landmark: ''
   });
   const [savingAddress, setSavingAddress] = useState(false);
   const [editingItem, setEditingItem] = useState<number | null>(null);
-  const [variantText, setVariantText] = useState('');
+  const [variantDraft, setVariantDraft] = useState<Record<string, string>>({});
+  const [variantGroups, setVariantGroups] = useState<Record<string, VariantGroup[]>>({});
+  const [variantsLoading, setVariantsLoading] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
   const [removingItem, setRemovingItem] = useState<number | null>(null);
 
@@ -156,6 +165,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     setAddress(order.delivery_address ?? {
       name: order.customer_name,
       phone: order.customer_whatsapp,
+      email: order.customer_email ?? '',
       address_line1: '',
       address_line2: '',
       city: '',
@@ -164,8 +174,29 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     });
     setAddressEditing(false);
     setEditingItem(null);
-    setVariantText('');
-  }, [order.id, order.delivery_address, order.customer_name, order.customer_whatsapp]);
+    setVariantDraft({});
+  }, [order.id, order.delivery_address, order.customer_name, order.customer_whatsapp, order.customer_email]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setVariantsLoading(true);
+    fetch(EDGE_URL + '?action=admin-products', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manager_token: token }),
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (cancelled) return;
+        const map: Record<string, VariantGroup[]> = {};
+        for (const product of data.products ?? []) {
+          if (product.has_variants && Array.isArray(product.variants) && product.variants.length > 0) map[product.id] = product.variants;
+        }
+        setVariantGroups(map);
+      })
+      .catch(() => { if (!cancelled) setVariantGroups({}); })
+      .finally(() => { if (!cancelled) setVariantsLoading(false); });
+    return () => { cancelled = true; };
+  }, [token]);
 
   const canEditAddress = !order.shipped_at && !['shipped_and_closed', 'clearance_and_closed', 'received', 'delivered'].includes(order.status ?? '');
 
@@ -185,12 +216,15 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
 
   const saveVariant = async (index: number) => {
     const item = items[index];
-    let parsed: Record<string, string> = {};
-    if (variantText.trim()) {
-      for (const part of variantText.split(',')) {
-        const bits = part.split(':'); const k = bits.shift(); const v = bits.join(':');
-        if (k?.trim() && v?.trim()) parsed[k.trim()] = v.trim();
+    const groups = variantGroups[item.id] ?? [];
+    const parsed: Record<string, string> = {};
+    for (const group of groups) {
+      const value = variantDraft[group.name];
+      if (!value || !group.options.includes(value)) {
+        toast.error(`Select a registered ${group.name}`);
+        return;
       }
+      parsed[group.name] = value;
     }
     setSavingItem(true);
     try {
@@ -200,8 +234,8 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error ?? 'Could not update product variant');
-      setEditingItem(null); await onReload(); toast.success('Product details updated');
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not update product'); }
+      setEditingItem(null); await onReload(); toast.success('Product variant updated');
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not update product variant'); }
     finally { setSavingItem(false); }
   };
 
@@ -240,7 +274,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
 
           <section className="rounded-2xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-3"><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Client</p>{order.user_id && <button onClick={() => onOpenClient(order.user_id!)} className="text-[10px] font-bold text-orange-600 hover:underline">Client details</button>}</div>
-            <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center"><User className="w-4 h-4 text-gray-400" /></div><div><p className="text-sm font-bold text-gray-800">{order.customer_name}</p><p className="text-xs text-gray-400">{order.customer_whatsapp}</p></div></div>
+            <div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center"><User className="w-4 h-4 text-gray-400" /></div><div className="min-w-0"><p className="text-sm font-bold text-gray-800">{order.customer_name}</p><p className="text-xs text-gray-400">{order.customer_whatsapp}</p><p className="text-xs text-gray-500 truncate">{order.customer_email || 'No email address saved'}</p></div></div>
           </section>
 
           <section>
@@ -248,13 +282,14 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
             <div className="space-y-2">
               {items.map((item, i) => {
                 const editing = editingItem === i;
+                const groups = variantGroups[item.id] ?? [];
                 return <div key={item.id + '-' + i} className="rounded-xl border border-gray-100 p-3">
                   <div className="flex gap-3">
                     {item.image_url ? <img src={item.image_url} className="w-12 h-12 rounded-lg object-cover border border-gray-100" alt="" /> : <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center"><Package className="w-4 h-4 text-gray-300" /></div>}
                     <div className="flex-1 min-w-0"><p className="text-xs font-bold text-gray-800">{item.name}</p><p className="text-[10px] text-gray-400 mt-0.5">Qty ×{item.quantity} · {money(item.price_ngn)} each</p>{item.variant_options && Object.keys(item.variant_options).length > 0 && <p className="text-[10px] text-gray-500 mt-1">{Object.entries(item.variant_options).map(([k,v]) => k + ': ' + v).join(', ')}</p>}</div>
-                    <div className="flex items-start gap-1"><button disabled={!item.variant_options || Object.keys(item.variant_options).length === 0} onClick={() => { setEditingItem(editing ? null : i); setVariantText(Object.entries(item.variant_options ?? {}).map(([k,v]) => k + ': ' + v).join(', ')); }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed" title={item.variant_options && Object.keys(item.variant_options).length > 0 ? 'Edit product details' : 'This product has no variants'}><Pencil className="w-3.5 h-3.5" /></button><button disabled={removingItem === i} onClick={() => void removeItem(i)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Remove item"><Trash2 className="w-3.5 h-3.5" /></button></div>
+                    <div className="flex items-start gap-1"><button disabled={variantsLoading || groups.length === 0} onClick={() => { setEditingItem(editing ? null : i); setVariantDraft(item.variant_options ?? {}); }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed" title={groups.length > 0 ? 'Edit product variant' : 'This product has no registered variants'}><Pencil className="w-3.5 h-3.5" /></button><button disabled={removingItem === i} onClick={() => void removeItem(i)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Remove item"><Trash2 className="w-3.5 h-3.5" /></button></div>
                   </div>
-                  {editing && <div className="mt-3 pt-3 border-t border-gray-100"><label className="text-[10px] font-bold text-gray-400 uppercase">Product variant</label><input value={variantText} onChange={e => setVariantText(e.target.value)} placeholder="Color: Black, Size: Large" className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-gray-400" /><p className="text-[9px] text-gray-400 mt-1">Variant changes use the product's configured pricing.</p><div className="flex justify-end gap-2 mt-2"><button onClick={() => setEditingItem(null)} className="px-3 py-1.5 text-xs text-gray-500">Cancel</button><button disabled={savingItem} onClick={() => void saveVariant(i)} className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold flex items-center gap-1">{savingItem ? <Loader className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>} Save</button></div></div>}
+                  {editing && <div className="mt-3 pt-3 border-t border-gray-100 space-y-2"><label className="text-[10px] font-bold text-gray-400 uppercase">Product variant</label>{groups.map(group => <div key={group.id}><label className="text-[9px] font-bold text-gray-500 uppercase">{group.name}</label><select value={variantDraft[group.name] ?? ''} onChange={e => setVariantDraft(v => ({ ...v, [group.name]: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-xs bg-white outline-none focus:border-gray-400"><option value="">Select {group.name}</option>{group.options.map(option => <option key={option} value={option}>{option}</option>)}</select></div>)}<p className="text-[9px] text-gray-400">Only variants registered for this product can be selected. The existing variant pricing logic will be used when saved.</p><div className="flex justify-end gap-2 mt-2"><button onClick={() => setEditingItem(null)} className="px-3 py-1.5 text-xs text-gray-500">Cancel</button><button disabled={savingItem} onClick={() => void saveVariant(i)} className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold flex items-center gap-1">{savingItem ? <Loader className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>} Save</button></div></div>}
                 </div>;
               })}
             </div>
@@ -262,7 +297,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
 
           <section className="rounded-2xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-3"><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Delivery address</p>{canEditAddress && <button onClick={() => setAddressEditing(v => !v)} className="text-[10px] font-bold text-orange-600 flex items-center gap-1"><Pencil className="w-3 h-3"/> {addressEditing ? 'Close edit' : 'Edit address'}</button>}</div>
-            {!addressEditing ? <div className="text-xs text-gray-600 space-y-1"><div className="flex gap-2"><MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5"/><div><p className="font-semibold text-gray-800">{order.delivery_address?.name ?? order.customer_name} · {order.delivery_address?.phone ?? order.customer_whatsapp}</p><p>{order.delivery_address?.address_line1 || 'No street address saved'}</p>{order.delivery_address?.address_line2 && <p>{order.delivery_address.address_line2}</p>}<p>{[order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ')}</p>{order.delivery_address?.landmark && <p>Landmark: {order.delivery_address.landmark}</p>}{order.pickup_station_name && <p className="mt-1 text-gray-500">Pickup: {order.pickup_station_name}{order.pickup_station_address ? ' — ' + order.pickup_station_address : ''}</p>}</div></div></div> : <div className="grid grid-cols-2 gap-2">{(['name','phone','address_line1','address_line2','city','state','landmark'] as const).map(k => <div key={k} className={k === 'address_line1' || k === 'address_line2' || k === 'landmark' ? 'col-span-2' : ''}><label className="text-[9px] font-bold text-gray-400 uppercase">{k.replaceAll('_',' ')}</label><input value={address[k] ?? ''} onChange={e => setAddress(a => ({...a,[k]:e.target.value}))} className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-gray-400" /></div>)}<div className="col-span-2 flex justify-end gap-2 mt-1"><button onClick={() => setAddressEditing(false)} className="px-3 py-1.5 text-xs text-gray-500">Cancel</button><button disabled={savingAddress} onClick={() => void saveAddress()} className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold flex items-center gap-1">{savingAddress ? <Loader className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>} Save address</button></div></div>}
+            {!addressEditing ? <div className="text-xs text-gray-600 space-y-1"><div className="flex gap-2"><MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5"/><div><p className="font-semibold text-gray-800">{order.delivery_address?.name ?? order.customer_name} · {order.delivery_address?.phone ?? order.customer_whatsapp}</p>{(order.delivery_address?.email || order.customer_email) && <p className="text-gray-500">{order.delivery_address?.email ?? order.customer_email}</p>}<p>{order.delivery_address?.address_line1 || 'No street address saved'}</p>{order.delivery_address?.address_line2 && <p>{order.delivery_address.address_line2}</p>}<p>{[order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ')}</p>{order.delivery_address?.landmark && <p>Landmark: {order.delivery_address.landmark}</p>}{order.pickup_station_name && <p className="mt-1 text-gray-500">Pickup: {order.pickup_station_name}{order.pickup_station_address ? ' — ' + order.pickup_station_address : ''}</p>}</div></div></div> : <div className="grid grid-cols-2 gap-2">{(['name','phone','email','address_line1','address_line2','city','state','landmark'] as const).map(k => <div key={k} className={k === 'address_line1' || k === 'address_line2' || k === 'landmark' ? 'col-span-2' : ''}><label className="text-[9px] font-bold text-gray-400 uppercase">{k.replaceAll('_',' ')}</label><input type={k === 'email' ? 'email' : 'text'} value={address[k] ?? ''} onChange={e => setAddress(a => ({...a,[k]:e.target.value}))} className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-gray-400" /></div>)}<div className="col-span-2 flex justify-end gap-2 mt-1"><button onClick={() => setAddressEditing(false)} className="px-3 py-1.5 text-xs text-gray-500">Cancel</button><button disabled={savingAddress} onClick={() => void saveAddress()} className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold flex items-center gap-1">{savingAddress ? <Loader className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>} Save address</button></div></div>}
           </section>
 
           <section className="rounded-2xl border border-gray-100 p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment & total</p><div className="space-y-2 text-xs"><div className="flex justify-between"><span className="text-gray-400">Subtotal</span><span className="font-semibold">{money(order.subtotal_ngn)}</span></div><div className="flex justify-between"><span className="text-gray-400">Jumia / delivery fee</span><span>{money(order.jumia_fee_ngn)}</span></div><div className="flex justify-between"><span className="text-gray-400">Shipping</span><span>{money(order.shipping_ngn)}</span></div><div className="border-t border-gray-100 pt-2 flex justify-between"><span className="font-bold text-gray-700">Total</span><span className="font-black text-gray-900">{money(order.total_ngn)}</span></div><div className="pt-1 text-[10px] text-gray-400 flex items-center gap-1"><CreditCard className="w-3 h-3"/>{order.payment_method ?? '—'}{order.payment_reference ? ' · ' + order.payment_reference : ''}</div></div></section>
@@ -497,14 +532,7 @@ export default function ManagementOrders({ belowTabs }: { belowTabs?: ReactNode 
                             <table className="w-full text-left">
                               <tbody className="divide-y divide-gray-100">
                                 {g.buyers.map((b, i) => (
-                                  <tr
-                                    key={i}
-                                    onClick={() => {
-                                      const found = orders.find(o => o.code === b.orderCode);
-                                      if (found) setSelectedOrderId(found.id);
-                                    }}
-                                    className="cursor-pointer hover:bg-gray-50"
-                                  >
+                                  <tr key={i} onClick={() => { const found = orders.find(o => o.code === b.orderCode); if (found) setSelectedOrderId(found.id); }} className="cursor-pointer hover:bg-gray-50">
                                     <td className="px-3 py-2 text-xs"><span className="text-gray-600">{b.name}</span></td>
                                     <td className="px-3 py-2 text-[11px]"><span className="font-mono font-semibold text-orange-600 hover:underline">{b.orderCode}</span></td>
                                     <td className="px-3 py-2 text-xs text-gray-600">{b.whatsapp || '—'}</td>
