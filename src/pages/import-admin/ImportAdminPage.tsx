@@ -1601,7 +1601,7 @@ export function OrdersList({ token }: { token: string }) {
     delivery_address: selectedOrder.delivery_address
       ? {
           ...selectedOrder.delivery_address,
-          email: selectedOrder.customer_email ?? selectedOrder.delivery_address.email ?? '',
+          email: selectedOrder.customer_email ?? '',
         }
       : null,
   } : null;
