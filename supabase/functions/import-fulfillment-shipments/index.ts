@@ -277,10 +277,20 @@ serve(async (req) => {
       if (error) return json({ error: error.message }, 500)
       const orderIds = Array.from(new Set((shipments ?? []).map((s: any) => s.order_id).filter(Boolean)))
       const { data: orders, error: ordersError } = orderIds.length
-        ? await db.from('china_import_orders').select('id,delivery_mode,delivery_address,pickup_station_name,pickup_station_address').in('id', orderIds)
+        ? await db.from('china_import_orders').select('id,user_id,delivery_mode,delivery_address,pickup_station_name,pickup_station_address').in('id', orderIds)
         : { data: [], error: null }
       if (ordersError) return json({ error: ordersError.message }, 500)
       const orderById = new Map((orders ?? []).map((o: any) => [o.id, o]))
+
+      const customerIds = Array.from(new Set([
+        ...(shipments ?? []).map((s: any) => s.customer_id).filter(Boolean),
+        ...(orders ?? []).map((o: any) => o.user_id).filter(Boolean),
+      ]))
+      const { data: customers, error: customersError } = customerIds.length
+        ? await db.from('customers').select('id,full_name,phone,email').in('id', customerIds)
+        : { data: [], error: null }
+      if (customersError) return json({ error: customersError.message }, 500)
+      const customerById = new Map((customers ?? []).map((customer: any) => [customer.id, customer]))
 
       const ids = (shipments ?? []).map((s: any) => s.id)
       const { data: shipmentItems, error: itemsError } = ids.length
@@ -298,8 +308,12 @@ serve(async (req) => {
       return json({
         shipments: (shipments ?? []).map((shipment: any) => {
           const order = orderById.get(shipment.order_id)
+          const customer = customerById.get(shipment.customer_id) ?? (order?.user_id ? customerById.get(order.user_id) : null)
           return {
             ...shipment,
+            customer_name: customer?.full_name ?? null,
+            customer_whatsapp: customer?.phone ?? null,
+            customer_email: customer?.email ?? null,
             delivery_mode: shipment.delivery_mode ?? order?.delivery_mode ?? null,
             delivery_address: shipment.delivery_address ?? order?.delivery_address ?? (
               order?.delivery_mode === 'pickup_station' && order?.pickup_station_name
