@@ -90,7 +90,20 @@ export interface StoreOwner extends User {
 // STORE TYPES
 // ============================================
 
-export type StorefrontLook = 'classic' | 'clean' | 'boutique' | 'catalog' | 'social' | 'bento';
+export type StorefrontLook = 'classic' | 'clean' | 'boutique' | 'catalog' | 'social' | 'bento' | 'atelier' | 'noir';
+
+/** A curated list of products with its own hero slide (premium looks). Saved in look_settings.collections. */
+export interface StoreCollection {
+  id: string;            // url-safe, e.g. 'december-sales'
+  title: string;         // "December Sales"
+  subtitle?: string;     // "Up to 30% off gifts"
+  image?: string;        // hero image URL
+  cta?: string;          // button label, default "Shop now"
+  product_ids: string[];
+  starts_at?: string | null; // ISO date; hidden before
+  ends_at?: string | null;   // ISO date; hidden after
+  hidden?: boolean;
+}
 export type StorefrontNavStyle = 'auto' | 'bottom' | 'sidebar';
 
 export interface Store {

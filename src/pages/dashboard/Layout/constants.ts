@@ -67,9 +67,13 @@ export const sidebarItems: NavItem[] = [
     children: [
       { icon: MapPin,  label: 'Delivery Zones', path: '/dashboard/delivery-zones' },
       { icon: Globe,   label: 'Custom Domain',  path: '/dashboard/domain' },
-      { icon: Palette, label: 'Templates',      path: '/dashboard/templates' },
       { icon: Layers,  label: 'Niches',         path: '/dashboard/niches' },
     ],
+  },
+  {
+    icon: Palette,
+    label: 'Themes',
+    path: '/dashboard/themes',
   },
   {
     icon: ShoppingBag,
@@ -150,6 +154,7 @@ export const PATH_PERMISSIONS: Record<string, PermissionKey | null> = {
   '/dashboard/delivery-zones': 'can_manage_settings',
   '/dashboard/domain':         'can_manage_settings',
   '/dashboard/templates':      'can_manage_settings',
+  '/dashboard/themes':         'can_manage_settings',
   '/dashboard/niches':         'can_manage_settings',
   '/dashboard/settings':       'can_manage_settings',
 

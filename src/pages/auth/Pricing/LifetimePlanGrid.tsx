@@ -148,6 +148,14 @@ export default function LifetimePlanGrid({
                       No staff management
                     </li>
                   )}
+                  {plan.id !== 'one_niche' && (
+                    <li className="flex items-center gap-2 text-sm text-gray-600">
+                      <CheckCircle className={`w-4 h-4 flex-shrink-0 ${
+                        isSelected ? 'text-purple-500' : 'text-gray-400'
+                      }`} />
+                      Premium themes + curated collections
+                    </li>
+                  )}
                 </ul>
 
                 {/* CTA */}

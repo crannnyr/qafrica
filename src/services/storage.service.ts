@@ -28,6 +28,9 @@ export const storageService = {
     try {
       if (bucket === 'store-logos') {
         fileToUpload = await compressImage(file, { maxWidth: 400, maxHeight: 400, quality: 0.85 });
+      } else if (bucket === 'store-banners' && folder.endsWith('/collections')) {
+        // Collection hero slides fill tall phone screens and wide desktops
+        fileToUpload = await compressImage(file, { maxWidth: 1800, maxHeight: 1800, quality: 0.82 });
       } else if (bucket === 'store-banners') {
         fileToUpload = await compressImage(file, { maxWidth: 1200, maxHeight: 400, quality: 0.82 });
       } else {

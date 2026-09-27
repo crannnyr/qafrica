@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import MarketplaceReturnBar from '@/components/storefront/MarketplaceReturnBar';
+import PremiumStorefront from '@/components/storefront/PremiumStorefront';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingCart, Search, X, Heart, ArrowRight,
@@ -19,7 +20,7 @@ import { useCustomDomainSlug } from '@/components/CustomDomainRouter';
 import StoreLocationBanner from './StoreLocationBanner';
 import type { Store, Product } from '@/types';
 import LookStorefront from '@/components/storefront/LookStorefront';
-import { applyPreviewOverrides, isNewLook } from '@/lib/storefrontLooks';
+import { applyPreviewOverrides, isNewLook, isPremiumLook } from '@/lib/storefrontLooks';
 import { recordStoreTouch } from '@/lib/marketplaceAttribution';
 
 // ── Helper: pick black or white text based on background color ────────────────
@@ -365,6 +366,35 @@ export default function StorePage() {
   // ?sf_preview=1 lets the owner's settings screen preview unsaved choices in an
   // iframe. It only changes what this visitor sees; nothing is saved.
   const viewStore: Store = applyPreviewOverrides(store);
+
+  // Premium looks (Atelier, Noir): curated collections + hero slider. Growth plan and above.
+  if (isPremiumLook(viewStore.storefront_look)) {
+    return (
+      <>
+        <StoreSEO
+          storeName={store.name}
+          storeDescription={store.description}
+          storeLogo={store.logo_url}
+          storeUrl={`${window.location.origin}/${slug}`}
+        />
+        <MarketplaceReturnBar fallback="/stores" />
+        <PremiumStorefront
+          store={viewStore}
+          slug={slug}
+          products={products}
+          primary={primary}
+          cartCount={cartCount}
+          customer={customer}
+          isAuthenticated={isAuthenticated}
+          onAddToCart={handleAddToCart}
+          isInWishlist={isInWishlist}
+          onWishlistToggle={handleWishlistToggle}
+          locationBanner={<StoreLocationBanner store={store} primary={primary} />}
+        />
+        {variantSheet}
+      </>
+    );
+  }
 
   if (isNewLook(viewStore.storefront_look)) {
     return (

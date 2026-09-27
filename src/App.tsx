@@ -517,7 +517,8 @@ function App() {
             <Route path="analytics" element={<StaffGuard permission="can_view_analytics"><AnalyticsPage /></StaffGuard>} />
             <Route path="tax-expenses" element={<StaffGuard permission="can_manage_wallet"><TaxExpensesPage /></StaffGuard>} />
             <Route path="settings" element={<StaffGuard><StoreSettingsPage /></StaffGuard>} />
-            <Route path="templates" element={<StaffGuard permission="can_manage_settings"><StoreTemplatesPage /></StaffGuard>} />
+            <Route path="themes" element={<StaffGuard permission="can_manage_settings"><StoreTemplatesPage /></StaffGuard>} />
+            <Route path="templates" element={<Navigate to="/dashboard/themes" replace />} />
             <Route path="subscription" element={<StaffGuard><SubscriptionPage /></StaffGuard>} />
             <Route path="niches" element={<StaffGuard permission="can_manage_settings"><NicheCustomizationPage /></StaffGuard>} />
             <Route path="how-to-use" element={<HowToUsePage />} />

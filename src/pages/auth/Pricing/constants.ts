@@ -14,7 +14,7 @@ export const durations = [
 export const ALL_INCLUSIVE_FEATURES = [
   'Unlimited Products',
   'Full Analytics Suite',
-  'All Store Themes',
+  'Standard Store Themes',
   'Custom Domain',
   'Import Catalog',
   'Dropshipping',

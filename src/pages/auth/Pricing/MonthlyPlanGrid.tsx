@@ -153,6 +153,19 @@ export default function MonthlyPlanGrid({
                     No staff management
                   </li>
                 )}
+                {plan.id !== 'one_niche' ? (
+                  <li className="flex items-center gap-2 text-sm text-gray-600">
+                    <CheckCircle className={`w-4 h-4 flex-shrink-0 ${
+                      isSelected ? 'text-orange-500' : 'text-gray-400'
+                    }`} />
+                    Premium themes + curated collections
+                  </li>
+                ) : (
+                  <li className="flex items-center gap-2 text-sm text-gray-400">
+                    <XCircle className="w-4 h-4 flex-shrink-0 text-red-400" />
+                    Standard themes only
+                  </li>
+                )}
               </ul>
 
               {/* CTA */}
