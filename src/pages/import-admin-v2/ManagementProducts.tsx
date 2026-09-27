@@ -7,7 +7,7 @@ import {
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
 
-const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-management`;
+const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const PAGE_SIZE = 50;
 
 type Product = {
@@ -81,7 +81,7 @@ export default function ManagementProducts() {
     try {
       const token = getManagementToken();
       if (!token) throw new Error('Management session expired');
-      const res = await fetch(`${EDGE_URL}?action=admin-product-delete`, {
+      const res = await fetch(`${EDGE_URL}?action=delete-product`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: token, id: product.id }),
