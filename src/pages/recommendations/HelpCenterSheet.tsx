@@ -8,8 +8,6 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Headset, ChevronDown, MessageCircle, ArrowRight } from 'lucide-react';
 
-const WHATSAPP_COMMUNITY_LINK = 'https://chat.whatsapp.com/CzoAid17ZbxEuzbQtvMQ6t';
-
 const FAQS = [
   {
     q: 'How long does delivery take?',
@@ -33,7 +31,7 @@ const FAQS = [
   },
   {
     q: 'What if something goes wrong with my order?',
-    a: 'Message us in the WhatsApp community above, or reach out with your order code and we\'ll look into it directly — every order is tracked end to end from consolidation through to delivery.',
+    a: 'Reach out with your order code and we\'ll look into it directly — every order is tracked end to end from consolidation through to delivery.',
   },
 ];
 
@@ -77,29 +75,6 @@ export default function HelpCenterSheet({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-6">
-          {/* Bold WhatsApp community banner */}
-          <a
-            href={WHATSAPP_COMMUNITY_LINK}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block bg-emerald-600 hover:bg-emerald-700 rounded-2xl p-4 transition-colors"
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-11 h-11 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0">
-                <MessageCircle className="w-5 h-5 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-black text-white text-sm leading-snug">
-                  Join the QAFRICA WhatsApp community
-                </p>
-                <p className="text-emerald-50 text-xs mt-0.5">
-                  Meet other QAFRICA importers like yourself
-                </p>
-              </div>
-              <ArrowRight className="w-4 h-4 text-white flex-shrink-0" />
-            </div>
-          </a>
-
           {/* FAQ */}
           <div>
             <h3 className="font-bold text-gray-900 text-sm mb-1">Frequently asked questions</h3>
