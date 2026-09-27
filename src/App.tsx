@@ -7,6 +7,7 @@ import { useDeveloperAuthStore } from '@/stores/developerAuthStore';
 
 // Scroll reset on every route change
 import ScrollToTop from '@/components/ScrollToTop';
+import { NavTracker } from '@/lib/navigation';
 
 // Pages
 const LandingPage = lazy(() => import('@/pages/landing/LandingPage'));
@@ -369,6 +370,7 @@ function App() {
       <CustomDomainRouter>
         {/* Resets scroll to top on every route change — must be inside the router */}
         <ScrollToTop />
+        <NavTracker />
 
         <Suspense fallback={<PageLoader />}>
         <Routes>

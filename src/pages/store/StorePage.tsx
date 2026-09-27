@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
+import MarketplaceReturnBar from '@/components/storefront/MarketplaceReturnBar';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ShoppingCart, Search, X, Heart, ArrowRight,
@@ -374,6 +375,7 @@ export default function StorePage() {
           storeLogo={store.logo_url}
           storeUrl={`${window.location.origin}/${slug}`}
         />
+        <MarketplaceReturnBar fallback="/stores" />
         <LookStorefront
           store={viewStore}
           slug={slug}
@@ -395,6 +397,7 @@ export default function StorePage() {
   // ─── Page ─────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-white" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <MarketplaceReturnBar fallback="/stores" />
       <StoreSEO
         storeName={store.name}
         storeDescription={store.description}
