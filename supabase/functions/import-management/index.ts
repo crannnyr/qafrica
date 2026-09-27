@@ -316,7 +316,7 @@ serve(async (req) => {
 
     const [{ data: customers, error: customersError }, { data: batches, error: batchesError }, { data: inventory, error: inventoryError }] = await Promise.all([
       customerIds.length
-        ? supabase.from('customers').select('id, full_name, phone').in('id', customerIds)
+        ? supabase.from('customers').select('id, full_name, phone, email').in('id', customerIds)
         : Promise.resolve({ data: [], error: null }),
       batchIds.length
         ? supabase.from('import_batches').select('id, opened_at').in('id', batchIds)
@@ -348,6 +348,7 @@ serve(async (req) => {
           order_code: order?.code ?? '—',
           customer_name: customer?.full_name || order?.customer_name || 'Customer',
           customer_whatsapp: customer?.phone || order?.customer_whatsapp || null,
+          customer_email: customer?.email || null,
           batch_id: order?.batch_id ?? null,
           batch_opened_at: batch?.opened_at ?? null,
           order_status: order?.status ?? null,
