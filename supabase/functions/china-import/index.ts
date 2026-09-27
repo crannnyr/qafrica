@@ -2259,7 +2259,18 @@ serve(async (req: Request) => {
       if (!code) return json({ error: 'Missing code' }, 400)
       const { data, error } = await supabase.from('china_import_orders').select('*').eq('code', code).single()
       if (error || !data) return json({ error: 'Order not found' }, 404)
-      return json({ order: data })
+
+      // Always resolve the email from the customer's profile, not from a
+      // possibly stale delivery_address snapshot.
+      const { data: customer } = data.user_id
+        ? await supabase.from('customers').select('email').eq('id', data.user_id).maybeSingle()
+        : { data: null }
+      return json({
+        order: {
+          ...data,
+          customer_email: customer?.email ?? null,
+        },
+      })
     }
 
     // Admin order-detail address editor. Kept separate from the generic update-order
@@ -2282,6 +2293,7 @@ serve(async (req: Request) => {
       const address = {
         name: typeof delivery_address.name === 'string' ? delivery_address.name.trim() : '',
         phone: typeof delivery_address.phone === 'string' ? delivery_address.phone.trim() : '',
+        email: typeof delivery_address.email === 'string' ? delivery_address.email.trim() : '',
         address_line1: typeof delivery_address.address_line1 === 'string' ? delivery_address.address_line1.trim() : '',
         address_line2: typeof delivery_address.address_line2 === 'string' ? delivery_address.address_line2.trim() : '',
         city: typeof delivery_address.city === 'string' ? delivery_address.city.trim() : '',
