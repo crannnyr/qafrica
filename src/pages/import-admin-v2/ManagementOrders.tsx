@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Loader, Search, X, CheckCircle2 } from 'lucide-react';
-import { createPortal } from 'react-dom';
 import CONFIG from '@/lib/config';
 import ManagementOrdersLegacy, { OrderDetails } from './ManagementOrdersLegacy';
 import { toast } from 'sonner';
@@ -13,26 +12,7 @@ export default function ManagementOrders() {
   const [error, setError] = useState('');
   const [found, setFound] = useState<any>(null);
   const [details, setDetails] = useState<any>(null);
-  const [tabSearchTarget, setTabSearchTarget] = useState<HTMLElement | null>(null);
   const token = sessionStorage.getItem('import_manager_token') || '';
-
-  useEffect(() => {
-    const findBatchTabs = () => {
-      const activeButton = Array.from(document.querySelectorAll('button')).find(
-        button => button.textContent?.trim() === 'Active'
-      );
-      const parent = activeButton?.parentElement;
-      if (parent && Array.from(parent.querySelectorAll('button')).some(button => button.textContent?.trim() === 'Closed')) {
-        setTabSearchTarget(parent);
-        return true;
-      }
-      return false;
-    };
-
-    if (findBatchTabs()) return;
-    const timer = window.setTimeout(findBatchTabs, 50);
-    return () => window.clearTimeout(timer);
-  }, []);
 
   const searchOrder = async () => {
     const code = query.trim().toUpperCase();
@@ -104,8 +84,7 @@ export default function ManagementOrders() {
 
   return (
     <div className="w-full space-y-4">
-      <ManagementOrdersLegacy />
-      {tabSearchTarget ? createPortal(searchContent, tabSearchTarget) : null}
+      <ManagementOrdersLegacy belowTabs={searchContent} />
       {details && <OrderDetails
         token={token}
         order={details}
