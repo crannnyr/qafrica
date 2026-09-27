@@ -225,7 +225,39 @@ export default function ClosedBatchDetail({
         batchViewCall('customer-breakdown', { manager_token: token, batch_key: batchKey, kind: 'clearance' }),
         batchViewCall('sourcing-totals', { manager_token: token, batch_key: batchKey }),
       ]);
-      setCustomerLines(consolRes.rows ?? []);
+      // The breakdown endpoint is the rich source, but the parent already
+      // has the authoritative closed-batch order list. Merge any batch orders
+      // missing from the breakdown so search can never hide a real order.
+      const apiLines = (consolRes.rows ?? []) as CustomerLine[];
+      const existingOrderIds = new Set(apiLines.map(line => line.order_id));
+      const fallbackLines: CustomerLine[] = [];
+
+      for (const order of orders) {
+        if (!order.user_id || existingOrderIds.has(order.id)) continue;
+        for (const item of order.items ?? []) {
+          fallbackLines.push({
+            customer_id: order.user_id,
+            customer_name: order.customer_name,
+            first_order_at: order.created_at,
+            order_count: orders.filter(o => o.user_id === order.user_id).length,
+            shipping_method: (item.shipping_method ?? order.shipping_method ?? null) as CustomerLine['shipping_method'],
+            order_id: order.id,
+            order_code: order.code,
+            product_id: item.id,
+            product_name: item.name,
+            product_image: item.image_url ?? null,
+            source_url: null,
+            ship_only: false,
+            variant_options: item.variant_options ?? null,
+            qty: Number(item.quantity ?? 0),
+            unit_price_ngn: Number(item.price_ngn ?? 0),
+            others_in_batch: 0,
+            customers_in_open_batch: 0,
+          });
+        }
+      }
+
+      setCustomerLines([...apiLines, ...fallbackLines]);
       setAdjustmentsByKind({ consolidation_shipping: consolRes.adjustments ?? [], clearance: clearRes.adjustments ?? [] });
       setLedgerByKind({ consolidation_shipping: consolRes.ledger ?? [], clearance: clearRes.ledger ?? [] });
       setStatusByKind({ consolidation_shipping: consolRes.customer_status ?? [], clearance: clearRes.customer_status ?? [] });
