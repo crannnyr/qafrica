@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader, Search, X, CheckCircle2 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import CONFIG from '@/lib/config';
 import ManagementOrdersLegacy, { OrderDetails } from './ManagementOrdersLegacy';
 import { toast } from 'sonner';
@@ -12,7 +13,26 @@ export default function ManagementOrders() {
   const [error, setError] = useState('');
   const [found, setFound] = useState<any>(null);
   const [details, setDetails] = useState<any>(null);
+  const [tabSearchTarget, setTabSearchTarget] = useState<HTMLElement | null>(null);
   const token = sessionStorage.getItem('import_manager_token') || '';
+
+  useEffect(() => {
+    const findBatchTabs = () => {
+      const activeButton = Array.from(document.querySelectorAll('button')).find(
+        button => button.textContent?.trim() === 'Active'
+      );
+      const parent = activeButton?.parentElement;
+      if (parent && Array.from(parent.querySelectorAll('button')).some(button => button.textContent?.trim() === 'Closed')) {
+        setTabSearchTarget(parent);
+        return true;
+      }
+      return false;
+    };
+
+    if (findBatchTabs()) return;
+    const timer = window.setTimeout(findBatchTabs, 50);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const searchOrder = async () => {
     const code = query.trim().toUpperCase();
@@ -44,8 +64,8 @@ export default function ManagementOrders() {
     ? `Batch — ${new Date(found.staged_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}`
     : 'Active — not yet assigned to a batch';
 
-  return (
-    <div className="w-full space-y-4">
+  const searchContent = (
+    <div className="w-full space-y-3 mt-3 mb-1">
       <div className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center gap-2">
           <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -79,9 +99,13 @@ export default function ManagementOrders() {
           </div>
         </div>
       )}
+    </div>
+  );
 
+  return (
+    <div className="w-full space-y-4">
       <ManagementOrdersLegacy />
-
+      {tabSearchTarget ? createPortal(searchContent, tabSearchTarget) : null}
       {details && <OrderDetails
         token={token}
         order={details}
