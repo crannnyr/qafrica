@@ -5,7 +5,7 @@
 // once it's been sourced, which stamps every order in it with a shared
 // staged_at timestamp and moves it into the Closed view for reference.
 import { useState, useEffect, useCallback } from 'react';
-import { Loader, Package, Users, Archive, CheckCircle2, FileDown } from 'lucide-react';
+import { Loader, Package, Users, Archive, CheckCircle2, FileDown, Search, X } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { CustomerDetail } from './ImportAdminCustomers';
 import ClosedBatchDetail from './ClosedBatchDetail';
@@ -113,6 +113,10 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
   const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedBatchKey, setSelectedBatchKey] = useState<string | null>(null);
+  const [orderSearch, setOrderSearch] = useState('');
+  const [orderSearchLoading, setOrderSearchLoading] = useState(false);
+  const [orderSearchError, setOrderSearchError] = useState('');
+  const [searchedOrder, setSearchedOrder] = useState<OrderRow | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -156,6 +160,33 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
   const groups = buildGroups(orders, showClosed);
   const closedBatches = buildClosedBatches(orders);
   const selectedOrder = selectedOrderId ? orders.find(o => o.id === selectedOrderId) ?? null : null;
+
+  const loadSearchedOrder = async () => {
+    const code = orderSearch.trim().toUpperCase();
+    if (!code) return;
+    setOrderSearchLoading(true);
+    setOrderSearchError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=load-code`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, code }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error || !data.order) throw new Error(data.error ?? 'Order not found');
+      const found = data.order as OrderRow;
+      if (showClosed ? !found.staged_at : !!found.staged_at) {
+        throw new Error(showClosed ? 'This order is not in a closed batch.' : 'This order is already in a closed batch.');
+      }
+      setSearchedOrder(found);
+    } catch (error) {
+      setSearchedOrder(null);
+      setOrderSearchError(error instanceof Error ? error.message : 'Order not found');
+    } finally {
+      setOrderSearchLoading(false);
+    }
+  };
+
+  const searchedBatch = searchedOrder?.staged_at ? buildClosedBatches([searchedOrder])[0] : null;
 
   const closeGroup = async (group: Group) => {
     setClosingKey(group.key);
@@ -242,6 +273,16 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
 
   return (
     <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 p-4">
+        <div className="flex items-center gap-2">
+          <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <input value={orderSearch} onChange={e => { setOrderSearch(e.target.value.toUpperCase()); setOrderSearchError(''); }} onKeyDown={e => { if (e.key === 'Enter') void loadSearchedOrder(); }} placeholder={showClosed ? 'Search closed order by code…' : 'Search active order by code…'} className="flex-1 min-w-0 px-1 py-2 text-sm outline-none font-mono uppercase" />
+          {orderSearch && <button onClick={() => { setOrderSearch(''); setSearchedOrder(null); setOrderSearchError(''); }} className="p-1.5 rounded-lg hover:bg-gray-100"><X className="w-4 h-4 text-gray-400" /></button>}
+          <button onClick={() => void loadSearchedOrder()} disabled={orderSearchLoading || !orderSearch.trim()} className="px-3.5 py-2 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white text-xs font-bold rounded-xl flex items-center gap-1.5">{orderSearchLoading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : 'Search'}</button>
+        </div>
+        {orderSearchError && <p className="mt-2 text-[11px] text-red-500">{orderSearchError}</p>}
+      </div>
+
       <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1">
         <button
           onClick={() => setShowClosed(false)}
@@ -256,6 +297,21 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
           Closed
         </button>
       </div>
+
+      {searchedOrder && (
+        <div className="bg-white rounded-2xl border border-orange-100 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Order found</p>
+              <button onClick={() => setSelectedOrderId(searchedOrder.id)} className="text-sm font-black text-orange-600 font-mono hover:underline">{searchedOrder.code}</button>
+              <p className="text-xs text-gray-700 mt-1">{searchedOrder.customer_name}</p>
+              <p className="text-[11px] text-gray-400">{searchedOrder.items?.length ?? 0} item line{(searchedOrder.items?.length ?? 0) === 1 ? '' : 's'} · {new Date(searchedOrder.created_at).toLocaleString('en-NG')}</p>
+              {searchedBatch && <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg"><CheckCircle2 className="w-3.5 h-3.5" /> Closed batch: {new Date(searchedBatch.stagedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</p>}
+            </div>
+            <button onClick={() => setSelectedOrderId(searchedOrder.id)} className="px-3 py-2 rounded-xl bg-gray-900 text-white text-xs font-bold">View details</button>
+          </div>
+        </div>
+      )}
 
       {!showClosed && !isLoading && groups.length > 0 && (
         <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center justify-between gap-3">
