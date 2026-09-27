@@ -13,7 +13,7 @@ import WithdrawalRequestsList from './Wallet/WithdrawalRequestsList';
 import WithdrawalAccountSection from './Wallet/WithdrawalAccountSection';
 import TransactionTable from './Wallet/TransactionTable';
 import WithdrawModal from './Wallet/WithdrawModal';
-import { sendBankChangeOtp, withdrawalEmailHtml, generateOtp } from './Wallet/emailTemplates';
+import { withdrawalEmailHtml } from './Wallet/emailTemplates';
 
 interface SavedAccount {
   bank_name: string;
@@ -105,7 +105,17 @@ export default function WalletPage() {
     toast.success('Withdrawal account saved');
   };
 
-  // ── Request OTP ────────────────────────────────────────────────────────────
+  // ── Request code (server generates, stores a hash bound to the new account, emails it) ──
+  const bankChange = async (body: Record<string, string>) => {
+    const { data, error } = await supabase.functions.invoke('bank-change', { body });
+    if (error) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const msg = await (error as any)?.context?.json?.().then((j: { error?: string }) => j?.error).catch(() => null);
+      return { ok: false as const, error: msg ?? 'Something went wrong. Please try again.' };
+    }
+    return { ok: true as const, data };
+  };
+
   const handleRequestOtp = async () => {
     if (!editForm.bank_name || !editForm.account_number || !editForm.account_name) {
       toast.error('Please fill in all bank account fields'); return;
@@ -114,53 +124,20 @@ export default function WalletPage() {
       toast.error('Please enter a valid 10-digit account number'); return;
     }
     setIsSendingOtp(true);
-    const otp       = generateOtp();
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-    const { error } = await supabase
-      .from('wallets')
-      .update({ bank_change_otp: otp, bank_change_otp_expires_at: expiresAt })
-      .eq('user_id', user!.id);
-    if (error) { toast.error('Failed to generate verification code'); setIsSendingOtp(false); return; }
-    await sendBankChangeOtp(user!.email, otp, user!.full_name || 'there');
+    const r = await bankChange({ action: 'request', bank_name: editForm.bank_name, account_number: editForm.account_number, account_name: editForm.account_name });
     setIsSendingOtp(false);
+    if (!r.ok) { toast.error(r.error); return; }
     setOtpSent(true);
     toast.success(`Verification code sent to ${user?.email}`);
   };
 
-  // ── Verify OTP + save ──────────────────────────────────────────────────────
+  // ── Verify code + save (server checks the code and updates the account) ──
   const handleVerifyAndSave = async () => {
     if (!otpInput || otpInput.length < 6) { toast.error('Please enter the 6-digit code'); return; }
     setIsVerifyingOtp(true);
-    const { data: walletData, error: fetchError } = await supabase
-      .from('wallets')
-      .select('bank_change_otp, bank_change_otp_expires_at')
-      .eq('user_id', user!.id)
-      .single();
-    if (fetchError || !walletData?.bank_change_otp) {
-      toast.error('Verification code not found. Please request a new one.');
-      setIsVerifyingOtp(false); return;
-    }
-    if (new Date(walletData.bank_change_otp_expires_at) < new Date()) {
-      toast.error('Verification code expired. Please request a new one.');
-      setIsVerifyingOtp(false); setOtpSent(false); setOtpInput(''); return;
-    }
-    if (walletData.bank_change_otp !== otpInput.trim()) {
-      toast.error('Incorrect code. Please try again.');
-      setIsVerifyingOtp(false); return;
-    }
-    const { error: saveError } = await supabase
-      .from('wallets')
-      .update({
-        withdrawal_bank_name:      editForm.bank_name,
-        withdrawal_account_number: editForm.account_number,
-        withdrawal_account_name:   editForm.account_name,
-        bank_change_otp:           null,
-        bank_change_otp_expires_at: null,
-        updated_at:                new Date().toISOString(),
-      })
-      .eq('user_id', user!.id);
+    const r = await bankChange({ action: 'confirm', code: otpInput.trim(), bank_name: editForm.bank_name, account_number: editForm.account_number, account_name: editForm.account_name });
     setIsVerifyingOtp(false);
-    if (saveError) { toast.error('Failed to update account details'); return; }
+    if (!r.ok) { toast.error(r.error); return; }
     setSavedAccount({ ...editForm });
     setIsEditingAccount(false); setOtpSent(false); setOtpInput('');
     toast.success('Withdrawal account updated successfully');

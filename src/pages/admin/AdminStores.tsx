@@ -134,7 +134,7 @@ export default function AdminStores() {
     setIsSaving(true);
     const { error } = await supabase
       .from('stores')
-      .update({ domain_status: 'active' })
+      .update({ domain_status: 'connected' })
       .eq('id', storeId);
     if (error) toast.error('Failed to approve domain');
     else { toast.success('Domain approved'); await fetchStores(); }

@@ -1,4 +1,6 @@
 import { Globe, Clock, Link2, AlertCircle } from 'lucide-react';
+import CONFIG from '@/lib/config';
+import { storeSubdomainUrl } from '@/lib/storeSubdomain';
 
 interface Props {
   customDomain?: string | null;
@@ -40,23 +42,23 @@ export default function StoreUrlCard({ customDomain, domainStatus, slug, domainR
       <div className={`flex items-center gap-3 p-3 rounded-lg text-sm ${urlInfo.status === 'active' ? 'bg-green-50 dark:bg-green-500/10 border border-green-200 dark:border-green-800' : urlInfo.status === 'pending' ? 'bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-800' : 'bg-gray-50 dark:bg-gray-700/50 border border-gray-200 dark:border-gray-600'}`}>
         <span className="text-gray-900 dark:text-white font-medium">{urlInfo.display}</span>
         {urlInfo.status === 'active' && (
-          <a href={urlInfo.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 ml-auto text-xs">
-            Visit Store →
-          </a>
+          <a href={urlInfo.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 ml-auto text-xs">Visit Store →</a>
         )}
       </div>
       {urlInfo.status === 'pending' && 'pendingDomain' in urlInfo && (
         <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-800 rounded-lg flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
-          <p className="text-xs text-orange-700 dark:text-orange-300">
-            Domain <strong>{urlInfo.pendingDomain}</strong> is awaiting admin approval. Your store is accessible via the default URL until then.
-          </p>
+          <p className="text-xs text-orange-700 dark:text-orange-300">Domain <strong>{urlInfo.pendingDomain}</strong> is awaiting admin approval. Your store is accessible via the default URL until then.</p>
+        </div>
+      )}
+      {CONFIG.STORE_SUBDOMAINS_LIVE && slug && (
+        <div className="mt-3 flex items-center gap-2 text-sm">
+          <span className="text-gray-500 dark:text-gray-400">Short link:</span>
+          <a href={storeSubdomainUrl(slug)} target="_blank" rel="noopener noreferrer" className="font-medium text-orange-600 dark:text-orange-400 break-all">{storeSubdomainUrl(slug).replace('https://', '')}</a>
         </div>
       )}
       {urlInfo.status === 'default' && (
-        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-          Set up a custom domain from the <a href="/dashboard/domain" className="text-orange-600 dark:text-orange-400 underline">Custom Domain</a> section.
-        </p>
+        <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">Set up a custom domain from the <a href="/dashboard/domain" className="text-orange-600 dark:text-orange-400 underline">Custom Domain</a> section.</p>
       )}
     </div>
   );

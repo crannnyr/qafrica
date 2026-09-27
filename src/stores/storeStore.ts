@@ -139,19 +139,15 @@ export const useStoreStore = create<StoreState>()(
       },
 
       switchActiveStore: async (storeId) => {
-        try {
-          const { data, error } = await supabase
-            .from('stores')
-            .select('*')
-            .eq('id', storeId)
-            .single();
-
-          if (!error && data) {
-            set({ currentStore: data as Store, products: [], deliveryZones: [] });
-          }
-        } catch {
-          // silently fail — reload will re-fetch from persisted currentStore
-        }
+        const { data, error } = await supabase.rpc('switch_active_store', { p_store_id: storeId });
+        if (error) throw new Error(error.message);
+        const { data: store, error: storeError } = await supabase
+          .from('stores')
+          .select('*')
+          .eq('id', storeId)
+          .single();
+        if (storeError || !store) throw new Error(storeError?.message ?? 'Store not found');
+        set({ currentStore: store as Store, products: [], deliveryZones: [] });
       },
 
       // ── Products ───────────────────────────────────────────────────────────

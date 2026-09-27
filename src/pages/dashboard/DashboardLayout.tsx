@@ -112,7 +112,7 @@ export default function DashboardLayout() {
       fetchUserStore(user.id);
       loadStockAlerts();
       fetchSubscriptionStatus();
-      getUserStores(user.id).then((result) => setStores(result ?? []));
+      supabase.rpc('list_switchable_stores').then(({ data }) => setStores((data as Store[] | null) ?? []));
     }
   }, [user?.id, fetchUserStore]);
 

@@ -92,6 +92,28 @@ const LogisticsBlogPage = lazy(() => import('@/pages/recommendations/LogisticsBl
 
 // Marketplace Pages
 const MarketplacePage = lazy(() => import('@/pages/MarketplacePage'));
+const StoreCheckoutRedirect = lazy(() => import('@/pages/shop/StoreCheckoutRedirect'));
+const ShopAuthPage = lazy(() => import('@/pages/shop/account/AuthPage'));
+const MePage = lazy(() => import('@/pages/shop/account/MePage'));
+const ShopOrdersPage = lazy(() => import('@/pages/shop/account/OrdersPages').then((m) => ({ default: m.OrdersPage })));
+const ShopOrderPage = lazy(() => import('@/pages/shop/account/OrdersPages').then((m) => ({ default: m.OrderPage })));
+const ShopWishlistPage = lazy(() => import('@/pages/shop/account/SimplePages').then((m) => ({ default: m.WishlistPage })));
+const ShopAddressesPage = lazy(() => import('@/pages/shop/account/SimplePages').then((m) => ({ default: m.AddressesPage })));
+const ShopProfilePage = lazy(() => import('@/pages/shop/account/SimplePages').then((m) => ({ default: m.ProfilePage })));
+const MyLinksPage = lazy(() => import('@/pages/shop/account/SimplePages').then((m) => ({ default: m.MyLinksPage })));
+const HelpPayPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.HelpPayPage })));
+const LeaderboardPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.LeaderboardPage })));
+const ClaimClearPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.ClaimClearPage })));
+const MarketplaceHome = lazy(() => import('@/pages/marketplace/MarketplaceHome'));
+const MarketplaceCategories = lazy(() => import('@/pages/marketplace/MarketplaceCategories'));
+const CartPage = lazy(() => import('@/pages/shop/CartPage'));
+const ShopCheckoutPage = lazy(() => import('@/pages/shop/CheckoutPage'));
+const CheckoutCompletePage = lazy(() => import('@/pages/shop/CheckoutCompletePage'));
+const OrderTrackingPage = lazy(() => import('@/pages/shop/OrderTrackingPage'));
+const TrackRouter = lazy(() => import('@/pages/shop/TrackRouter'));
+const ShareCartPage = lazy(() => import('@/pages/shop/ShareCartPage'));
+const PaySharedCartPage = lazy(() => import('@/pages/shop/PaySharedCartPage'));
+const AdminIssues = lazy(() => import('@/pages/admin/AdminIssues'));
 
 // Dashboard Pages
 const DashboardLayout = lazy(() => import('@/pages/dashboard/DashboardLayout'));
@@ -362,6 +384,7 @@ function App() {
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
           <Route path="/import-terms" element={<ImportTermsPage />} />
           <Route path="/track" element={<ImportTrackingPage />} />
+          <Route path="/track-order" element={<OrderTrackingPage />} />
 
           {/* ── Blog ── */}
           <Route path="/blog" element={<BlogIndexPage />} />
@@ -442,13 +465,25 @@ function App() {
           <Route path="/payment/callback" element={<PaymentCallbackPage />} />
 
           {/* ── Customer ── */}
-          <Route path="/customer/login" element={<CustomerLoginPage />} />
-          <Route path="/customer/signup" element={<CustomerSignupPage />} />
-          <Route path="/customer/dashboard" element={<CustomerDashboard />} />
-          <Route path="/customer/orders/:orderId" element={<CustomerOrderDetailPage />} />
-          <Route path="/stores" element={<StoreDiscoveryPage />} />
-          <Route path="/cart" element={<UniversalCartPage />} />
-          <Route path="/checkout" element={<UniversalCheckoutPage />} />
+          <Route path="/customer/login" element={<ShopAuthPage mode="login" />} />
+          <Route path="/customer/signup" element={<ShopAuthPage mode="signup" />} />
+          <Route path="/customer/dashboard" element={<MePage />} />
+          <Route path="/customer/orders" element={<ShopOrdersPage />} />
+          <Route path="/customer/orders/:orderId" element={<ShopOrderPage />} />
+          <Route path="/customer/wishlist" element={<ShopWishlistPage />} />
+          <Route path="/customer/addresses" element={<ShopAddressesPage />} />
+          <Route path="/customer/profile" element={<ShopProfilePage />} />
+          <Route path="/customer/links" element={<MyLinksPage />} />
+          <Route path="/help-pay" element={<HelpPayPage />} />
+          <Route path="/help-pay/leaderboard" element={<LeaderboardPage />} />
+          <Route path="/help-pay/claim" element={<ClaimClearPage />} />
+          <Route path="/stores" element={<MarketplaceHome />} />
+          <Route path="/stores/categories" element={<MarketplaceCategories />} />
+          <Route path="/cart" element={<CartPage />} />
+          <Route path="/cart/share" element={<ShareCartPage />} />
+          <Route path="/pay/:code" element={<PaySharedCartPage />} />
+          <Route path="/checkout" element={<ShopCheckoutPage />} />
+          <Route path="/checkout/complete" element={<CheckoutCompletePage />} />
 
           {/* ── Staff invite ── */}
           <Route path="/accept-staff-invite" element={<AcceptStaffInvitePage />} />
@@ -525,6 +560,7 @@ function App() {
             <Route path="domain-requests" element={<AdminDomainRequests />} />
             <Route path="email-controls" element={<AdminEmailControls />} />
             <Route path="notifications" element={<AdminNotifications />} />
+            <Route path="issues" element={<AdminIssues />} />
             <Route path="legal" element={<AdminLegal />} />
             <Route path="shipbubble" element={<AdminShipbubblePage />} />
             <Route path="jumia" element={<AdminJumia />} />
@@ -565,7 +601,7 @@ function App() {
           {/* ── Store Routes — must stay LAST (wildcard slugs) ── */}
           <Route path="/:slug" element={<StorePage />} />
           <Route path="/:slug/product/:productId" element={<ProductDetailPage />} />
-          <Route path="/:slug/checkout" element={<CheckoutPage />} />
+          <Route path="/:slug/checkout" element={<StoreCheckoutRedirect />} />
 
           {/* ── Catch-all ── */}
           <Route path="*" element={<StoreNotFoundPage />} />
