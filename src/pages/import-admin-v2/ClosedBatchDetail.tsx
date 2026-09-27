@@ -608,7 +608,23 @@ export default function ClosedBatchDetail({
   const [customerSearch, setCustomerSearch] = useState('');
 
   const visibleCustomers = useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+
+    // Searching by an order code must search the whole batch, not just the
+    // currently selected billing-status tab. This lets an admin find an order
+    // such as 4Z8KAQ even when its customer's bill state is different from
+    // the active tab.
+    const orderMatchCustomerIds = q
+      ? new Set(
+          orders
+            .filter(o => o.code.toLowerCase().includes(q) && o.user_id)
+            .map(o => o.user_id as string)
+        )
+      : new Set<string>();
+
     let list = customersForList.filter(c => {
+      if (q && orderMatchCustomerIds.has(c.customerId)) return true;
+
       const billed = isBilled(c.customerId, billKind);
       if (billStatusTab === 'unbilled') return !billed;
       if (!billed) return false;
@@ -617,15 +633,15 @@ export default function ClosedBatchDetail({
       return status !== 'paid';
     });
 
-    const q = customerSearch.trim().toLowerCase();
     if (q) {
       list = list.filter(c =>
         c.name.toLowerCase().includes(q) ||
-        c.lines.some(l => l.order_code.toLowerCase().includes(q))
+        c.lines.some(l => l.order_code.toLowerCase().includes(q)) ||
+        orderMatchCustomerIds.has(c.customerId)
       );
     }
     return list;
-  }, [customersForList, billStatusTab, billKind, statusByKind, ledgerByCustomerActive, customerSearch]);
+  }, [customersForList, billStatusTab, billKind, statusByKind, ledgerByCustomerActive, customerSearch, orders]);
 
   const billStatusCounts = useMemo(() => {
     let unbilled = 0, billed = 0, paid = 0;
