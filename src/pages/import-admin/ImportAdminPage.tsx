@@ -29,7 +29,7 @@ import CategoryManager from './CategoryManager';
 import AiSupportInbox, { AiSupportAlertMonitor } from './AiSupportInbox';
 import ImportAdminExpenses from './ImportAdminExpenses';
 import ChinaImportFulfillmentManager from './ChinaImportFulfillmentManager';
-import { OrderDetails } from '@/pages/management/ManagementOrders';
+import { OrderDetails, type OrderRow as V2OrderRow } from '@/pages/import-admin-v2/ManagementOrdersLegacy';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const IMPORT_ADMIN_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-admin-orders`;
@@ -1593,6 +1593,18 @@ export function OrdersList({ token }: { token: string }) {
     ? totalCount
     : null;
   const selectedOrder = selectedOrderId ? orders.find(o => o.id === selectedOrderId) ?? null : null;
+  const selectedOrderForDetails: V2OrderRow | null = selectedOrder ? {
+    ...selectedOrder,
+    customer_email: selectedOrder.customer_email ?? null,
+    shipped_at: null,
+    delivery_mode: 'home',
+    delivery_address: selectedOrder.delivery_address
+      ? {
+          ...selectedOrder.delivery_address,
+          email: selectedOrder.customer_email ?? selectedOrder.delivery_address.email ?? '',
+        }
+      : null,
+  } : null;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
@@ -1869,10 +1881,10 @@ export function OrdersList({ token }: { token: string }) {
         </div>
       )}
 
-      {selectedOrder && (
+      {selectedOrderForDetails && (
         <OrderDetails
           token={token}
-          order={selectedOrder}
+          order={selectedOrderForDetails}
           onClose={() => setSelectedOrderId(null)}
           onReload={async () => { await load(page); }}
           onOpenClient={(id) => { setSelectedOrderId(null); setProfileCustomerId(id); }}
