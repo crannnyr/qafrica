@@ -793,7 +793,26 @@ serve(async (req: Request) => {
 
       if (permissionRows.error) return json({ error: 'Could not load admin permissions' }, 500)
 
-      const permissionIds = Array.from(new Set((permissionRows.data ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+      const rolePermissionIds = Array.from(new Set((permissionRows.data ?? []).map((row: any) => row.permission_id).filter(Boolean)))
+
+      const { data: directAssignments, error: directAssignmentsError } = await supabase
+        .from('import_admin_manager_permissions')
+        .select('permission_id')
+        .eq('manager_id', manager.id)
+      if (directAssignmentsError) return json({ error: 'Could not load admin permissions' }, 500)
+
+      const { data: deniedAssignments, error: deniedAssignmentsError } = await supabase
+        .from('import_admin_manager_denied_permissions')
+        .select('permission_id')
+        .eq('manager_id', manager.id)
+      if (deniedAssignmentsError) return json({ error: 'Could not load admin permission denials' }, 500)
+
+      const deniedIds = new Set((deniedAssignments ?? []).map((row: any) => row.permission_id).filter(Boolean))
+      const permissionIds = Array.from(new Set([
+        ...rolePermissionIds,
+        ...(directAssignments ?? []).map((row: any) => row.permission_id).filter(Boolean),
+      ])).filter((id: string) => !deniedIds.has(id))
+
       const permissions = permissionIds.length
         ? await supabase
             .from('import_admin_permissions')
