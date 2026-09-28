@@ -15,58 +15,58 @@ const NAV = [
   {
     section: 'Overview',
     items: [
-      { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2' },
+      { icon: LayoutDashboard, label: 'Dashboard', path: '/import-admin-v2', permission: 'import.analytics.view' },
     ],
   },
   {
     section: 'Orders & Payments',
     items: [
-      { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders' },
-      { icon: ClipboardList, label: 'Batch Orders', path: '/import-admin-v2/batch-orders' },
-      { icon: CheckCircle2, label: 'Confirmed Payments', path: '/import-admin-v2/confirmed-payments' },
-      { icon: CreditCard, label: 'Payment Transactions', path: '/import-admin-v2/payment-transactions' },
-      { icon: WalletCards, label: 'Payment Recovery', path: '/import-admin-v2/payment-recovery' },
-      { icon: RotateCcw, label: 'Refunds', path: '/import-admin-v2/refunds' },
-      { icon: ClipboardList, label: 'Custom Orders', path: '/import-admin-v2/custom-orders' },
+      { icon: ShoppingCart, label: 'Orders', path: '/import-admin-v2/orders', permission: 'import.total_orders.view' },
+      { icon: ClipboardList, label: 'Batch Orders', path: '/import-admin-v2/batch-orders', permission: 'import.orders.view' },
+      { icon: CheckCircle2, label: 'Confirmed Payments', path: '/import-admin-v2/confirmed-payments', permission: 'import.confirmed_payments.view' },
+      { icon: CreditCard, label: 'Payment Transactions', path: '/import-admin-v2/payment-transactions', permission: 'import.paystack_transactions.view' },
+      { icon: WalletCards, label: 'Payment Recovery', path: '/import-admin-v2/payment-recovery', permission: 'import.timed_out.view' },
+      { icon: RotateCcw, label: 'Refunds', path: '/import-admin-v2/refunds', permission: 'import.refunds.view' },
+      { icon: ClipboardList, label: 'Custom Orders', path: '/import-admin-v2/custom-orders', permission: 'import.custom_orders.view' },
     ],
   },
   {
     section: 'Fulfillment',
     items: [
-      { icon: PackageCheck, label: 'Fulfillment', path: '/import-admin-v2/fulfillment' },
-      { icon: Boxes, label: 'Inventory', path: '/import-admin-v2/inventory' },
+      { icon: PackageCheck, label: 'Fulfillment', path: '/import-admin-v2/fulfillment', permission: 'import.orders.view' },
+      { icon: Boxes, label: 'Inventory', path: '/import-admin-v2/inventory', permission: 'import.products.view' },
     ],
   },
   {
     section: 'Products',
     items: [
-      { icon: Package, label: 'Products', path: '/import-admin-v2/products' },
-      { icon: Tags, label: 'Categories', path: '/import-admin-v2/categories' },
-      { icon: TrendingUp, label: 'Trending', path: '/import-admin-v2/trending' },
+      { icon: Package, label: 'Products', path: '/import-admin-v2/products', permission: 'import.products.view' },
+      { icon: Tags, label: 'Categories', path: '/import-admin-v2/categories', permission: 'import.categories.view' },
+      { icon: TrendingUp, label: 'Trending', path: '/import-admin-v2/trending', permission: 'import.trending.view' },
     ],
   },
   {
     section: 'Customers & Support',
     items: [
-      { icon: Users, label: 'Users', path: '/import-admin-v2/users' },
-      { icon: MessageCircle, label: 'Support', path: '/import-admin-v2/support' },
-      { icon: CircleHelp, label: 'Product FAQ', path: '/import-admin-v2/product-faq' },
+      { icon: Users, label: 'Users', path: '/import-admin-v2/users', permission: 'import.clients.view' },
+      { icon: MessageCircle, label: 'Support', path: '/import-admin-v2/support', permission: 'import.messages.view' },
+      { icon: CircleHelp, label: 'Product FAQ', path: '/import-admin-v2/product-faq', permission: 'import.questions.view' },
     ],
   },
   {
     section: 'Communications',
     items: [
-      { icon: Mail, label: 'Email Templates', path: '/import-admin-v2/email-templates' },
-      { icon: Megaphone, label: 'Broadcast', path: '/import-admin-v2/broadcast' },
+      { icon: Mail, label: 'Email Templates', path: '/import-admin-v2/email-templates', permission: 'import.messages.view' },
+      { icon: Megaphone, label: 'Broadcast', path: '/import-admin-v2/broadcast', permission: 'import.broadcast.send' },
     ],
   },
   {
     section: 'Finance & Administration',
     items: [
-      { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses' },
-      { icon: Truck, label: 'Pricing & Shipping', path: '/import-admin-v2/pricing-shipping' },
-      { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings' },
-      { icon: UserCog, label: 'Admin Access', path: '/import-admin-v2/admin-access' },
+      { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses', permission: 'import.expenses.view' },
+      { icon: Truck, label: 'Pricing & Shipping', path: '/import-admin-v2/pricing-shipping', permission: 'import.pricing_shipping.view' },
+      { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings', permission: 'import.settings.view' },
+      { icon: UserCog, label: 'Admin Access', path: '/import-admin-v2/admin-access', permission: 'import.admin_access.view' },
     ],
   },
 ];
@@ -79,7 +79,7 @@ export default function ManagementLayout() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [manager, setManager] = useState<ManagementManager | null>(getManagementManager());
   const managementToken = getManagementToken();
-  const { hasPermission } = useImportAdminPermissions(managementToken);
+  const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(managementToken);
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
@@ -114,8 +114,11 @@ export default function ManagementLayout() {
       ? location.pathname === '/import-admin-v2'
       : location.pathname === path || location.pathname.startsWith(path + '/');
 
-  const activeLabel = NAV.flatMap(section => section.items).find(n => isActive(n.path))?.label || 'Dashboard';
+  const activeItem = NAV.flatMap(section => section.items).find(n => isActive(n.path));
+  const activeLabel = activeItem?.label || 'Dashboard';
   const managerName = manager?.full_name || manager?.name || 'Manager';
+  const requiredPermission = activeItem?.permission;
+  const canViewCurrentRoute = !requiredPermission || hasPermission(requiredPermission);
 
   if (checkingSession) {
     return (
@@ -154,7 +157,7 @@ export default function ManagementLayout() {
         </div>
 
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto min-h-0">
-          {NAV.map(section => (
+          {NAV.map(section => ({ ...section, items: section.items.filter(item => !permissionsLoading && hasPermission(item.permission)) })).filter(section => section.items.length > 0).map(section => (
             <div key={section.section} className="mb-3">
               {!collapsed && (
                 <p className="px-3 pt-2 pb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
@@ -207,11 +210,29 @@ export default function ManagementLayout() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <AnimatePresence mode="wait">
-            <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+          {permissionsLoading ? (
+            <div className="min-h-[40vh] flex items-center justify-center">
+              <Loader className="w-5 h-5 text-orange-500 animate-spin" />
+            </div>
+          ) : permissionsError ? (
+            <div className="bg-white rounded-2xl border border-red-100 p-8 text-center">
+              <Shield className="w-8 h-8 mx-auto text-red-300" />
+              <h2 className="mt-3 text-sm font-bold text-gray-900">Could not verify access</h2>
+              <p className="mt-1 text-xs text-gray-500">{permissionsError}</p>
+            </div>
+          ) : !canViewCurrentRoute ? (
+            <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
+              <Shield className="w-8 h-8 mx-auto text-gray-300" />
+              <h2 className="mt-3 text-sm font-bold text-gray-900">Permission required</h2>
+              <p className="mt-1 text-xs text-gray-500">You do not have permission to view this section.</p>
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+              <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
+                <Outlet />
+              </motion.div>
+            </AnimatePresence>
+          )}
         </main>
       </div>
     </div>
