@@ -79,7 +79,7 @@ export default function ManagementLayout() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [manager, setManager] = useState<ManagementManager | null>(getManagementManager());
   const managementToken = getManagementToken();
-  const { hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(managementToken);
+  const { permissions, hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(managementToken);
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
@@ -127,7 +127,12 @@ export default function ManagementLayout() {
         ? 'import.products.update'
         : activeItem?.permission;
 
-  const canViewCurrentRoute = !requiredPermission || hasPermission(requiredPermission);
+  // The dashboard is a shared landing page. Access to it only requires at least one
+  // Import Admin permission; the dashboard itself must scope its data/cards by permission.
+  const isDashboardRoute = location.pathname === '/import-admin-v2';
+  const canViewCurrentRoute = isDashboardRoute
+    ? permissions.size > 0
+    : !requiredPermission || hasPermission(requiredPermission);
 
   if (checkingSession) {
     return (
@@ -166,7 +171,7 @@ export default function ManagementLayout() {
         </div>
 
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto min-h-0">
-          {NAV.map(section => ({ ...section, items: section.items.filter(item => !permissionsLoading && hasPermission(item.permission)) })).filter(section => section.items.length > 0).map(section => (
+          {NAV.map(section => ({ ...section, items: section.items.filter(item => !permissionsLoading && (item.path === '/import-admin-v2' ? permissions.size > 0 : hasPermission(item.permission))) })).filter(section => section.items.length > 0).map(section => (
             <div key={section.section} className="mb-3">
               {!collapsed && (
                 <p className="px-3 pt-2 pb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">
