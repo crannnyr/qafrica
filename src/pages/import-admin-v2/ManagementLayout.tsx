@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck, CheckCircle2, Boxes,
-  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText,
+  LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText, MessageSquare,
   Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard, Mail, Megaphone, CircleHelp, Users, TrendingUp,
 } from 'lucide-react';
 import { getManagementManager, logoutManagementSession, validateManagementSession, getManagementToken, type ManagementManager } from './ManagementAuth';
@@ -26,6 +26,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'import.products.view': 'View Products',
   'import.products.create': 'Create Products',
   'import.products.update': 'Update Products',
+  'import.reviews.view': 'View Reviews',
   'import.categories.view': 'View Categories',
   'import.trending.view': 'View Trending',
   'import.clients.view': 'View Clients',
@@ -71,6 +72,7 @@ const NAV = [
       { icon: Package, label: 'Products', path: '/import-admin-v2/products', permission: 'import.products.view' },
       { icon: Tags, label: 'Categories', path: '/import-admin-v2/categories', permission: 'import.categories.view' },
       { icon: TrendingUp, label: 'Trending', path: '/import-admin-v2/trending', permission: 'import.trending.view' },
+      { icon: MessageSquare, label: 'Reviews', path: '/import-admin-v2/reviews', permission: 'import.reviews.view' },
     ],
   },
   {
