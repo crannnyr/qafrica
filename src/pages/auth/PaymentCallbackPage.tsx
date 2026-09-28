@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckCircle, Loader2, ShoppingBag, Sparkles, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { verifyTransaction } from '@/services/paystack';
 import { authService } from '@/services';
 import { useAuthStore } from '@/stores';
 import { supabase } from '@/services/supabase';
@@ -60,70 +59,27 @@ export default function PaymentCallbackPage() {
       }
 
       try {
-        setMessage('Verifying your payment...');
-        const result = await verifyTransaction(reference);
-
-        if (!result.success) {
+        // The server confirms the payment with Paystack, checks the amount against the plan
+        // price and creates the subscription. The browser never writes it directly.
+        setMessage('Confirming your payment...');
+        const { data: act, error: actError } = await supabase.functions.invoke('activate-subscription', {
+          body: { reference },
+        });
+        const result = (act ?? {}) as { ok?: boolean; message?: string; subscription?: { tier?: string } };
+        if (actError || !result.ok) {
+          let detail = result.message;
+          // supabase-js puts the JSON body of a non-2xx response on error.context
+          const ctx = (actError as { context?: Response } | null)?.context;
+          if (!detail && ctx && typeof ctx.json === 'function') {
+            detail = (await ctx.json().catch(() => ({})))?.message;
+          }
           setStatus('failed');
-          setMessage(result.error || 'Payment verification failed.');
-          setErrorDetails('The payment could not be verified. Please contact support if you were charged.');
-          toast.error('Payment verification failed.');
+          setMessage('We could not confirm your payment.');
+          setErrorDetails(`${detail ?? 'Please try again or contact support.'} Reference: ${reference}`);
+          toast.error('Payment could not be confirmed.');
           return;
         }
-
-        // Read payment metadata from sessionStorage
-        // (written by PricingPage just before Paystack redirect — short-lived use)
-        const plan     = sessionStorage.getItem('subscription_plan') ?? 'one_niche';
-        const duration = parseInt(sessionStorage.getItem('subscription_duration') || '1');
-        const amount   = parseInt(sessionStorage.getItem('subscription_amount') || '0');
-        const isLifetime = sessionStorage.getItem('is_lifetime') === 'true';
-
-        // Normalize tier
-        const tierMap: Record<string, 'one_niche' | 'three_niches' | 'unlimited'> = {
-          single:       'one_niche',
-          one_niche:    'one_niche',
-          three:        'three_niches',
-          three_niches: 'three_niches',
-          unlimited:    'unlimited',
-        };
-        const dbTier = tierMap[plan] ?? 'one_niche';
-
-        setMessage('Activating your subscription...');
-
-        // Create subscription directly (paid plan — not via complete-onboarding
-        // which is free-plan only)
-        const expiresAt = isLifetime
-          ? new Date('2099-12-31').toISOString()
-          : new Date(Date.now() + duration * 30 * 24 * 60 * 60 * 1000).toISOString();
-
-        const { error: subError } = await supabase
-          .from('subscriptions')
-          .insert({
-            user_id:           userId,
-            store_id:          storeId,
-            tier:              dbTier,
-            niches:            selectedNiches,
-            duration_months:   isLifetime ? 0 : duration,
-            amount_paid:       amount,
-            payment_reference: reference,
-            starts_at:         new Date().toISOString(),
-            expires_at:        expiresAt,
-            is_active:         true,
-            is_trial:          false,
-          });
-
-        if (subError) {
-          setStatus('failed');
-          setMessage('Failed to activate subscription.');
-          setErrorDetails(subError.message);
-          return;
-        }
-
-        // Activate the store
-        await supabase
-          .from('stores')
-          .update({ niches: selectedNiches, is_active: true })
-          .eq('id', storeId);
+        const dbTier = result.subscription?.tier ?? sessionStorage.getItem('subscription_plan') ?? 'one_niche';
 
         // Mark onboarding complete via authStore
         // so isAuthenticated becomes true and ProtectedRoute stops redirecting

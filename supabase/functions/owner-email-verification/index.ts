@@ -6,28 +6,7 @@
 // 5 guesses/code, 15-minute expiry, caller identity only from the access token.
 // It is step 1 of the dashboard setup guide: order, payout and security emails only
 // reach owners whose address is real. It never blocks the dashboard.
-//
-// ---- notes carried over from account-verification ----
-// Non-blocking email confirmation for import customers.
-//
-// Why non-blocking: 0 of 6,352 importation customers are currently verified.
-// Gating checkout, ordering or payment on this flag would lock out the entire
-// customer base overnight. The flag exists so that marketing mail can be
-// restricted to addresses we know are real -- which is what protects the
-// sending domain -- not to gate the product.
-//
-// Why it also allows correcting the address: a visible share of the 1-2 Sep
-// signups typo'd their email (gamil.com, gmail.con, gmal.com, ail.com). Those
-// people never received anything and currently have no way to fix it
-// themselves.
-//
-// Security model:
-//   * The caller must present a valid Supabase access token. The customer_id
-//     is taken from that token, never from the request body -- otherwise
-//     anyone could verify or re-address anyone else's account.
-//   * The 6-digit code is generated here with crypto.getRandomValues and only
-//     its SHA-256 hash is stored. A database leak yields no usable codes.
-//   * 3 codes per customer per hour, 5 guesses per code, 15-minute expiry.
+
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
