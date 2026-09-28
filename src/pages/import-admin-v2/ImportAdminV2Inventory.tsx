@@ -14,6 +14,8 @@ type InventoryRow = {
   image_url?: string | null;
   category?: string | null;
   parent_category?: string | null;
+  category_id?: string | null;
+  subcategory_id?: string | null;
   is_active?: boolean;
   has_variants?: boolean;
   variant_options?: Record<string, string> | null;
@@ -33,6 +35,7 @@ type ProductGroup = {
 };
 
 type Pagination = { page: number; per_page: number; total: number; page_count: number };
+type Category = { id: string; name: string; subcategories: { id: string; name: string }[] };
 
 const variantKey = (row: InventoryRow) => row.id + '|' + JSON.stringify(row.variant_options ?? {});
 
@@ -43,11 +46,16 @@ export default function ImportAdminV2Inventory() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pagination, setPagination] = useState<Pagination>({ page: 1, per_page: PAGE_SIZE, total: 0, page_count: 1 });
   const [search, setSearch] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [subcategoryId, setSubcategoryId] = useState('');
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState('');
   const { hasPermission } = useImportAdminPermissions(getManagementToken());
   const canSubtractStock = hasPermission('import.inventory.subtract');
+  const selectedCategory = categories.find(category => category.id === categoryId);
+  const availableSubcategories = selectedCategory?.subcategories ?? [];
 
   const products = useMemo<ProductGroup[]>(() => {
     const map = new Map<string, ProductGroup>();
@@ -70,6 +78,18 @@ export default function ImportAdminV2Inventory() {
     return Array.from(map.values());
   }, [rows]);
 
+  useEffect(() => {
+    const token = getManagementToken();
+    if (!token) return;
+    void fetch(CONFIG.SUPABASE_URL + '/functions/v1/category?action=list&manager_token=' + encodeURIComponent(token))
+      .then(async res => {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? 'Could not load categories');
+        setCategories(Array.isArray(data.categories) ? data.categories : []);
+      })
+      .catch(() => setCategories([]));
+  }, []);
+
   const load = useCallback(async (page = 1, signal?: AbortSignal) => {
     const token = getManagementToken();
     if (!token) return;
@@ -79,7 +99,7 @@ export default function ImportAdminV2Inventory() {
       const res = await fetch(EDGE_URL + '?action=admin-inventory-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, page, per_page: PAGE_SIZE, search: search.trim() }),
+        body: JSON.stringify({ manager_token: token, page, per_page: PAGE_SIZE, search: search.trim(), category_id: categoryId, subcategory_id: subcategoryId }),
         signal,
       });
       const data = await res.json().catch(() => ({}));
@@ -96,7 +116,7 @@ export default function ImportAdminV2Inventory() {
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [search]);
+  }, [search, categoryId, subcategoryId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -217,8 +237,16 @@ export default function ImportAdminV2Inventory() {
         <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search inventory products…" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-500" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search product name…" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-500" />
           </div>
+          <select value={categoryId} onChange={e => { setCategoryId(e.target.value); setSubcategoryId(''); }} className="min-w-[170px] px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 outline-none focus:border-orange-500">
+            <option value="">All categories</option>
+            {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </select>
+          <select value={subcategoryId} onChange={e => setSubcategoryId(e.target.value)} disabled={!categoryId} className="min-w-[170px] px-3 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-700 outline-none focus:border-orange-500 disabled:bg-gray-50 disabled:text-gray-400">
+            <option value="">All subcategories</option>
+            {availableSubcategories.map(subcategory => <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>)}
+          </select>
           <span className="px-3 py-2.5 rounded-xl bg-gray-50 text-[11px] font-semibold text-gray-500">Visible stock: {totalStock.toLocaleString()}</span>
           {lowStock > 0 && <span className="px-3 py-2.5 rounded-xl bg-amber-50 text-[11px] font-semibold text-amber-700">{lowStock} low-stock</span>}
         </div>
@@ -230,7 +258,6 @@ export default function ImportAdminV2Inventory() {
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr className="text-[10px] uppercase tracking-wide text-gray-400">
                 <th className="px-5 py-3 font-bold">Product</th>
-                <th className="px-4 py-3 font-bold">Category</th>
                 <th className="px-4 py-3 font-bold">Total stock</th>
                 <th className="px-4 py-3 font-bold">Stock status</th>
                 <th className="px-4 py-3 font-bold">Variants</th>
@@ -238,9 +265,9 @@ export default function ImportAdminV2Inventory() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
-                <tr><td colSpan={5} className="px-5 py-12 text-center"><Loader className="w-5 h-5 text-orange-500 animate-spin mx-auto" /></td></tr>
+                <tr><td colSpan={4} className="px-5 py-12 text-center"><Loader className="w-5 h-5 text-orange-500 animate-spin mx-auto" /></td></tr>
               ) : products.length === 0 ? (
-                <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-gray-400">No inventory products found.</td></tr>
+                <tr><td colSpan={4} className="px-5 py-12 text-center text-sm text-gray-400">No inventory products found.</td></tr>
               ) : products.map(product => {
                 const isOpen = !!expanded[product.id];
                 const productStock = product.variants.reduce((sum, row) => sum + Number(row.stock_quantity || 0), 0);
@@ -248,7 +275,7 @@ export default function ImportAdminV2Inventory() {
                 const optionNames = Array.from(new Set(product.variants.flatMap(row => Object.keys(row.variant_options ?? {}))));
                 return (
                   <tr key={product.id} className="align-top">
-                    <td colSpan={5} className="p-0">
+                    <td colSpan={4} className="p-0">
                       <button
                         type="button"
                         onClick={() => setExpanded(current => ({ ...current, [product.id]: !isOpen }))}
@@ -259,10 +286,18 @@ export default function ImportAdminV2Inventory() {
                           {product.image_url ? <img src={product.image_url} alt="" className="w-full h-full object-cover" /> : null}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{product.name}</p>
+                          <a
+                            href={'/recommendations/' + product.id}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="block text-sm font-semibold text-gray-900 truncate hover:text-orange-500 hover:underline"
+                            title="Open product page"
+                          >
+                            {product.name}
+                          </a>
                           <p className="text-[10px] text-gray-400 mt-0.5">{hasRealVariants ? product.variants.length.toLocaleString() + ' variant combinations' : 'No variants'}</p>
                         </div>
-                        <div className="hidden sm:block w-28 text-xs text-gray-600">{product.parent_category || product.category || '—'}</div>
                         <span className={productStock > 0 ? 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700' : 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-gray-100 text-gray-500'}>{productStock.toLocaleString()}</span>
                         <span className={productStock > 0 ? 'inline-flex min-w-[70px] justify-center px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold' : 'inline-flex min-w-[70px] justify-center px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold'}>
                           {productStock > 0 ? 'In stock' : 'Out of stock'}
