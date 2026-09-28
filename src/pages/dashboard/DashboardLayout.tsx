@@ -7,6 +7,7 @@ import { useAuthStore, useStoreStore } from '@/stores';
 import { stockAlertService, supabase } from '@/services';
 import { subscribeToOrders, subscribeToStockAlerts, subscribeToWalletUpdates } from '@/services/realtime';
 import ConfirmEmailBanner from '@/components/ConfirmEmailBanner';
+import SetupGuide from '@/components/guide/SetupGuide';
 import SubscriptionBanner from '@/components/SubscriptionBanner';
 import ModalNotificationDisplay from '@/components/ModalNotificationDisplay';
 import { toast } from 'sonner';
@@ -393,6 +394,13 @@ export default function DashboardLayout() {
         <main className="flex-1 overflow-y-auto">
           <SubscriptionBanner />
           <ConfirmEmailBanner />
+          <SetupGuide
+            openSidebar={() => {
+              setIsSidebarOpen(true);
+              if (window.innerWidth < 1024) setIsMobileMenuOpen(true);
+            }}
+            closeMobileSidebar={() => setIsMobileMenuOpen(false)}
+          />
           <div className="p-4 lg:p-6">
             <AnimatePresence mode="wait">
               <motion.div

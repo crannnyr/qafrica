@@ -47,6 +47,29 @@ export default function AddProductPage() {
 
   const stepProps = { formData, set, currentStore, allowedNiches };
 
+  // Setup gate: a store needs its logo and banner before its first product goes up.
+  // Buyers judge a store in seconds, and a bare store with products hurts trust.
+  if (currentStore && (!currentStore.logo_url || !currentStore.banner_url)) {
+    const missing = [!currentStore.logo_url && 'logo', !currentStore.banner_url && 'banner'].filter(Boolean).join(' and ');
+    return (
+      <div className="max-w-lg mx-auto mt-6 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 sm:p-8 text-center">
+        <div className="w-12 h-12 rounded-full bg-orange-50 dark:bg-orange-500/10 flex items-center justify-center mx-auto">
+          <AlertCircle className="w-6 h-6 text-orange-500" />
+        </div>
+        <h1 className="mt-4 text-xl font-bold text-gray-900 dark:text-white">First, add your store {missing}</h1>
+        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+          Shoppers decide in seconds whether a store looks real. Your logo and banner appear on every product page, so add them before your first product. It takes about two minutes.
+        </p>
+        <div className="mt-6 flex flex-col sm:flex-row gap-2 justify-center">
+          <Button onClick={() => navigate('/dashboard/settings?tab=images')} className="bg-orange-500 hover:bg-orange-600 text-white">
+            Add {missing}
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/dashboard')}>Back to dashboard</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto pb-24">
       <div className="flex items-center gap-4 mb-8">

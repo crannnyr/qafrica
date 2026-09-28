@@ -32,7 +32,7 @@ export default function SidebarStoreCard({
   domainRequest,
 }: Props) {
   return (
-    <div className="px-3 pt-3 pb-2 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+    <div data-tour="store-card" className="px-3 pt-3 pb-2 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
       <a
         href={storeUrl}
         target="_blank"

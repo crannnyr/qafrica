@@ -39,6 +39,7 @@ export default function NavGroup({
       <Link
         to={item.path}
         onClick={onNavigate}
+        data-tour={`nav-${item.path}`}
         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
           isActive(item.path)
             ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 font-medium'
@@ -60,6 +61,7 @@ export default function NavGroup({
       <Link
         to={item.path}
         onClick={onNavigate}
+        data-tour={`nav-${item.path}`}
         className={`flex items-center justify-center px-2 py-2.5 rounded-lg transition-all ${
           groupActive
             ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600'
@@ -79,6 +81,7 @@ export default function NavGroup({
     <div>
       <button
         onClick={() => setIsOpen((o) => !o)}
+        data-tour={`nav-${item.path}`}
         className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
           groupActive
             ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 font-medium'

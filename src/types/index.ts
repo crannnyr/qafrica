@@ -49,6 +49,8 @@ export interface User {
   // FIX: added onboarding fields used in PaymentCallbackPage & PricingPage
   onboarding_step?: number;
   onboarding_completed?: boolean;
+  /** Free-form onboarding state; `guide` holds the dashboard setup guide progress. */
+  onboarding_data?: Record<string, unknown> | null;
 }
 
 export interface SavedCard {
@@ -130,6 +132,8 @@ export interface Store {
   block_reason?: string;
   custom_domain?: string;
   domain_status?: 'none' | 'pending' | 'processing' | 'connected' | 'failed';
+  /** Store chose to list on the QAFRICA marketplace (/stores). */
+  marketplace_enabled?: boolean;
   domain_paid_amount?: number;
   created_at: string;
   updated_at: string;
