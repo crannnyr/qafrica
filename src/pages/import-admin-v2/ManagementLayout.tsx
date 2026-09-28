@@ -117,7 +117,16 @@ export default function ManagementLayout() {
   const activeItem = NAV.flatMap(section => section.items).find(n => isActive(n.path));
   const activeLabel = activeItem?.label || 'Dashboard';
   const managerName = manager?.full_name || manager?.name || 'Manager';
-  const requiredPermission = activeItem?.permission;
+
+  // Nested management routes need their own action permission. Do not let a
+  // parent "view" permission implicitly authorize create/update screens.
+  const requiredPermission =
+    location.pathname === '/import-admin-v2/products/add'
+      ? 'import.products.create'
+      : location.pathname.startsWith('/import-admin-v2/products/edit/')
+        ? 'import.products.update'
+        : activeItem?.permission;
+
   const canViewCurrentRoute = !requiredPermission || hasPermission(requiredPermission);
 
   if (checkingSession) {
