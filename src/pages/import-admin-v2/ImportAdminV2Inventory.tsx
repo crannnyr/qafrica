@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Boxes, Search, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Loader, Plus, Save } from 'lucide-react';
+import { Boxes, Search, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, Loader, Plus, Minus, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
+import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 
 const EDGE_URL = CONFIG.SUPABASE_URL + '/functions/v1/import-management';
 const PAGE_SIZE = 50;
@@ -38,12 +39,15 @@ const variantKey = (row: InventoryRow) => row.id + '|' + JSON.stringify(row.vari
 export default function ImportAdminV2Inventory() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [subtractDrafts, setSubtractDrafts] = useState<Record<string, string>>({});
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pagination, setPagination] = useState<Pagination>({ page: 1, per_page: PAGE_SIZE, total: 0, page_count: 1 });
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const { hasPermission } = useImportAdminPermissions(getManagementToken());
+  const canSubtractStock = hasPermission('import.inventory.subtract');
 
   const products = useMemo<ProductGroup[]>(() => {
     const map = new Map<string, ProductGroup>();
@@ -83,6 +87,7 @@ export default function ImportAdminV2Inventory() {
       const next = Array.isArray(data.products) ? data.products : [];
       setRows(next);
       setDrafts(Object.fromEntries(next.map((row: InventoryRow) => [variantKey(row), ''])));
+      setSubtractDrafts(Object.fromEntries(next.map((row: InventoryRow) => [variantKey(row), ''])));
       setPagination(data.pagination ?? { page, per_page: PAGE_SIZE, total: 0, page_count: 1 });
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
@@ -139,6 +144,56 @@ export default function ImportAdminV2Inventory() {
     }
   };
 
+  const subtractStock = async (row: InventoryRow) => {
+    const token = getManagementToken();
+    if (!token) {
+      toast.error('Management session expired');
+      return;
+    }
+    if (!canSubtractStock) {
+      toast.error('You do not have permission to subtract inventory stock');
+      return;
+    }
+
+    const quantityToSubtract = Number(subtractDrafts[variantKey(row)] || 0);
+    if (!Number.isInteger(quantityToSubtract) || quantityToSubtract <= 0) {
+      toast.error('Enter a whole number greater than 0 to subtract');
+      return;
+    }
+    if (quantityToSubtract > row.stock_quantity) {
+      toast.error('You cannot subtract more than the current stock');
+      return;
+    }
+
+    const key = variantKey(row);
+    setSaving('subtract:' + key);
+    try {
+      const res = await fetch(EDGE_URL + '?action=admin-inventory-subtract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          manager_token: token,
+          product_id: row.id,
+          variant_options: row.variant_options ?? {},
+          quantity_to_subtract: quantityToSubtract,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Could not subtract stock');
+
+      const nextQuantity = Number(data.inventory?.quantity ?? row.stock_quantity - quantityToSubtract);
+      setRows(current => current.map(item => variantKey(item) === key
+        ? { ...item, stock_quantity: nextQuantity, stock_updated_at: data.inventory?.updated_at ?? new Date().toISOString() }
+        : item));
+      setSubtractDrafts(current => ({ ...current, [key]: '' }));
+      toast.success('Subtracted ' + quantityToSubtract.toLocaleString() + ' unit' + (quantityToSubtract === 1 ? '' : 's') + '. New stock: ' + nextQuantity.toLocaleString());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not subtract stock');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   const totalStock = rows.reduce((sum, row) => sum + Number(row.stock_quantity || 0), 0);
   const lowStock = rows.filter(row => row.stock_quantity > 0 && row.stock_quantity <= 5).length;
 
@@ -177,8 +232,8 @@ export default function ImportAdminV2Inventory() {
                 <th className="px-5 py-3 font-bold">Product</th>
                 <th className="px-4 py-3 font-bold">Category</th>
                 <th className="px-4 py-3 font-bold">Total stock</th>
+                <th className="px-4 py-3 font-bold">Stock status</th>
                 <th className="px-4 py-3 font-bold">Variants</th>
-                <th className="px-4 py-3 font-bold">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -209,6 +264,9 @@ export default function ImportAdminV2Inventory() {
                         </div>
                         <div className="hidden sm:block w-28 text-xs text-gray-600">{product.parent_category || product.category || '—'}</div>
                         <span className={productStock > 0 ? 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700' : 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-gray-100 text-gray-500'}>{productStock.toLocaleString()}</span>
+                        <span className={productStock > 0 ? 'inline-flex min-w-[70px] justify-center px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold' : 'inline-flex min-w-[70px] justify-center px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold'}>
+                          {productStock > 0 ? 'In stock' : 'Out of stock'}
+                        </span>
                         <span className="inline-flex min-w-[110px] justify-center px-2.5 py-1.5 rounded-lg bg-orange-50 text-orange-600 text-[10px] font-bold">
                           {isOpen ? 'Hide variants' : hasRealVariants ? 'View variants' : 'View stock'}
                         </span>
@@ -230,8 +288,9 @@ export default function ImportAdminV2Inventory() {
                                   <tr className="text-[9px] uppercase tracking-wide text-gray-400">
                                     {optionNames.map(name => <th key={name} className="px-4 py-2.5 font-bold">{name}</th>)}
                                     {!optionNames.length && <th className="px-4 py-2.5 font-bold">Stock type</th>}
-                                    <th className="px-4 py-2.5 font-bold">Stock</th>
+                                    <th className="px-4 py-2.5 font-bold">Current stock</th>
                                     <th className="px-4 py-2.5 font-bold">Add stock</th>
+                                    <th className="px-4 py-2.5 font-bold">Subtract stock</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
@@ -271,6 +330,38 @@ export default function ImportAdminV2Inventory() {
                                             </button>
                                           </div>
                                           <p className="text-[9px] text-gray-400 mt-1">{row.stock_updated_at ? 'Updated ' + new Date(row.stock_updated_at).toLocaleString('en-NG') : 'No stock registered yet'}</p>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          {canSubtractStock ? (
+                                            <>
+                                              <div className="flex items-center gap-2">
+                                                <div className="relative">
+                                                  <Minus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                                                  <input
+                                                    type="number"
+                                                    min="1"
+                                                    max={row.stock_quantity}
+                                                    step="1"
+                                                    placeholder="0"
+                                                    value={subtractDrafts[key] ?? ''}
+                                                    onChange={e => setSubtractDrafts(current => ({ ...current, [key]: e.target.value }))}
+                                                    className="w-24 pl-7 pr-2 py-2 rounded-lg border border-gray-200 text-sm font-semibold outline-none focus:border-red-400"
+                                                  />
+                                                </div>
+                                                <button
+                                                  onClick={() => void subtractStock(row)}
+                                                  disabled={saving === 'subtract:' + key || row.stock_quantity <= 0}
+                                                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-600 text-white text-[10px] font-bold disabled:opacity-40"
+                                                >
+                                                  <Minus className="w-3.5 h-3.5" />
+                                                  {saving === 'subtract:' + key ? 'Subtracting…' : 'Subtract'}
+                                                </button>
+                                              </div>
+                                              <p className="text-[9px] text-gray-400 mt-1">Maximum: {row.stock_quantity.toLocaleString()}</p>
+                                            </>
+                                          ) : (
+                                            <span className="text-[10px] text-gray-400">Permission required</span>
+                                          )}
                                         </td>
                                       </tr>
                                     );
