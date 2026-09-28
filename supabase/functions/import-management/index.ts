@@ -275,6 +275,45 @@ serve(async (req) => {
     return json({ inventory: data, added_quantity: quantityToAdd })
   }
 
+  if (action === 'admin-inventory-subtract') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.inventory.subtract'))) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
+    if (!body.product_id) return json({ error: 'Missing product id' }, 400)
+
+    const variantOptions = body.variant_options && typeof body.variant_options === 'object' && !Array.isArray(body.variant_options)
+      ? Object.fromEntries(
+          Object.entries(body.variant_options).filter(
+            ([key, value]) => typeof key === 'string' && typeof value === 'string' && key.trim() && value.trim(),
+          ),
+        )
+      : {}
+
+    const quantityToSubtract = Number(body.quantity_to_subtract)
+    if (!Number.isInteger(quantityToSubtract) || quantityToSubtract <= 0) {
+      return json({ error: 'Stock to subtract must be a positive whole number' }, 400)
+    }
+
+    const { data: session, error: sessionError } = await supabase
+      .from('import_admin_sessions')
+      .select('manager_id')
+      .eq('token', body.manager_token)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+
+    if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
+
+    const { data, error } = await supabase.rpc('subtract_china_import_inventory_stock', {
+      p_product_id: body.product_id,
+      p_variant_options: variantOptions,
+      p_quantity_to_subtract: quantityToSubtract,
+      p_manager_id: session.manager_id,
+    })
+
+    if (error) return json({ error: error.message }, 400)
+    return json({ inventory: data, subtracted_quantity: quantityToSubtract })
+  }
+
   if (action === 'admin-fulfillment-list') {
     if (!(await requireManager(supabase, body.manager_token, 'import.orders.view'))) {
       return json({ error: 'Unauthorized' }, 401)
