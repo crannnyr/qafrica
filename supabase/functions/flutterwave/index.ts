@@ -48,6 +48,20 @@ function expectedPrice(tier: string, duration: number | 'lifetime', starterPack:
   return base && mult ? Math.round(base * mult) : null
 }
 
+// Plan ranks: a payment may renew or upgrade, never silently replace a better plan that is still running.
+const RANK: Record<string, number> = { one_niche: 1, three_niches: 2, unlimited: 3 }
+const DAY = 24 * 60 * 60 * 1000
+type ActivePlan = { tier: string; expires_at: string; duration_months: number | null }
+async function runningPlans(userId: string, storeId: string | null): Promise<ActivePlan[]> {
+  let q = admin.from('subscriptions').select('tier, expires_at, duration_months')
+    .eq('user_id', userId).eq('is_active', true).eq('is_trial', false).gt('expires_at', new Date().toISOString())
+  q = storeId ? q.or(`store_id.eq.${storeId},store_id.is.null`) : q.is('store_id', null)
+  const { data } = await q
+  return (data ?? []) as ActivePlan[]
+}
+const isLifetimePlan = (p: ActivePlan) => Date.parse(p.expires_at) > Date.now() + 50 * 365 * DAY
+const tierName = (t: string) => ({ one_niche: 'Starter', three_niches: 'Growth', unlimited: 'Enterprise' } as Record<string, string>)[t] ?? t
+
 // ── Flutterwave API ───────────────────────────────────────────────────────────────────
 let cachedToken: { value: string; until: number } | null = null
 async function flwToken(): Promise<string> {
@@ -167,9 +181,14 @@ async function activate(payment: PaymentRow, charge: Charge): Promise<{ ok: bool
 
     if (!subscriptionId) {
       const months = payment.is_lifetime ? 0 : payment.duration_months
+      // Renewing or upgrading early: the new months start when the current plan would have ended
+      const running = await runningPlans(payment.user_id, payment.store_id)
+      const carryFrom = running
+        .filter((p) => !isLifetimePlan(p) && (RANK[p.tier] ?? 0) <= (RANK[payment.tier] ?? 0))
+        .reduce((max, p) => Math.max(max, Date.parse(p.expires_at)), Date.now())
       const expiresAt = payment.is_lifetime
         ? new Date('2099-12-31T00:00:00Z').toISOString()
-        : new Date(Date.now() + months * 30 * 24 * 60 * 60 * 1000).toISOString()
+        : new Date(carryFrom + months * 30 * DAY).toISOString()
       const { data: sub, error } = await admin.from('subscriptions').insert({
         user_id: payment.user_id,
         store_id: payment.store_id,
@@ -242,6 +261,17 @@ async function start(req: Request) {
     ? await admin.from('stores').select('id, owner_id, name').eq('id', String(body.store_id)).maybeSingle()
     : await admin.from('stores').select('id, owner_id, name').eq('owner_id', userId).order('created_at').limit(1).maybeSingle()
   if (store && store.owner_id !== userId) return json({ ok: false, message: 'Store not found on your account.' }, 403)
+
+  // Don't sell a lower plan over a better one that is still running
+  const running = await runningPlans(userId, store?.id ?? null)
+  const better = running.find((p) => (RANK[p.tier] ?? 0) > (RANK[tier] ?? 0) && Date.parse(p.expires_at) > Date.now() + 3 * DAY)
+  if (better) {
+    const until = isLifetimePlan(better) ? 'for life' : `until ${new Date(better.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+    return json({ ok: false, message: `This store is already on ${tierName(better.tier)} ${until}. Choose ${tierName(better.tier)} or a higher plan to renew or upgrade.` }, 409)
+  }
+  if (running.some((p) => isLifetimePlan(p) && (RANK[p.tier] ?? 0) >= (RANK[tier] ?? 0))) {
+    return json({ ok: false, message: 'This store already has lifetime access on this plan or a higher one.' }, 409)
+  }
 
   // Same plan asked again while an account is still open: show the same account
   const { data: recent } = await admin.from('subscription_payments')
