@@ -243,7 +243,13 @@ export default function ImportAdminV2Inventory() {
         {error && <div className="mx-5 mt-4 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs">{error}</div>}
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left">
+          <table className="w-full min-w-[920px] table-fixed text-left">
+            <colgroup>
+              <col className="w-[46%]" />
+              <col className="w-[16%]" />
+              <col className="w-[18%]" />
+              <col className="w-[20%]" />
+            </colgroup>
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr className="text-[10px] uppercase tracking-wide text-gray-400">
                 <th className="px-5 py-3 font-bold">Product</th>
@@ -263,23 +269,25 @@ export default function ImportAdminV2Inventory() {
                 const hasRealVariants = product.variants.some(row => row.variant_options && Object.keys(row.variant_options).length > 0);
                 const optionNames = Array.from(new Set(product.variants.flatMap(row => Object.keys(row.variant_options ?? {}))));
                 return (
-                  <tr key={product.id} className="align-top">
-                    <td colSpan={4} className="p-0">
-                      <button
-                        type="button"
-                        onClick={() => setExpanded(current => ({ ...current, [product.id]: !isOpen }))}
-                        className="w-full px-5 py-3 flex items-center gap-3 text-left hover:bg-gray-50"
-                      >
-                        <ChevronDown className={isOpen ? 'w-4 h-4 text-orange-500 transition-transform' : 'w-4 h-4 text-gray-400 -rotate-90 transition-transform'} />
+                  <tr key={product.id} className="align-middle">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setExpanded(current => ({ ...current, [product.id]: !isOpen }))}
+                          className="p-0.5 rounded text-left hover:bg-gray-100 flex-shrink-0"
+                          aria-label={isOpen ? 'Collapse product' : 'Expand product'}
+                        >
+                          <ChevronDown className={isOpen ? 'w-4 h-4 text-orange-500 transition-transform' : 'w-4 h-4 text-gray-400 -rotate-90 transition-transform'} />
+                        </button>
                         <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0">
                           {product.image_url ? <img src={product.image_url} alt="" className="w-full h-full object-cover" /> : null}
                         </div>
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
                           <a
                             href={'/recommendations/' + product.id}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
                             className="block text-sm font-semibold text-gray-900 truncate hover:text-orange-500 hover:underline"
                             title="Open product page"
                           >
@@ -287,16 +295,32 @@ export default function ImportAdminV2Inventory() {
                           </a>
                           <p className="text-[10px] text-gray-400 mt-0.5">{hasRealVariants ? product.variants.length.toLocaleString() + ' variant combinations' : 'No variants'}</p>
                         </div>
-                        <span className={productStock > 0 ? 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700' : 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-gray-100 text-gray-500'}>{productStock.toLocaleString()}</span>
-                        <span className={productStock > 0 ? 'inline-flex min-w-[70px] justify-center px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold' : 'inline-flex min-w-[70px] justify-center px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold'}>
-                          {productStock > 0 ? 'In stock' : 'Out of stock'}
-                        </span>
-                        <span className="inline-flex min-w-[110px] justify-center px-2.5 py-1.5 rounded-lg bg-orange-50 text-orange-600 text-[10px] font-bold">
-                          {isOpen ? 'Hide variants' : hasRealVariants ? 'View variants' : 'View stock'}
-                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={productStock > 0 ? 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-emerald-50 text-emerald-700' : 'inline-flex min-w-[58px] justify-center px-2.5 py-1.5 rounded-lg text-xs font-black bg-gray-100 text-gray-500'}>
+                        {productStock.toLocaleString()}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={productStock > 0 ? 'inline-flex min-w-[70px] justify-center px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold' : 'inline-flex min-w-[70px] justify-center px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-500 text-[10px] font-bold'}>
+                        {productStock > 0 ? 'In stock' : 'Out of stock'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setExpanded(current => ({ ...current, [product.id]: !isOpen }))}
+                        className="inline-flex min-w-[110px] justify-center px-2.5 py-1.5 rounded-lg bg-orange-50 text-orange-600 text-[10px] font-bold hover:bg-orange-100"
+                      >
+                        {isOpen ? 'Hide variants' : hasRealVariants ? 'View variants' : 'View stock'}
                       </button>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={4} className="p-0">
 
-                      {isOpen && (
                         <div className="bg-gray-50/70 border-t border-gray-100 px-5 py-3">
                           <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
                             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
@@ -396,8 +420,9 @@ export default function ImportAdminV2Inventory() {
                           </div>
                         </div>
                       )}
-                    </td>
-                  </tr>
+                      </td>
+                    </tr>
+                  )}
                 );
               })}
             </tbody>
