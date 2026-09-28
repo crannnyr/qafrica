@@ -34,7 +34,7 @@ const NAV = [
     section: 'Fulfillment',
     items: [
       { icon: PackageCheck, label: 'Fulfillment', path: '/import-admin-v2/fulfillment', permission: 'import.orders.view' },
-      { icon: Boxes, label: 'Inventory', path: '/import-admin-v2/inventory', permission: 'import.products.view' },
+      { icon: Boxes, label: 'Inventory', path: '/import-admin-v2/inventory', permission: 'import.inventory.view' },
     ],
   },
   {
