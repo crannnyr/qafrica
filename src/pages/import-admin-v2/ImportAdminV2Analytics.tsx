@@ -8,7 +8,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import {
-  TrendingUp, Package, Users, DollarSign, RefreshCw, Calendar, ShoppingCart, Clock3, Boxes, Truck, ReceiptText, RotateCcw, Layers3, MessageCircle, CheckCircle2,
+  TrendingUp, Package, Users, DollarSign, RefreshCw, Calendar, ShoppingCart, Clock3, Boxes, Truck, ReceiptText, RotateCcw, Layers3, MessageCircle, CheckCircle2, Shield,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
@@ -128,12 +128,24 @@ const RANGE_PRESETS = [
 
 export default function ImportAdminV2Analytics() {
   const token = getManagementToken() || '';
+  const { hasPermission, loading: permissionsLoading } = useImportAdminPermissions(token);
+  const canViewAnalytics = hasPermission('import.analytics.view');
   const [range, setRange] = useState<typeof RANGE_PRESETS[number]['key']>('30d');
   const [data, setData] = useState<Analytics | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const load = useCallback(async () => {
+    if (permissionsLoading) return;
+    if (!token || !canViewAnalytics) {
+      setData(null);
+      setError(null);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
+    setError(null);
     try {
       const preset = RANGE_PRESETS.find(r => r.key === range)!;
       const body: any = { manager_token: token };
@@ -145,14 +157,18 @@ export default function ImportAdminV2Analytics() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const json = await res.json();
-      setData(json.analytics ?? null);
-    } catch {
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.analytics) {
+        throw new Error(json.error || 'We could not load analytics right now. Please try again.');
+      }
+      setData(json.analytics);
+    } catch (e) {
       setData(null);
+      setError(e instanceof Error ? e.message : 'We could not load analytics right now. Please try again.');
     } finally {
       setIsLoading(false);
     }
-  }, [token, range]);
+  }, [token, range, permissionsLoading, canViewAnalytics]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -197,15 +213,23 @@ export default function ImportAdminV2Analytics() {
         </button>
       </div>
 
-      {isLoading && !data ? (
+      {permissionsLoading || (isLoading && !data) ? (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 h-24 animate-pulse" />
           ))}
         </div>
+      ) : !canViewAnalytics ? (
+        <div className="bg-white rounded-2xl border border-amber-100 bg-amber-50/40 p-8 text-center">
+          <Shield className="w-8 h-8 mx-auto text-amber-300" />
+          <p className="mt-3 text-sm font-semibold text-gray-700">Analytics access is not enabled for this account.</p>
+          <p className="text-xs text-gray-500 mt-1">You can still use the sections your administrator has granted. Ask an administrator for “View Analytics” if you need this dashboard.</p>
+        </div>
       ) : !data ? (
-        <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-          <p className="text-sm text-gray-300">Couldn't load analytics.</p>
+        <div className="bg-white rounded-2xl border border-red-100 p-8 text-center">
+          <Shield className="w-8 h-8 mx-auto text-red-300" />
+          <p className="mt-3 text-sm font-semibold text-gray-700">{error ?? 'We could not load analytics right now.'}</p>
+          <p className="text-xs text-gray-500 mt-1">Please refresh and try again. If the problem continues, contact an administrator.</p>
         </div>
       ) : (
         <>
