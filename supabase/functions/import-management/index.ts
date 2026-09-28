@@ -27,21 +27,20 @@ async function hasManagerPermission(db: any, managerId: string, permissionKey: s
 
   const rolePermissionIds = Array.from(new Set((rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)))
 
+  const { data: directPermissions, error: directError } = await db
+    .from('import_admin_manager_permissions').select('permission_id').eq('manager_id', managerId)
+  if (directError) return false
+
   const { data: deniedPermissions, error: deniedPermissionsError } = await db
     .from('import_admin_manager_denied_permissions').select('permission_id').eq('manager_id', managerId)
   if (deniedPermissionsError) return false
 
   const deniedIds = new Set((deniedPermissions ?? []).map((row: any) => row.permission_id).filter(Boolean))
-  const effectivePermissionIds = rolePermissionIds.filter((id: string) => !deniedIds.has(id))
+  const effectivePermissionIds = Array.from(new Set([
+    ...rolePermissionIds,
+    ...(directPermissions ?? []).map((row: any) => row.permission_id).filter(Boolean),
+  ])).filter((id: string) => !deniedIds.has(id))
   if (effectivePermissionIds.length === 0) return false
-
-  const { data: directPermissions, error: directError } = await db
-    .from('import_admin_manager_permissions').select('permission_id')
-    .eq('manager_id', managerId).in('permission_id', effectivePermissionIds)
-  if (!directError && (directPermissions ?? []).some((row: any) => row.permission_id)) {
-    // Direct grants are not required for role permissions; this query only
-    // confirms the table is readable for deployments that use both models.
-  }
 
   const { data: permission, error: permissionError } = await db
     .from('import_admin_permissions').select('id')
@@ -174,8 +173,8 @@ serve(async (req) => {
   }
 
   if (action === 'admin-inventory-list') {
-    if (!(await requireManager(supabase, body.manager_token, 'import.products.view'))) {
-      return json({ error: 'Unauthorized' }, 401)
+    if (!(await requireManager(supabase, body.manager_token, 'import.inventory.view'))) {
+      return json({ error: 'You do not have permission to view Inventory.' }, 403)
     }
 
     const requestedPage = Number(body.page)
@@ -261,8 +260,8 @@ serve(async (req) => {
   }
 
   if (action === 'admin-inventory-set') {
-    if (!(await requireManager(supabase, body.manager_token, 'import.products.update'))) {
-      return json({ error: 'Unauthorized' }, 401)
+    if (!(await requireManager(supabase, body.manager_token, 'import.inventory.add'))) {
+      return json({ error: 'You do not have permission to add Inventory stock.' }, 403)
     }
     if (!body.product_id) return json({ error: 'Missing product id' }, 400)
 
