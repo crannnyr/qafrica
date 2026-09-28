@@ -78,18 +78,6 @@ export default function ImportAdminV2Inventory() {
     return Array.from(map.values());
   }, [rows]);
 
-  useEffect(() => {
-    const token = getManagementToken();
-    if (!token) return;
-    void fetch(CONFIG.SUPABASE_URL + '/functions/v1/category?action=list&manager_token=' + encodeURIComponent(token))
-      .then(async res => {
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error ?? 'Could not load categories');
-        setCategories(Array.isArray(data.categories) ? data.categories : []);
-      })
-      .catch(() => setCategories([]));
-  }, []);
-
   const load = useCallback(async (page = 1, signal?: AbortSignal) => {
     const token = getManagementToken();
     if (!token) return;
@@ -106,6 +94,7 @@ export default function ImportAdminV2Inventory() {
       if (!res.ok) throw new Error(data.error ?? 'Could not load inventory');
       const next = Array.isArray(data.products) ? data.products : [];
       setRows(next);
+      setCategories(Array.isArray(data.categories) ? data.categories : []);
       setDrafts(Object.fromEntries(next.map((row: InventoryRow) => [variantKey(row), ''])));
       setSubtractDrafts(Object.fromEntries(next.map((row: InventoryRow) => [variantKey(row), ''])));
       setPagination(data.pagination ?? { page, per_page: PAGE_SIZE, total: 0, page_count: 1 });
