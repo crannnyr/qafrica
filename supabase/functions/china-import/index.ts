@@ -326,16 +326,25 @@ async function hasManagerImportPermission(supabase: any, managerId: string, perm
     (rolePermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)
   ))
 
-  const { data: deniedPermissions, error: deniedPermissionsError } = await supabase
+  const { data: directPermissions, error: directPermissionsError } = await supabase
+    .from('import_admin_manager_permissions')
+    .select('permission_id')
+    .eq('manager_id', managerId)
+  if (directPermissionsError) return false
+
+  const deniedPermissionsResult = await supabase
     .from('import_admin_manager_denied_permissions')
     .select('permission_id')
     .eq('manager_id', managerId)
-  if (deniedPermissionsError) return false
+  if (deniedPermissionsResult.error) return false
 
   const deniedIds = new Set(
-    (deniedPermissions ?? []).map((row: any) => row.permission_id).filter(Boolean)
+    (deniedPermissionsResult.data ?? []).map((row: any) => row.permission_id).filter(Boolean)
   )
-  const effectivePermissionIds = rolePermissionIds.filter((id: string) => !deniedIds.has(id))
+  const effectivePermissionIds = Array.from(new Set([
+    ...rolePermissionIds,
+    ...(directPermissions ?? []).map((row: any) => row.permission_id).filter(Boolean),
+  ])).filter((id: string) => !deniedIds.has(id))
   if (effectivePermissionIds.length === 0) return false
 
   const { data: permission, error: permissionError } = await supabase
@@ -2408,7 +2417,7 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-analytics') {
       const { manager_token, date_from, date_to } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token, 'import.analytics.view'))) return json({ error: 'Unauthorized' }, 401)
+      if (!(await requireAdmin(supabase, manager_token, 'import.analytics.view'))) return json({ error: 'You do not have permission to view Import Admin analytics.' }, 403)
 
       const { data: analyticsJson, error: analyticsErr } = await supabase.rpc('get_import_analytics', {
         p_date_from: date_from ?? null,
