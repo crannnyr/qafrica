@@ -269,7 +269,7 @@ export default function ManagementLayout() {
             <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
               <Shield className="w-8 h-8 mx-auto text-gray-300" />
               <h2 className="mt-3 text-sm font-bold text-gray-900">Permission required</h2>
-              <p className="mt-1 text-xs text-gray-500">Your account does not have “{requiredPermissionLabel{'}'}”. Ask an administrator to grant this permission if you need access.</p>
+              <p className="mt-1 text-xs text-gray-500">Your account does not have the required permission for this section. Ask an administrator to grant access if you need it.</p>
             </div>
           ) : (
             <AnimatePresence mode="wait">
