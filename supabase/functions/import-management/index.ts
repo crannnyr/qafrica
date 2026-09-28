@@ -183,12 +183,16 @@ serve(async (req) => {
     const page = Number.isFinite(requestedPage) && requestedPage >= 1 ? Math.floor(requestedPage) : 1
     const perPage = Number.isFinite(requestedPerPage) && requestedPerPage >= 1 ? Math.min(50, Math.floor(requestedPerPage)) : 50
     const search = typeof body.search === 'string' ? body.search.trim() : ''
+    const categoryId = typeof body.category_id === 'string' ? body.category_id.trim() : ''
+    const subcategoryId = typeof body.subcategory_id === 'string' ? body.subcategory_id.trim() : ''
 
     let query = supabase.from('china_import_products')
-      .select('id,name,image_url,category,parent_category,is_active,moq,has_variants,variants,created_at', { count: 'exact' })
+      .select('id,name,image_url,category,parent_category,category_id,subcategory_id,is_active,moq,has_variants,variants,created_at', { count: 'exact' })
       .order('created_at', { ascending: false })
 
     if (search) query = query.ilike('name', '%' + search + '%')
+    if (categoryId) query = query.eq('category_id', categoryId)
+    if (subcategoryId) query = query.eq('subcategory_id', subcategoryId)
 
     const from = (page - 1) * perPage
     const to = from + perPage - 1
