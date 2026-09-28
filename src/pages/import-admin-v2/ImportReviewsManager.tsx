@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Edit3, Image as ImageIcon, MessageSquare, Plus, Search, Star, Trash2, UserPlus, X } from 'lucide-react';
+import { Check, Edit3, MessageSquare, Plus, Search, Star, Trash2, UserPlus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
@@ -192,7 +192,7 @@ export default function ImportReviewsManager() {
           </div>
           <div className="p-4">
             {reviewsLoading ? <div className="py-16 flex justify-center"><div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"/></div> :
-            !visibleReviews.length ? <div className="py-16 text-center"><MessageSquare className="w-8 h-8 mx-auto text-gray-200"/><p className="text-xs text-gray-400 mt-2">No reviews for this product yet.</p><button onClick={openCreate} className="mt-3 text-xs font-bold text-orange-500">Add the first review</button></div> :
+            !visibleReviews.length ? <div className="py-16 text-center"><MessageSquare className="w-8 h-8 mx-auto text-gray-200"/><p className="text-xs text-gray-400 mt-2">No reviews for this product yet.</p><button onClick={openCreate} disabled={!canManage} className="mt-3 text-xs font-bold text-orange-500 disabled:opacity-40">Add the first review</button></div> :
             <div className="space-y-3">{visibleReviews.map(r=><div key={r.id} className="border border-gray-100 rounded-2xl p-4">
               <div className="flex gap-3">
                 {r.customer_avatar_url ? <img src={r.customer_avatar_url} className="w-9 h-9 rounded-full object-cover bg-gray-100" alt=""/> : <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-400">{r.customer_name.slice(0,1).toUpperCase()}</div>}
