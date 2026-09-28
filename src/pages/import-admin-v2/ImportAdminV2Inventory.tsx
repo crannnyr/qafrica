@@ -269,6 +269,7 @@ export default function ImportAdminV2Inventory() {
                 const hasRealVariants = product.variants.some(row => row.variant_options && Object.keys(row.variant_options).length > 0);
                 const optionNames = Array.from(new Set(product.variants.flatMap(row => Object.keys(row.variant_options ?? {}))));
                 return (
+                  <>
                   <tr key={product.id} className="align-middle">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3 min-w-0">
@@ -423,6 +424,7 @@ export default function ImportAdminV2Inventory() {
                       </td>
                     </tr>
                   )}
+                  </>
                 );
               })}
             </tbody>
