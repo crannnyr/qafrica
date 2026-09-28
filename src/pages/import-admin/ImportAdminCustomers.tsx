@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { AvatarImage } from '@/lib/presetAvatars';
+import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const REFUNDS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/refunds`;
@@ -106,6 +107,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
   const [cancellingItem, setCancellingItem] = useState<{ order: OrderRow; itemIndex: number; itemName: string } | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [isCancelling, setIsCancelling] = useState(false);
+  const { hasPermission: hasImportPermission } = useImportAdminPermissions(token);
 
   const load = useCallback(() => {
     setIsLoading(true);
@@ -297,7 +299,7 @@ export function CustomerDetail({ token, customerId, onClose, onFavoriteToggled, 
                       </button>
                       <div className="flex items-center justify-between">
                         <p className="text-[10px] text-gray-400 capitalize">{o.status.replace(/_/g, ' ')} · {o.payment_status}</p>
-                        {needsReminder && (
+                        {needsReminder && hasImportPermission('import.messages.send') && (
                           <a
                             href={waLink(o.customer_whatsapp, REMINDER_MESSAGE(o.customer_name, o.code))}
                             target="_blank" rel="noopener noreferrer"
