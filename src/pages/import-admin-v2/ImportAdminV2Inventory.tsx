@@ -53,6 +53,7 @@ export default function ImportAdminV2Inventory() {
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState('');
   const { hasPermission } = useImportAdminPermissions(getManagementToken());
+  const canAddStock = hasPermission('import.inventory.add');
   const canSubtractStock = hasPermission('import.inventory.subtract');
   const selectedCategory = categories.find(category => category.id === categoryId);
   const availableSubcategories = selectedCategory?.subcategories ?? [];
@@ -114,6 +115,10 @@ export default function ImportAdminV2Inventory() {
   }, [load]);
 
   const saveStock = async (row: InventoryRow) => {
+    if (!canAddStock) {
+      toast.error('You do not have permission to add inventory stock. Ask an administrator to grant Inventory → Add stock.');
+      return;
+    }
     const token = getManagementToken();
     if (!token) {
       toast.error('Management session expired');
@@ -356,29 +361,35 @@ export default function ImportAdminV2Inventory() {
                                           </span>
                                         </td>
                                         <td className="px-4 py-3">
-                                          <div className="flex items-center gap-2">
-                                            <div className="relative">
-                                              <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                                              <input
-                                                type="number"
-                                                min="1"
-                                                step="1"
-                                                placeholder="0"
-                                                value={drafts[key] ?? ''}
-                                                onChange={e => setDrafts(current => ({ ...current, [key]: e.target.value }))}
-                                                className="w-24 pl-7 pr-2 py-2 rounded-lg border border-gray-200 text-sm font-semibold outline-none focus:border-orange-500"
-                                              />
-                                            </div>
-                                            <button
-                                              onClick={() => void saveStock(row)}
-                                              disabled={saving === key}
-                                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40"
-                                            >
-                                              <Save className="w-3.5 h-3.5" />
-                                              {saving === key ? 'Adding…' : 'Add'}
-                                            </button>
-                                          </div>
-                                          <p className="text-[9px] text-gray-400 mt-1">{row.stock_updated_at ? 'Updated ' + new Date(row.stock_updated_at).toLocaleString('en-NG') : 'No stock registered yet'}</p>
+                                          {canAddStock ? (
+                                            <>
+                                              <div className="flex items-center gap-2">
+                                                <div className="relative">
+                                                  <Plus className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                                                  <input
+                                                    type="number"
+                                                    min="1"
+                                                    step="1"
+                                                    placeholder="0"
+                                                    value={drafts[key] ?? ''}
+                                                    onChange={e => setDrafts(current => ({ ...current, [key]: e.target.value }))}
+                                                    className="w-24 pl-7 pr-2 py-2 rounded-lg border border-gray-200 text-sm font-semibold outline-none focus:border-orange-500"
+                                                  />
+                                                </div>
+                                                <button
+                                                  onClick={() => void saveStock(row)}
+                                                  disabled={saving === key}
+                                                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40"
+                                                >
+                                                  <Save className="w-3.5 h-3.5" />
+                                                  {saving === key ? 'Adding…' : 'Add'}
+                                                </button>
+                                              </div>
+                                              <p className="text-[9px] text-gray-400 mt-1">{row.stock_updated_at ? 'Updated ' + new Date(row.stock_updated_at).toLocaleString('en-NG') : 'No stock registered yet'}</p>
+                                            </>
+                                          ) : (
+                                            <p className="text-[9px] text-gray-400">Add stock permission required.</p>
+                                          )}
                                         </td>
                                         <td className="px-4 py-3">
                                           {canSubtractStock ? (
