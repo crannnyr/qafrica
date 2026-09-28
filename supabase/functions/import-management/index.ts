@@ -200,11 +200,25 @@ serve(async (req) => {
     if (productsError) return json({ error: productsError.message }, 500)
 
     const ids = (products ?? []).map((p: any) => p.id)
-    const { data: inventory, error: inventoryError } = ids.length
-      ? await supabase.from('china_import_inventory').select('product_id,variant_options,quantity,updated_at').in('product_id', ids)
-      : { data: [], error: null }
+    const [{ data: inventory, error: inventoryError }, { data: categories, error: categoriesError }, { data: subcategories, error: subcategoriesError }] = await Promise.all([
+      ids.length
+        ? supabase.from('china_import_inventory').select('product_id,variant_options,quantity,updated_at').in('product_id', ids)
+        : Promise.resolve({ data: [], error: null }),
+      supabase.from('niche_categories').select('id,name').order('name'),
+      supabase.from('niche_subcategories').select('id,category_id,name').order('name'),
+    ])
 
     if (inventoryError) return json({ error: inventoryError.message }, 500)
+    if (categoriesError) return json({ error: categoriesError.message }, 500)
+    if (subcategoriesError) return json({ error: subcategoriesError.message }, 500)
+
+    const categoryOptions = (categories ?? []).map((category: any) => ({
+      id: category.id,
+      name: category.name,
+      subcategories: (subcategories ?? [])
+        .filter((subcategory: any) => subcategory.category_id === category.id)
+        .map((subcategory: any) => ({ id: subcategory.id, name: subcategory.name })),
+    }))
 
     const stockMap = new Map((inventory ?? []).map((row: any) => [
       row.product_id + '|' + JSON.stringify(row.variant_options ?? {}),
@@ -241,6 +255,7 @@ serve(async (req) => {
     const total = Number(count ?? 0)
     return json({
       products: rows,
+      categories: categoryOptions,
       pagination: { page, per_page: perPage, total, page_count: Math.max(1, Math.ceil(total / perPage)) },
     })
   }
