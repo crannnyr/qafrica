@@ -11,6 +11,34 @@ import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import { AiSupportAlertMonitor } from '@/pages/import-admin/AiSupportInbox';
 
 // Import Admin v2 navigation
+const PERMISSION_LABELS: Record<string, string> = {
+  'import.analytics.view': 'View Analytics',
+  'import.total_orders.view': 'View Total Orders',
+  'import.orders.view': 'View Orders',
+  'import.confirmed_payments.view': 'View Confirmed Payments',
+  'import.paystack_transactions.view': 'View Paystack Transactions',
+  'import.timed_out.view': 'View Timed Out Orders',
+  'import.refunds.view': 'View Refunds',
+  'import.custom_orders.view': 'View Custom Orders',
+  'import.inventory.view': 'View Inventory',
+  'import.inventory.add': 'Add Inventory Stock',
+  'import.inventory.subtract': 'Subtract Inventory Stock',
+  'import.products.view': 'View Products',
+  'import.products.create': 'Create Products',
+  'import.products.update': 'Update Products',
+  'import.categories.view': 'View Categories',
+  'import.trending.view': 'View Trending',
+  'import.clients.view': 'View Clients',
+  'import.messages.view': 'View Messages',
+  'import.messages.send': 'Send Messages',
+  'import.questions.view': 'View Questions',
+  'import.broadcast.send': 'Send Broadcasts',
+  'import.expenses.view': 'View Expenses',
+  'import.pricing_shipping.view': 'View Pricing & Shipping',
+  'import.settings.view': 'View Settings',
+  'import.admin_access.view': 'View Admin Access',
+};
+
 const NAV = [
   {
     section: 'Overview',
@@ -133,6 +161,9 @@ export default function ManagementLayout() {
   const canViewCurrentRoute = isDashboardRoute
     ? permissions.size > 0
     : !requiredPermission || hasPermission(requiredPermission);
+  const requiredPermissionLabel = requiredPermission
+    ? (PERMISSION_LABELS[requiredPermission] ?? requiredPermission)
+    : 'access to this section';
 
   if (checkingSession) {
     return (
@@ -238,7 +269,7 @@ export default function ManagementLayout() {
             <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center">
               <Shield className="w-8 h-8 mx-auto text-gray-300" />
               <h2 className="mt-3 text-sm font-bold text-gray-900">Permission required</h2>
-              <p className="mt-1 text-xs text-gray-500">You do not have permission to view this section.</p>
+              <p className="mt-1 text-xs text-gray-500">Your account does not have “{requiredPermissionLabel{'}'}”. Ask an administrator to grant this permission if you need access.</p>
             </div>
           ) : (
             <AnimatePresence mode="wait">
