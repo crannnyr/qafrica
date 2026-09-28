@@ -420,7 +420,6 @@ export default function ImportAdminV2Inventory() {
                             </div>
                           </div>
                         </div>
-                      )}
                       </td>
                     </tr>
                   )}
