@@ -10,7 +10,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { useAuthStore, useWalletStore } from '@/stores';
 import { toast } from 'sonner';
-import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
+import { loadPaystackScript, initializePayment, generateReference } from '@/services/paystack';
+import FlutterwavePayDialog from '@/components/payments/FlutterwavePayDialog';
 import { supabase } from '@/services';
 import type { Subscription, SavedCard } from '@/types';
 
@@ -205,120 +206,31 @@ export default function SubscriptionPage() {
     };
   };
 
-  const handleSubscribe = async () => {
-    if (!user?.email) {
-      toast.error('User email not found');
-      return;
-    }
+  // ── Renew / upgrade: Flutterwave bank transfer; the server prices and activates the plan ──
+  const [payment, setPayment] = useState<{ tier: string; duration: number | 'lifetime'; label: string; autoRenew: boolean } | null>(null);
 
+  const handleSubscribe = () => {
     const pricing = calculatePrice();
-
-    if (autoRenewEnabled && autoRenewMethod === 'card' && !pricing.isLifetime) {
-      if (savedCards.length === 0) {
-        toast.error('Please add a card first for auto-renewal');
-        setShowAddCardModal(true);
-        return;
-      }
-      if (!selectedCardId) {
-        toast.error('Please select a saved card for auto-renewal');
-        return;
-      }
-    }
-
-    setIsProcessing(true);
-
-    try {
-      await loadPaystackScript();
-      
-      const reference = generateReference(pricing.isLifetime ? 'LIFE' : 'SUB');
-      
-      let authorizationCode = null;
-      if (autoRenewEnabled && autoRenewMethod === 'card' && selectedCardId) {
-        const selectedCard = savedCards.find(c => c.id === selectedCardId);
-        authorizationCode = selectedCard?.paystack_authorization_code;
-      }
-      
-      sessionStorage.setItem('payment_intent', JSON.stringify({
-        type: 'subscription',
-        tier: selectedTier,
-        duration_months: pricing.isLifetime ? 9999 : selectedDuration,
-        is_lifetime: pricing.isLifetime,
-        auto_renew: autoRenewEnabled && !pricing.isLifetime,
-        auto_renew_method: autoRenewMethod,
-        authorization_code: authorizationCode,
-        reference,
-      }));
-
-      const paymentChannels = (autoRenewEnabled && !pricing.isLifetime) ? ['card'] : undefined;
-
-      initializePayment({
-        email: user.email,
-        amount: toKobo(pricing.total),
-        reference,
-        channels: paymentChannels,
-        metadata: {
-          user_id: user.id,
-          tier: selectedTier,
-          duration_months: pricing.isLifetime ? 9999 : selectedDuration,
-          is_lifetime: pricing.isLifetime,
-          auto_renew: autoRenewEnabled && !pricing.isLifetime,
-          auto_renew_method: autoRenewMethod,
-          authorization_code: authorizationCode,
-          requires_authorization: autoRenewEnabled && !pricing.isLifetime,
-        },
-        onSuccess: (response) => {
-          toast.success('Payment successful! Processing...');
-          processSuccessfulPayment(response.reference, pricing);
-        },
-        // ── SAFE CANCEL HANDLER ──────────────────────────────────────────────
-        // We do NOT assume the payment failed when the popup closes.
-        // For large amounts in test mode, Paystack can show an "insufficient
-        // funds" error, close the popup (firing onClose/onCancel), yet still
-        // process the charge internally. The webhook is the safety net for
-        // this case. We tell the user to wait and refresh rather than leaving
-        // them confused if their subscription activates a moment later.
-        onCancel: () => {
-          setIsProcessing(false);
-          toast.info(
-            'Payment window closed. If you completed payment, your subscription will activate shortly — please refresh in a moment.',
-            { duration: 6000 }
-          );
-        },
-      });
-    } catch (err) {
-      console.error('Payment error:', err);
-      toast.error('Failed to initialize payment');
-      setIsProcessing(false);
-    }
+    setPayment({
+      tier: selectedTier,
+      duration: pricing.isLifetime ? 'lifetime' : selectedDuration,
+      label: `${TIER_CONFIG[selectedTier].name} · ${pricing.isLifetime ? 'Lifetime' : `${selectedDuration} month${selectedDuration > 1 ? 's' : ''}`}`,
+      autoRenew: autoRenewEnabled && !pricing.isLifetime,
+    });
   };
 
-  const processSuccessfulPayment = async (reference: string, pricing: any) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('verify-subscription-payment', {
-        body: {
-          reference,
-          user_id: user?.id,
-          tier: selectedTier,
-          duration_months: pricing.isLifetime ? 9999 : selectedDuration,
-          is_lifetime: pricing.isLifetime,
-          auto_renew: autoRenewEnabled && !pricing.isLifetime,
-          auto_renew_method: autoRenewMethod,
-          amount: pricing.total,
-          requires_authorization: autoRenewEnabled && !pricing.isLifetime,
-        },
-      });
-
-      if (error) throw error;
-
-      toast.success(pricing.isLifetime ? 'Lifetime access activated!' : 'Subscription renewed!');
-      setShowUpgradeModal(false);
-      loadData();
-    } catch (err) {
-      console.error('Verification error:', err);
-      toast.error('Payment verified but failed to activate. Contact support.');
-    } finally {
-      setIsProcessing(false);
+  const onPaymentDone = async () => {
+    const wantsAutoRenew = payment?.autoRenew;
+    setPayment(null);
+    setShowUpgradeModal(false);
+    if (wantsAutoRenew && user?.id) {
+      // Renewal from wallet balance (card renewals are paused while card payments move to Flutterwave)
+      await supabase.from('subscriptions')
+        .update({ auto_renew: true, auto_renew_method: 'wallet' })
+        .eq('user_id', user.id).eq('is_active', true);
     }
+    toast.success('Payment received. Your plan is active.');
+    loadData();
   };
 
   const handleToggleAutoRenew = async () => {
@@ -871,24 +783,15 @@ export default function SubscriptionPage() {
         </motion.div>
       )}
 
-      {/* Saved Payment Methods */}
-      <motion.div
+      {/* Saved Payment Methods: older Paystack cards only; new plans are paid by bank transfer */}
+      {savedCards.length > 0 && <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
         className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-6"
       >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Payment Methods</h3>
-          <Button
-            onClick={() => setShowAddCardModal(true)}
-            variant="outline"
-            size="sm"
-            className="text-orange-600 border-orange-600 hover:bg-orange-50"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Add Card
-          </Button>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Saved cards</h3>
         </div>
 
         {savedCards.length === 0 ? (
@@ -928,7 +831,7 @@ export default function SubscriptionPage() {
             ))}
           </div>
         )}
-      </motion.div>
+      </motion.div>}
 
       {/* Change Plan Section */}
       <motion.div
@@ -1112,8 +1015,8 @@ export default function SubscriptionPage() {
                     {autoRenewEnabled && (
                       <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                         <p className="text-sm text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                          <CreditCard className="w-4 h-4" />
-                          Auto-renewal requires card payment. Other payment methods will be disabled.
+                          <Wallet className="w-4 h-4" />
+                          Your plan will renew from your QAFRICA wallet balance. Keep enough in your wallet before it ends.
                         </p>
                       </div>
                     )}
@@ -1143,18 +1046,6 @@ export default function SubscriptionPage() {
                               </p>
                             </button>
 
-                            <button
-                              onClick={() => setAutoRenewMethod('card')}
-                              className={`p-3 rounded-lg border-2 text-left transition-all ${
-                                autoRenewMethod === 'card'
-                                  ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
-                                  : 'border-gray-200 dark:border-gray-600'
-                              }`}
-                            >
-                              <CreditCard className={`w-5 h-5 mb-2 ${autoRenewMethod === 'card' ? 'text-orange-500' : 'text-gray-400'}`} />
-                              <p className="font-medium text-gray-900 dark:text-white text-sm">Card</p>
-                              <p className="text-xs text-gray-500">{savedCards.length} saved</p>
-                            </button>
                           </div>
 
                           {autoRenewMethod === 'card' && savedCards.length > 0 && (
@@ -1210,16 +1101,13 @@ export default function SubscriptionPage() {
                   </Button>
                   <Button
                     onClick={handleSubscribe}
-                    disabled={
-                      isProcessing || 
-                      (autoRenewEnabled && autoRenewMethod === 'card' && savedCards.length === 0 && !isLifetime)
-                    }
+                    disabled={isProcessing || !!payment}
                     className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
                   >
                     {isProcessing ? (
                       <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</>
                     ) : (
-                      <><CreditCard className="w-4 h-4 mr-2" />Pay {formatPrice(pricing.total)}</>
+                      <><CreditCard className="w-4 h-4 mr-2" />Pay {formatPrice(pricing.total)} by transfer</>
                     )}
                   </Button>
                 </div>
@@ -1357,6 +1245,15 @@ export default function SubscriptionPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {payment && (
+        <FlutterwavePayDialog
+          plan={{ tier: payment.tier, duration: payment.duration }}
+          planLabel={payment.label}
+          onClose={() => setPayment(null)}
+          onPaid={() => { void onPaymentDone(); }}
+        />
+      )}
     </div>
   );
 }

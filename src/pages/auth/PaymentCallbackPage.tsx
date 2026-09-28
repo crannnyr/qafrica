@@ -7,6 +7,7 @@ import { authService } from '@/services';
 import { useAuthStore } from '@/stores';
 import { supabase } from '@/services/supabase';
 import { toast } from 'sonner';
+import { checkSubscriptionPayment } from '@/services/flutterwave';
 
 export default function PaymentCallbackPage() {
   const navigate       = useNavigate();
@@ -59,27 +60,47 @@ export default function PaymentCallbackPage() {
       }
 
       try {
-        // The server confirms the payment with Paystack, checks the amount against the plan
-        // price and creates the subscription. The browser never writes it directly.
-        setMessage('Confirming your payment...');
-        const { data: act, error: actError } = await supabase.functions.invoke('activate-subscription', {
-          body: { reference },
-        });
-        const result = (act ?? {}) as { ok?: boolean; message?: string; subscription?: { tier?: string } };
-        if (actError || !result.ok) {
-          let detail = result.message;
-          // supabase-js puts the JSON body of a non-2xx response on error.context
-          const ctx = (actError as { context?: Response } | null)?.context;
-          if (!detail && ctx && typeof ctx.json === 'function') {
-            detail = (await ctx.json().catch(() => ({})))?.message;
+        let dbTier: string;
+        if (searchParams.get('provider') === 'flutterwave') {
+          // Flutterwave bank transfer: the server activates the plan once the money lands.
+          setMessage('Confirming your transfer...');
+          let res = await checkSubscriptionPayment(reference);
+          for (let i = 0; i < 24 && res.ok && !res.paid && (res.status === 'pending' || res.status === 'activating'); i++) {
+            await new Promise((r) => setTimeout(r, 5000));
+            res = await checkSubscriptionPayment(reference);
           }
-          setStatus('failed');
-          setMessage('We could not confirm your payment.');
-          setErrorDetails(`${detail ?? 'Please try again or contact support.'} Reference: ${reference}`);
-          toast.error('Payment could not be confirmed.');
-          return;
+          if (!res.ok || !res.paid) {
+            setStatus('failed');
+            setMessage(res.ok && res.status === 'review' ? 'Your transfer needs a quick check.' : 'We haven’t received your transfer yet.');
+            setErrorDetails(res.ok
+              ? `If you sent the money, your plan will switch on by itself as soon as it lands, usually within minutes. Reference: ${reference}`
+              : `${res.message} Reference: ${reference}`);
+            return;
+          }
+          dbTier = res.tier;
+        } else {
+          // The server confirms the payment with Paystack, checks the amount against the plan
+          // price and creates the subscription. The browser never writes it directly.
+          setMessage('Confirming your payment...');
+          const { data: act, error: actError } = await supabase.functions.invoke('activate-subscription', {
+            body: { reference },
+          });
+          const result = (act ?? {}) as { ok?: boolean; message?: string; subscription?: { tier?: string } };
+          if (actError || !result.ok) {
+            let detail = result.message;
+            // supabase-js puts the JSON body of a non-2xx response on error.context
+            const ctx = (actError as { context?: Response } | null)?.context;
+            if (!detail && ctx && typeof ctx.json === 'function') {
+              detail = (await ctx.json().catch(() => ({})))?.message;
+            }
+            setStatus('failed');
+            setMessage('We could not confirm your payment.');
+            setErrorDetails(`${detail ?? 'Please try again or contact support.'} Reference: ${reference}`);
+            toast.error('Payment could not be confirmed.');
+            return;
+          }
+          dbTier = result.subscription?.tier ?? sessionStorage.getItem('subscription_plan') ?? 'one_niche';
         }
-        const dbTier = result.subscription?.tier ?? sessionStorage.getItem('subscription_plan') ?? 'one_niche';
 
         // Mark onboarding complete via authStore
         // so isAuthenticated becomes true and ProtectedRoute stops redirecting

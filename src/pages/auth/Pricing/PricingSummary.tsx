@@ -76,7 +76,7 @@ export default function PricingSummary({
           {/* No free option — Starter Pack banner above covers the entry tier */}
 
           <p className="text-center text-sm text-gray-400">
-            Secure payment powered by Paystack
+            Pay by bank transfer · secured by Flutterwave
           </p>
 
           <div className="flex justify-center">

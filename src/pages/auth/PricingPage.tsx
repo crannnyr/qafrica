@@ -6,7 +6,8 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores';
 import { supabase } from '@/services/supabase';
-import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
+import FlutterwavePayDialog from '@/components/payments/FlutterwavePayDialog';
+import type { SubscriptionPlanRequest } from '@/services/flutterwave';
 
 import PricingHeader from './Pricing/PricingHeader';
 import BillingToggle from './Pricing/BillingToggle';
@@ -24,11 +25,8 @@ export default function PricingPage() {
 
   const [selectedPlan, setSelectedPlan]         = useState<string>('three_niches');
   const [selectedDuration, setSelectedDuration] = useState<number>(1);
-  const [isLoading, setIsLoading]               = useState(false);
-  const [isSkipLoading, setIsSkipLoading]       = useState(false);
   const [selectedNiches, setSelectedNiches]     = useState<string[]>([]);
   const [storeId, setStoreId]                   = useState<string | null>(null);
-  const [userEmail, setUserEmail]               = useState<string>('');
   const [billingType, setBillingType]           = useState<'monthly' | 'lifetime'>('monthly');
 
   // ── Load onboarding_data from Supabase — no sessionStorage ───────────────
@@ -67,7 +65,6 @@ export default function PricingPage() {
 
       setSelectedNiches(saved.selected_niches);
       setStoreId(saved.store_id);
-      setUserEmail(data.email ?? user?.email ?? '');
     };
 
     load();
@@ -92,108 +89,37 @@ export default function PricingPage() {
     return selectedNiches.length <= maxNiches;
   };
 
-  // ── Subscribe (paid) ──────────────────────────────────────────────────────
-  const handleSubscribe = async () => {
+  // ── Pay (Flutterwave bank transfer). The server prices the plan and activates it. ──
+  const [payment, setPayment] = useState<{ plan: SubscriptionPlanRequest; label: string } | null>(null);
+
+  const handleSubscribe = () => {
     if (!storeId || !selectedNiches.length) {
       toast.error('Missing store or niche data. Please go back and try again.');
       return;
     }
-
-    setIsLoading(true);
-    try {
-      await loadPaystackScript();
-
-      const isLifetime       = billingType === 'lifetime';
-      const lifetimePlanData = lifetimePlans.find((p) => p.id === selectedPlan);
-      const amount           = isLifetime
-        ? lifetimePlanData?.price || 0
-        : calculatePrice(selectedPlan, selectedDuration);
-      const reference = generateReference(isLifetime ? 'LIFE' : 'SUB');
-
-      // Store payment metadata in sessionStorage only for the callback
-      // (short-lived: just for the redirect back from Paystack)
-      sessionStorage.setItem('subscription_plan',     selectedPlan);
-      sessionStorage.setItem('subscription_duration', isLifetime ? 'lifetime' : selectedDuration.toString());
-      sessionStorage.setItem('subscription_amount',   amount.toString());
-      sessionStorage.setItem('payment_reference',     reference);
-      sessionStorage.setItem('is_lifetime',           isLifetime ? 'true' : 'false');
-
-      initializePayment({
-        email:  userEmail,
-        amount: toKobo(amount),
-        reference,
-        metadata: {
-          plan:        selectedPlan,
-          duration:    isLifetime ? 'lifetime' : selectedDuration,
-          niches:      selectedNiches,
-          store_id:    storeId,
-          is_lifetime: isLifetime,
-        },
-        onSuccess: (response) => {
-          toast.success(isLifetime ? 'Lifetime access purchased!' : 'Payment successful!');
-          navigate(`/payment/callback?reference=${response.reference}`);
-        },
-        onCancel: () => {
-          setIsLoading(false);
-          toast.info('Payment cancelled. You can try again.');
-        },
-      });
-    } catch {
-      setIsLoading(false);
-      toast.error('Payment initialization failed. Please try again.');
-    }
+    const isLifetime = billingType === 'lifetime';
+    const name = (isLifetime ? lifetimePlans : monthlyPlans).find((p) => p.id === selectedPlan)?.name ?? 'Plan';
+    setPayment({
+      plan: { tier: selectedPlan, duration: isLifetime ? 'lifetime' : selectedDuration, niches: selectedNiches, store_id: storeId },
+      label: `${name} · ${isLifetime ? 'Lifetime' : `${selectedDuration} month${selectedDuration > 1 ? 's' : ''}`}`,
+    });
   };
 
-  // ── Starter Pack: flat ₦5,000 for 3 months, charged via Paystack ──────────
-  // This replaces the old free-trial skip. Same activation path as a normal
-  // paid subscription (PaymentCallbackPage), just with a fixed promotional
-  // amount/duration instead of the regular per-plan pricing formula.
-  const STARTER_PACK_AMOUNT_NGN = 5000;
-  const STARTER_PACK_DURATION_MONTHS = 3;
-
-  const handleStartStarterPack = async () => {
+  // ── Starter Pack: flat ₦5,000 for 3 months (priced on the server) ──────────
+  const handleStartStarterPack = () => {
     if (!storeId || !selectedNiches.length) {
       toast.error('Missing store or niche data. Please go back and try again.');
       return;
     }
+    setPayment({
+      plan: { tier: 'one_niche', duration: 3, starter_pack: true, niches: selectedNiches, store_id: storeId },
+      label: 'Starter Pack · 3 months',
+    });
+  };
 
-    setIsSkipLoading(true);
-    try {
-      await loadPaystackScript();
-
-      const reference = generateReference('STARTER');
-
-      sessionStorage.setItem('subscription_plan',     'one_niche');
-      sessionStorage.setItem('subscription_duration', STARTER_PACK_DURATION_MONTHS.toString());
-      sessionStorage.setItem('subscription_amount',   STARTER_PACK_AMOUNT_NGN.toString());
-      sessionStorage.setItem('payment_reference',     reference);
-      sessionStorage.setItem('is_lifetime',           'false');
-
-      initializePayment({
-        email:  userEmail,
-        amount: toKobo(STARTER_PACK_AMOUNT_NGN),
-        reference,
-        metadata: {
-          plan:        'one_niche',
-          duration:    STARTER_PACK_DURATION_MONTHS,
-          niches:      selectedNiches,
-          store_id:    storeId,
-          is_lifetime: false,
-          is_starter_pack: true,
-        },
-        onSuccess: (response) => {
-          toast.success('Payment successful!');
-          navigate(`/payment/callback?reference=${response.reference}`);
-        },
-        onCancel: () => {
-          setIsSkipLoading(false);
-          toast.info('Payment cancelled. You can try again.');
-        },
-      });
-    } catch {
-      setIsSkipLoading(false);
-      toast.error('Payment initialization failed. Please try again.');
-    }
+  const onPaid = (reference: string) => {
+    setPayment(null);
+    navigate(`/payment/callback?provider=flutterwave&reference=${reference}`);
   };
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -222,7 +148,7 @@ export default function PricingPage() {
         >
           <BillingToggle billingType={billingType} onToggle={setBillingType} />
 
-          <FreePlanBanner isLoading={isSkipLoading} onContinue={handleStartStarterPack} />
+          <FreePlanBanner isLoading={!!payment?.plan.starter_pack} onContinue={handleStartStarterPack} />
 
           {billingType === 'monthly' && (
             <>
@@ -251,12 +177,16 @@ export default function PricingPage() {
             selectedNiches={selectedNiches}
             currentPrice={currentPrice}
             billingType={billingType}
-            isLoading={isLoading}
+            isLoading={!!payment && !payment.plan.starter_pack}
             onSubscribe={handleSubscribe}
             onBack={() => navigate('/onboarding/choice')}
           />
         </motion.div>
       </div>
+
+      {payment && (
+        <FlutterwavePayDialog plan={payment.plan} planLabel={payment.label} onClose={() => setPayment(null)} onPaid={onPaid} />
+      )}
     </div>
   );
 }
