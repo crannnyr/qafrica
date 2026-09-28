@@ -3,6 +3,7 @@ import { Check, Edit3, Image as ImageIcon, MessageSquare, Plus, Search, Star, Tr
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
+import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 
 type Product = { id:string; name:string; image_url?:string|null; image_urls?:string[]; category?:string|null };
 type Reviewer = { id:string; display_name:string; is_username:boolean };
@@ -30,6 +31,8 @@ const emptyForm = {
 
 export default function ImportReviewsManager() {
   const token = getManagementToken();
+  const { hasPermission } = useImportAdminPermissions(token);
+  const canManage = hasPermission('import.reviews.manage');
   const [products,setProducts] = useState<Product[]>([]);
   const [reviewers,setReviewers] = useState<Reviewer[]>([]);
   const [reviews,setReviews] = useState<Review[]>([]);
@@ -162,7 +165,7 @@ export default function ImportReviewsManager() {
   return <div className="space-y-5">
     <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
       <div><h1 className="text-lg font-bold text-gray-900">Product Reviews</h1><p className="text-xs text-gray-500 mt-1">Create and manage reviews shown on China-import product pages.</p></div>
-      <button onClick={openCreate} disabled={!selectedProduct} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold disabled:opacity-40"><Plus className="w-4 h-4"/> Add review</button>
+      <button onClick={openCreate} disabled={!selectedProduct || !canManage} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold disabled:opacity-40"><Plus className="w-4 h-4"/> Add review</button>
     </div>
 
     <div className="grid lg:grid-cols-[340px_1fr] gap-5">
@@ -198,7 +201,7 @@ export default function ImportReviewsManager() {
                   <div className="flex items-center gap-2 mt-1"><Stars value={r.rating}/><span className="text-[10px] text-gray-400">{new Date(r.created_at).toLocaleDateString()}</span></div>
                   {r.title&&<p className="text-xs font-bold text-gray-800 mt-3">{r.title}</p>}<p className="text-xs text-gray-600 leading-relaxed mt-1">{r.content}</p>
                   {!!r.images?.length&&<div className="flex gap-2 mt-3 overflow-x-auto">{r.images.map((im,i)=><img key={i} src={im} className="w-16 h-16 rounded-lg object-cover" alt=""/></div>}
-                  <div className="flex items-center justify-between mt-3"><span className="text-[10px] text-gray-400">{r.helpful_count} found helpful</span><div className="flex gap-1"><button onClick={()=>openEdit(r)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Edit"><Edit3 className="w-3.5 h-3.5"/></button><button onClick={()=>void deleteReview(r.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5"/></button></div></div>
+                  <div className="flex items-center justify-between mt-3"><span className="text-[10px] text-gray-400">{r.helpful_count} found helpful</span><div className="flex gap-1"><button onClick={()=>openEdit(r)} disabled={!canManage} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Edit"><Edit3 className="w-3.5 h-3.5"/></button><button onClick={()=>void deleteReview(r.id)} disabled={!canManage} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5"/></button></div></div>
                 </div>
               </div>
             </div>)}</div>}
@@ -212,7 +215,7 @@ export default function ImportReviewsManager() {
         <div className="p-5 border-b border-gray-100 flex items-center justify-between"><div><h3 className="font-bold text-gray-900">{editing?'Edit review':'Add review'}</h3><p className="text-[10px] text-gray-400 mt-0.5">This review will appear on the selected product page.</p></div><button onClick={()=>setShowForm(false)} className="p-2 rounded-lg hover:bg-gray-100"><X className="w-4 h-4"/></button></div>
         <div className="p-5 space-y-4">
           <div><label className="text-[11px] font-bold text-gray-700">Product</label><select value={form.product_id} onChange={e=>{const p=products.find(x=>x.id===e.target.value);setForm(f=>({...f,product_id:e.target.value,product_name:p?.name??''}))}} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white"><option value="">Select product</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-          <div><div className="flex items-center justify-between"><label className="text-[11px] font-bold text-gray-700">Reviewer</label><button onClick={()=>setShowReviewer(true)} type="button" className="text-[10px] font-bold text-orange-500 flex items-center gap-1"><UserPlus className="w-3 h-3"/> New reviewer</button></div><select value={form.reviewer_id} onChange={e=>chooseReviewer(e.target.value)} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white"><option value="">Choose existing reviewer</option>{reviewers.map(r=><option key={r.id} value={r.id}>{r.display_name}{r.is_username?' · username':''}</option>)}</select><input value={form.customer_name} onChange={e=>setForm(f=>({...f,customer_name:e.target.value}))} placeholder="Reviewer display name" className="mt-2 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs"/></div>
+          <div><div className="flex items-center justify-between"><label className="text-[11px] font-bold text-gray-700">Reviewer</label><button onClick={()=>setShowReviewer(true)} disabled={!canManage} type="button" className="text-[10px] font-bold text-orange-500 flex items-center gap-1"><UserPlus className="w-3 h-3"/> New reviewer</button></div><select value={form.reviewer_id} onChange={e=>chooseReviewer(e.target.value)} className="mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white"><option value="">Choose existing reviewer</option>{reviewers.map(r=><option key={r.id} value={r.id}>{r.display_name}{r.is_username?' · username':''}</option>)}</select><input value={form.customer_name} onChange={e=>setForm(f=>({...f,customer_name:e.target.value}))} placeholder="Reviewer display name" className="mt-2 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs"/></div>
           <div className="grid sm:grid-cols-2 gap-4"><div><label className="text-[11px] font-bold text-gray-700">Rating</label><div className="mt-2"><Stars value={form.rating} onChange={n=>setForm(f=>({...f,rating:n}))} size={21}/></div></div><label className="flex items-center gap-2 text-xs text-gray-600 mt-5"><input type="checkbox" checked={form.is_username} onChange={e=>setForm(f=>({...f,is_username:e.target.checked}))}/> Display as username</label></div>
           <div><label className="text-[11px] font-bold text-gray-700">Avatar URL <span className="font-normal text-gray-400">(optional)</span></label><input value={form.customer_avatar_url} onChange={e=>setForm(f=>({...f,customer_avatar_url:e.target.value}))} placeholder="https://..." className="mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs"/></div>
           <div><label className="text-[11px] font-bold text-gray-700">Title <span className="font-normal text-gray-400">(optional)</span></label><input value={form.title} onChange={e=>setForm(f=>({...f,title:e.target.value}))} placeholder="e.g. Solid quality" className="mt-1 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs"/></div>
@@ -228,6 +231,6 @@ export default function ImportReviewsManager() {
       </div>
     </div>}
 
-    {showReviewer&&<div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onMouseDown={()=>setShowReviewer(false)}><div className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl" onMouseDown={e=>e.stopPropagation()}><div className="flex items-center justify-between"><h3 className="font-bold text-sm">New reviewer</h3><button onClick={()=>setShowReviewer(false)}><X className="w-4 h-4"/></button></div><input autoFocus value={reviewerName} onChange={e=>setReviewerName(e.target.value)} placeholder="Name or username" className="mt-4 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs"/><label className="mt-3 flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={reviewerUsername} onChange={e=>setReviewerUsername(e.target.checked)}/> This is a username</label><button onClick={()=>void createReviewer()} className="mt-4 w-full py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold">Create reviewer</button></div></div>}
+    {showReviewer&&<div className="fixed inset-0 z-[80] bg-black/40 flex items-center justify-center p-4" onMouseDown={()=>setShowReviewer(false)}><div className="bg-white rounded-2xl p-5 w-full max-w-sm shadow-2xl" onMouseDown={e=>e.stopPropagation()}><div className="flex items-center justify-between"><h3 className="font-bold text-sm">New reviewer</h3><button onClick={()=>setShowReviewer(false)}><X className="w-4 h-4"/></button></div><input autoFocus value={reviewerName} onChange={e=>setReviewerName(e.target.value)} placeholder="Name or username" className="mt-4 w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs"/><label className="mt-3 flex items-center gap-2 text-xs text-gray-600"><input type="checkbox" checked={reviewerUsername} onChange={e=>setReviewerUsername(e.target.checked)}/> This is a username</label><button onClick={()=>void createReviewer()} disabled={!canManage} className="mt-4 w-full py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold">Create reviewer</button></div></div>}
   </div>;
 }
