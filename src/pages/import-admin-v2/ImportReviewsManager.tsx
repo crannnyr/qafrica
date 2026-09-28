@@ -193,7 +193,7 @@ export default function ImportReviewsManager() {
           <button type="button" onClick={()=>changeProductPage(productPage-1)} disabled={productPage<=1||productsLoading} className="px-3 py-2 rounded-lg border border-gray-200 text-[10px] font-bold text-gray-700 disabled:opacity-40">Previous</button>
           <span className="text-[10px] text-gray-400">Page {productPage} of {productPageCount}</span>
           <button type="button" onClick={()=>changeProductPage(productPage+1)} disabled={productPage>=productPageCount||productsLoading} className="px-3 py-2 rounded-lg bg-gray-900 text-white text-[10px] font-bold disabled:opacity-40">Next</button>
-        </div>
+        </div>}
       </section>
 
       <section className="min-w-0">
