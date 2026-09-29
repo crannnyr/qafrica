@@ -170,8 +170,8 @@ export default function ImportAdminV2Inventory() {
     }
   };
 
-  const closeReceiving = () => {
-    if (receivingSaving) return;
+  const closeReceiving = (force = false) => {
+    if (receivingSaving && !force) return;
     setReceivingResult(null);
     setProductReceiveDrafts({});
     setReceiptQuantity('');
@@ -210,7 +210,7 @@ export default function ImportAdminV2Inventory() {
       const total = Number(data.received_quantity ?? lines.reduce((sum, line) => sum + line.quantity, 0));
       toast.success('Received ' + total.toLocaleString() + ' unit' + (total === 1 ? '' : 's') + ' into inventory');
       const productId = receivingResult.product.id;
-      closeReceiving();
+      closeReceiving(true);
       await load(1, undefined, { search: '', categoryId: '', subcategoryId: '', productId });
       setExpanded({ [productId]: true });
     } catch (e) {
@@ -333,10 +333,11 @@ export default function ImportAdminV2Inventory() {
   }, [search, categoryId, subcategoryId]);
 
   useEffect(() => {
+    if (receivingResult) return;
     const controller = new AbortController();
     const timer = window.setTimeout(() => void load(1, controller.signal), search.trim() ? 350 : 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [load]);
+  }, [load, receivingResult]);
 
   const saveStock = async (row: InventoryRow) => {
     if (!canAddStock) {
