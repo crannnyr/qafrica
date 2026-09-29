@@ -200,6 +200,7 @@ serve(async (req) => {
     const search = typeof body.search === 'string' ? body.search.trim() : ''
     const categoryId = typeof body.category_id === 'string' ? body.category_id.trim() : ''
     const subcategoryId = typeof body.subcategory_id === 'string' ? body.subcategory_id.trim() : ''
+    const productId = typeof body.product_id === 'string' ? body.product_id.trim() : ''
 
     let query = supabase.from('china_import_products')
       .select('id,name,image_url,category,parent_category,category_id,subcategory_id,is_active,moq,has_variants,variants,created_at', { count: 'exact' })
@@ -208,6 +209,7 @@ serve(async (req) => {
     if (search) query = query.ilike('name', '%' + search + '%')
     if (categoryId) query = query.eq('category_id', categoryId)
     if (subcategoryId) query = query.eq('subcategory_id', subcategoryId)
+    if (productId) query = query.eq('id', productId)
 
     const from = (page - 1) * perPage
     const to = from + perPage - 1
