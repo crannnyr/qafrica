@@ -52,10 +52,50 @@ export default function ImportAdminV2Inventory() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [chinaImportBarcode, setChinaImportBarcode] = useState('');
+  const [barcodeSearching, setBarcodeSearching] = useState(false);
   const { hasPermission } = useImportAdminPermissions(getManagementToken());
   const canAddStock = hasPermission('import.inventory.add');
   const canSubtractStock = hasPermission('import.inventory.subtract');
   const selectedCategory = categories.find(category => category.id === categoryId);
+  const findByChinaImportBarcode = async () => {
+    const barcode = chinaImportBarcode.trim();
+    if (!barcode) {
+      toast.error('Enter or scan a China-import barcode');
+      return;
+    }
+    const token = getManagementToken();
+    if (!token) {
+      toast.error('Management session expired');
+      return;
+    }
+    setBarcodeSearching(true);
+    try {
+      const res = await fetch(EDGE_URL + '?action=admin-inventory-find-barcode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, barcode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Could not find product by barcode');
+      if (!data.product?.id) {
+        toast.error('No China-import product found for this barcode');
+        return;
+      }
+      setSearch('');
+      setCategoryId('');
+      setSubcategoryId('');
+      setExpanded(current => ({ ...current, [data.product.id]: true }));
+      setChinaImportBarcode('');
+      await load(1);
+      setExpanded(current => ({ ...current, [data.product.id]: true }));
+      toast.success('Product found: ' + data.product.name);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not find product by barcode');
+    } finally {
+      setBarcodeSearching(false);
+    }
+  };
   const availableSubcategories = selectedCategory?.subcategories ?? [];
 
   const products = useMemo<ProductGroup[]>(() => {
@@ -225,6 +265,17 @@ export default function ImportAdminV2Inventory() {
           </div>
           <button onClick={() => void load(pagination.page)} disabled={loading} className="p-2 hover:bg-gray-100 rounded-lg" title="Refresh inventory">
             <RefreshCw className={loading ? 'w-4 h-4 text-gray-400 animate-spin' : 'w-4 h-4 text-gray-400'} />
+          </button>
+        </div>
+
+        <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-2 bg-orange-50/40">
+          <div className="relative flex-1 min-w-[260px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-orange-400" />
+            <input value={chinaImportBarcode} onChange={e => setChinaImportBarcode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void findByChinaImportBarcode(); }} placeholder="Scan or enter China-import barcode…" inputMode="text" autoComplete="off" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-orange-200 bg-white text-sm outline-none focus:border-orange-500" />
+          </div>
+          <button onClick={() => void findByChinaImportBarcode()} disabled={barcodeSearching} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold disabled:opacity-50">
+            {barcodeSearching ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+            {barcodeSearching ? 'Finding…' : 'Find product'}
           </button>
         </div>
 
