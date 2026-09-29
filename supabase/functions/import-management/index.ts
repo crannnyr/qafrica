@@ -172,20 +172,187 @@ serve(async (req) => {
     return json(data)
   }
 
-  if (action === 'admin-inventory-find-barcode') {
+  if (action === 'admin-inventory-find-barcode' || action === 'admin-inventory-receiving-lookup') {
     if (!(await requireManager(supabase, body.manager_token, 'import.inventory.view'))) {
       return json({ error: 'You do not have permission to view Inventory.' }, 403)
     }
-    const barcode = typeof body.barcode === 'string' ? body.barcode.trim() : ''
-    if (!barcode) return json({ error: 'Missing China-import barcode' }, 400)
+
+    const code = typeof body.barcode === 'string' ? body.barcode.trim() : ''
+    if (!code) return json({ error: 'Missing China-import barcode or receiving code' }, 400)
+
+    const { data: receivingItem, error: receivingError } = await supabase
+      .from('china_import_supplier_invoice_items')
+      .select('id,invoice_id,product_id,product_name,product_image,variant_options,quantity,receiving_code,china_import_barcode')
+      .eq('receiving_code', code)
+      .maybeSingle()
+
+    if (receivingError) return json({ error: receivingError.message }, 500)
+
+    if (receivingItem) {
+      const [{ data: invoice, error: invoiceError }, { data: receivedRows, error: receivedError }] = await Promise.all([
+        supabase.from('china_import_supplier_invoices')
+          .select('id,invoice_code,supplier_id,batch_key')
+          .eq('id', receivingItem.invoice_id)
+          .maybeSingle(),
+        supabase.from('china_import_receiving_events')
+          .select('quantity_received')
+          .eq('invoice_item_id', receivingItem.id),
+      ])
+
+      if (invoiceError) return json({ error: invoiceError.message }, 500)
+      if (receivedError) return json({ error: receivedError.message }, 500)
+
+      const previouslyReceived = (receivedRows ?? []).reduce((sum: number, row: any) => sum + Number(row.quantity_received ?? 0), 0)
+      const expectedQuantity = Number(receivingItem.quantity ?? 0)
+      const remainingQuantity = Math.max(expectedQuantity - previouslyReceived, 0)
+
+      return json({
+        mode: 'receipt',
+        receiving: {
+          id: receivingItem.id,
+          receiving_code: receivingItem.receiving_code,
+          invoice_id: receivingItem.invoice_id,
+          invoice_code: invoice?.invoice_code ?? null,
+          supplier_id: invoice?.supplier_id ?? null,
+          batch_key: invoice?.batch_key ?? null,
+          product_id: receivingItem.product_id,
+          product_name: receivingItem.product_name,
+          product_image: receivingItem.product_image,
+          variant_options: receivingItem.variant_options ?? {},
+          china_import_barcode: receivingItem.china_import_barcode,
+          expected_quantity: expectedQuantity,
+          previously_received: previouslyReceived,
+          remaining_quantity: remainingQuantity,
+        },
+      })
+    }
+
     const { data: product, error: productError } = await supabase
       .from('china_import_products')
       .select('id,name,image_url,china_import_barcode,has_variants,variants')
-      .eq('china_import_barcode', barcode)
+      .eq('china_import_barcode', code)
       .maybeSingle()
+
     if (productError) return json({ error: productError.message }, 500)
-    if (!product) return json({ product: null }, 200)
-    return json({ product })
+    if (!product) return json({ mode: 'none', product: null })
+
+    const { data: inventory, error: inventoryError } = await supabase
+      .from('china_import_inventory')
+      .select('product_id,variant_options,quantity,updated_at')
+      .eq('product_id', product.id)
+
+    if (inventoryError) return json({ error: inventoryError.message }, 500)
+
+    const stockMap = new Map((inventory ?? []).map((row: any) => [
+      JSON.stringify(row.variant_options ?? {}),
+      row,
+    ]))
+
+    const groups = Array.isArray(product.variants) ? product.variants : []
+    const combinations = groups.length
+      ? groups.reduce((acc: Array<Record<string, string>>, group: any) => {
+          const options = Array.isArray(group?.options)
+            ? group.options.filter((v: any) => typeof v === 'string' && v.trim())
+            : []
+          if (!options.length) return acc
+          if (!acc.length) return options.map((option: string) => ({ [group.name]: option }))
+          return acc.flatMap((current: Record<string, string>) =>
+            options.map((option: string) => ({ ...current, [group.name]: option }))
+          )
+        }, [])
+      : [{}]
+
+    return json({
+      mode: 'product',
+      product,
+      variants: combinations.map((variant_options: Record<string, string>) => {
+        const stock = stockMap.get(JSON.stringify(variant_options))
+        return {
+          variant_options,
+          variant_label: Object.keys(variant_options).length
+            ? Object.entries(variant_options).map(([k, v]) => k + ': ' + v).join(', ')
+            : 'Base / no variant',
+          stock_quantity: Number(stock?.quantity ?? 0),
+          stock_updated_at: stock?.updated_at ?? null,
+        }
+      }),
+    })
+  }
+
+  if (action === 'admin-inventory-receive-invoice-item') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.inventory.add'))) {
+      return json({ error: 'You do not have permission to add Inventory stock.' }, 403)
+    }
+
+    const invoiceItemId = typeof body.invoice_item_id === 'string' ? body.invoice_item_id.trim() : ''
+    const quantity = Number(body.quantity)
+    if (!invoiceItemId) return json({ error: 'Missing receiving item id' }, 400)
+    if (!Number.isInteger(quantity) || quantity <= 0) return json({ error: 'Received quantity must be a positive whole number' }, 400)
+
+    const { data: session, error: sessionError } = await supabase
+      .from('import_admin_sessions')
+      .select('manager_id')
+      .eq('token', body.manager_token)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+
+    if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
+
+    const source = body.source === 'manual' ? 'manual' : 'receiving_code'
+    const { data, error } = await supabase.rpc('china_import_receive_invoice_item', {
+      p_invoice_item_id: invoiceItemId,
+      p_quantity: quantity,
+      p_manager_id: session.manager_id,
+      p_source: source,
+    })
+
+    if (error) return json({ error: error.message }, 400)
+    const result = Array.isArray(data) ? data[0] : data
+    return json({ receiving: result })
+  }
+
+  if (action === 'admin-inventory-receive-product') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.inventory.add'))) {
+      return json({ error: 'You do not have permission to add Inventory stock.' }, 403)
+    }
+
+    if (!body.product_id) return json({ error: 'Missing product id' }, 400)
+    if (!Array.isArray(body.lines) || body.lines.length === 0) {
+      return json({ error: 'No received variants were selected' }, 400)
+    }
+
+    const lines = body.lines
+      .filter((line: any) => line && typeof line === 'object' && !Array.isArray(line))
+      .map((line: any) => ({
+        variant_options: line.variant_options && typeof line.variant_options === 'object' && !Array.isArray(line.variant_options)
+          ? Object.fromEntries(Object.entries(line.variant_options).filter(([key, value]) =>
+              typeof key === 'string' && typeof value === 'string' && key.trim() && value.trim()
+            ))
+          : {},
+        quantity: Number(line.quantity),
+      }))
+
+    if (!lines.length || lines.some((line: any) => !Number.isInteger(line.quantity) || line.quantity <= 0)) {
+      return json({ error: 'Every received quantity must be a positive whole number' }, 400)
+    }
+
+    const { data: session, error: sessionError } = await supabase
+      .from('import_admin_sessions')
+      .select('manager_id')
+      .eq('token', body.manager_token)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+
+    if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
+
+    const { data, error } = await supabase.rpc('china_import_receive_product_lines', {
+      p_product_id: body.product_id,
+      p_lines: lines,
+      p_manager_id: session.manager_id,
+    })
+
+    if (error) return json({ error: error.message }, 400)
+    return json({ received_quantity: Number(data ?? 0) })
   }
 
   if (action === 'admin-inventory-list') {
