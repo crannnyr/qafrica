@@ -1,0 +1,10 @@
+revoke execute on function public.get_or_create_sourcing_supplier(text) from anon,authenticated;
+revoke execute on function public.assign_sourcing_supplier(text,uuid,text) from anon,authenticated;
+revoke execute on function public.create_sourcing_supplier_invoice(text,uuid) from anon,authenticated;
+revoke execute on function public.get_sourcing_supplier_invoice(uuid,text) from anon,authenticated;
+revoke execute on function public.get_sourcing_receiving_code(text) from anon,authenticated;
+grant execute on function public.get_or_create_sourcing_supplier(text) to service_role;
+grant execute on function public.assign_sourcing_supplier(text,uuid,text) to service_role;
+grant execute on function public.create_sourcing_supplier_invoice(text,uuid) to service_role;
+grant execute on function public.get_sourcing_supplier_invoice(uuid,text) to service_role;
+grant execute on function public.get_sourcing_receiving_code(text) to service_role;
