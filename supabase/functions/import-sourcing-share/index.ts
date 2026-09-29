@@ -24,7 +24,7 @@ async function getShare(supabase: any, token: unknown) {
   return error || !data ? null : data
 }
 async function getCommitmentRows(supabase: any, batchKey: string) {
-  const { data, error } = await supabase.rpc('get_sourcing_commitment_lines', { p_batch_key: batchKey })
+  const { data, error } = await supabase.rpc('china_import_get_sourcing_commitment_lines', { p_batch_key: batchKey })
   if (error) throw error
   return data ?? []
 }
@@ -45,7 +45,7 @@ Deno.serve(async (req: Request) => {
   try { body = await req.json() } catch { return json({ error: 'Invalid JSON' }, 400) }
   const action = body.action
 
-  if (['sourcing-commitments','commit-sourcing','mark-sourcing-bought','assign-supplier','create-supplier-invoice','get-supplier-invoice','receiving-lookup'].includes(action)) {
+  if (['sourcing-commitments','commit-sourcing','mark-sourcing-bought','assign-supplier','set-product-barcode','create-supplier-invoice','get-supplier-invoice','receiving-lookup'].includes(action)) {
     const share = await getShare(supabase, body.share_token)
     if (!share && action !== 'receiving-lookup') return json({ error: 'Sourcing link not found or invalid' }, 404)
 
@@ -56,37 +56,46 @@ Deno.serve(async (req: Request) => {
     if (action === 'commit-sourcing' || action === 'mark-sourcing-bought') {
       if (!body.allocation_id) return json({ error: 'Missing allocation_id' }, 400)
       const target = action === 'commit-sourcing' ? 'committed' : 'purchased'
-      const { data, error } = await supabase.rpc('set_sourcing_allocation_status', { p_allocation_id: body.allocation_id, p_batch_key: share.batch_key, p_status: target })
+      const { data, error } = await supabase.rpc('china_import_set_sourcing_allocation_status', { p_allocation_id: body.allocation_id, p_batch_key: share.batch_key, p_status: target })
       if (error) return json({ error: error.message }, 400)
       return json({ success: true, row: data?.[0] ?? data })
+    }
+    if (action === 'set-product-barcode') {
+      const productId = typeof body.product_id === 'string' ? body.product_id : ''
+      const barcode = typeof body.barcode === 'string' ? body.barcode.trim() : ''
+      if (!productId) return json({ error: 'Product is required' }, 400)
+      if (barcode && !/^[0-9A-Za-z._-]{4,64}$/.test(barcode)) return json({ error: 'Enter a valid barcode or product identifier' }, 400)
+      const { data, error } = await supabase.rpc('china_import_set_sourcing_product_barcode', { p_batch_key: share.batch_key, p_product_id: productId, p_barcode: barcode })
+      if (error) return json({ error: error.message }, 400)
+      return json({ success: true, barcode: data ?? null })
     }
     if (action === 'assign-supplier') {
       const productId = typeof body.product_id === 'string' ? body.product_id : ''
       const supplierName = typeof body.supplier_name === 'string' ? body.supplier_name.trim() : ''
       if (!productId || !supplierName) return json({ error: 'Product and supplier are required' }, 400)
-      const { data, error } = await supabase.rpc('assign_sourcing_supplier', { p_batch_key: share.batch_key, p_product_id: productId, p_supplier_name: supplierName })
+      const { data, error } = await supabase.rpc('china_import_assign_sourcing_supplier', { p_batch_key: share.batch_key, p_product_id: productId, p_supplier_name: supplierName })
       if (error) return json({ error: error.message }, 400)
       return json({ success: true, result: data?.[0] ?? data })
     }
     if (action === 'create-supplier-invoice') {
       const supplierId = typeof body.supplier_id === 'string' ? body.supplier_id : ''
       if (!supplierId) return json({ error: 'Supplier is required' }, 400)
-      const { data, error } = await supabase.rpc('create_sourcing_supplier_invoice', { p_batch_key: share.batch_key, p_supplier_id: supplierId })
+      const { data, error } = await supabase.rpc('china_import_create_sourcing_supplier_invoice', { p_batch_key: share.batch_key, p_supplier_id: supplierId })
       if (error) return json({ error: error.message }, 400)
       const row = data?.[0] ?? data
       return json({ success: true, invoice_id: row?.invoice_id, invoice_code: row?.invoice_code })
     }
     if (action === 'get-supplier-invoice') {
       if (!body.invoice_id) return json({ error: 'Missing invoice_id' }, 400)
-      const { data, error } = await supabase.rpc('get_sourcing_supplier_invoice', { p_invoice_id: body.invoice_id, p_batch_key: share.batch_key })
+      const { data, error } = await supabase.rpc('china_import_get_sourcing_supplier_invoice', { p_invoice_id: body.invoice_id, p_batch_key: share.batch_key })
       if (error) return json({ error: error.message }, 400)
       return json({ success: true, rows: data ?? [] })
     }
     if (action === 'receiving-lookup') {
-      if (!body.receiving_code) return json({ error: 'Missing receiving code' }, 400)
-      const { data, error } = await supabase.rpc('get_sourcing_receiving_code', { p_code: body.receiving_code })
+      if (!body.receiving_code) return json({ error: 'Missing barcode or product code' }, 400)
+      const { data, error } = await supabase.rpc('china_import_get_sourcing_receiving_code', { p_code: body.receiving_code })
       if (error) return json({ error: error.message }, 400)
-      return json({ success: true, row: data?.[0] ?? null })
+      return json({ success: true, rows: data ?? [] })
     }
   }
 
