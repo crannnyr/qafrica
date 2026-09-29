@@ -140,25 +140,41 @@ stable
 security definer
 set search_path to 'public', 'pg_temp'
 as $$
+  with active_allocations as (
+    select a.product_id, a.customer_id, a.variant_options, a.quantity, a.created_at
+    from public.import_sourcing_allocations a
+    join public.china_import_orders o on o.id = a.order_id
+    where a.batch_key = p_batch_key
+      and a.status <> 'cancelled'
+      and o.status not in ('cancelled', 'refunded')
+  ),
+  variant_totals as (
+    select product_id, variant_options, sum(quantity)::bigint as quantity, min(created_at) as first_created_at
+    from active_allocations
+    group by product_id, variant_options
+  )
   select
     a.product_id,
-    coalesce(p.name, min(a.product_id::text)) as product_name,
+    coalesce(p.name, 'Unnamed product') as product_name,
     p.image_url as product_image,
     p.source_url,
     sum(a.quantity)::bigint as total_qty,
     count(distinct a.customer_id)::bigint as customers_count,
-    jsonb_agg(
-      jsonb_build_object(
-        'variant_options', a.variant_options,
-        'quantity', a.quantity
-      ) order by a.created_at
+    coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'variant_options', vt.variant_options,
+            'quantity', vt.quantity
+          ) order by vt.first_created_at
+        )
+        from variant_totals vt
+        where vt.product_id = a.product_id
+      ),
+      '[]'::jsonb
     ) as variants
-  from public.import_sourcing_allocations a
+  from active_allocations a
   left join public.china_import_products p on p.id = a.product_id
-  join public.china_import_orders o on o.id = a.order_id
-  where a.batch_key = p_batch_key
-    and a.status <> 'cancelled'
-    and o.status not in ('cancelled', 'refunded')
   group by a.product_id, p.name, p.image_url, p.source_url
   order by product_name asc;
 $$;
