@@ -172,6 +172,22 @@ serve(async (req) => {
     return json(data)
   }
 
+  if (action === 'admin-inventory-find-barcode') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.inventory.view'))) {
+      return json({ error: 'You do not have permission to view Inventory.' }, 403)
+    }
+    const barcode = typeof body.barcode === 'string' ? body.barcode.trim() : ''
+    if (!barcode) return json({ error: 'Missing China-import barcode' }, 400)
+    const { data: product, error: productError } = await supabase
+      .from('china_import_products')
+      .select('id,name,image_url,china_import_barcode,has_variants,variants')
+      .eq('china_import_barcode', barcode)
+      .maybeSingle()
+    if (productError) return json({ error: productError.message }, 500)
+    if (!product) return json({ product: null }, 200)
+    return json({ product })
+  }
+
   if (action === 'admin-inventory-list') {
     if (!(await requireManager(supabase, body.manager_token, 'import.inventory.view'))) {
       return json({ error: 'You do not have permission to view Inventory.' }, 403)
