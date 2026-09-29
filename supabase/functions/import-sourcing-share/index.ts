@@ -49,9 +49,9 @@ serve(async (req: Request) => {
 
     if (shareError || !share) return json({ error: 'Sourcing link not found' }, 404)
 
-    // IMPORTANT: the public sourcing page never derives quantities directly
-    // from the whole batch anymore. It only displays durable allocations that
-    // an admin has explicitly released after payment was confirmed.
+    // The public page only displays durable sourcing allocations. It never
+    // derives quantities directly from the whole batch or from today's bill
+    // state, so a later payment can only add a new allocation.
     const { data: rows, error } = await supabase.rpc('get_paid_sourcing_allocations', {
       p_batch_key: share.batch_key,
     })
@@ -89,13 +89,14 @@ serve(async (req: Request) => {
   const batchKey = typeof body.batch_key === 'string' ? body.batch_key.trim() : ''
   if (!batchKey) return json({ error: 'Missing batch_key' }, 400)
 
-  if (body.action === 'prepare-paid-sourcing') {
-    const { data, error } = await supabase.rpc('prepare_paid_sourcing', {
-      p_batch_key: batchKey,
-    })
-    if (error) return json({ error: error.message }, 500)
-    return json({ success: true, ...(data ?? {}) })
-  }
+  // The existing "Create and copy sourcing link" button is deliberately the
+  // release point. Every time an admin opens/shares the link we reconcile paid
+  // customers into immutable allocations. This means a late payer is added on
+  // the next share refresh, while already released lines cannot be duplicated.
+  const { data: prepared, error: prepareError } = await supabase.rpc('prepare_paid_sourcing', {
+    p_batch_key: batchKey,
+  })
+  if (prepareError) return json({ error: prepareError.message }, 500)
 
   const { data: existing } = await supabase
     .from('import_sourcing_share_links')
@@ -106,7 +107,12 @@ serve(async (req: Request) => {
     .maybeSingle()
 
   if (existing?.token) {
-    return json({ success: true, token: existing.token, url: PUBLIC_BASE + '/' + existing.token })
+    return json({
+      success: true,
+      token: existing.token,
+      url: PUBLIC_BASE + '/' + existing.token,
+      sourcing_sync: prepared ?? null,
+    })
   }
 
   const { data: created, error } = await supabase
@@ -117,5 +123,10 @@ serve(async (req: Request) => {
 
   if (error || !created) return json({ error: error?.message || 'Could not create sourcing link' }, 500)
 
-  return json({ success: true, token: created.token, url: PUBLIC_BASE + '/' + created.token })
+  return json({
+    success: true,
+    token: created.token,
+    url: PUBLIC_BASE + '/' + created.token,
+    sourcing_sync: prepared ?? null,
+  })
 })
