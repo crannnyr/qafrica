@@ -85,10 +85,14 @@ export default function ImportAdminV2Inventory() {
       setSearch('');
       setCategoryId('');
       setSubcategoryId('');
-      setExpanded(current => ({ ...current, [data.product.id]: true }));
       setChinaImportBarcode('');
-      await load(1);
-      setExpanded(current => ({ ...current, [data.product.id]: true }));
+      await load(1, undefined, {
+        search: '',
+        categoryId: '',
+        subcategoryId: '',
+        productId: data.product.id,
+      });
+      setExpanded({ [data.product.id]: true });
       toast.success('Product found: ' + data.product.name);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not find product by barcode');
@@ -119,7 +123,11 @@ export default function ImportAdminV2Inventory() {
     return Array.from(map.values());
   }, [rows]);
 
-  const load = useCallback(async (page = 1, signal?: AbortSignal) => {
+  const load = useCallback(async (
+    page = 1,
+    signal?: AbortSignal,
+    overrides?: { search?: string; categoryId?: string; subcategoryId?: string; productId?: string },
+  ) => {
     const token = getManagementToken();
     if (!token) return;
     setLoading(true);
@@ -128,7 +136,15 @@ export default function ImportAdminV2Inventory() {
       const res = await fetch(EDGE_URL + '?action=admin-inventory-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, page, per_page: PAGE_SIZE, search: search.trim(), category_id: categoryId, subcategory_id: subcategoryId }),
+        body: JSON.stringify({
+          manager_token: token,
+          page,
+          per_page: PAGE_SIZE,
+          search: (overrides?.search ?? search).trim(),
+          category_id: overrides?.categoryId ?? categoryId,
+          subcategory_id: overrides?.subcategoryId ?? subcategoryId,
+          product_id: overrides?.productId ?? '',
+        }),
         signal,
       });
       const data = await res.json().catch(() => ({}));
