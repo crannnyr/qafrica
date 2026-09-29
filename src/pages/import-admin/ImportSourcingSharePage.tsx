@@ -26,12 +26,13 @@ export default function ImportSourcingSharePage() {
     if(!token){setError('This sourcing link is incomplete.');setLoading(false);return}
     setLoading(true);setError('')
     try{
-      await post('sync-sourcing')
-      const data=await post('sourcing-commitments')
+      const res=await fetch(`${EDGE_URL}?token=${encodeURIComponent(token)}`)
+      const data=await res.json().catch(()=>({}))
+      if(!res.ok) throw new Error(data?.error||'Could not load sourcing workflow.')
       setLines(Array.isArray(data.rows)?data.rows:[])
       setBatchDate(data.batch_key||'')
     }catch(e){setError(e instanceof Error?e.message:'Could not load sourcing workflow.')}finally{setLoading(false)}
-  },[post,token])
+  },[token])
 
   useEffect(()=>{void load()},[load])
 
