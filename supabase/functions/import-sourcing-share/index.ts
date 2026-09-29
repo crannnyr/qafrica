@@ -49,53 +49,32 @@ serve(async (req: Request) => {
 
     if (shareError || !share) return json({ error: 'Sourcing link not found' }, 404)
 
-    const { data: rows, error } = await supabase.rpc('get_batch_customer_breakdown', {
+    // IMPORTANT: the public sourcing page never derives quantities directly
+    // from the whole batch anymore. It only displays durable allocations that
+    // an admin has explicitly released after payment was confirmed.
+    const { data: rows, error } = await supabase.rpc('get_paid_sourcing_allocations', {
       p_batch_key: share.batch_key,
     })
     if (error) return json({ error: error.message }, 500)
 
-    const orderIds = Array.from(new Set((rows ?? []).map((row: any) => row.order_id).filter(Boolean)))
-    const { data: orderStatuses, error: statusError } = orderIds.length
-      ? await supabase.from('china_import_orders').select('id,status').in('id', orderIds)
-      : { data: [], error: null }
-    if (statusError) return json({ error: statusError.message }, 500)
-
-    const receivedIds = new Set((orderStatuses ?? []).filter((row: any) => row.status === 'received').map((row: any) => row.id))
-    const grouped = new Map<string, {
-      product_id: string
-      product_name: string
-      product_image: string | null
-      total_qty: number
-      variants: Array<{ variant_options: Record<string, string> | null; quantity: number }>
-    }>()
-
-    for (const row of (rows ?? [])) {
-      if (!row.product_id || !row.customer_id || receivedIds.has(row.order_id)) continue
-
-      const key = String(row.product_id)
-      let item = grouped.get(key)
-      if (!item) {
-        item = {
-          product_id: row.product_id,
-          product_name: row.product_name || 'Unnamed product',
-          product_image: row.product_image || null,
-          total_qty: 0,
-          variants: [],
-        }
-        grouped.set(key, item)
-      }
-
-      const qty = Number(row.qty ?? 0)
-      item.total_qty += qty
-      const variantKey = JSON.stringify(row.variant_options ?? null)
-      const existing = item.variants.find(v => JSON.stringify(v.variant_options ?? null) === variantKey)
-      if (existing) existing.quantity += qty
-      else item.variants.push({ variant_options: row.variant_options ?? null, quantity: qty })
-    }
+    const products = (rows ?? []).map((row: any) => ({
+      product_id: row.product_id,
+      product_name: row.product_name || 'Unnamed product',
+      product_image: row.product_image || null,
+      source_url: row.source_url || null,
+      total_qty: Number(row.total_qty ?? 0),
+      customers_count: Number(row.customers_count ?? 0),
+      variants: Array.isArray(row.variants)
+        ? row.variants.map((v: any) => ({
+            variant_options: v?.variant_options && typeof v.variant_options === 'object' ? v.variant_options : null,
+            quantity: Number(v?.quantity ?? 0),
+          }))
+        : [],
+    }))
 
     return json({
       batch_date: share.batch_key,
-      products: Array.from(grouped.values()).sort((a, b) => a.product_name.localeCompare(b.product_name)),
+      products,
     })
   }
 
@@ -109,6 +88,14 @@ serve(async (req: Request) => {
 
   const batchKey = typeof body.batch_key === 'string' ? body.batch_key.trim() : ''
   if (!batchKey) return json({ error: 'Missing batch_key' }, 400)
+
+  if (body.action === 'prepare-paid-sourcing') {
+    const { data, error } = await supabase.rpc('prepare_paid_sourcing', {
+      p_batch_key: batchKey,
+    })
+    if (error) return json({ error: error.message }, 500)
+    return json({ success: true, ...(data ?? {}) })
+  }
 
   const { data: existing } = await supabase
     .from('import_sourcing_share_links')
