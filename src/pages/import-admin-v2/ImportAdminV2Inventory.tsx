@@ -455,7 +455,7 @@ export default function ImportAdminV2Inventory() {
                     : 'Enter only what you physically received. Leave unseen variants at 0.'}
                 </p>
               </div>
-              <button type="button" onClick={closeReceiving} disabled={receivingSaving} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-40">
+              <button type="button" onClick={() => closeReceiving()} disabled={receivingSaving} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-40">
                 <X className="w-5 h-5" />
               </button>
             </div>
