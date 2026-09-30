@@ -17,6 +17,9 @@ import type { CartItem } from './RecommendationsPage';
 import { fmt } from './RecommendationsPage';
 import ManualPaymentFlow, { COMMUNITY_LINK } from './ManualPaymentFlow';
 import ImportQtyControl from '@/components/ImportQtyControl';
+import ChinaImportPromoCode, { type ChinaImportPromotionQuote } from './ChinaImportPromoCode';
+
+// CHINA_IMPORT_PROMO_WIRED
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const STATIONS_REST_URL = `${CONFIG.SUPABASE_URL}/rest/v1/pickup_stations`;
@@ -91,6 +94,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   // beforeunload warning, rather than just the normal button spinner.
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState('');
+  const [promoCode, setPromoCode] = useState('');
+  const [promoQuote, setPromoQuote] = useState<ChinaImportPromotionQuote | null>(null);
   const [result, setResult] = useState<{ code: string; bank?: any; order_id?: string } | null>(null);
 
   useEffect(() => {
@@ -237,7 +242,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     : rawShippingTotal;
   
   const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
-  const total = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
+  const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
+  const promoDiscount = Math.max(0, Math.min(Number(promoQuote?.discount_amount_ngn ?? 0), totalBeforePromo));
+  const total = Math.max(0, totalBeforePromo - promoDiscount);
 
   // Paystack / manual selection
   // Paystack remains available only below the configured threshold.
@@ -482,6 +489,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           delivery_latitude: coords?.lat, delivery_longitude: coords?.lng,
           location_shared: !!coords,
           payment_method: paymentMethod,
+          promotion_code: promoQuote?.code ?? undefined,
+          promotion_id: promoQuote?.promotion_id ?? undefined,
           items: cart.map(i => ({
             id: i.id, name: i.name, price_ngn: i.price_ngn, price_cny: i.price_cny,
             quantity: i.quantity, image_url: i.image_url,
@@ -715,7 +724,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                   <p className="font-semibold text-gray-900 text-xs">Sea freight</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">Sea 60–90 days</p>
                   {cart[0]?.volume_cbm != null && (
-                    <p className="text-[9px] text-gray-400 mt-0.5">{cart[0].volume_cbm} cbm</p>
+                    <p className="text-[9px] text-gray-400 mt-0.5">Volume: {cart[0].volume_cbm}</p>
                   )}
                   {cart[0]?.sea_shipping_cost_ngn != null && shippingSettings.chargeShippingAtCheckout && (
                     <div className="mt-1">
@@ -769,7 +778,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
                         <p className="text-[9px] text-gray-400">
                           {item.weight_grams != null && `${item.weight_grams}g`}
                           {item.weight_grams != null && item.volume_cbm != null && ' · '}
-                          {item.volume_cbm != null && `${item.volume_cbm} cbm`}
+                          {item.volume_cbm != null && `Volume: ${item.volume_cbm}`}
                         </p>
                       )}
                       {chosen && shippingSettings.chargeShippingAtCheckout && (
@@ -1062,12 +1071,26 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           </div>
         </div>
 
+        <ChinaImportPromoCode
+          customerId={customer.id}
+          orderSubtotalNgn={totalBeforePromo}
+          value={promoCode}
+          onChange={setPromoCode}
+          onApplied={setPromoQuote}
+        />
+
         <div className="bg-gray-50 rounded-xl p-3.5 space-y-1.5">
           <div className="flex justify-between text-xs text-gray-500"><span>Subtotal</span><span className="font-medium">{fmt(subtotal)}</span></div>
           {shippingSettings.chargeShippingAtCheckout && (
             <div className="flex justify-between text-xs text-gray-500">
-              <span>Shipping{discountActive && effectiveDiscountPercent > 0 ? ` (${effectiveDiscountPercent}% off)` : ''}</span>              
+              <span>Shipping{discountActive && effectiveDiscountPercent > 0 ? ` (${effectiveDiscountPercent}% off)` : ''}</span>
               <span className="font-medium">{fmt(shippingTotal)}</span>
+            </div>
+          )}
+          {promoDiscount > 0 && (
+            <div className="flex justify-between text-xs text-emerald-600">
+              <span>Promo discount{promoQuote?.code ? ` (${promoQuote.code})` : ''}</span>
+              <span className="font-semibold">-{fmt(promoDiscount)}</span>
             </div>
           )}
           <div className="flex justify-between text-xs font-bold text-gray-900 pt-1.5 border-t border-gray-200"><span>Total</span><span className="text-orange-500">{fmt(total)}</span></div>

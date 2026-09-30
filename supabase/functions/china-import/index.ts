@@ -846,7 +846,8 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'admin-products') {
-      const body = await req.json().catch(() => ({}))
+      const body = await req.json()
+      const promotionCode = typeof body.promotion_code === 'string' ? body.promotion_code.trim().toUpperCase() : null.catch(() => ({}))
       const { manager_token } = body
       if (!(await requireAdmin(supabase, manager_token, 'import.products.view'))) return json({ error: 'Unauthorized' }, 401)
 
@@ -920,6 +921,7 @@ serve(async (req: Request) => {
       return json({ error: lastError?.message ?? 'Failed to generate code' }, 500)
     }
 
+    // CHINA_IMPORT_PROMO_WIRED
     if (req.method === 'POST' && action === 'checkout-init') {
       const body = await req.json()
       const {
