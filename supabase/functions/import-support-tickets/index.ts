@@ -14,7 +14,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 const clean = (v: unknown, max = 5000) => String(v ?? '').trim().slice(0, max)
 
-async function requireAdmin(s: any, token: unknown, permission = 'import.messages.view') {
+async function requireAdmin(s: any, token: unknown, permission = 'import.tickets.view') {
   if (!token || typeof token !== 'string') throw new Error('Admin authentication required')
 
   const { data: session, error: se } = await s.from('import_admin_sessions')
@@ -53,7 +53,7 @@ async function main(req: Request) {
   )
 
   if (action === 'list_tickets') {
-    await requireAdmin(s, token, 'import.messages.view')
+    await requireAdmin(s, token, 'import.tickets.view')
     const status = clean(body.status, 40)
     const query = clean(body.query, 200)
     let q = s.from('import_support_tickets')
@@ -69,7 +69,7 @@ async function main(req: Request) {
   }
 
   if (action === 'get_ticket') {
-    await requireAdmin(s, token, 'import.messages.view')
+    await requireAdmin(s, token, 'import.tickets.view')
     const id = clean(body.ticket_id, 80)
     if (!id) throw new Error('ticket_id is required')
     const { data, error } = await s.from('import_support_tickets')
@@ -88,7 +88,7 @@ async function main(req: Request) {
   }
 
   if (action === 'create_ticket') {
-    const managerId = await requireAdmin(s, token, 'import.messages.send')
+    const managerId = await requireAdmin(s, token, 'import.tickets.manage')
     const subject = clean(body.subject, 250)
     if (!subject) throw new Error('subject is required')
     const payload = {
@@ -111,7 +111,7 @@ async function main(req: Request) {
   }
 
   if (action === 'update_ticket') {
-    await requireAdmin(s, token, 'import.messages.send')
+    await requireAdmin(s, token, 'import.tickets.manage')
     const id = clean(body.ticket_id, 80)
     if (!id) throw new Error('ticket_id is required')
     const nextStatus = clean(body.status, 40)
