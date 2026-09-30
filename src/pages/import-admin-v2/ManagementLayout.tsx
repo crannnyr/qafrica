@@ -6,6 +6,7 @@ import {
   LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText, MessageSquare,
   Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard, Mail, Megaphone, CircleHelp, Users, TrendingUp, Ticket,
 } from 'lucide-react';
+import CONFIG from '@/lib/config';
 import { getManagementManager, logoutManagementSession, validateManagementSession, getManagementToken, type ManagementManager } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 import { AiSupportAlertMonitor } from '@/pages/import-admin/AiSupportInbox';
@@ -18,7 +19,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'import.products.view': 'View Products', 'import.products.create': 'Create Products', 'import.products.update': 'Update Products',
   'import.reviews.view': 'View Reviews', 'import.categories.view': 'View Categories', 'import.trending.view': 'View Trending',
   'import.clients.view': 'View Clients', 'import.messages.view': 'View Messages', 'import.messages.send': 'Send Messages',
-  'import.tickets.view': 'View Support Tickets', 'import.questions.view': 'View Questions', 'import.broadcast.send': 'Send Broadcasts',
+  'import.tickets.view': 'View Support Tickets', 'import.tickets.manage': 'Manage Support Tickets', 'import.questions.view': 'View Questions', 'import.broadcast.send': 'Send Broadcasts',
   'import.expenses.view': 'View Expenses', 'import.pricing_shipping.view': 'View Pricing & Shipping', 'import.settings.view': 'View Settings',
   'import.admin_access.view': 'View Admin Access',
 };
@@ -47,7 +48,7 @@ const NAV = [
   { section: 'Customers & Support', items: [
     { icon: Users, label: 'Users', path: '/import-admin-v2/users', permission: 'import.clients.view' },
     { icon: MessageCircle, label: 'Support', path: '/import-admin-v2/support', permission: 'import.messages.view' },
-    { icon: Ticket, label: 'Support Tickets', path: '/import-admin-v2/support?view=tickets', permission: 'import.tickets.view' },
+    { icon: Ticket, label: 'Tickets', path: '/import-admin-v2/support?view=tickets', permission: 'import.tickets.view' },
     { icon: CircleHelp, label: 'Product FAQ', path: '/import-admin-v2/product-faq', permission: 'import.questions.view' },
   ] },
   { section: 'Communications', items: [
@@ -68,11 +69,44 @@ export default function ManagementLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [ticketCount, setTicketCount] = useState<number | null>(null);
   const [manager, setManager] = useState<ManagementManager | null>(getManagementManager());
   const managementToken = getManagementToken();
   const { permissions, hasPermission, loading: permissionsLoading, error: permissionsError } = useImportAdminPermissions(managementToken);
 
-  useEffect(() => setMobileOpen(false), [location.pathname]);
+  useEffect(() => setMobileOpen(false), [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (permissionsLoading || !managementToken) return;
+    const canViewTickets = permissions.has('import.tickets.view') || permissions.has('import.messages.view');
+    if (!canViewTickets) {
+      setTicketCount(null);
+      return;
+    }
+
+    let cancelled = false;
+    const loadTicketCount = async () => {
+      try {
+        const response = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/import-support-tickets`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'count_tickets', manager_token: managementToken }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!cancelled && response.ok) setTicketCount(Number(data.count || 0));
+      } catch {
+        // The badge is optional; never block the management layout when it cannot refresh.
+      }
+    };
+
+    void loadTicketCount();
+    const interval = window.setInterval(loadTicketCount, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [managementToken, permissions, permissionsLoading]);
+
   useEffect(() => {
     let cancelled = false;
     const checkSession = async () => {
@@ -90,6 +124,7 @@ export default function ManagementLayout() {
   const isActive = (path: string) => {
     const [pathname, search] = path.split('?');
     if (search) return location.pathname === pathname && location.search === `?${search}`;
+    if (pathname === '/import-admin-v2/support') return location.pathname === pathname && location.search !== '?view=tickets';
     return location.pathname === pathname || location.pathname.startsWith(pathname + '/');
   };
   const activeItem = NAV.flatMap(section => section.items).find(n => isActive(n.path));
@@ -123,7 +158,6 @@ export default function ManagementLayout() {
             ...section,
             items: section.items.filter(item => {
               if (permissionsLoading) return false;
-              // Keep Tickets visible to Support managers; Import Admin RBAC still protects the page itself.
               if (item.permission === 'import.tickets.view') return hasPermission('import.tickets.view') || hasPermission('import.messages.view');
               return item.path === '/import-admin-v2' ? permissions.size > 0 : hasPermission(item.permission);
             }),
@@ -132,7 +166,8 @@ export default function ManagementLayout() {
               {!collapsed && <p className="px-3 pt-2 pb-1 text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">{section.section}</p>}
               {section.items.map(item => {
                 const active = isActive(item.path);
-                return <Link key={item.path} to={item.path} title={collapsed ? item.label : undefined} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm ${active ? 'bg-orange-500 text-white font-medium' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'} ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}><item.icon className="w-4 h-4 flex-shrink-0" />{!collapsed && <span className="truncate">{item.label}</span>}</Link>;
+                const showTicketBadge = item.path === '/import-admin-v2/support?view=tickets' && ticketCount !== null && ticketCount > 0;
+                return <Link key={item.path} to={item.path} title={collapsed ? item.label : undefined} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm ${active ? 'bg-orange-500 text-white font-medium' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'} ${collapsed ? 'lg:justify-center lg:px-2' : ''}`}><item.icon className="w-4 h-4 flex-shrink-0" />{!collapsed && <><span className="truncate flex-1">{item.label}</span>{showTicketBadge && <span className={`min-w-5 h-5 px-1.5 rounded-full text-[10px] font-bold flex items-center justify-center ${active ? 'bg-white text-orange-600' : 'bg-orange-500 text-white'}`}>{ticketCount}</span>}</>}</Link>;
               })}
             </div>
           ))}
