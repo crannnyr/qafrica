@@ -564,6 +564,8 @@ if (promoQuote?.pending_order?.id) {
         email: customer.email,
         amount: toKobo(data.total_ngn),
         reference,
+        customerName: customer.full_name,
+        phone: whatsapp.trim(),
         metadata: { type: 'china_import_order', order_id: data.order_id, code: data.code, promo_code: promoQuote?.code ?? undefined, promo_discount_ngn: promoDiscount },
         onSuccess: async () => {
           setIsVerifying(true);
