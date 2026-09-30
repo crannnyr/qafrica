@@ -1,0 +1,95 @@
+name: Wire China Import Promo Checkout
+
+on:
+  push:
+    branches:
+      - feature/china-import-promotions
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/china-import-promotions
+          fetch-depth: 0
+
+      - name: Wire promo checkout
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          checkout = Path('src/pages/recommendations/ImportCheckoutSheet.tsx')
+          text = checkout.read_text()
+          marker = '// CHINA_IMPORT_PROMO_WIRED'
+          if marker in text:
+              print('Promo checkout already wired')
+              raise SystemExit(0)
+
+          text = text.replace(
+              "import ImportQtyControl from '@/components/ImportQtyControl';",
+              "import ImportQtyControl from '@/components/ImportQtyControl';\nimport ChinaImportPromoCode, { type ChinaImportPromotionQuote } from './ChinaImportPromoCode';\n\n// CHINA_IMPORT_PROMO_WIRED"
+          )
+
+          text = text.replace(
+              "  const [error, setError] = useState('');\n  const [result, setResult]",
+              "  const [error, setError] = useState('');\n  const [promoCode, setPromoCode] = useState('');\n  const [promoQuote, setPromoQuote] = useState<ChinaImportPromotionQuote | null>(null);\n  const [result, setResult]"
+          )
+
+          text = text.replace(
+              "  const total = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);",
+              "  const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);\n  const promoDiscount = Math.max(0, Math.min(Number(promoQuote?.discount_amount_ngn ?? 0), totalBeforePromo));\n  const total = Math.max(0, totalBeforePromo - promoDiscount);"
+          )
+
+          text = text.replace(
+              "          payment_method: paymentMethod,\n          items:",
+              "          payment_method: paymentMethod,\n          promotion_code: promoQuote?.code ?? undefined,\n          promotion_id: promoQuote?.promotion_id ?? undefined,\n          items:"
+          )
+
+          sea_old = """                  {cart[0]?.volume_cbm != null && (\n                    <p className=\"text-[9px] text-gray-400 mt-0.5\">{cart[0].volume_cbm} cbm</p>\n                  )}"""
+          sea_new = """                  {cart[0]?.volume_cbm != null && (\n                    <p className=\"text-[9px] text-gray-400 mt-0.5\">Volume: {cart[0].volume_cbm}</p>\n                  )}"""
+          text = text.replace(sea_old, sea_new)
+          text = text.replace("{item.volume_cbm != null && `${item.volume_cbm} cbm`}", "{item.volume_cbm != null && `Volume: ${item.volume_cbm}`}")
+
+          needle = """        <div className=\"bg-gray-50 rounded-xl p-3.5 space-y-1.5\">\n          <div className=\"flex justify-between text-xs text-gray-500\"><span>Subtotal</span><span className=\"font-medium\">{fmt(subtotal)}</span></div>"""
+          replacement = """        <ChinaImportPromoCode\n          customerId={customer.id}\n          orderSubtotalNgn={totalBeforePromo}\n          value={promoCode}\n          onChange={setPromoCode}\n          onApplied={setPromoQuote}\n        />\n\n        <div className=\"bg-gray-50 rounded-xl p-3.5 space-y-1.5\">\n          <div className=\"flex justify-between text-xs text-gray-500\"><span>Subtotal</span><span className=\"font-medium\">{fmt(subtotal)}</span></div>"""
+          if needle not in text:
+              raise SystemExit('Could not find checkout totals insertion point')
+          text = text.replace(needle, replacement, 1)
+
+          shipping_line = """          {shippingSettings.chargeShippingAtCheckout && (\n            <div className=\"flex justify-between text-xs text-gray-500\">\n              <span>Shipping{discountActive && effectiveDiscountPercent > 0 ? ` (${effectiveDiscountPercent}% off)` : ''}</span>              \n              <span className=\"font-medium\">{fmt(shippingTotal)}</span>\n            </div>\n          )}\n          <div className=\"flex justify-between text-xs font-bold text-gray-900 pt-1.5 border-t border-gray-200\"><span>Total</span><span className=\"text-orange-500\">{fmt(total)}</span></div>"""
+          shipping_replacement = """          {shippingSettings.chargeShippingAtCheckout && (\n            <div className=\"flex justify-between text-xs text-gray-500\">\n              <span>Shipping{discountActive && effectiveDiscountPercent > 0 ? ` (${effectiveDiscountPercent}% off)` : ''}</span>\n              <span className=\"font-medium\">{fmt(shippingTotal)}</span>\n            </div>\n          )}\n          {promoDiscount > 0 && (\n            <div className=\"flex justify-between text-xs text-emerald-600\">\n              <span>Promo discount{promoQuote?.code ? ` (${promoQuote.code})` : ''}</span>\n              <span className=\"font-semibold\">-{fmt(promoDiscount)}</span>\n            </div>\n          )}\n          <div className=\"flex justify-between text-xs font-bold text-gray-900 pt-1.5 border-t border-gray-200\"><span>Total</span><span className=\"text-orange-500\">{fmt(total)}</span></div>"""
+          if shipping_line not in text:
+              raise SystemExit('Could not find checkout total block')
+          text = text.replace(shipping_line, shipping_replacement, 1)
+          text = text.replace("{isProcessing ? 'Processing…' : `Pay ${fmt(total)}`}", "{isProcessing ? 'Processing…' : `Pay ${fmt(total)}`}")
+          checkout.write_text(text)
+
+          edge = Path('supabase/functions/china-import/index.ts')
+          et = edge.read_text()
+          if marker not in et:
+              et = et.replace(
+                  "    if (req.method === 'POST' && action === 'checkout-init') {",
+                  "    // CHINA_IMPORT_PROMO_WIRED\n    if (req.method === 'POST' && action === 'checkout-init') {",
+                  1,
+              )
+              et = et.replace(
+                  "      const body = await req.json()",
+                  "      const body = await req.json()\n      const promotionCode = typeof body.promotion_code === 'string' ? body.promotion_code.trim().toUpperCase() : null",
+                  1,
+              )
+              anchor = "      const total = subtotal + shipping_total"
+              if anchor in et:
+                  et = et.replace(anchor, "      const totalBeforePromotion = subtotal + shipping_total\n      let promotionDiscount = 0\n      if (promotionCode) {\n        const { data: promoRows, error: promoError } = await supabase.rpc('validate_china_import_promotion', { p_code: promotionCode, p_customer_id: body.customer_id, p_order_subtotal_ngn: totalBeforePromotion })\n        if (promoError) throw new Error('Could not validate promo code')\n        const promo = Array.isArray(promoRows) ? promoRows[0] : promoRows\n        if (!promo?.promotion_id) throw new Error(promo?.message || 'Promo code is not valid')\n        promotionDiscount = Math.max(0, Math.min(Number(promo.discount_amount_ngn || 0), totalBeforePromotion))\n      }\n      const total = Math.max(0, totalBeforePromotion - promotionDiscount)", 1)
+              edge.write_text(et)
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/pages/recommendations/ImportCheckoutSheet.tsx supabase/functions/china-import/index.ts
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: wire China Import promo code into checkout'
+          git push origin feature/china-import-promotions
