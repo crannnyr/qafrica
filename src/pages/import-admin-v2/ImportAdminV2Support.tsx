@@ -31,22 +31,34 @@ export default function ImportAdminV2Support() {
     );
   }
 
-  if (!hasPermission('import.messages.view')) {
-    return (
-      <div className="rounded-2xl border border-gray-200 bg-white p-6">
-        <h2 className="text-sm font-bold text-gray-900">Support access required</h2>
-        <p className="text-xs text-gray-500 mt-1">Your manager account does not have permission to view support conversations.</p>
-      </div>
-    );
-  }
-
   if (ticketsView) {
+    if (!hasPermission('import.tickets.view')) {
+      return (
+        <div className="rounded-2xl border border-gray-200 bg-white p-6">
+          <h2 className="text-sm font-bold text-gray-900">Ticket access required</h2>
+          <p className="text-xs text-gray-500 mt-1">Your manager account does not have permission to view support tickets.</p>
+          <Link to="/import-admin-v2/support" className="inline-flex items-center gap-2 mt-4 text-sm font-semibold text-gray-600 hover:text-gray-900">
+            <ArrowLeft className="w-4 h-4" /> Back to Support
+          </Link>
+        </div>
+      );
+    }
+
     return (
       <div className="space-y-4">
         <Link to="/import-admin-v2/support" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900">
           <ArrowLeft className="w-4 h-4" /> Back to Support
         </Link>
         <ImportSupportTickets />
+      </div>
+    );
+  }
+
+  if (!hasPermission('import.messages.view')) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-6">
+        <h2 className="text-sm font-bold text-gray-900">Support access required</h2>
+        <p className="text-xs text-gray-500 mt-1">Your manager account does not have permission to view support conversations.</p>
       </div>
     );
   }
@@ -58,9 +70,11 @@ export default function ImportAdminV2Support() {
           <h1 className="text-xl font-bold text-gray-900">AI Support</h1>
           <p className="text-sm text-gray-500 mt-1">Live AI, human handoffs and resolved conversations.</p>
         </div>
-        <Link to="/import-admin-v2/support?view=tickets" className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50">
-          <Ticket className="w-4 h-4" /> Support Tickets
-        </Link>
+        {hasPermission('import.tickets.view') && (
+          <Link to="/import-admin-v2/support?view=tickets" className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50">
+            <Ticket className="w-4 h-4" /> Support Tickets
+          </Link>
+        )}
       </div>
       <AiSupportConversationSearch token={token} />
       <div data-qafrica-ai-support-inbox>
