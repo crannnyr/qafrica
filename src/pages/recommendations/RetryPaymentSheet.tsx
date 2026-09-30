@@ -33,7 +33,7 @@ interface ToPayOrder {
 
 export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: {
   order: ToPayOrder;
-  customer: { id: string; email: string; full_name?: string };
+  customer: { id: string; email: string; full_name?: string; phone?: string };
   onClose: () => void;
   onPaid: () => void;
 }) {
@@ -45,7 +45,6 @@ export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: 
   const useManualTransfer = order.total_ngn >= 100_000;
   const usePaystack = !useManualTransfer;
 
-  // Fetch bank details only when the order must use manual transfer.
   useEffect(() => {
     if (!useManualTransfer) return;
     fetch(`${EDGE_URL}?action=admin-settings`)
@@ -68,7 +67,13 @@ export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: 
         email: customer.email,
         amount: toKobo(order.total_ngn),
         reference,
-        metadata: { order_id: order.id, code: order.code },
+        customerName: customer.full_name,
+        phone: customer.phone,
+        metadata: {
+          order_id: order.id,
+          code: order.code,
+          customer_name: customer.full_name ?? '',
+        },
         onSuccess: async () => {
           try {
             const res = await fetch(`${EDGE_URL}?action=checkout-verify`, {
