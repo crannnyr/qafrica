@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { OPEN_GUIDE_EVENT, REPLAY_TOUR_EVENT } from '@/components/guide/SetupGuide';
 import { 
   BookOpen, Store, Package, ShoppingCart, Wallet, TrendingUp, 
   Calculator, Shield, HelpCircle, ChevronRight, ChevronDown,
@@ -53,6 +54,22 @@ export default function HowToUsePage() {
         <p className="text-gray-600 dark:text-gray-400">
           Everything you need to know about using the QAFRICA platform
         </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(REPLAY_TOUR_EVENT))}
+            className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold"
+          >
+            Replay the dashboard tour
+          </button>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(OPEN_GUIDE_EVENT))}
+            className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-300 dark:border-gray-600 text-sm font-medium text-gray-800 dark:text-gray-200"
+          >
+            Open setup checklist
+          </button>
+        </div>
       </div>
 
       {/* Quick Start */}

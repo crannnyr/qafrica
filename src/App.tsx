@@ -7,6 +7,7 @@ import { useDeveloperAuthStore } from '@/stores/developerAuthStore';
 
 // Scroll reset on every route change
 import ScrollToTop from '@/components/ScrollToTop';
+import { NavTracker } from '@/lib/navigation';
 
 // Pages
 const LandingPage = lazy(() => import('@/pages/landing/LandingPage'));
@@ -21,7 +22,8 @@ const PostSignupChoice = lazy(() => import('@/pages/auth/PostSignupChoice'));
 const PricingPage = lazy(() => import('@/pages/auth/PricingPage'));
 const PaymentCallbackPage = lazy(() => import('@/pages/auth/PaymentCallbackPage'));
 const AcceptStaffInvitePage = lazy(() => import('@/pages/auth/AcceptStaffInvitePage'));
-const JumiaSignupPage = lazy(() => import('@/pages/auth/JumiaSignupPage'));
+// Paused while Sell-on-Jumia is "coming soon" — restore the routes below to re-enable.
+// const JumiaSignupPage = lazy(() => import('@/pages/auth/JumiaSignupPage'));
 
 // Legal Pages
 const PrivacyPolicyPage = lazy(() => import('@/pages/legal/PrivacyPolicyPage'));
@@ -72,7 +74,6 @@ const ImportAdminV2EmailTemplates = lazy(() => import('@/pages/import-admin-v2/I
 const ImportAdminV2Broadcast = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Broadcast'));
 const ImportAdminV2ProductFAQ = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2ProductFAQ'));
 const ImportAdminV2Trending = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Trending'));
-const ImportAdminV2Reviews = lazy(() => import('@/pages/import-admin-v2/ImportReviewsManager'));
 const ImportAdminV2Inventory = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Inventory'));
 const ImportAdminV2ConfirmedPayments = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2ConfirmedPayments'));
 const ImportAdminV2ProductAdd = lazy(() => import('@/pages/import-admin-v2/ManagementProductAdd'));
@@ -146,11 +147,13 @@ const NicheCustomizationPage = lazy(() => import('@/pages/dashboard/NicheCustomi
 
 // Marketplace Dashboard Pages
 const JumiaPage = lazy(() => import('@/pages/dashboard/JumiaPage'));
-const JumiaAddItemPage = lazy(() => import('@/pages/dashboard/JumiaAddItemPage'));
+// const JumiaAddItemPage = lazy(() => import('@/pages/dashboard/JumiaAddItemPage'));
 const JumiaDropOffLocationsPage = lazy(() => import('@/pages/dashboard/JumiaDropOffLocationsPage'));
 const JumiaWalletPage = lazy(() => import('@/pages/dashboard/JumiaWalletPage'));
 const JumiaHowToScalePage = lazy(() => import('@/pages/dashboard/JumiaHowToScalePage'));
 const JumiaItemDetailPage = lazy(() => import('@/pages/dashboard/Jumia/JumiaItemDetailPage'));
+const SellOnMarketplacePage = lazy(() => import('@/pages/dashboard/SellOnMarketplacePage'));
+const JumiaComingSoon = lazy(() => import('@/pages/dashboard/Jumia/JumiaComingSoon'));
 const KongaPage = lazy(() => import('@/pages/dashboard/KongaPage'));
 const JijiPage = lazy(() => import('@/pages/dashboard/JijiPage'));
 
@@ -368,6 +371,7 @@ function App() {
       <CustomDomainRouter>
         {/* Resets scroll to top on every route change — must be inside the router */}
         <ScrollToTop />
+        <NavTracker />
 
         <Suspense fallback={<PageLoader />}>
         <Routes>
@@ -376,7 +380,8 @@ function App() {
           <Route path="/store-owners" element={<StoreOwnersPage />} />
           <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
           <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
-          <Route path="/signup/jumia" element={<PublicRoute><JumiaSignupPage /></PublicRoute>} />
+          {/* Sell-on-Jumia is coming soon: new Jumia signups show the explainer instead of the form. */}
+          <Route path="/signup/jumia" element={<PublicRoute><div className="min-h-screen bg-gray-50 dark:bg-gray-950 px-4 py-8"><JumiaComingSoon backTo="/" /></div></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
 
@@ -423,7 +428,6 @@ function App() {
             <Route path="orders" element={<ImportAdminV2Orders />} />
             <Route path="users" element={<ImportAdminV2Users />} />
             <Route path="trending" element={<ImportAdminV2Trending />} />
-            <Route path="reviews" element={<ImportAdminV2Reviews />} />
   <Route path="inventory" element={<ImportAdminV2Inventory />} />
             <Route path="confirmed-payments" element={<ImportAdminV2ConfirmedPayments />} />
             <Route path="batch-orders" element={<ImportAdminV2BatchOrders />} />
@@ -514,13 +518,15 @@ function App() {
             <Route path="analytics" element={<StaffGuard permission="can_view_analytics"><AnalyticsPage /></StaffGuard>} />
             <Route path="tax-expenses" element={<StaffGuard permission="can_manage_wallet"><TaxExpensesPage /></StaffGuard>} />
             <Route path="settings" element={<StaffGuard><StoreSettingsPage /></StaffGuard>} />
-            <Route path="templates" element={<StaffGuard permission="can_manage_settings"><StoreTemplatesPage /></StaffGuard>} />
+            <Route path="marketplace" element={<StaffGuard permission="can_manage_settings"><SellOnMarketplacePage /></StaffGuard>} />
+            <Route path="themes" element={<StaffGuard permission="can_manage_settings"><StoreTemplatesPage /></StaffGuard>} />
+            <Route path="templates" element={<Navigate to="/dashboard/themes" replace />} />
             <Route path="subscription" element={<StaffGuard><SubscriptionPage /></StaffGuard>} />
             <Route path="niches" element={<StaffGuard permission="can_manage_settings"><NicheCustomizationPage /></StaffGuard>} />
             <Route path="how-to-use" element={<HowToUsePage />} />
             <Route path="manual-sales" element={<ManualSalesPage />} />
             <Route path="jumia" element={<JumiaPage />} />
-            <Route path="jumia/add" element={<JumiaAddItemPage />} />
+            <Route path="jumia/add" element={<JumiaComingSoon />} />
             <Route path="jumia/locations" element={<JumiaDropOffLocationsPage />} />
             <Route path="jumia/wallet" element={<JumiaWalletPage />} />
             <Route path="jumia/how-to-scale" element={<JumiaHowToScalePage />} />
@@ -540,7 +546,7 @@ function App() {
             <ProtectedRoute isJumiaRoute={true}><JumiaDashboardLayout /></ProtectedRoute>
           }>
             <Route index element={<JumiaPage />} />
-            <Route path="add" element={<JumiaAddItemPage />} />
+            <Route path="add" element={<JumiaComingSoon />} />
             <Route path="locations" element={<JumiaDropOffLocationsPage />} />
             <Route path="wallet" element={<JumiaWalletPage />} />
             <Route path="how-to-scale" element={<JumiaHowToScalePage />} />

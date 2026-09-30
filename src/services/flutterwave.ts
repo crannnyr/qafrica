@@ -55,3 +55,50 @@ export function startSubscriptionPayment(plan: SubscriptionPlanRequest) {
 export function checkSubscriptionPayment(reference: string) {
   return call<{ ok: true; status: PaymentStatus; paid: boolean; tier: string; is_starter_pack: boolean }>('status', { reference });
 }
+
+// ── Card payments ───────────────────────────────────────────────────────────────────────
+export type CardInput = { number: string; cvv: string; expiry_month: string; expiry_year: string };
+
+/** What the payer must do next to finish a card charge. */
+export type NextAction =
+  | { type: 'requires_pin' }
+  | { type: 'requires_otp' }
+  | { type: 'requires_additional_fields' | 'avs' }
+  | { type: 'redirect_url'; redirect_url: string }
+  | { type: string; [key: string]: unknown }
+  | null;
+
+export type CardChargeResult =
+  | { ok: true; reference: string; amount: number; status: string; next_action: NextAction }
+  | { ok: false; message: string };
+
+export type AuthorizeResult =
+  | { ok: true; status: string; next_action: NextAction }
+  | { ok: false; message: string };
+
+/** Pay for a plan by card. May come back needing a PIN/OTP/AVS step or a 3DS redirect — see `next_action`. */
+export function startCardPayment(plan: SubscriptionPlanRequest & { card: CardInput; save_card?: boolean }) {
+  return call<CardChargeResult>('start-card', plan) as Promise<CardChargeResult>;
+}
+
+/** Submit the PIN, OTP, or AVS address a card charge's `next_action` asked for. */
+export function authorizeCardPayment(reference: string, step:
+  | { type: 'pin'; pin: string }
+  | { type: 'otp'; otp: string }
+  | { type: 'avs'; address: Record<string, string> }
+) {
+  return call<AuthorizeResult>('card-authorize', { reference, ...step }) as Promise<AuthorizeResult>;
+}
+
+/** Charge an already-saved card — manual "renew now" for a given subscription. */
+export function chargeSavedCard(subscriptionId: string, cardId?: string) {
+  return call<{ ok: true } | { ok: false; message: string }>('charge-saved-card', { subscription_id: subscriptionId, card_id: cardId });
+}
+
+export function removeSavedCard(cardId: string) {
+  return call<{ ok: true } | { ok: false; message: string }>('remove-card', { card_id: cardId });
+}
+
+export function setDefaultSavedCard(cardId: string) {
+  return call<{ ok: true } | { ok: false; message: string }>('set-default-card', { card_id: cardId });
+}

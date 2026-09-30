@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Star, BadgeCheck } from 'lucide-react';
 import { marketplaceLink } from '@/lib/marketplaceAttribution';
+import { MARKETPLACE_STATE } from '@/lib/navigation';
 import { naira, soldLabel, type MarketProduct } from './useMarketplace';
 
 export default function ProductCard({ p, priority = false }: { p: MarketProduct; priority?: boolean }) {
@@ -11,6 +12,7 @@ export default function ProductCard({ p, priority = false }: { p: MarketProduct;
   return (
     <Link
       to={href}
+      state={MARKETPLACE_STATE}
       className="group block bg-white rounded-md overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500"
     >
       <div className="relative aspect-[3/4] bg-gray-100 overflow-hidden">

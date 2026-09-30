@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, ExternalLink, ImageOff, Smartphone, PanelLeft, PanelRight, PanelBottom, Info } from 'lucide-react';
+import { Check, ExternalLink, ImageOff, Smartphone, PanelLeft, PanelRight, PanelBottom, Info, Crown, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { useStoreStore } from '@/stores';
 import { productService } from '@/services';
 import type { Product, Store, StorefrontLook, StorefrontNavStyle } from '@/types';
-import { STOREFRONT_LOOKS, getLook, loadLookFonts } from '@/lib/storefrontLooks';
+import { STOREFRONT_LOOKS, getLook, loadLookFonts, canUsePremium, PREMIUM_PLAN_NAME } from '@/lib/storefrontLooks';
+import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus';
+import CollectionsManager from './CollectionsManager';
 import { buildCategories } from '@/lib/storefrontCategories';
 
 type Draft = {
@@ -35,6 +37,8 @@ export default function StorefrontLookSettings() {
   const [products, setProducts] = useState<Product[]>([]);
   const [saving, setSaving] = useState(false);
   const [previewSrc, setPreviewSrc] = useState('');
+  const { subscription, loading: subLoading } = useSubscriptionStatus();
+  const premiumOk = canUsePremium(subscription);
 
   useEffect(() => {
     if (!currentStore?.id) return;
@@ -80,6 +84,10 @@ export default function StorefrontLookSettings() {
     set({ look_settings: { ...draft.look_settings, [key]: value } });
 
   const save = async () => {
+    if (getLook(draft.storefront_look)?.premium && !premiumOk) {
+      toast.error(`${getLook(draft.storefront_look)!.name} is a premium layout. Upgrade to the ${PREMIUM_PLAN_NAME} plan to use it.`);
+      return;
+    }
     setSaving(true);
     // Only keep settings that belong to a look and aren't empty
     const allowed = new Set(STOREFRONT_LOOKS.flatMap((l) => l.fields.map((f) => f.key)));
@@ -89,7 +97,9 @@ export default function StorefrontLookSettings() {
         .filter(([k, v]) => allowed.has(k) && v),
     );
     const category_images = Object.fromEntries(Object.entries(draft.category_images).filter(([, v]) => !!v));
-    const res = await updateStore(currentStore.id, { ...draft, look_settings, category_images });
+    // Keep non-text settings (curated collections) that this form doesn't edit
+    const kept = Object.fromEntries(Object.entries(currentStore.look_settings ?? {}).filter(([, v]) => typeof v !== 'string'));
+    const res = await updateStore(currentStore.id, { ...draft, look_settings: { ...kept, ...look_settings }, category_images });
     setSaving(false);
     if (res.success) {
       setDraft(null); // show the freshly saved store
@@ -98,10 +108,14 @@ export default function StorefrontLookSettings() {
     else toast.error(`Layout not saved: ${res.error ?? 'please try again'}`);
   };
 
-  const lookCards: { id: StorefrontLook; name: string; summary: string; bestFor: string; font?: string }[] = [
+  type Card = { id: StorefrontLook; name: string; summary: string; bestFor: string; font?: string; premium?: boolean };
+  const toCard = (l: (typeof STOREFRONT_LOOKS)[number]): Card => ({ id: l.id, name: l.name, summary: l.summary, bestFor: l.bestFor, font: l.fonts.display, premium: l.premium });
+  const premiumCards: Card[] = STOREFRONT_LOOKS.filter((l) => l.premium).map(toCard);
+  const lookCards: Card[] = [
     { id: 'classic', name: 'Classic', summary: 'The layout your store has today.', bestFor: 'Keep things as they are.' },
-    ...STOREFRONT_LOOKS.map((l) => ({ id: l.id, name: l.name, summary: l.summary, bestFor: l.bestFor, font: l.fonts.display })),
+    ...STOREFRONT_LOOKS.filter((l) => !l.premium).map(toCard),
   ];
+  const draftIsLockedPremium = !!look?.premium && !premiumOk && !subLoading;
 
   const navOptions: { id: StorefrontNavStyle; label: string; help: string; icon: typeof PanelBottom }[] = [
     { id: 'bottom', label: 'Bottom bar', help: 'Home, categories, search, cart and account along the bottom of the phone screen.', icon: PanelBottom },
@@ -121,7 +135,7 @@ export default function StorefrontLookSettings() {
           <a href={previewUrl} target="_blank" rel="noopener noreferrer" className="lg:hidden">
             <Button variant="outline" size="sm"><Smartphone className="w-4 h-4 mr-1.5" />Preview</Button>
           </a>
-          <Button size="sm" onClick={save} disabled={!dirty || saving} className="bg-orange-500 hover:bg-orange-600 text-white">
+          <Button size="sm" onClick={save} disabled={!dirty || saving || draftIsLockedPremium} className="bg-orange-500 hover:bg-orange-600 text-white">
             {saving ? 'Saving…' : dirty ? 'Save layout' : 'Saved'}
           </Button>
         </div>
@@ -129,38 +143,38 @@ export default function StorefrontLookSettings() {
 
       <div className="grid lg:grid-cols-[1fr_300px] gap-8">
         <div className="space-y-8 min-w-0">
-          {/* Look */}
+          {/* Premium looks */}
           <fieldset>
-            <legend className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Layout</legend>
+            <legend className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white mb-1">
+              <Crown className="w-4 h-4 text-amber-500" /> Premium
+            </legend>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+              Rotating hero slides and curated collections.{' '}
+              {premiumOk ? 'Included in your plan.' : <>On the {PREMIUM_PLAN_NAME} plan (₦10,000/month) and above. You can preview them now.</>}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {premiumCards.map((c) => (
+                <LookCard key={c.id} c={c} selected={draft.storefront_look === c.id} live={currentStore.storefront_look === c.id}
+                  locked={!premiumOk} onPick={() => set({ storefront_look: c.id })} />
+              ))}
+            </div>
+            {draftIsLockedPremium && (
+              <div className="mt-3 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 p-3 text-sm text-amber-900 dark:text-amber-200">
+                <Lock className="w-4 h-4 shrink-0" />
+                <p className="flex-1">You're previewing {look!.name}. Upgrade to the {PREMIUM_PLAN_NAME} plan to put it live and add collections.</p>
+                <Link to="/dashboard/subscription" className="shrink-0 inline-flex items-center justify-center h-9 px-4 rounded-lg bg-gray-900 text-white text-sm font-medium">See plans</Link>
+              </div>
+            )}
+          </fieldset>
+
+          {/* Standard looks */}
+          <fieldset>
+            <legend className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Standard</legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {lookCards.map((c) => {
-                const selected = draft.storefront_look === c.id;
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    aria-pressed={selected}
-                    onClick={() => set({ storefront_look: c.id })}
-                    className={`relative text-left rounded-xl border-2 p-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
-                      selected ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    {selected && (
-                      <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center">
-                        <Check className="w-3 h-3 text-white" />
-                      </span>
-                    )}
-                    <span className="block text-2xl text-gray-900 dark:text-white leading-none mb-2" style={c.font ? { fontFamily: c.font } : undefined}>
-                      {c.name}
-                    </span>
-                    <span className="block text-sm text-gray-600 dark:text-gray-300">{c.summary}</span>
-                    <span className="block text-xs text-gray-500 dark:text-gray-400 mt-2">Good for: {c.bestFor}</span>
-                    {currentStore.storefront_look === c.id && (
-                      <span className="inline-block mt-2 text-[11px] font-medium text-green-700 dark:text-green-400">Live now</span>
-                    )}
-                  </button>
-                );
-              })}
+              {lookCards.map((c) => (
+                <LookCard key={c.id} c={c} selected={draft.storefront_look === c.id} live={currentStore.storefront_look === c.id}
+                  locked={false} onPick={() => set({ storefront_look: c.id })} />
+              ))}
             </div>
           </fieldset>
 
@@ -204,6 +218,9 @@ export default function StorefrontLookSettings() {
                 </fieldset>
               )}
 
+              {look.premium && <CollectionsManager products={products} locked={!premiumOk} />}
+
+              {!look.premium && <>
               {/* Navigation */}
               <fieldset>
                 <legend className="text-sm font-semibold text-gray-900 dark:text-white mb-1">Navigation</legend>
@@ -315,6 +332,7 @@ export default function StorefrontLookSettings() {
                   </ul>
                 )}
               </fieldset>
+              </>}
             </>
           )}
 
@@ -351,5 +369,37 @@ export default function StorefrontLookSettings() {
         </div>
       </div>
     </section>
+  );
+}
+
+function LookCard({ c, selected, live, locked, onPick }: {
+  c: { id: StorefrontLook; name: string; summary: string; bestFor: string; font?: string; premium?: boolean };
+  selected: boolean; live: boolean; locked: boolean; onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onPick}
+      className={`relative text-left rounded-xl border-2 p-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+        selected ? 'border-orange-500 bg-orange-50/60 dark:bg-orange-500/10' : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+      } ${c.premium ? 'bg-gradient-to-br from-white to-amber-50/50 dark:from-gray-800 dark:to-amber-500/5' : ''}`}
+    >
+      {selected ? (
+        <span className="absolute top-3 right-3 w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center">
+          <Check className="w-3 h-3 text-white" />
+        </span>
+      ) : locked ? (
+        <span className="absolute top-3 right-3 inline-flex items-center gap-1 rounded-full bg-gray-900 text-white text-[10px] font-semibold px-2 py-0.5">
+          <Lock className="w-3 h-3" /> {PREMIUM_PLAN_NAME}
+        </span>
+      ) : null}
+      <span className="block text-2xl text-gray-900 dark:text-white leading-none mb-2" style={c.font ? { fontFamily: c.font } : undefined}>
+        {c.name}
+      </span>
+      <span className="block text-sm text-gray-600 dark:text-gray-300">{c.summary}</span>
+      <span className="block text-xs text-gray-500 dark:text-gray-400 mt-2">Good for: {c.bestFor}</span>
+      {live && <span className="inline-block mt-2 text-[11px] font-medium text-green-700 dark:text-green-400">Live now</span>}
+    </button>
   );
 }

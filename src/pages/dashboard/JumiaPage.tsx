@@ -11,6 +11,7 @@ import JumiaSubmissionStatusBadge from './Jumia/JumiaSubmissionStatusBadge';
 import JumiaPlanGate from './Jumia/JumiaPlanGate';
 import JumiaDropoffTaskCard from './Jumia/JumiaDropoffTaskCard';
 import { generateJumiaLabel } from './Jumia/generateJumiaLabel';
+import JumiaComingSoon from './Jumia/JumiaComingSoon';
 
 type Tab = 'items' | 'dropoffs';
 const LOW_STOCK_THRESHOLD = 5;
@@ -266,7 +267,27 @@ function JumiaOverview() {
   );
 }
 
+// Sell-on-Jumia is paused for new sellers ("coming soon"). Sellers who already
+// have submissions keep full access so they can track items and withdraw earnings.
 export default function JumiaPage() {
+  const { user } = useAuthStore();
+  const { fetchSubmissions } = useJumiaStore();
+  const [hasHistory, setHasHistory] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let active = true;
+    fetchSubmissions(user.id).then(() => {
+      if (active) setHasHistory(useJumiaStore.getState().submissions.length > 0);
+    });
+    return () => { active = false; };
+  }, [user?.id, fetchSubmissions]);
+
+  if (hasHistory === null) {
+    return <div className="flex h-64 items-center justify-center text-sm text-gray-400">Loading…</div>;
+  }
+  if (!hasHistory) return <JumiaComingSoon />;
+
   return (
     <JumiaPlanGate>
       <JumiaOverview />
