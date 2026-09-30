@@ -1,5 +1,5 @@
 // src/App.tsx
-import { Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useEffect, lazy, Suspense } from 'react';
 import { Toaster } from '@/components/ui/sonner';
 import { useAuthStore } from '@/stores';
@@ -341,6 +341,66 @@ function PageLoader() {
   );
 }
 
+// Meta Pixel is site-wide for public QAfrica pages, but must never initialize
+// or record PageViews while an admin/internal route is active.
+const META_PIXEL_ID = '2267794760686832';
+const META_BLOCKED_PREFIXES = [
+  '/admin',
+  '/management',
+  '/import-admin',
+  '/importations/admin',
+  '/importations/sourcing',
+  '/developer',
+];
+
+type MetaFbq = ((...args: unknown[]) => void) & {
+  queue?: unknown[];
+  loaded?: boolean;
+  version?: string;
+  push?: (...args: unknown[]) => void;
+  callMethod?: (...args: unknown[]) => void;
+};
+
+function SitewideMetaPixel() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const path = location.pathname.replace(/\\/+$/, '') || '/';
+    if (META_BLOCKED_PREFIXES.some(prefix => path === prefix || path.startsWith(prefix + '/'))) return;
+
+    const w = window as Window & { fbq?: MetaFbq; _fbq?: MetaFbq };
+    if (w.fbq) {
+      w.fbq('track', 'PageView');
+      return;
+    }
+
+    const fbq = ((...args: unknown[]) => {
+      if (fbq.callMethod) fbq.callMethod(...args);
+      else fbq.queue?.push(args);
+    }) as MetaFbq;
+    fbq.queue = [];
+    fbq.loaded = true;
+    fbq.version = '2.0';
+    fbq.push = (...args: unknown[]) => fbq.queue?.push(args);
+    w.fbq = fbq;
+    w._fbq = fbq;
+
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = 'https://connect.facebook.net/en_US/fbevents.js';
+    script.dataset.qafricaMetaPixel = META_PIXEL_ID;
+    const firstScript = document.getElementsByTagName('script')[0];
+    if (firstScript?.parentNode) firstScript.parentNode.insertBefore(script, firstScript);
+    else document.head.appendChild(script);
+
+    fbq('init', META_PIXEL_ID);
+    fbq('track', 'PageView');
+  }, [location.pathname]);
+
+  return null;
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 function App() {
@@ -370,6 +430,7 @@ function App() {
         }}
       />
       <CustomDomainRouter>
+        <SitewideMetaPixel />
         {/* Resets scroll to top on every route change — must be inside the router */}
         <ScrollToTop />
         <NavTracker />
