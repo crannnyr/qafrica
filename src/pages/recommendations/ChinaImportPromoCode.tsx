@@ -11,6 +11,15 @@ export type ChinaImportPromotionQuote = {
   discount_value: number | null;
   discount_amount_ngn: number;
   message: string;
+  pending_order?: {
+    id: string;
+    code: string;
+    subtotal_ngn: number;
+    total_ngn: number;
+    promotion_id: string | null;
+    promotion_code: string | null;
+    promotion_discount_ngn: number;
+  } | null;
 };
 
 interface Props {
@@ -37,7 +46,9 @@ export default function ChinaImportPromoCode({ customerId, orderSubtotalNgn, val
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not validate promo code');
-      const next = data.promotion as ChinaImportPromotionQuote | null;
+      const next = data.promotion
+  ? ({ ...(data.promotion as ChinaImportPromotionQuote), pending_order: data.pending_order ?? null } as ChinaImportPromotionQuote)
+  : null;
       setQuote(next);
       setMessage(next?.message ?? 'This promo code is not valid.');
       onApplied(next?.promotion_id ? next : null);

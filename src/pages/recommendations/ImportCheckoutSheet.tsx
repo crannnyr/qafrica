@@ -473,39 +473,83 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         }).catch(() => {});
       }
 
-      const res = await fetch(`${EDGE_URL}?action=checkout-init`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_id: customer.id,
-          customer_name: customer.full_name,
-          customer_whatsapp: whatsapp.trim(),
-          delivery_type: 'to_me',
-          delivery_mode: deliveryMode,
-          pickup_station_id: deliveryMode === 'pickup_station' ? selectedStationId : undefined,
-          address_id: deliveryMode === 'home' && selectedAddressId !== 'new' ? selectedAddressId : undefined,
-          shipping_method: cart.length === 1 ? shippingMethod : undefined,
-          delivery_address: address,
-          delivery_latitude: coords?.lat, delivery_longitude: coords?.lng,
-          location_shared: !!coords,
-          payment_method: paymentMethod,
-          promotion_code: promoQuote?.code ?? undefined,
-          promotion_id: promoQuote?.promotion_id ?? undefined,
-          items: cart.map(i => ({
-            id: i.id, name: i.name, price_ngn: i.price_ngn, price_cny: i.price_cny,
-            quantity: i.quantity, image_url: i.image_url,
-            variant_options: i.variant_selection ?? undefined,
-            shipping_method: shippingMethodFor(i),
-          })),
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        if (data.error === 'duplicate_pending_order') {
-          throw new Error(data.message ?? 'You already have a pending order for this — check your dashboard to complete payment.');
-        }
-        throw new Error(data.error ?? 'Checkout failed');
-      }
+      let data: any;
+
+// Reuse the pending order already updated by promo validation.
+// This prevents the legacy checkout-init endpoint from creating a
+// second full-price order after a promo has been applied.
+if (promoQuote?.pending_order?.id) {
+  data = {
+    order_id: promoQuote.pending_order.id,
+    code: promoQuote.pending_order.code,
+    subtotal_ngn: Number(promoQuote.pending_order.subtotal_ngn),
+    total_ngn: Number(promoQuote.pending_order.total_ngn),
+  };
+} else {
+  // Keep checkout-init backward compatible. It creates the pending
+  // order first; the dedicated China Import promo endpoint updates
+  // that exact order to the discounted amount below.
+  const res = await fetch(`${EDGE_URL}?action=checkout-init`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      customer_id: customer.id,
+      customer_name: customer.full_name,
+      customer_whatsapp: whatsapp.trim(),
+      delivery_type: 'to_me',
+      delivery_mode: deliveryMode,
+      pickup_station_id: deliveryMode === 'pickup_station' ? selectedStationId : undefined,
+      address_id: deliveryMode === 'home' && selectedAddressId !== 'new' ? selectedAddressId : undefined,
+      shipping_method: cart.length === 1 ? shippingMethod : undefined,
+      delivery_address: address,
+      delivery_latitude: coords?.lat, delivery_longitude: coords?.lng,
+      location_shared: !!coords,
+      payment_method: paymentMethod,
+      items: cart.map(i => ({
+        id: i.id, name: i.name, price_ngn: i.price_ngn, price_cny: i.price_cny,
+        quantity: i.quantity, image_url: i.image_url,
+        variant_options: i.variant_selection ?? undefined,
+        shipping_method: shippingMethodFor(i),
+      })),
+    }),
+  });
+  data = await res.json();
+  if (!res.ok) {
+    if (data.error === 'duplicate_pending_order') {
+      throw new Error(data.message ?? 'You already have a pending order for this — check your dashboard to complete payment.');
+    }
+    throw new Error(data.error ?? 'Checkout failed');
+  }
+
+  // The deployed checkout-init endpoint does not know about the new
+  // China Import promo fields yet. Revalidate here so the dedicated
+  // promo function updates the newly-created order before Paystack
+  // is opened. The amount below is always the updated server value.
+  if (promoQuote?.promotion_id && promoQuote.code) {
+    const promoRes = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/china-import-promotions?action=validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        customer_id: customer.id,
+        code: promoQuote.code,
+        order_subtotal_ngn: Number(data.subtotal_ngn ?? subtotal),
+      }),
+    });
+    const promoData = await promoRes.json();
+    if (!promoRes.ok) throw new Error(promoData.error ?? 'Could not apply promo code to the order');
+    const updated = promoData.pending_order;
+    if (!updated?.id) {
+      throw new Error('The promo was validated, but the checkout order could not be updated. Please try again.');
+    }
+    data = {
+      ...data,
+      order_id: updated.id,
+      code: updated.code ?? data.code,
+      subtotal_ngn: Number(updated.subtotal_ngn),
+      total_ngn: Number(updated.total_ngn),
+    };
+  }
+}
 
       if (paymentMethod === 'manual') {
         setResult({ code: data.code, bank: data.bank, order_id: data.order_id });
@@ -520,7 +564,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         email: customer.email,
         amount: toKobo(data.total_ngn),
         reference,
-        metadata: { type: 'china_import_order', order_id: data.order_id, code: data.code },
+        metadata: { type: 'china_import_order', order_id: data.order_id, code: data.code, promo_code: promoQuote?.code ?? undefined, promo_discount_ngn: promoDiscount },
         onSuccess: async () => {
           setIsVerifying(true);
           // Paystack has already charged the customer at this point — this
