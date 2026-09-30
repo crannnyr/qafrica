@@ -9,6 +9,7 @@ import { storeService } from '@/services/store.service';
 import { supabase } from '@/services/supabase';
 import { toast } from 'sonner';
 import { sendStoreCreatedEmail } from '@/services/email';
+import QbotGuide from '@/components/QbotGuide';
 
 import OnboardingProgress from './NicheSelection/OnboardingProgress';
 import StoreSubStepIndicator from './StoreSetup/StoreSubStepIndicator';
@@ -261,6 +262,16 @@ export default function OnboardingStoreSetup() {
           </motion.div>
         </AnimatePresence>
       </div>
+
+      {subStep === 1 && (
+        <QbotGuide
+          stepId="store-basic-info"
+          message="Give your store a name that sticks — I'll help you write a description that actually converts."
+          imageSrc="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.50215565484325.webp"
+          position="corner"
+          delayMs={700}
+        />
+      )}
     </div>
   );
 }

@@ -7,7 +7,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/stores';
-import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
+import FlutterwavePayDialog from '@/components/payments/FlutterwavePayDialog';
+import QbotGuide from '@/components/QbotGuide';
 import { toast } from 'sonner';
 
 interface OnboardingData {
@@ -17,10 +18,8 @@ interface OnboardingData {
 }
 
 // Flat promotional price for every new store — replaces the old 4-day free
-// trial. Paid the same way as any other subscription (Paystack -> the
-// existing PaymentCallbackPage activation flow), just with a fixed
-// amount/duration instead of the regular per-plan pricing formula.
-const STARTER_PACK_AMOUNT_NGN = 5000;
+// trial. Paid by bank transfer through Flutterwave; the server prices it
+// (₦5,000 for 3 months) and activates it, then PaymentCallbackPage finishes onboarding.
 const STARTER_PACK_DURATION_MONTHS = 3;
 
 export default function PostSignupChoice() {
@@ -29,7 +28,6 @@ export default function PostSignupChoice() {
   const userId    = user?.id;
 
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
-  const [userEmail, setUserEmail]           = useState('');
   const [isChecking, setIsChecking]         = useState(true);
   const [isPaying, setIsPaying]             = useState(false);
 
@@ -57,7 +55,6 @@ export default function PostSignupChoice() {
         }
 
         setOnboardingData(saved);
-        setUserEmail(data?.email ?? user?.email ?? '');
       } catch (err) {
         console.error('Failed to load onboarding state:', err);
         toast.error('Could not load your progress. Please try again.');
@@ -71,55 +68,9 @@ export default function PostSignupChoice() {
     return () => { cancelled = true; };
   }, [userId, navigate, user?.email]);
 
-  const handleStartStarterPack = async () => {
+  const handleStartStarterPack = () => {
     if (!onboardingData) return;
-
     setIsPaying(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error('Session expired. Please sign in again.');
-        navigate('/login');
-        return;
-      }
-
-      await loadPaystackScript();
-      const reference = generateReference('STARTER');
-
-      // Short-lived — read back by PaymentCallbackPage right after the
-      // Paystack redirect, same pattern as a normal subscription purchase.
-      sessionStorage.setItem('subscription_plan',     'one_niche');
-      sessionStorage.setItem('subscription_duration', STARTER_PACK_DURATION_MONTHS.toString());
-      sessionStorage.setItem('subscription_amount',   STARTER_PACK_AMOUNT_NGN.toString());
-      sessionStorage.setItem('payment_reference',     reference);
-      sessionStorage.setItem('is_lifetime',           'false');
-
-      initializePayment({
-        email:  userEmail,
-        amount: toKobo(STARTER_PACK_AMOUNT_NGN),
-        reference,
-        metadata: {
-          plan:        'one_niche',
-          duration:    STARTER_PACK_DURATION_MONTHS,
-          niches:      onboardingData.selected_niches,
-          store_id:    onboardingData.store_id,
-          is_lifetime: false,
-          is_starter_pack: true,
-        },
-        onSuccess: (response) => {
-          toast.success('Payment successful!');
-          navigate(`/payment/callback?reference=${response.reference}`);
-        },
-        onCancel: () => {
-          setIsPaying(false);
-          toast.info('Payment cancelled. You can try again.');
-        },
-      });
-    } catch (err: any) {
-      console.error('Starter pack payment error:', err);
-      toast.error(err?.message || 'Payment initialization failed. Please try again.');
-      setIsPaying(false);
-    }
   };
 
   if (isChecking) {
@@ -210,7 +161,7 @@ export default function PostSignupChoice() {
             </Button>
 
             <p className="text-center text-xs text-gray-400 mt-4">
-              Secure payment powered by Paystack
+              Pay by bank transfer · secured by Flutterwave
             </p>
           </div>
 
@@ -222,6 +173,23 @@ export default function PostSignupChoice() {
           </p>
         </motion.div>
       </div>
+
+      {isPaying && onboardingData && (
+        <FlutterwavePayDialog
+          plan={{ tier: 'one_niche', duration: STARTER_PACK_DURATION_MONTHS, starter_pack: true, niches: onboardingData.selected_niches, store_id: onboardingData.store_id }}
+          planLabel="Starter Pack · ₦5,000 for 3 months"
+          onClose={() => setIsPaying(false)}
+          onPaid={(reference) => navigate(`/payment/callback?provider=flutterwave&reference=${reference}`)}
+        />
+      )}
+
+      <QbotGuide
+        stepId="plan-starter-pack"
+        message="₦5,000 unlocks 3 months of training, the seller community, and my weekly check-ins to keep you on track for profit."
+        imageSrc="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.2905509906139019.webp"
+        position="corner"
+        delayMs={700}
+      />
     </div>
   );
 }

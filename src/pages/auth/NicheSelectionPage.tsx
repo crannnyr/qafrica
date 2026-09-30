@@ -7,6 +7,7 @@ import { ShoppingBag, Lock } from 'lucide-react';
 import { supabase } from '@/services';
 import { useAuthStore } from '@/stores';
 import { toast } from 'sonner';
+import QbotGuide from '@/components/QbotGuide';
 
 import OnboardingProgress from './NicheSelection/OnboardingProgress';
 import NicheGrid from './NicheSelection/NicheGrid';
@@ -182,6 +183,14 @@ export default function NicheSelectionPage() {
           <a href="#" className="text-orange-600 hover:text-orange-700">Contact our support team</a>
         </p>
       </div>
+
+      <QbotGuide
+        stepId="niche-select"
+        message="Pick the niche that fits you best — I'll tailor tips, promo content, and ad ideas around it from day one."
+        imageSrc="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.23287452874705228.webp"
+        position="corner"
+        delayMs={700}
+      />
     </div>
   );
 }
