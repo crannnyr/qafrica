@@ -1,8 +1,8 @@
-insert into public.import_admin_permissions (key, name)
+insert into public.import_admin_permissions (key, name, section, action)
 values
-  ('import.promotions.view', 'View China Import Promotions'),
-  ('import.promotions.manage', 'Manage China Import Promotions')
-on conflict (key) do update set name = excluded.name;
+  ('import.promotions.view', 'View China Import Promotions', 'promotions', 'view'),
+  ('import.promotions.manage', 'Manage China Import Promotions', 'promotions', 'manage')
+on conflict (key) do update set name = excluded.name, section = excluded.section, action = excluded.action;
 
 insert into public.import_admin_role_permissions (role_id, permission_id)
 select r.id, p.id
