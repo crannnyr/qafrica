@@ -11,6 +11,7 @@ export default function ImportAdminV2Support() {
   const [searchParams] = useSearchParams();
   const ticketsView = searchParams.get('view') === 'tickets';
   const { loading, error, hasPermission } = useImportAdminPermissions(token);
+  const canViewTickets = hasPermission('import.tickets.view') || hasPermission('import.messages.view');
 
   if (!token) return null;
 
@@ -32,7 +33,7 @@ export default function ImportAdminV2Support() {
   }
 
   if (ticketsView) {
-    if (!hasPermission('import.tickets.view')) {
+    if (!canViewTickets) {
       return (
         <div className="rounded-2xl border border-gray-200 bg-white p-6">
           <h2 className="text-sm font-bold text-gray-900">Ticket access required</h2>
@@ -70,9 +71,9 @@ export default function ImportAdminV2Support() {
           <h1 className="text-xl font-bold text-gray-900">AI Support</h1>
           <p className="text-sm text-gray-500 mt-1">Live AI, human handoffs and resolved conversations.</p>
         </div>
-        {hasPermission('import.tickets.view') && (
+        {canViewTickets && (
           <Link to="/import-admin-v2/support?view=tickets" className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50">
-            <Ticket className="w-4 h-4" /> Support Tickets
+            <Ticket className="w-4 h-4" /> Tickets
           </Link>
         )}
       </div>
