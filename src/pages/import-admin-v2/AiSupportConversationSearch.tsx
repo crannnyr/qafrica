@@ -105,12 +105,12 @@ export default function AiSupportConversationSearch({ token }: { token: string }
         setSearching(true);
         setError(null);
         try {
-          const rows = conversations.length
+          const rows: Conversation[] = conversations.length
             ? conversations
-            : (await request(token, 'list_support_conversations')).conversations || [];
+            : ((await request(token, 'list_support_conversations')).conversations || []) as Conversation[];
           if (!conversations.length) setConversations(rows);
 
-          const candidateRows = rows.filter(conversation => {
+          const candidateRows = rows.filter((conversation: Conversation) => {
             const customer = customerOf(conversation);
             const basicText = normalize([
               conversation.id,
@@ -124,11 +124,11 @@ export default function AiSupportConversationSearch({ token }: { token: string }
             return terms.every(term => basicText.includes(term)) || terms.length > 0;
           });
 
-          const uncached = candidateRows.filter(row => !cacheRef.current[row.id]);
+          const uncached = candidateRows.filter((row: Conversation) => !cacheRef.current[row.id]);
           const fetched: Record<string, Message[]> = {};
           for (let i = 0; i < uncached.length; i += 8) {
             const batch = uncached.slice(i, i + 8);
-            const results = await Promise.all(batch.map(async conversation => {
+            const results = await Promise.all(batch.map(async (conversation: Conversation) => {
               try {
                 const data = await request(token, 'get_support_conversation', { conversation_id: conversation.id });
                 return [conversation.id, (data.messages || []) as Message[]] as const;
