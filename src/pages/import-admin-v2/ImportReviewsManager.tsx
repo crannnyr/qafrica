@@ -37,6 +37,7 @@ export default function ImportReviewsManager() {
   const [reviewers,setReviewers] = useState<Reviewer[]>([]);
   const [reviews,setReviews] = useState<Review[]>([]);
   const [selectedProduct,setSelectedProduct] = useState<string>('');
+  const [selectedProductData,setSelectedProductData] = useState<Product|null>(null);
   const [search,setSearch] = useState('');
   const [reviewSearch,setReviewSearch] = useState('');
   const [loading,setLoading] = useState(true);
@@ -59,9 +60,10 @@ export default function ImportReviewsManager() {
     return data;
   };
 
-  const load = async (page = 1, productSearch = '') => {
+  const load = async (page = 1, productSearch = '', initial = false) => {
     if(!token) return;
-    setLoading(true);
+    if (initial) setLoading(true);
+    else setProductsLoading(true);
     try {
       const [productRes, reviewerRes] = await Promise.all([
         fetch(PRODUCTS_FN+'?action=admin-products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({manager_token:token,page,per_page:50,search:productSearch})}),
@@ -75,7 +77,10 @@ export default function ImportReviewsManager() {
       setReviewers(reviewerRes.reviewers ?? []);
     } catch(e) {
       toast.error(e instanceof Error ? e.message : 'Could not load reviews manager');
-    } finally { setLoading(false); setProductsLoading(false); }
+    } finally {
+      if (initial) setLoading(false);
+      setProductsLoading(false);
+    }
   };
 
   const loadReviews = async (productId:string) => {
@@ -88,7 +93,7 @@ export default function ImportReviewsManager() {
     } finally { setReviewsLoading(false); }
   };
 
-  useEffect(()=>{ void load(1,''); },[]);
+  useEffect(()=>{ void load(1,'',true); },[]);
   useEffect(()=>{ if(selectedProduct) void loadReviews(selectedProduct); else setReviews([]); },[selectedProduct]);
 
   const filteredProducts = products;
@@ -104,7 +109,7 @@ export default function ImportReviewsManager() {
     return reviews.filter(r=>!q || r.customer_name.toLowerCase().includes(q) || (r.title??'').toLowerCase().includes(q) || (r.content??'').toLowerCase().includes(q));
   },[reviews,reviewSearch]);
 
-  const selected = products.find(p=>p.id===selectedProduct) ?? null;
+  const selected = products.find(p=>p.id===selectedProduct) ?? selectedProductData;
 
   const openCreate = () => {
     setEditing(null);
@@ -183,7 +188,7 @@ export default function ImportReviewsManager() {
           <div className="relative"><Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400"/><input value={search} onChange={e=>{setSearch(e.target.value);setProductPage(1);void load(1,e.target.value.trim());}} placeholder="Search products..." className="w-full pl-9 pr-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs outline-none focus:border-orange-300"/></div>
         </div>
         <div className="max-h-[60vh] overflow-y-auto p-2">
-          {filteredProducts.map(p=><button key={p.id} onClick={()=>setSelectedProduct(p.id)} className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left ${selectedProduct===p.id?'bg-orange-50 border border-orange-200':'hover:bg-gray-50'}`}>
+          {filteredProducts.map(p=><button key={p.id} onClick={()=>{setSelectedProduct(p.id);setSelectedProductData(p);}} className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left ${selectedProduct===p.id?'bg-orange-50 border border-orange-200':'hover:bg-gray-50'}`}>
             <img src={p.image_url || p.image_urls?.[0] || '/qafrica-bag-logo.svg'} className="w-11 h-11 rounded-lg object-cover bg-gray-100" alt=""/>
             <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p><p className="text-[10px] text-gray-400 mt-0.5">{p.category || 'Uncategorized'}</p></div>
           </button>)}
