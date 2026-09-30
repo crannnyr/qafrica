@@ -9,6 +9,7 @@ type Customer = {
   full_name?: string | null;
   email?: string | null;
   phone?: string | null;
+  avatar_url?: string | null;
 };
 
 type Conversation = {
@@ -84,22 +85,22 @@ export default function AiSupportConversationSearch({ token }: { token: string }
   useEffect(() => {
     let cancelled = false;
     void request(token, 'list_support_conversations').then(data => {
-      if (!cancelled) setConversations(data.conversations || []);
+      if (!cancelled) setConversations((data.conversations || []) as Conversation[]);
     }).catch(() => {
-      // The main support inbox will show its own loading/error state.
+      if (!cancelled) setError('Could not load support conversations for search.');
     });
     return () => { cancelled = true; };
   }, [token]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const terms = keywords(query);
-      if (!terms.length) {
-        setError(null);
-        setSearching(false);
-        return;
-      }
+    const terms = keywords(query);
+    if (!terms.length) {
+      setSearching(false);
+      setError(null);
+      return;
+    }
 
+    const timer = window.setTimeout(() => {
       const run = async () => {
         const currentRequest = ++requestId.current;
         setSearching(true);
@@ -110,25 +111,10 @@ export default function AiSupportConversationSearch({ token }: { token: string }
             : ((await request(token, 'list_support_conversations')).conversations || []) as Conversation[];
           if (!conversations.length) setConversations(rows);
 
-          const candidateRows = rows.filter((conversation: Conversation) => {
-            const customer = customerOf(conversation);
-            const basicText = normalize([
-              conversation.id,
-              conversation.wa_id,
-              conversation.customer_id,
-              customer?.full_name,
-              customer?.email,
-              customer?.phone,
-              conversation.status,
-            ].join(' '));
-            return terms.every(term => basicText.includes(term)) || terms.length > 0;
-          });
-
-          const uncached = candidateRows.filter((row: Conversation) => !cacheRef.current[row.id]);
-          const fetched: Record<string, Message[]> = {};
-          for (let i = 0; i < uncached.length; i += 8) {
-            const batch = uncached.slice(i, i + 8);
-            const results = await Promise.all(batch.map(async (conversation: Conversation) => {
+          const uncached = rows.filter(row => !cacheRef.current[row.id]);
+          for (let i = 0; i < uncached.length; i += 10) {
+            const batch = uncached.slice(i, i + 10);
+            const results = await Promise.all(batch.map(async conversation => {
               try {
                 const data = await request(token, 'get_support_conversation', { conversation_id: conversation.id });
                 return [conversation.id, (data.messages || []) as Message[]] as const;
@@ -136,27 +122,24 @@ export default function AiSupportConversationSearch({ token }: { token: string }
                 return [conversation.id, [] as Message[]] as const;
               }
             }));
-            for (const [id, messages] of results) {
-              cacheRef.current[id] = messages;
-              fetched[id] = messages;
-            }
+            for (const [id, messages] of results) cacheRef.current[id] = messages;
             if (currentRequest !== requestId.current) return;
           }
 
-          if (Object.keys(fetched).length) setDetails(prev => ({ ...prev, ...fetched }));
-          if (currentRequest !== requestId.current) return;
+          const nextDetails: Record<string, Message[]> = {};
+          for (const row of rows) nextDetails[row.id] = cacheRef.current[row.id] || [];
+          if (currentRequest === requestId.current) setDetails(nextDetails);
         } catch (err) {
           if (currentRequest === requestId.current) setError(err instanceof Error ? err.message : 'Could not search support conversations');
         } finally {
           if (currentRequest === requestId.current) setSearching(false);
         }
       };
-
       void run();
-    }, 300);
+    }, 250);
 
     return () => window.clearTimeout(timer);
-  }, [query, token, conversations]);
+  }, [query, token, conversations.length]);
 
   const results = useMemo<SearchResult[]>(() => {
     const terms = keywords(query);
@@ -165,6 +148,7 @@ export default function AiSupportConversationSearch({ token }: { token: string }
     return conversations.map(conversation => {
       const customer = customerOf(conversation);
       const messages = details[conversation.id] || cacheRef.current[conversation.id] || [];
+      const messageText = messages.map(message => message.body).join(' ');
       const combined = normalize([
         conversation.id,
         conversation.wa_id,
@@ -172,7 +156,8 @@ export default function AiSupportConversationSearch({ token }: { token: string }
         customer?.full_name,
         customer?.email,
         customer?.phone,
-        ...messages.map(message => message.body),
+        conversation.status,
+        messageText,
       ].join(' '));
       const matchedMessage = messages.find(message => {
         const text = normalize(message.body);
@@ -185,36 +170,13 @@ export default function AiSupportConversationSearch({ token }: { token: string }
   }, [query, conversations, details]);
 
   const openResult = (result: SearchResult) => {
-    const customer = customerOf(result.conversation);
-    const identifiers = [
-      customer?.full_name,
-      customer?.phone,
-      customer?.email,
-      result.conversation.wa_id,
-    ].map(normalize).filter(Boolean);
-
-    const root = document.querySelector('[data-qafrica-ai-support-inbox]') || document.body;
-    const candidates = Array.from(root.querySelectorAll('button, [role="button"], [data-conversation-id]'));
-    const target = candidates.find(element => {
-      const text = normalize(element.textContent);
-      return identifiers.some(identifier => identifier && text.includes(identifier));
-    }) as HTMLElement | undefined;
-
-    if (target) {
-      target.click();
-      setQuery('');
-      return;
-    }
-
-    // Fallback for the existing support inbox alert opener.
     window.dispatchEvent(new CustomEvent('qafrica-open-ai-support', {
       detail: { conversationId: result.conversation.id },
     }));
-    setQuery('');
   };
 
   return (
-    <div className="relative z-20 bg-white rounded-2xl border border-gray-100 p-3">
+    <div className="relative z-30 bg-white rounded-2xl border border-gray-100 p-3">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
         <input
@@ -236,16 +198,19 @@ export default function AiSupportConversationSearch({ token }: { token: string }
 
       {query.trim() && (
         <div className="mt-2 text-[10px] text-gray-400">
-          Searches <span className="font-semibold text-gray-500">all keywords</span> across customer details and WhatsApp messages.
+          Searches all keywords across customer details and WhatsApp messages.
+          {searching && <span className="ml-2 text-orange-500">Searching…</span>}
         </div>
       )}
 
-      {query.trim() && !searching && (
+      {query.trim() && (
         <div className="mt-2 rounded-xl border border-gray-100 overflow-hidden bg-white shadow-sm max-h-80 overflow-y-auto">
           {error ? (
             <div className="px-4 py-5 text-xs text-red-600">{error}</div>
           ) : results.length === 0 ? (
-            <div className="px-4 py-6 text-center text-xs text-gray-400">No support conversation matched those keywords.</div>
+            <div className="px-4 py-6 text-center text-xs text-gray-400">
+              {searching ? 'Searching support messages…' : 'No support conversation matched those keywords.'}
+            </div>
           ) : (
             results.slice(0, 30).map(result => {
               const customer = customerOf(result.conversation);
@@ -259,9 +224,13 @@ export default function AiSupportConversationSearch({ token }: { token: string }
                   className="w-full text-left px-3 py-2.5 border-b last:border-b-0 border-gray-100 hover:bg-orange-50/50 transition-colors"
                 >
                   <div className="flex items-start gap-2.5">
-                    <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
-                      <MessageCircle className="w-4 h-4 text-gray-500" />
-                    </div>
+                    {customer?.avatar_url ? (
+                      <img src={customer.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0 bg-gray-100" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                        <MessageCircle className="w-4 h-4 text-gray-500" />
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-gray-900 truncate">{title}</span>
