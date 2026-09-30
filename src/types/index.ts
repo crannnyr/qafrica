@@ -67,6 +67,23 @@ export interface SavedCard {
   updated_at: string;
 }
 
+/** A card tokenized with Flutterwave for store-subscription payments (flutterwave_saved_cards). */
+export interface FlutterwaveSavedCard {
+  id: string;
+  user_id: string;
+  provider_customer_id: string;
+  payment_method_id: string;
+  last4: string;
+  first6: string | null;
+  network: string | null;
+  exp_month: number;
+  exp_year: number;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 // Extends User — maps to the profiles table (store owners and staff)
 export interface StoreOwner extends User {
   role: 'store_owner' | 'admin' | 'staff';

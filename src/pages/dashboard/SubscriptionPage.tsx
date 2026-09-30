@@ -1,19 +1,20 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Crown, Check, ArrowRight, Calendar, CreditCard, 
+import {
+  Crown, Check, ArrowRight, Calendar, CreditCard,
   RefreshCw, AlertTriangle, ToggleLeft, ToggleRight,
-  Loader2, Zap, Sparkles, Wallet, Plus,
+  Loader2, Zap, Sparkles, Wallet, Plus, Building2,
   TrendingUp, Clock, Trash2, Infinity as InfinityIcon,
   AlertCircle, Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore, useWalletStore } from '@/stores';
 import { toast } from 'sonner';
-import { loadPaystackScript, initializePayment, generateReference } from '@/services/paystack';
 import FlutterwavePayDialog from '@/components/payments/FlutterwavePayDialog';
+import FlutterwaveCardPayDialog from '@/components/payments/FlutterwaveCardPayDialog';
+import { removeSavedCard, setDefaultSavedCard } from '@/services/flutterwave';
 import { supabase } from '@/services';
-import type { Subscription, SavedCard } from '@/types';
+import type { Subscription, FlutterwaveSavedCard } from '@/types';
 
 // Pricing configuration
 const TIER_CONFIG = {
@@ -89,13 +90,12 @@ export default function SubscriptionPage() {
   const { availableBalance: walletBalance } = useWalletStore();
   
   const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [savedCards, setSavedCards] = useState<FlutterwaveSavedCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  
+
   // Modals
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [showAddCardModal, setShowAddCardModal] = useState(false);
   const [selectedTier, setSelectedTier] = useState<keyof typeof TIER_CONFIG>('one_niche');
   const [selectedDuration, setSelectedDuration] = useState(3);
   const [isLifetime, setIsLifetime] = useState(false);
@@ -150,29 +150,18 @@ export default function SubscriptionPage() {
         }
       }
 
-      // Load saved cards
+      // Load saved cards (Flutterwave-tokenized — saved after a successful card payment)
       const { data: cardsData, error: cardsError } = await supabase
-        .from('saved_cards')
+        .from('flutterwave_saved_cards')
         .select('*')
         .eq('user_id', user.id)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .order('is_default', { ascending: false });
 
       if (cardsError) {
         console.error('Error loading cards:', cardsError);
       } else if (cardsData) {
-        setSavedCards(cardsData.map((c: any) => ({
-          id: c.id,
-          user_id: c.user_id,
-          paystack_authorization_code: c.paystack_authorization_code,
-          last4: c.last4,
-          brand: c.brand,
-          exp_month: c.exp_month,
-          exp_year: c.exp_year,
-          is_default: c.is_default,
-          is_active: c.is_active,
-          created_at: c.created_at,
-          updated_at: c.updated_at,
-        })));
+        setSavedCards(cardsData as FlutterwaveSavedCard[]);
       }
     } catch (err) {
       console.error('Error loading data:', err);
@@ -206,8 +195,9 @@ export default function SubscriptionPage() {
     };
   };
 
-  // ── Renew / upgrade: Flutterwave bank transfer; the server prices and activates the plan ──
-  const [payment, setPayment] = useState<{ tier: string; duration: number | 'lifetime'; label: string; autoRenew: boolean } | null>(null);
+  // ── Renew / upgrade: Flutterwave bank transfer or card; the server prices and activates the plan ──
+  const [payment, setPayment] = useState<{ tier: string; duration: number | 'lifetime'; label: string; amount: number; autoRenew: boolean } | null>(null);
+  const [cardPayment, setCardPayment] = useState<{ tier: string; duration: number | 'lifetime'; label: string; amount: number; autoRenew: boolean } | null>(null);
 
   const handleSubscribe = () => {
     const pricing = calculatePrice();
@@ -215,6 +205,18 @@ export default function SubscriptionPage() {
       tier: selectedTier,
       duration: pricing.isLifetime ? 'lifetime' : selectedDuration,
       label: `${TIER_CONFIG[selectedTier].name} · ${pricing.isLifetime ? 'Lifetime' : `${selectedDuration} month${selectedDuration > 1 ? 's' : ''}`}`,
+      amount: pricing.total,
+      autoRenew: autoRenewEnabled && !pricing.isLifetime,
+    });
+  };
+
+  const handleSubscribeByCard = () => {
+    const pricing = calculatePrice();
+    setCardPayment({
+      tier: selectedTier,
+      duration: pricing.isLifetime ? 'lifetime' : selectedDuration,
+      label: `${TIER_CONFIG[selectedTier].name} · ${pricing.isLifetime ? 'Lifetime' : `${selectedDuration} month${selectedDuration > 1 ? 's' : ''}`}`,
+      amount: pricing.total,
       autoRenew: autoRenewEnabled && !pricing.isLifetime,
     });
   };
@@ -224,9 +226,27 @@ export default function SubscriptionPage() {
     setPayment(null);
     setShowUpgradeModal(false);
     if (wantsAutoRenew && user?.id) {
-      // Renewal from wallet balance (card renewals are paused while card payments move to Flutterwave)
+      // Renewal from wallet balance
       await supabase.from('subscriptions')
         .update({ auto_renew: true, auto_renew_method: 'wallet' })
+        .eq('user_id', user.id).eq('is_active', true);
+    }
+    toast.success('Payment received. Your plan is active.');
+    loadData();
+  };
+
+  const onCardPaymentDone = async () => {
+    const wantsAutoRenew = cardPayment?.autoRenew;
+    setCardPayment(null);
+    setShowUpgradeModal(false);
+    if (wantsAutoRenew && user?.id) {
+      // The card just used was only just saved server-side (if the payer opted in). Point
+      // auto-renew at whichever card is now the default rather than guessing an id here.
+      const { data: defaultCard } = await supabase
+        .from('flutterwave_saved_cards')
+        .select('id').eq('user_id', user.id).eq('is_active', true).eq('is_default', true).maybeSingle();
+      await supabase.from('subscriptions')
+        .update({ auto_renew: true, auto_renew_method: defaultCard ? 'card' : 'wallet', auto_renew_card_id: defaultCard?.id ?? null })
         .eq('user_id', user.id).eq('is_active', true);
     }
     toast.success('Payment received. Your plan is active.');
@@ -240,14 +260,16 @@ export default function SubscriptionPage() {
     try {
       const newValue = !autoRenewEnabled;
       
-      const updates: any = { 
+      const updates: any = {
         auto_renew: newValue,
       };
-      
+
       if (newValue) {
         updates.auto_renew_method = autoRenewMethod;
+        updates.auto_renew_card_id = autoRenewMethod === 'card' ? (selectedCardId ?? savedCards.find((c) => c.is_default)?.id ?? null) : null;
       } else {
         updates.auto_renew_method = null;
+        updates.auto_renew_card_id = null;
       }
 
       const { error } = await supabase
@@ -268,18 +290,31 @@ export default function SubscriptionPage() {
 
   const handleAutoRenewMethodChange = async (method: 'wallet' | 'card') => {
     setAutoRenewMethod(method);
-    
+
     if (subscription && autoRenewEnabled) {
       try {
+        const cardId = method === 'card' ? (selectedCardId ?? savedCards.find((c) => c.is_default)?.id ?? null) : null;
+        if (method === 'card' && !cardId) {
+          toast.error('Save a card first (pay for a plan by card and choose to save it).');
+          return;
+        }
         await supabase
           .from('subscriptions')
-          .update({ auto_renew_method: method })
+          .update({ auto_renew_method: method, auto_renew_card_id: cardId })
           .eq('id', subscription.id);
         toast.success(`Auto-renewal set to use ${method === 'wallet' ? 'wallet balance' : 'saved card'}`);
       } catch (err: any) {
         toast.error('Failed to update payment method');
       }
     }
+  };
+
+  const handleSetDefaultCard = async (cardId: string) => {
+    setIsProcessing(true);
+    const res = await setDefaultSavedCard(cardId);
+    if (!res.ok) toast.error(res.message);
+    else { toast.success('Default card updated'); await loadData(); }
+    setIsProcessing(false);
   };
 
   const handleCancelSubscription = async () => {
@@ -306,82 +341,21 @@ export default function SubscriptionPage() {
     setIsProcessing(false);
   };
 
-  const handleAddCard = async () => {
-    if (!user?.email) {
-      toast.error('Email not found');
-      return;
-    }
-    
-    setIsProcessing(true);
-    
-    try {
-      await loadPaystackScript();
-      const reference = generateReference('CARD');
-      
-      const handlePaymentSuccess = async (response: any) => {
-        try {
-          console.log('Paystack success response:', response);
-          
-          const { data: verifyData, error: verifyError } = await supabase.functions.invoke('verify-and-save-card', {
-            body: { 
-              reference: response.reference, 
-              user_id: user.id 
-            },
-          });
-          
-          if (verifyError) throw verifyError;
-          
-          toast.success('Card saved successfully');
-          setShowAddCardModal(false);
-          await loadData();
-        } catch (err: any) {
-          console.error('Save card error:', err);
-          toast.error(err.message || 'Failed to save card');
-        } finally {
-          setIsProcessing(false);
-        }
-      };
-      
-      const handlePaymentCancel = () => {
-        toast.info('Card addition cancelled');
-        setIsProcessing(false);
-      };
-
-      initializePayment({
-        email: user.email,
-        amount: 5000, // ₦50 in kobo
-        reference,
-        metadata: {
-          user_id: user.id,
-          type: 'card_tokenization',
-        },
-        channels: ['card'],
-        onSuccess: handlePaymentSuccess,
-        onCancel: handlePaymentCancel,
-      });
-      
-    } catch (err: any) {
-      console.error('Add card initialization error:', err);
-      toast.error(err.message || 'Failed to initialize card payment');
-      setIsProcessing(false);
-    }
-  };
+  // A card is saved by Flutterwave only after a real, successful charge — there is no standalone
+  // "add a card" flow any more. Payers save a card when they pay for a plan by card and tick
+  // "Save this card for auto-renewal" (see FlutterwaveCardPayDialog).
 
   const handleDeleteCard = async (cardId: string) => {
-    try {
-      const { error } = await supabase
-        .from('saved_cards')
-        .update({ is_active: false })
-        .eq('id', cardId);
-
-      if (error) throw error;
-      
+    setIsProcessing(true);
+    const res = await removeSavedCard(cardId);
+    if (!res.ok) {
+      toast.error(res.message);
+    } else {
       setSavedCards(prev => prev.filter(c => c.id !== cardId));
       if (selectedCardId === cardId) setSelectedCardId(null);
       toast.success('Card removed');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to remove card');
     }
+    setIsProcessing(false);
     setShowDeleteCardConfirm(null);
   };
 
@@ -783,7 +757,8 @@ export default function SubscriptionPage() {
         </motion.div>
       )}
 
-      {/* Saved Payment Methods: older Paystack cards only; new plans are paid by bank transfer */}
+      {/* Saved Payment Methods (Flutterwave). A card lands here after a successful card payment
+          for a plan where the payer chose to save it. */}
       {savedCards.length > 0 && <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -794,22 +769,15 @@ export default function SubscriptionPage() {
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Saved cards</h3>
         </div>
 
-        {savedCards.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-            <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>No saved cards</p>
-            <p className="text-sm">Add a card for faster checkout</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
+        <div className="space-y-3">
             {savedCards.map((card) => (
               <div
                 key={card.id}
                 className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-6 bg-gradient-to-r from-blue-600 to-blue-800 rounded flex items-center justify-center text-[10px] font-bold text-white">
-                    {card.brand}
+                  <div className="w-10 h-6 bg-gradient-to-r from-blue-600 to-blue-800 rounded flex items-center justify-center text-[10px] font-bold text-white uppercase">
+                    {(card.network || 'card').slice(0, 4)}
                   </div>
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">•••• {card.last4}</p>
@@ -817,8 +785,16 @@ export default function SubscriptionPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {card.is_default && (
+                  {card.is_default ? (
                     <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">Default</span>
+                  ) : (
+                    <button
+                      onClick={() => handleSetDefaultCard(card.id)}
+                      disabled={isProcessing}
+                      className="text-xs text-orange-600 hover:underline disabled:opacity-50"
+                    >
+                      Make default
+                    </button>
                   )}
                   <button
                     onClick={() => setShowDeleteCardConfirm(card.id)}
@@ -829,8 +805,7 @@ export default function SubscriptionPage() {
                 </div>
               </div>
             ))}
-          </div>
-        )}
+        </div>
       </motion.div>}
 
       {/* Change Plan Section */}
@@ -1016,7 +991,9 @@ export default function SubscriptionPage() {
                       <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                         <p className="text-sm text-blue-800 dark:text-blue-300 flex items-center gap-2">
                           <Wallet className="w-4 h-4" />
-                          Your plan will renew from your QAFRICA wallet balance. Keep enough in your wallet before it ends.
+                          {autoRenewMethod === 'card'
+                            ? 'Your plan will renew automatically on the saved card you choose below.'
+                            : 'Your plan will renew from your QAFRICA wallet balance. Keep enough in your wallet before it ends.'}
                         </p>
                       </div>
                     )}
@@ -1046,6 +1023,20 @@ export default function SubscriptionPage() {
                               </p>
                             </button>
 
+                            <button
+                              onClick={() => setAutoRenewMethod('card')}
+                              className={`p-3 rounded-lg border-2 text-left transition-all ${
+                                autoRenewMethod === 'card'
+                                  ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/20'
+                                  : 'border-gray-200 dark:border-gray-600'
+                              }`}
+                            >
+                              <CreditCard className={`w-5 h-5 mb-2 ${autoRenewMethod === 'card' ? 'text-orange-500' : 'text-gray-400'}`} />
+                              <p className="font-medium text-gray-900 dark:text-white text-sm">Saved Card</p>
+                              <p className="text-xs text-gray-500">
+                                {savedCards.length > 0 ? `${savedCards.length} card(s) saved` : 'No cards saved'}
+                              </p>
+                            </button>
                           </div>
 
                           {autoRenewMethod === 'card' && savedCards.length > 0 && (
@@ -1062,8 +1053,8 @@ export default function SubscriptionPage() {
                                   }`}
                                 >
                                   <div className="flex items-center gap-3">
-                                    <div className="w-8 h-5 bg-gradient-to-r from-blue-600 to-blue-800 rounded flex items-center justify-center text-[10px] font-bold text-white">
-                                      {card.brand}
+                                    <div className="w-8 h-5 bg-gradient-to-r from-blue-600 to-blue-800 rounded flex items-center justify-center text-[10px] font-bold text-white uppercase">
+                                      {(card.network || 'card').slice(0, 4)}
                                     </div>
                                     <div>
                                       <p className="font-medium text-gray-900 dark:text-white text-sm">•••• {card.last4}</p>
@@ -1090,25 +1081,33 @@ export default function SubscriptionPage() {
                 )}
 
                 {/* Action Buttons */}
-                <div className="flex gap-3 sticky bottom-0 bg-white dark:bg-gray-800 pt-2 pb-2">
+                <div className="space-y-2 sticky bottom-0 bg-white dark:bg-gray-800 pt-2 pb-2">
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={handleSubscribe}
+                      disabled={isProcessing || !!payment || !!cardPayment}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      <Building2 className="w-4 h-4 mr-2" />
+                      Pay by transfer
+                    </Button>
+                    <Button
+                      onClick={handleSubscribeByCard}
+                      disabled={isProcessing || !!payment || !!cardPayment}
+                      className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                    >
+                      <CreditCard className="w-4 h-4 mr-2" />
+                      Pay {formatPrice(pricing.total)} by card
+                    </Button>
+                  </div>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     onClick={() => setShowUpgradeModal(false)}
-                    className="flex-1"
+                    className="w-full"
                     disabled={isProcessing}
                   >
                     Cancel
-                  </Button>
-                  <Button
-                    onClick={handleSubscribe}
-                    disabled={isProcessing || !!payment}
-                    className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
-                  >
-                    {isProcessing ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</>
-                    ) : (
-                      <><CreditCard className="w-4 h-4 mr-2" />Pay {formatPrice(pricing.total)} by transfer</>
-                    )}
                   </Button>
                 </div>
               </div>
@@ -1175,8 +1174,9 @@ export default function SubscriptionPage() {
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Remove Card?</h3>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Are you sure you want to remove this {savedCards.find(c => c.id === showDeleteCardConfirm)?.brand} card
+                  Are you sure you want to remove this {(savedCards.find(c => c.id === showDeleteCardConfirm)?.network || 'saved')} card
                   ending in <strong>{savedCards.find(c => c.id === showDeleteCardConfirm)?.last4}</strong>?
+                  {subscription?.auto_renew_method === 'card' ? ' Auto-renewal will be turned off if this is the card it uses.' : ''}
                 </p>
               </div>
               <div className="flex gap-3">
@@ -1200,58 +1200,22 @@ export default function SubscriptionPage() {
         )}
       </AnimatePresence>
 
-      {/* Add Card Modal */}
-      <AnimatePresence>
-        {showAddCardModal && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white dark:bg-gray-800 rounded-2xl max-w-md w-full p-6"
-            >
-              <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CreditCard className="w-8 h-8 text-orange-600" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Add Payment Card</h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-4">
-                  Add a card for faster checkout and auto-renewal.
-                  A temporary charge of ₦50 will be made to verify your card and refunded immediately.
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowAddCardModal(false)}
-                  className="flex-1"
-                  disabled={isProcessing}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleAddCard}
-                  disabled={isProcessing}
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
-                >
-                  {isProcessing ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Processing...</>
-                  ) : (
-                    <><Plus className="w-4 h-4 mr-2" />Add Card</>
-                  )}
-                </Button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
       {payment && (
         <FlutterwavePayDialog
           plan={{ tier: payment.tier, duration: payment.duration }}
           planLabel={payment.label}
           onClose={() => setPayment(null)}
           onPaid={() => { void onPaymentDone(); }}
+        />
+      )}
+
+      {cardPayment && (
+        <FlutterwaveCardPayDialog
+          plan={{ tier: cardPayment.tier, duration: cardPayment.duration }}
+          planLabel={cardPayment.label}
+          amount={cardPayment.amount}
+          onClose={() => setCardPayment(null)}
+          onPaid={() => { void onCardPaymentDone(); }}
         />
       )}
     </div>

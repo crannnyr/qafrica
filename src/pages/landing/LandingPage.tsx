@@ -1,7 +1,9 @@
 // src/pages/landing/LandingPage.tsx
 
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import SEO, { OrganizationSchema } from '@/components/SEO';
+import QbotGuide from '@/components/QbotGuide';
 
 import { FlyingLogo }          from './animations';
 import LandingNav              from './LandingNav';
@@ -17,6 +19,8 @@ import CtaSection              from './CtaSection';
 import FooterSection           from './FooterSection';
 
 export default function LandingPage() {
+  const navigate = useNavigate();
+
   // ── Nav state ──────────────────────────────────────────────────────────────
   const [isScrolled, setIsScrolled]             = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -141,6 +145,19 @@ export default function LandingPage() {
       <CtaSection />
 
       <FooterSection onScrollToSection={scrollToSection} />
+
+      {/* Qbot: greets everyone once the flying-logo intro settles, nudging them to start a store. */}
+      {animDone && (
+        <QbotGuide
+          stepId="home-intro"
+          message="Hey, I'm Qbot — your business analyst. Store, dropshipping, or ordering from vendors: whatever you're here for, I'll guide you the whole way."
+          ctaLabel="Start Your Store"
+          onCta={() => navigate('/signup')}
+          position="corner"
+          imageSrc="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.060143133080175715.webp"
+          imageSize="lg"
+        />
+      )}
 
     </div>
   );
