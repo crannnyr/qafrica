@@ -16,10 +16,13 @@
 // nag them again on that step (remembered per-browser). A fresh `stepId` on a later page always
 // shows again, so the guide still greets them at each stage of the journey.
 //
-// Positioning: `position="corner"` floats bottom-right, out of the way of page content — used
-// on roomy desktop/tablet viewports. On phones there usually isn't enough vertical room below
-// the hero for a corner card without it covering the primary CTA, so below the `sm` breakpoint
-// this always renders as a full backdrop popup instead, regardless of the `position` prop.
+// Positioning: `position="corner"` floats small in the bottom-right, out of the way of page
+// content — this is the default for every step except the homepage. `position="center"` is
+// reserved for the homepage's big introductory popup. A `corner` guide with `imageSize="lg"`
+// (a full-size character) doesn't reliably fit bottom-right on phones without covering page
+// content, so that specific combination falls back to a full backdrop popup below the `sm`
+// breakpoint; a `corner` guide with the default `imageSize="md"` stays a small, non-distracting
+// bottom-right card on every screen size.
 
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -36,7 +39,9 @@ interface QbotGuideProps {
   onCta?: () => void;
   /** Cutout character image (transparent background). Falls back to the QAFRICA bag mark. */
   imageSrc?: string;
-  /** 'corner' floats bottom-right on desktop (always 'center' on phones — see file header).
+  /** 'corner' floats small in the bottom-right on every screen size (falls back to a
+   *  centered popup on phones only when paired with imageSize="lg" — see file header).
+   *  'center' is the big backdrop popup, reserved for the homepage intro.
    *  'inline' sits in normal page flow (e.g. above a form), character pointing down at
    *  whatever follows it — never forced to 'center' on mobile since it doesn't float. */
   position?: QbotPosition;
@@ -95,9 +100,12 @@ export default function QbotGuide({
 }: QbotGuideProps) {
   const [visible, setVisible] = useState(false);
   const isMobile = useIsMobile();
-  // Only the floating 'corner' widget needs to fall back on phones (not enough room without
-  // covering page content) — 'inline' already sits safely in the page's own flow.
-  const effectivePosition: QbotPosition = isMobile && position === 'corner' ? 'center' : position;
+  const isLg = imageSize === 'lg';
+  // Only a large-character 'corner' widget needs to fall back on phones (not enough room
+  // without covering page content) — a small 'md' corner card stays put on every screen,
+  // and 'inline' already sits safely in the page's own flow.
+  const effectivePosition: QbotPosition =
+    isMobile && position === 'corner' && isLg ? 'center' : position;
 
   useEffect(() => {
     if (!alwaysShow && getDismissed()[stepId]) return;
@@ -115,119 +123,38 @@ export default function QbotGuide({
     dismiss();
   };
 
-  const isLg = imageSize === 'lg';
   const isCenter = effectivePosition === 'center';
   const isInline = effectivePosition === 'inline';
   const isCorner = effectivePosition === 'corner';
 
   const card = (
     <div className={`relative ${isLg ? 'pt-9 sm:pt-11' : ''}`}>
-      {/* Full-body character, peeking above the bubble */}
       {isLg && (
-        <motion.img
-          src={imageSrc}
-          alt="Qbot"
-          animate={{ y: [0, -6, 0] }}
-          transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute -top-1 left-1/2 -translate-x-1/2 w-20 sm:w-24 h-auto object-contain drop-shadow-xl select-none pointer-events-none"
-          draggable={false}
-        />
+        <motion.img src={imageSrc} alt="Qbot" animate={{ y: [0, -6, 0] }} transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }} className="absolute -top-1 left-1/2 -translate-x-1/2 w-20 sm:w-24 h-auto object-contain drop-shadow-xl select-none pointer-events-none" draggable={false} />
       )}
-
       <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-2xl ring-1 ring-black/5 dark:ring-white/10 p-4 pr-9">
-        <button
-          onClick={dismiss}
-          aria-label="Dismiss"
-          className="absolute top-2 right-2 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
-
+        <button onClick={dismiss} aria-label="Dismiss" className="absolute top-2 right-2 p-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"><X className="w-3.5 h-3.5" /></button>
         <div className={isLg ? 'text-center' : 'flex items-start gap-3'}>
-          {!isLg && (
-            <motion.img
-              src={imageSrc}
-              alt="Qbot"
-              animate={{ y: [0, -4, 0] }}
-              transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-              className="w-11 h-11 sm:w-14 sm:h-14 flex-shrink-0 object-contain drop-shadow-md"
-            />
-          )}
+          {!isLg && <motion.img src={imageSrc} alt="Qbot" animate={{ y: [0, -4, 0] }} transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }} className="w-11 h-11 sm:w-14 sm:h-14 flex-shrink-0 object-contain drop-shadow-md" />}
           <div className="min-w-0 pt-0.5">
             <p className="text-[11px] sm:text-xs font-semibold text-orange-500 mb-0.5">Qbot</p>
             <p className="text-[13px] sm:text-sm text-gray-700 dark:text-gray-200 leading-snug">{message}</p>
-            {ctaLabel && (
-              <button
-                onClick={handleCta}
-                className={`mt-3 inline-flex items-center gap-1 text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white px-3.5 py-2 rounded-lg transition-colors ${isLg ? 'w-full justify-center' : ''}`}
-              >
-                {ctaLabel}
-              </button>
-            )}
+            {ctaLabel && <button onClick={handleCta} className={`mt-3 inline-flex items-center gap-1 text-xs font-semibold bg-orange-500 hover:bg-orange-600 text-white px-3.5 py-2 rounded-lg transition-colors ${isLg ? 'w-full justify-center' : ''}`}>{ctaLabel}</button>}
           </div>
         </div>
-
-        {/* Speech-bubble tail, corner mode only — inline already connects via the overlapping character */}
-        {isCorner && (
-          <div className="hidden sm:block absolute -bottom-1.5 right-10 w-3 h-3 bg-white dark:bg-gray-800 rotate-45 ring-1 ring-black/5 dark:ring-white/10" />
-        )}
+        {isCorner && <div className="hidden sm:block absolute -bottom-1.5 right-10 w-3 h-3 bg-white dark:bg-gray-800 rotate-45 ring-1 ring-black/5 dark:ring-white/10" />}
       </div>
     </div>
   );
 
   return (
     <AnimatePresence>
-      {visible && (
-        <>
-          {isCenter && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 z-[90]"
-              onClick={dismiss}
-            />
-          )}
-
-          {isCenter && (
-            <div className="fixed inset-0 z-[91] flex items-center justify-center p-5 pointer-events-none">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.92, y: 16 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.92, y: 16 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-                className="w-full max-w-xs pointer-events-auto"
-              >
-                {card}
-              </motion.div>
-            </div>
-          )}
-
-          {isCorner && (
-            <motion.div
-              initial={{ opacity: 0, y: 40, x: 24 }}
-              animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
-              exit={{ opacity: 0, y: 40 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-              className={`fixed z-[91] bottom-6 right-6 ${isLg ? 'w-80' : 'w-72'}`}
-            >
-              {card}
-            </motion.div>
-          )}
-
-          {isInline && (
-            <motion.div
-              initial={{ opacity: 0, y: -16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -16 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-              className="relative w-full max-w-xs mx-auto"
-            >
-              {card}
-            </motion.div>
-          )}
-        </>
-      )}
+      {visible && <>
+        {isCenter && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 z-[90]" onClick={dismiss} />}
+        {isCenter && <div className="fixed inset-0 z-[91] flex items-center justify-center p-5 pointer-events-none"><motion.div initial={{ opacity: 0, scale: 0.92, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.92, y: 16 }} transition={{ type: 'spring', stiffness: 300, damping: 24 }} className="w-full max-w-xs pointer-events-auto">{card}</motion.div></div>}
+        {isCorner && <motion.div initial={{ opacity: 0, y: 40, x: 24 }} animate={{ opacity: 1, scale: 1, y: 0, x: 0 }} exit={{ opacity: 0, y: 40 }} transition={{ type: 'spring', stiffness: 300, damping: 24 }} className={`fixed z-[91] bottom-4 right-4 sm:bottom-6 sm:right-6 max-w-[calc(100vw-2rem)] ${isLg ? 'w-80' : 'w-64 sm:w-72'}`}>{card}</motion.div>}
+        {isInline && <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }} transition={{ type: 'spring', stiffness: 300, damping: 24 }} className="relative w-full max-w-xs mx-auto">{card}</motion.div>}
+      </>}
     </AnimatePresence>
   );
 }
