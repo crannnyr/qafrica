@@ -20,7 +20,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'import.reviews.view': 'View Reviews', 'import.categories.view': 'View Categories', 'import.trending.view': 'View Trending',
   'import.clients.view': 'View Clients', 'import.messages.view': 'View Messages', 'import.messages.send': 'Send Messages',
   'import.tickets.view': 'View Support Tickets', 'import.tickets.manage': 'Manage Support Tickets', 'import.questions.view': 'View Questions', 'import.broadcast.send': 'Send Broadcasts',
-  'import.expenses.view': 'View Expenses', 'import.pricing_shipping.view': 'View Pricing & Shipping', 'import.settings.view': 'View Settings',
+  'import.expenses.view': 'View Expenses', 'import.pricing_shipping.view': 'View Pricing & Shipping', 'import.promotions.view': 'View China Import Promotions', 'import.promotions.manage': 'Manage China Import Promotions', 'import.settings.view': 'View Settings',
   'import.admin_access.view': 'View Admin Access',
 };
 
@@ -58,7 +58,7 @@ const NAV = [
   { section: 'Finance & Administration', items: [
     { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses', permission: 'import.expenses.view' },
     { icon: Truck, label: 'Pricing & Shipping', path: '/import-admin-v2/pricing-shipping', permission: 'import.pricing_shipping.view' },
-    { icon: Ticket, label: 'Promotions', path: '/import-admin-v2/pricing-shipping?view=promotions', permission: 'import.pricing_shipping.view' },
+    { icon: Ticket, label: 'Promotions', path: '/import-admin-v2/pricing-shipping?view=promotions', permission: 'import.promotions.view' },
     { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings', permission: 'import.settings.view' },
     { icon: UserCog, label: 'Admin Access', path: '/import-admin-v2/admin-access', permission: 'import.admin_access.view' },
   ] },
@@ -126,6 +126,7 @@ export default function ManagementLayout() {
     const [pathname, search] = path.split('?');
     if (search) return location.pathname === pathname && location.search === `?${search}`;
     if (pathname === '/import-admin-v2/support') return location.pathname === pathname && location.search !== '?view=tickets';
+    if (pathname === '/import-admin-v2/pricing-shipping') return location.pathname === pathname && location.search !== '?view=promotions';
     return location.pathname === pathname || location.pathname.startsWith(pathname + '/');
   };
   const activeItem = NAV.flatMap(section => section.items).find(n => isActive(n.path));
