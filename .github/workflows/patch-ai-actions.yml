@@ -1,0 +1,40 @@
+name: Patch AI customer actions
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[ai-actions-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch import AI support
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('supabase/functions/import-ai-support/index.ts')
+          text=p.read_text()
+          old="""  { type:'function', name:'get_my_addresses', description:'Get the authenticated customer import address book and defaults.', parameters:{type:'object',properties:{},additionalProperties:false}},\n"""
+          new=old+"""  { type:'function', name:'update_import_order_address', description:'Update the delivery address for one authenticated customer import order. Use this when the customer explicitly asks to change an existing order delivery address. First inspect the order with get_my_order_context. Never use this for Jumia/pickup-station orders; those delivery addresses must not be changed by AI.', parameters:{type:'object',properties:{order_id:{type:'string'},address:{type:'object',properties:{name:{type:'string'},phone:{type:'string'},address_line1:{type:'string'},address_line2:{type:'string'},city:{type:'string'},state:{type:'string'},landmark:{type:'string'}},required:['name','phone','address_line1','city','state'],additionalProperties:false}},required:['order_id','address'],additionalProperties:false}},\n  { type:'function', name:'update_import_order_variant', description:'Update the selected product variant on one authenticated customer import order. Use this only when the customer explicitly asks to change a product variant. First inspect the order and identify the exact product. Validate the selected variant against the product record before changing it.', parameters:{type:'object',properties:{order_id:{type:'string'},product_id:{type:'string'},variant_options:{type:'object',additionalProperties:{type:'string'}}},required:['order_id','product_id','variant_options'],additionalProperties:false}},\n"""
+          if old not in text: raise SystemExit('customer tool anchor not found')
+          text=text.replace(old,new,1)
+          anchor="""  if (name === 'get_my_addresses') {\n    const [{data:addresses,error:ae},{data:defaults,error:de}]=await Promise.all([\n      s.from('import_customer_addresses').select('id,label,name,phone,address_line1,address_line2,city,state,landmark,is_default,preferred_pickup_station_id,created_at,updated_at').eq('customer_id',id).order('is_default',{ascending:false}).order('updated_at',{ascending:false}),\n      s.from('customers').select('import_default_delivery_mode,import_default_pickup_station_id').eq('id',id).single()\n    ]); if(ae)throw ae;if(de)throw de;return {addresses:addresses??[],defaults}\n  }\n"""
+          insert=anchor+"""  if (name === 'update_import_order_address') {\n    const orderId=clean(a.order_id,80); if(!orderId) throw new Error('order_id is required');\n    const {data:order,error:oe}=await s.from('china_import_orders').select('id,code,delivery_mode,delivery_type,status,shipped_at').eq('id',orderId).eq('user_id',id).maybeSingle();\n    if(oe) throw oe; if(!order) throw new Error('Order not found');\n    const isJumia=String(order.delivery_mode??'').toLowerCase()==='pickup_station' || String(order.delivery_type??'').toLowerCase()==='jumia';\n    if(isJumia) return {success:false,blocked:true,reason:'Jumia/pickup-station delivery addresses cannot be changed by AI',order_id:order.id,code:order.code};\n    const {data,error}=await s.rpc('ai_update_import_order_address',{p_customer_id:id,p_order_id:order.id,p_address:a.address});\n    if(error) throw new Error(error.message||'The delivery address could not be updated');\n    return data;\n  }\n  if (name === 'update_import_order_variant') {\n    const orderId=clean(a.order_id,80),productId=clean(a.product_id,80); if(!orderId||!productId) throw new Error('order_id and product_id are required');\n    const {data:order,error:oe}=await s.from('china_import_orders').select('id,code,status,shipped_at').eq('id',orderId).eq('user_id',id).maybeSingle();\n    if(oe) throw oe; if(!order) throw new Error('Order not found');\n    const {data,error}=await s.rpc('ai_update_import_order_variant',{p_customer_id:id,p_order_id:order.id,p_product_id:productId,p_variant_options:a.variant_options??{}});\n    if(error) throw new Error(error.message||'The product variant could not be updated');\n    return data;\n  }\n"""
+          if anchor not in text: raise SystemExit('handler anchor not found')
+          text=text.replace(anchor,insert,1)
+          prompt_anchor="""A conversation marked resolved has been closed; if a customer later starts a new support request, treat the new request as active again rather than assuming the old issue is still unresolved. """
+          prompt_add=prompt_anchor+"""For existing import-order changes, you can update a customer's delivery address and product variant through controlled tools. When a customer asks to change an existing order's delivery address, identify the exact order, inspect its current order context, collect the complete new address, then use update_import_order_address. Do not tell the customer that address changes require human support when the order is an eligible home-delivery order and the tool can perform the change. Never update a Jumia/pickup-station delivery address with AI; if the customer asks to change one, explain that this delivery mode cannot be changed by AI and use human support only if the customer needs further assistance. When a customer asks to change a product variant, identify the exact order and product, ask for any missing variant choices, then use update_import_order_variant. Never claim a variant was changed until the tool returns success. """
+          if prompt_anchor not in text: raise SystemExit('prompt anchor not found')
+          text=text.replace(prompt_anchor,prompt_add,1)
+          p.write_text(text)
+          PY
+      - name: Commit patched function
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add supabase/functions/import-ai-support/index.ts
+          git rm .github/workflows/patch-ai-actions.yml
+          git commit -m 'Fix AI order address and variant updates [ai-actions-patched]'
+          git push
