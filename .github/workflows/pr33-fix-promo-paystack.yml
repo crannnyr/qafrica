@@ -1,0 +1,154 @@
+name: PR33 promo Paystack fix
+
+on:
+  push:
+    branches:
+      - feature/china-import-promotions
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch promo checkout flow
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+
+          promo = Path('src/pages/recommendations/ChinaImportPromoCode.tsx')
+          s = promo.read_text()
+          old = "  message: string;\n};"
+          new = """  message: string;
+            pending_order?: {
+              id: string;
+              code: string;
+              subtotal_ngn: number;
+              total_ngn: number;
+              promotion_id: string | null;
+              promotion_code: string | null;
+              promotion_discount_ngn: number;
+            } | null;
+          };"""
+          if old not in s:
+              raise SystemExit('Promo type marker not found')
+          s = s.replace(old, new, 1)
+          old = "      const next = data.promotion as ChinaImportPromotionQuote | null;"
+          new = """      const next = data.promotion
+            ? ({ ...(data.promotion as ChinaImportPromotionQuote), pending_order: data.pending_order ?? null } as ChinaImportPromotionQuote)
+            : null;"""
+          if old not in s:
+              raise SystemExit('Promo response marker not found')
+          s = s.replace(old, new, 1)
+          promo.write_text(s)
+
+          checkout = Path('src/pages/recommendations/ImportCheckoutSheet.tsx')
+          s = checkout.read_text()
+          start_marker = "      const res = await fetch(`${EDGE_URL}?action=checkout-init`, {"
+          end_marker = "\n\n      if (paymentMethod === 'manual') {"
+          start = s.find(start_marker)
+          if start < 0:
+              raise SystemExit('checkout-init start marker not found')
+          end = s.find(end_marker, start)
+          if end < 0:
+              raise SystemExit('checkout-init end marker not found')
+
+          replacement = """      let data: any;
+
+          // Reuse the pending order already updated by promo validation.
+          // This prevents the legacy checkout-init endpoint from creating a
+          // second full-price order after a promo has been applied.
+          if (promoQuote?.pending_order?.id) {
+            data = {
+              order_id: promoQuote.pending_order.id,
+              code: promoQuote.pending_order.code,
+              subtotal_ngn: Number(promoQuote.pending_order.subtotal_ngn),
+              total_ngn: Number(promoQuote.pending_order.total_ngn),
+            };
+          } else {
+            // Keep checkout-init backward compatible. It creates the pending
+            // order first; the dedicated China Import promo endpoint updates
+            // that exact order to the discounted amount below.
+            const res = await fetch(`${EDGE_URL}?action=checkout-init`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customer_id: customer.id,
+                customer_name: customer.full_name,
+                customer_whatsapp: whatsapp.trim(),
+                delivery_type: 'to_me',
+                delivery_mode: deliveryMode,
+                pickup_station_id: deliveryMode === 'pickup_station' ? selectedStationId : undefined,
+                address_id: deliveryMode === 'home' && selectedAddressId !== 'new' ? selectedAddressId : undefined,
+                shipping_method: cart.length === 1 ? shippingMethod : undefined,
+                delivery_address: address,
+                delivery_latitude: coords?.lat, delivery_longitude: coords?.lng,
+                location_shared: !!coords,
+                payment_method: paymentMethod,
+                items: cart.map(i => ({
+                  id: i.id, name: i.name, price_ngn: i.price_ngn, price_cny: i.price_cny,
+                  quantity: i.quantity, image_url: i.image_url,
+                  variant_options: i.variant_selection ?? undefined,
+                  shipping_method: shippingMethodFor(i),
+                })),
+              }),
+            });
+            data = await res.json();
+            if (!res.ok) {
+              if (data.error === 'duplicate_pending_order') {
+                throw new Error(data.message ?? 'You already have a pending order for this — check your dashboard to complete payment.');
+              }
+              throw new Error(data.error ?? 'Checkout failed');
+            }
+
+            // The deployed checkout-init endpoint does not know about the new
+            // China Import promo fields yet. Revalidate here so the dedicated
+            // promo function updates the newly-created order before Paystack
+            // is opened. The amount below is always the updated server value.
+            if (promoQuote?.promotion_id && promoQuote.code) {
+              const promoRes = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/china-import-promotions?action=validate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  customer_id: customer.id,
+                  code: promoQuote.code,
+                  order_subtotal_ngn: Number(data.subtotal_ngn ?? subtotal),
+                }),
+              });
+              const promoData = await promoRes.json();
+              if (!promoRes.ok) throw new Error(promoData.error ?? 'Could not apply promo code to the order');
+              const updated = promoData.pending_order;
+              if (!updated?.id) {
+                throw new Error('The promo was validated, but the checkout order could not be updated. Please try again.');
+              }
+              data = {
+                ...data,
+                order_id: updated.id,
+                code: updated.code ?? data.code,
+                subtotal_ngn: Number(updated.subtotal_ngn),
+                total_ngn: Number(updated.total_ngn),
+              };
+            }
+          }"""
+          s = s[:start] + replacement + s[end:]
+
+          old = "metadata: { type: 'china_import_order', order_id: data.order_id, code: data.code },"
+          new = "metadata: { type: 'china_import_order', order_id: data.order_id, code: data.code, promo_code: promoQuote?.code ?? undefined, promo_discount_ngn: promoDiscount },"
+          if old not in s:
+              raise SystemExit('Paystack metadata marker not found')
+          s = s.replace(old, new, 1)
+          checkout.write_text(s)
+
+          subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
+          subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+          subprocess.run(['git', 'rm', '.github/workflows/pr33-fix-promo-paystack.yml'], check=True)
+          subprocess.run(['git', 'add', 'src/pages/recommendations/ChinaImportPromoCode.tsx', 'src/pages/recommendations/ImportCheckoutSheet.tsx'], check=True)
+          subprocess.run(['git', 'commit', '-m', 'Fix PR33 promo amount passed to Paystack'], check=True)
+          subprocess.run(['git', 'push'], check=True)
