@@ -94,15 +94,13 @@ export default function HeroSection({
                   Order from China
                   <ArrowRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                 </Link>
-                <a
-                  href="https://opticsview.store"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <Link
+                  to="/stores"
                   className="group flex items-center justify-center gap-1.5 px-5 py-3 rounded-xl border border-gray-200 dark:border-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:border-orange-300 hover:text-orange-600 transition-colors"
                 >
                   Shop from Verified QAFRICA Vendors
                   <ArrowRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
-                </a>
+                </Link>
               </div>
             </motion.div>
 
