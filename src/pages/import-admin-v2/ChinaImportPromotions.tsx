@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Pencil, Power, RefreshCw, Tag, X } from 'lucide-react';
+import { Plus, Pencil, Power, RefreshCw, X } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { getManagementToken } from './ManagementAuth';
 
@@ -150,7 +150,7 @@ export default function ChinaImportPromotions() {
     <div className="space-y-4">
       <div className="mb-4">
         <h1 className="text-2xl font-bold text-gray-900">China Import Promotions</h1>
-        <p className="text-sm text-gray-500 mt-1">Promo codes for /recommendations only. Storefront coupons are not used here.</p>
+        <p className="text-sm text-gray-500 mt-1">Manage promo codes used during China Import checkout.</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
