@@ -14,30 +14,47 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 
 const clean = (v: unknown, max = 5000) => String(v ?? '').trim().slice(0, max)
 
-async function requireAdmin(s: any, token: unknown, permission = 'import.tickets.view') {
+async function getManagerId(s: any, token: unknown) {
   if (!token || typeof token !== 'string') throw new Error('Admin authentication required')
-
   const { data: session, error: se } = await s.from('import_admin_sessions')
     .select('manager_id').eq('token', token).gt('expires_at', new Date().toISOString()).maybeSingle()
   if (se || !session) throw new Error('Invalid or expired admin session')
+  return session.manager_id as string
+}
 
+async function managerHasPermission(s: any, managerId: string, permission: string) {
   const { data: roles, error: re } = await s.from('import_admin_manager_roles')
-    .select('role_id').eq('manager_id', session.manager_id)
+    .select('role_id').eq('manager_id', managerId)
   if (re) throw re
   const roleIds = (roles ?? []).map((x: any) => x.role_id)
-  if (!roleIds.length) throw new Error(`Missing permission: ${permission}`)
+  if (!roleIds.length) return false
 
   const { data: links, error: le } = await s.from('import_admin_role_permissions')
     .select('permission_id').in('role_id', roleIds)
   if (le) throw le
   const permissionIds = (links ?? []).map((x: any) => x.permission_id)
-  if (!permissionIds.length) throw new Error(`Missing permission: ${permission}`)
+  if (!permissionIds.length) return false
 
   const { data: perms, error: pe } = await s.from('import_admin_permissions')
     .select('key').in('id', permissionIds)
   if (pe) throw pe
-  if (!(perms ?? []).some((p: any) => p.key === permission)) throw new Error(`Missing permission: ${permission}`)
-  return session.manager_id
+  return (perms ?? []).some((p: any) => p.key === permission)
+}
+
+async function requireAdmin(s: any, token: unknown, permission = 'import.tickets.view') {
+  const managerId = await getManagerId(s, token)
+  if (!(await managerHasPermission(s, managerId, permission))) {
+    throw new Error(`Missing permission: ${permission}`)
+  }
+  return managerId
+}
+
+async function requireTicketViewer(s: any, token: unknown) {
+  const managerId = await getManagerId(s, token)
+  const canView = await managerHasPermission(s, managerId, 'import.tickets.view')
+    || await managerHasPermission(s, managerId, 'import.messages.view')
+  if (!canView) throw new Error('Missing permission: import.tickets.view')
+  return managerId
 }
 
 async function main(req: Request) {
@@ -53,23 +70,30 @@ async function main(req: Request) {
   )
 
   if (action === 'list_tickets') {
-    await requireAdmin(s, token, 'import.tickets.view')
+    await requireTicketViewer(s, token)
     const status = clean(body.status, 40)
     const query = clean(body.query, 200)
     let q = s.from('import_support_tickets')
       .select('id,ticket_number,customer_id,conversation_id,order_id,order_code,category,subject,description,status,priority,assigned_agent_id,resolution_notes,created_by,created_at,updated_at,resolved_at,closed_at,customers(id,full_name,email,phone,avatar_url)')
       .order('updated_at', { ascending: false }).limit(1000)
     if (status && status !== 'all') q = q.eq('status', status)
-    if (query) {
-      q = q.or(`subject.ilike.%${query}%,description.ilike.%${query}%,order_code.ilike.%${query}%`)
-    }
+    if (query) q = q.or(`subject.ilike.%${query}%,description.ilike.%${query}%,order_code.ilike.%${query}%`)
     const { data, error } = await q
     if (error) throw error
     return { tickets: data ?? [] }
   }
 
+  if (action === 'count_tickets') {
+    await requireTicketViewer(s, token)
+    const { count, error } = await s.from('import_support_tickets')
+      .select('id', { count: 'exact', head: true })
+      .in('status', ['open', 'in_progress', 'waiting_customer'])
+    if (error) throw error
+    return { count: count ?? 0 }
+  }
+
   if (action === 'get_ticket') {
-    await requireAdmin(s, token, 'import.tickets.view')
+    await requireTicketViewer(s, token)
     const id = clean(body.ticket_id, 80)
     if (!id) throw new Error('ticket_id is required')
     const { data, error } = await s.from('import_support_tickets')
