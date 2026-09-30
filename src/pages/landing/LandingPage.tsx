@@ -146,14 +146,15 @@ export default function LandingPage() {
 
       <FooterSection onScrollToSection={scrollToSection} />
 
-      {/* Qbot: greets everyone once the flying-logo intro settles, nudging them to start a store. */}
+      {/* Qbot: greets everyone once the flying-logo intro settles — the one big, centered
+          moment in the whole funnel. Every other step keeps Qbot small in the corner. */}
       {animDone && (
         <QbotGuide
           stepId="home-intro"
-          message="Hey, I'm Qbot — your business analyst. Store, dropshipping, or ordering from vendors: whatever you're here for, I'll guide you the whole way."
+          message="Hi, I'm Qbot — not just an AI, your business analyst. Storefront, dropshipping, or reselling vendors' products: I'll show you what works, connect your social media ads, and check in weekly to keep you profitable. QAFRICA never leaves you behind — let's begin this journey."
           ctaLabel="Start Your Store"
           onCta={() => navigate('/signup')}
-          position="corner"
+          position="center"
           imageSrc="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.060143133080175715.webp"
           imageSize="lg"
         />

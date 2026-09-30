@@ -135,20 +135,17 @@ export default function SignupPage() {
           </Link>
         </div>
 
-        {/* Qbot: points straight down at the form, nudging you to fill it in */}
-        <div className="relative z-10 mb-[-1.75rem] flex justify-center">
-          <QbotGuide
-            stepId="signup-intro"
-            message="You're almost in! Fill this out and I'll take you straight to picking your niche."
-            imageSrc="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.14775864147143236.webp"
-            imageSize="lg"
-            position="inline"
-            delayMs={300}
-          />
-        </div>
+        {/* Qbot: small, out-of-the-way nudge in the corner — not the main event on this step */}
+        <QbotGuide
+          stepId="signup-intro"
+          message="You're almost in! Fill this out and I'll take you straight to picking your niche."
+          imageSrc="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.14775864147143236.webp"
+          position="corner"
+          delayMs={500}
+        />
 
         {/* Signup Card */}
-        <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8 pt-10">
+        <div className="relative bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-8">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Create Your Account</h1>
             <p className="text-gray-500 dark:text-gray-400">Start your e-commerce journey today</p>

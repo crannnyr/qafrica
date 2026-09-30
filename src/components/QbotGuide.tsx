@@ -16,10 +16,13 @@
 // nag them again on that step (remembered per-browser). A fresh `stepId` on a later page always
 // shows again, so the guide still greets them at each stage of the journey.
 //
-// Positioning: `position="corner"` floats bottom-right, out of the way of page content — used
-// on roomy desktop/tablet viewports. On phones there usually isn't enough vertical room below
-// the hero for a corner card without it covering the primary CTA, so below the `sm` breakpoint
-// this always renders as a full backdrop popup instead, regardless of the `position` prop.
+// Positioning: `position="corner"` floats small in the bottom-right, out of the way of page
+// content — this is the default for every step except the homepage. `position="center"` is
+// reserved for the homepage's big introductory popup. A `corner` guide with `imageSize="lg"`
+// (a full-size character) doesn't reliably fit bottom-right on phones without covering page
+// content, so that specific combination falls back to a full backdrop popup below the `sm`
+// breakpoint; a `corner` guide with the default `imageSize="md"` stays a small, non-distracting
+// bottom-right card on every screen size.
 
 import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -36,7 +39,9 @@ interface QbotGuideProps {
   onCta?: () => void;
   /** Cutout character image (transparent background). Falls back to the QAFRICA bag mark. */
   imageSrc?: string;
-  /** 'corner' floats bottom-right on desktop (always 'center' on phones — see file header).
+  /** 'corner' floats small in the bottom-right on every screen size (falls back to a
+   *  centered popup on phones only when paired with imageSize="lg" — see file header).
+   *  'center' is the big backdrop popup, reserved for the homepage intro.
    *  'inline' sits in normal page flow (e.g. above a form), character pointing down at
    *  whatever follows it — never forced to 'center' on mobile since it doesn't float. */
   position?: QbotPosition;
@@ -95,9 +100,12 @@ export default function QbotGuide({
 }: QbotGuideProps) {
   const [visible, setVisible] = useState(false);
   const isMobile = useIsMobile();
-  // Only the floating 'corner' widget needs to fall back on phones (not enough room without
-  // covering page content) — 'inline' already sits safely in the page's own flow.
-  const effectivePosition: QbotPosition = isMobile && position === 'corner' ? 'center' : position;
+  const isLg = imageSize === 'lg';
+  // Only a large-character 'corner' widget needs to fall back on phones (not enough room
+  // without covering page content) — a small 'md' corner card stays put on every screen,
+  // and 'inline' already sits safely in the page's own flow.
+  const effectivePosition: QbotPosition =
+    isMobile && position === 'corner' && isLg ? 'center' : position;
 
   useEffect(() => {
     if (!alwaysShow && getDismissed()[stepId]) return;
@@ -115,7 +123,6 @@ export default function QbotGuide({
     dismiss();
   };
 
-  const isLg = imageSize === 'lg';
   const isCenter = effectivePosition === 'center';
   const isInline = effectivePosition === 'inline';
   const isCorner = effectivePosition === 'corner';
@@ -209,7 +216,9 @@ export default function QbotGuide({
               animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
               exit={{ opacity: 0, y: 40 }}
               transition={{ type: 'spring', stiffness: 300, damping: 24 }}
-              className={`fixed z-[91] bottom-6 right-6 ${isLg ? 'w-80' : 'w-72'}`}
+              className={`fixed z-[91] bottom-4 right-4 sm:bottom-6 sm:right-6 max-w-[calc(100vw-2rem)] ${
+                isLg ? 'w-80' : 'w-64 sm:w-72'
+              }`}
             >
               {card}
             </motion.div>

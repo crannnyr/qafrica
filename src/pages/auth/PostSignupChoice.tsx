@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/services/supabase';
 import { useAuthStore } from '@/stores';
 import FlutterwavePayDialog from '@/components/payments/FlutterwavePayDialog';
+import QbotGuide from '@/components/QbotGuide';
 import { toast } from 'sonner';
 
 interface OnboardingData {
@@ -181,6 +182,14 @@ export default function PostSignupChoice() {
           onPaid={(reference) => navigate(`/payment/callback?provider=flutterwave&reference=${reference}`)}
         />
       )}
+
+      <QbotGuide
+        stepId="plan-starter-pack"
+        message="₦5,000 unlocks 3 months of training, the seller community, and my weekly check-ins to keep you on track for profit."
+        imageSrc="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.2905509906139019.webp"
+        position="corner"
+        delayMs={700}
+      />
     </div>
   );
 }
