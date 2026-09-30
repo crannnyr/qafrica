@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AlertCircle, Check, Loader, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import CONFIG from '@/lib/config'
 import { getManagementToken } from './ManagementAuth'
+import ChinaImportPromotions from './ChinaImportPromotions'
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`
 
@@ -28,6 +30,9 @@ const DEFAULTS: PricingSettings = {
 }
 
 export default function ManagementPricingShipping() {
+  const [searchParams] = useSearchParams()
+  if (searchParams.get('view') === 'promotions') return <ChinaImportPromotions />
+
   const [settings, setSettings] = useState<PricingSettings>(DEFAULTS)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
