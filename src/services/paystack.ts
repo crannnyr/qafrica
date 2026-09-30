@@ -9,9 +9,12 @@ export const loadPaystackScript = (): Promise<void> => {
     }
 
     const script = document.createElement('script');
-    script.src = 'https://js.paystack.co/v1/inline.js'; // Fixed: removed trailing space
+    script.src = 'https://js.paystack.co/v1/inline.js';
     script.async = true;
-    script.onload = () => resolve();
+    script.onload = () => {
+      if (window.PaystackPop) resolve();
+      else reject(new Error('Paystack loaded but the checkout client is unavailable'));
+    };
     script.onerror = () => reject(new Error('Failed to load Paystack'));
     document.body.appendChild(script);
   });
@@ -38,28 +41,43 @@ export const initializePayment = ({
   if (!window.PaystackPop) {
     throw new Error('Paystack not loaded');
   }
+  if (!CONFIG.PAYSTACK_PUBLIC_KEY) {
+    throw new Error('Paystack public key is not configured');
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Invalid payment amount');
+  }
+  if (!email?.trim()) {
+    throw new Error('Customer email is required for Paystack');
+  }
+  if (!reference?.trim()) {
+    throw new Error('Payment reference is required');
+  }
 
-  // Build config object
   const config: PaystackConfig = {
-  key: CONFIG.PAYSTACK_PUBLIC_KEY,
-  email,
-  amount,
-  ref: reference,
-  metadata,
-  callback: (response: PaystackResponse) => {
-    // Wrap async callback in plain sync function — Paystack v1 rejects async callbacks
-    onSuccess(response);
-  },
-  onClose: onCancel,
-};
+    key: CONFIG.PAYSTACK_PUBLIC_KEY,
+    email: email.trim(),
+    amount: Math.round(amount),
+    ref: reference,
+    metadata,
+    callback: (response: PaystackResponse) => {
+      // Paystack v1 expects a synchronous callback. The checkout sheet handles
+      // the async server-side verification after this callback fires.
+      onSuccess(response);
+    },
+    onClose: onCancel,
+  };
 
-  // Only add channels if explicitly provided
   if (channels && channels.length > 0) {
     config.channels = channels;
   }
 
-  const handler = window.PaystackPop.setup(config);
-  handler.openIframe();
+  try {
+    const handler = window.PaystackPop.setup(config);
+    handler.openIframe();
+  } catch (error) {
+    throw new Error(error instanceof Error ? `Could not open Paystack: ${error.message}` : 'Could not open Paystack checkout');
+  }
 };
 
 // Generate unique payment reference
