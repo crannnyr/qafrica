@@ -151,7 +151,7 @@ export default function LandingPage() {
       {animDone && (
         <QbotGuide
           stepId="home-intro"
-          message="Hi, I'm Qbot — not just an AI, I'm also your business analyst. Storefront, dropshipping, or reselling vendors' and direct China products: I'll show you what works, connect your social media, and check in weekly to keep you profitable. QAFRICA never leaves you behind — sign up now, I can't wait to show you all I can do."
+          message="Hi, I'm Qbot — connect me to your ChatGPT. I'm not just an AI, I'm also your business analyst. Storefront, dropshipping, or reselling vendors and direct China products: I'll show you what works, you connect your social media, and I'll check in weekly to keep you profitable. QAFRICA never leaves you behind — quickly sign up now, I can't wait to show you all I can do."
           ctaLabel="Start Your Store"
           onCta={() => navigate('/signup')}
           position="center"
