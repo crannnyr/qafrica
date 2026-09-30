@@ -1,0 +1,67 @@
+name: Finish China Import Promo Server Wiring
+
+on:
+  push:
+    branches:
+      - feature/china-import-promotions
+
+permissions:
+  contents: write
+
+jobs:
+  finish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/china-import-promotions
+          fetch-depth: 0
+
+      - name: Finish promo server wiring
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          checkout = Path('src/pages/recommendations/ImportCheckoutSheet.tsx')
+          text = checkout.read_text()
+          text = text.replace('orderSubtotalNgn={totalBeforePromo}', 'orderSubtotalNgn={subtotal}')
+          checkout.write_text(text)
+
+          edge = Path('supabase/functions/china-import/index.ts')
+          et = edge.read_text()
+          marker = '// CHINA_IMPORT_PROMO_SERVER_FINAL'
+          if marker not in et:
+              et = et.replace(
+                  "      const {\n        customer_id, customer_name, customer_whatsapp, delivery_type, items, payment_method,\n        shipping_method, delivery_address, delivery_latitude, delivery_longitude, location_shared,\n        delivery_mode, pickup_station_id, address_id,\n      } = body",
+                  "      const {\n        customer_id, customer_name, customer_whatsapp, delivery_type, items, payment_method,\n        shipping_method, delivery_address, delivery_latitude, delivery_longitude, location_shared,\n        delivery_mode, pickup_station_id, address_id, promotion_code,\n      } = body"
+              )
+
+              old = """      const shippingNgn = shippingSettings.charge_shipping_at_checkout ? discountedShippingNgn : 0\n      const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0\n      const totalNgn = subtotalNgn + jumiaFeeNgn + shippingNgn"""
+              new = """      const shippingNgn = shippingSettings.charge_shipping_at_checkout ? discountedShippingNgn : 0\n      const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0\n      const totalBeforePromotionNgn = subtotalNgn + jumiaFeeNgn + shippingNgn\n\n      let promotionId: string | null = null\n      let promotionCodeApplied: string | null = null\n      let promotionDiscountNgn = 0\n      if (typeof promotion_code === 'string' && promotion_code.trim()) {\n        const { data: promotion, error: promotionError } = await supabase.rpc('validate_china_import_promotion', {\n          p_code: promotion_code.trim().toUpperCase(),\n          p_customer_id: customer_id,\n          p_order_subtotal_ngn: subtotalNgn,\n        })\n        if (promotionError) return json({ error: 'Could not validate promo code' }, 500)\n        const quote = Array.isArray(promotion) ? promotion[0] : promotion\n        if (!quote?.promotion_id) return json({ error: quote?.message ?? 'Promo code is not valid' }, 400)\n        promotionId = quote.promotion_id\n        promotionCodeApplied = quote.code ?? promotion_code.trim().toUpperCase()\n        promotionDiscountNgn = Math.max(0, Math.min(Number(quote.discount_amount_ngn ?? 0), totalBeforePromotionNgn))\n      }\n\n      const totalNgn = Math.max(0, totalBeforePromotionNgn - promotionDiscountNgn)\n      // CHINA_IMPORT_PROMO_SERVER_FINAL"""
+              if old not in et:
+                  raise SystemExit('Could not find China Import checkout total block')
+              et = et.replace(old, new, 1)
+
+              # Store the applied promo snapshot in the order payload so the
+              # payment verification/reconciliation path has an auditable record.
+              old_insert = """        total_ngn: totalNgn,\n        payment_method,\n        status: 'pending', payment_status: 'unpaid',"""
+              new_insert = """        total_ngn: totalNgn,\n        payment_method,\n        promotion_id: promotionId,\n        promotion_code: promotionCodeApplied,\n        promotion_discount_ngn: promotionDiscountNgn,\n        status: 'pending', payment_status: 'unpaid',"""
+              if old_insert in et:
+                  et = et.replace(old_insert, new_insert, 1)
+
+              edge.write_text(et)
+
+          # Remove the accidental promotionCode declaration inserted into the
+          # admin-products action by the first pass.
+          edge = Path('supabase/functions/china-import/index.ts')
+          et = edge.read_text()
+          et = et.replace("      const promotionCode = typeof body.promotion_code === 'string' ? body.promotion_code.trim().toUpperCase() : null.catch(() => ({}))\n", "")
+          edge.write_text(et)
+          PY
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/pages/recommendations/ImportCheckoutSheet.tsx supabase/functions/china-import/index.ts
+          git diff --cached --quiet && exit 0
+          git commit -m 'fix: apply China Import promo server-side'
+          git push origin feature/china-import-promotions
