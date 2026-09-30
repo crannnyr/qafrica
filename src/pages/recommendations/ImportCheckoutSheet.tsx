@@ -1073,7 +1073,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
         <ChinaImportPromoCode
           customerId={customer.id}
-          orderSubtotalNgn={totalBeforePromo}
+          orderSubtotalNgn={subtotal}
           value={promoCode}
           onChange={setPromoCode}
           onApplied={setPromoQuote}

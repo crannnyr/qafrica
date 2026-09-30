@@ -847,7 +847,6 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-products') {
       const body = await req.json()
-      const promotionCode = typeof body.promotion_code === 'string' ? body.promotion_code.trim().toUpperCase() : null.catch(() => ({}))
       const { manager_token } = body
       if (!(await requireAdmin(supabase, manager_token, 'import.products.view'))) return json({ error: 'Unauthorized' }, 401)
 
@@ -927,7 +926,7 @@ serve(async (req: Request) => {
       const {
         customer_id, customer_name, customer_whatsapp, delivery_type, items, payment_method,
         shipping_method, delivery_address, delivery_latitude, delivery_longitude, location_shared,
-        delivery_mode, pickup_station_id, address_id,
+        delivery_mode, pickup_station_id, address_id, promotion_code,
       } = body
 
       if (!customer_id) return json({ error: 'Login required to check out' }, 401)
@@ -1093,7 +1092,27 @@ serve(async (req: Request) => {
         : rawShippingNgn
       const shippingNgn = shippingSettings.charge_shipping_at_checkout ? discountedShippingNgn : 0
       const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
-      const totalNgn = subtotalNgn + jumiaFeeNgn + shippingNgn
+      const totalBeforePromotionNgn = subtotalNgn + jumiaFeeNgn + shippingNgn
+
+      let promotionId: string | null = null
+      let promotionCodeApplied: string | null = null
+      let promotionDiscountNgn = 0
+      if (typeof promotion_code === 'string' && promotion_code.trim()) {
+        const { data: promotion, error: promotionError } = await supabase.rpc('validate_china_import_promotion', {
+          p_code: promotion_code.trim().toUpperCase(),
+          p_customer_id: customer_id,
+          p_order_subtotal_ngn: subtotalNgn,
+        })
+        if (promotionError) return json({ error: 'Could not validate promo code' }, 500)
+        const quote = Array.isArray(promotion) ? promotion[0] : promotion
+        if (!quote?.promotion_id) return json({ error: quote?.message ?? 'Promo code is not valid' }, 400)
+        promotionId = quote.promotion_id
+        promotionCodeApplied = quote.code ?? promotion_code.trim().toUpperCase()
+        promotionDiscountNgn = Math.max(0, Math.min(Number(quote.discount_amount_ngn ?? 0), totalBeforePromotionNgn))
+      }
+
+      const totalNgn = Math.max(0, totalBeforePromotionNgn - promotionDiscountNgn)
+      // CHINA_IMPORT_PROMO_SERVER_FINAL
 
       // Payment threshold: Paystack is available only below the configured
       // threshold; at or above it, manual bank transfer is required.
