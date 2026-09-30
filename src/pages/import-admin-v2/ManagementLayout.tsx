@@ -58,6 +58,7 @@ const NAV = [
   { section: 'Finance & Administration', items: [
     { icon: ReceiptText, label: 'Expenses', path: '/import-admin-v2/expenses', permission: 'import.expenses.view' },
     { icon: Truck, label: 'Pricing & Shipping', path: '/import-admin-v2/pricing-shipping', permission: 'import.pricing_shipping.view' },
+    { icon: Ticket, label: 'Promotions', path: '/import-admin-v2/pricing-shipping?view=promotions', permission: 'import.pricing_shipping.view' },
     { icon: Settings, label: 'Settings', path: '/import-admin-v2/settings', permission: 'import.settings.view' },
     { icon: UserCog, label: 'Admin Access', path: '/import-admin-v2/admin-access', permission: 'import.admin_access.view' },
   ] },
