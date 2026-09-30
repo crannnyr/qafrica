@@ -144,9 +144,15 @@ async function adminSupportAction(s:any, token:string, action:string, body:any) 
     const { data, error } = await s.from('import_ai_whatsapp_conversations')
       .update({ status: 'resolved', human_agent_id: null, updated_at: now })
       .eq('id', id).in('status', ['ai','returned_to_ai','human_requested','human_assigned','human_active'])
-      .select('id,status,channel').maybeSingle()
+      .select('id,status,channel,customer_id').maybeSingle()
     if (error) throw error
     if (!data) throw new Error('Conversation is already resolved or not found')
+    if (data.channel === 'whatsapp' && data.customer_id) {
+      await s.from('import_ai_whatsapp_links')
+        .update({ linked_at: null, whatsapp_wa_id: null, whatsapp_phone: null })
+        .eq('customer_id', data.customer_id)
+        .not('linked_at', 'is', null)
+    }
     return { conversation: data }
   }
 
@@ -415,12 +421,18 @@ async function customerTool(s:any, req:Request, actor:Actor, name:string, a:any,
       .update({ status:'resolved', human_agent_id:null, updated_at:now })
       .eq('id', context.conversationId)
       .in('status',['ai','returned_to_ai'])
-      .select('id,status,channel').maybeSingle()
+      .select('id,status,channel,customer_id').maybeSingle()
     if (error) throw error
     if (!data) throw new Error('Conversation could not be resolved')
     await appendSupportMessage(s, context.conversationId, 'inbound', 'customer',
       'AI marked this conversation resolved.' + (a.reason ? ' Reason: ' + clean(a.reason,300) : ''),
       { channel:context.channel, event:'ai_resolved' })
+    if (data.channel === 'whatsapp' && data.customer_id) {
+      await s.from('import_ai_whatsapp_links')
+        .update({ linked_at: null, whatsapp_wa_id: null, whatsapp_phone: null })
+        .eq('customer_id', data.customer_id)
+        .not('linked_at', 'is', null)
+    }
     return { success:true, status:data.status, conversation_id:data.id, channel:data.channel }
   }
   if (actor === 'guest' && name === 'search_products') {
@@ -684,7 +696,9 @@ serve(async(req:Request)=>{
   }
   const key=Deno.env.get('OPENAI_API_KEY');if(!key)return json({error:'AI support is not configured: OPENAI_API_KEY is missing'},503)
   const message=clean(body.message,4000);if(!message)return json({error:'message is required'},400)
-  const isNewConversation=channel==='whatsapp' && body.is_new_conversation===true
+  let activeConversationId = conversationId
+  let resolvedConversationReopened = false
+  const isNewConversationFromBody = channel==='whatsapp' && body.is_new_conversation===true
   const token=actor==='admin'?clean(body.manager_token,500):null
   const history = Array.isArray(body.messages)
     ? body.messages
@@ -698,21 +712,48 @@ serve(async(req:Request)=>{
     let websiteConversation:any = null
     if (actor==='customer' && channel==='website') {
       websiteConversation = conversationId
-        ? await s.from('import_ai_whatsapp_conversations').select('id,status,customer_id,channel').eq('id',conversationId).eq('customer_id',await customerId(s,req)).eq('channel','website').maybeSingle().then((x:any)=>x.data)
+        ? await s.from('import_ai_whatsapp_conversations').select('id,status,customer_id,channel,wa_id').eq('id',conversationId).eq('customer_id',await customerId(s,req)).eq('channel','website').maybeSingle().then((x:any)=>x.data)
         : await getOrCreateWebsiteConversation(s, req)
       if (!websiteConversation) throw new Error('Website support conversation not found')
       if (['human_requested','human_assigned','human_active'].includes(websiteConversation.status)) {
         return json({answer:'Your conversation is currently with a QAfrica Support agent. Please send your message here and the agent will reply in this chat.',conversation_id:websiteConversation.id,status:websiteConversation.status,handed_off:true,human_active:true})
       }
       if (websiteConversation.status === 'resolved') {
-        await s.from('import_ai_whatsapp_conversations').update({
-          status: 'ai', human_agent_id: null, updated_at: new Date().toISOString()
-        }).eq('id', websiteConversation.id)
-        websiteConversation.status = 'ai'
+        const customerIdValue = await customerId(s, req)
+        const { data: fresh, error: freshError } = await s.from('import_ai_whatsapp_conversations')
+          .insert({ customer_id: customerIdValue, wa_id:'web:' + customerIdValue, channel:'website', status:'ai' })
+          .select('id,status,customer_id,channel,wa_id').single()
+        if (freshError) throw freshError
+        websiteConversation = fresh
+        activeConversationId = fresh.id
+        resolvedConversationReopened = true
+      } else {
+        activeConversationId = websiteConversation.id
       }
       await appendSupportMessage(s, websiteConversation.id, 'inbound', 'customer', message)
+    } else if (actor==='customer' && channel==='whatsapp' && conversationId) {
+      const { data: whatsappConversation, error: whatsappConversationError } = await s.from('import_ai_whatsapp_conversations')
+        .select('id,status,customer_id,channel,wa_id')
+        .eq('id', conversationId)
+        .eq('channel','whatsapp')
+        .maybeSingle()
+      if (whatsappConversationError) throw whatsappConversationError
+      if (whatsappConversation?.status === 'resolved') {
+        const customerIdValue = await customerId(s, req)
+        if (whatsappConversation.customer_id && whatsappConversation.customer_id !== customerIdValue) {
+          throw new Error('WhatsApp conversation does not belong to this customer')
+        }
+        const { data: fresh, error: freshError } = await s.from('import_ai_whatsapp_conversations')
+          .insert({ customer_id: customerIdValue, wa_id: whatsappConversation.wa_id, channel:'whatsapp', status:'ai' })
+          .select('id,status,customer_id,channel,wa_id').single()
+        if (freshError) throw freshError
+        activeConversationId = fresh.id
+        resolvedConversationReopened = true
+      }
     }
-    let input:any[]=[{role:'system',content:prompt(actor, channel, isNewConversation)},...history,{role:'user',content:message}]
+    const isNewConversation = isNewConversationFromBody || resolvedConversationReopened
+    const effectiveHistory = resolvedConversationReopened ? [] : history
+    let input:any[]=[{role:'system',content:prompt(actor, channel, isNewConversation)},...effectiveHistory,{role:'user',content:message}]
     for(let turn=0;turn<5;turn++){
       const r=await openai(key,input,tools);const calls=(r.output??[]).filter((x:any)=>x.type==='function_call')
       if(!calls.length){
@@ -721,7 +762,7 @@ serve(async(req:Request)=>{
           await appendSupportMessage(s, websiteConversation.id, 'outbound', 'ai', answer)
           await s.from('import_ai_whatsapp_conversations').update({last_outbound_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',websiteConversation.id)
         }
-        return json({answer,model:MODEL,conversation_id:channel==='website'?websiteConversation?.id:null,status:channel==='website'?websiteConversation?.status:null,handed_off:false})
+        return json({answer,model:MODEL,conversation_id:activeConversationId ?? (channel==='website'?websiteConversation?.id:null),status:channel==='website'?websiteConversation?.status:null,handed_off:false})
       }
       input=[...input,...(r.output??[])]
       for(const c of calls){
