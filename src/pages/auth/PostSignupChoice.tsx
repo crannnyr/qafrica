@@ -12,24 +12,23 @@ import QbotGuide from '@/components/QbotGuide';
 import { toast } from 'sonner';
 
 interface OnboardingData {
-  step:            number;
+  step: number;
   selected_niches: string[];
-  store_id:        string;
+  store_id: string;
 }
 
-// Flat promotional price for every new store — replaces the old 4-day free
-// trial. Paid by bank transfer through Flutterwave; the server prices it
-// (₦5,000 for 3 months) and activates it, then PaymentCallbackPage finishes onboarding.
+// Flat promotional price for every new store. Paid by bank transfer through
+// Flutterwave; the server validates the Starter Pack price and activates it.
 const STARTER_PACK_DURATION_MONTHS = 3;
 
 export default function PostSignupChoice() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const userId    = user?.id;
+  const userId = user?.id;
 
   const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null);
-  const [isChecking, setIsChecking]         = useState(true);
-  const [isPaying, setIsPaying]             = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
+  const [isPaying, setIsPaying] = useState(false);
 
   useEffect(() => {
     if (!userId) { navigate('/login'); return; }
@@ -92,7 +91,6 @@ export default function PostSignupChoice() {
       </div>
 
       <div className="max-w-lg mx-auto relative z-10">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-2">
             <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
@@ -102,11 +100,7 @@ export default function PostSignupChoice() {
           </div>
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-        >
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Everyone starts here</h1>
             <p className="text-gray-600">
@@ -136,8 +130,8 @@ export default function PostSignupChoice() {
             <ul className="space-y-3 mb-8">
               {[
                 { icon: GraduationCap, text: 'Full training on setting up and running your store' },
-                { icon: Users,         text: 'Access to the seller community for support & tips' },
-                { icon: CheckCircle,   text: '1 niche, unlimited products, all core features' },
+                { icon: Users, text: 'Access to the seller community for support & tips' },
+                { icon: CheckCircle, text: '1 niche, unlimited products, all core features' },
               ].map(({ icon: Icon, text }) => (
                 <li key={text} className="flex items-start gap-3 text-sm text-gray-700">
                   <Icon className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
@@ -146,23 +140,13 @@ export default function PostSignupChoice() {
               ))}
             </ul>
 
-            <Button
-              onClick={handleStartStarterPack}
-              disabled={isPaying}
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-lg font-semibold"
-            >
+            <Button onClick={handleStartStarterPack} disabled={isPaying} className="w-full bg-orange-500 hover:bg-orange-600 text-white h-12 text-lg font-semibold">
               {isPaying ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-5 h-5 animate-spin" /> Processing…
-                </span>
-              ) : (
-                'Get Started — ₦5,000'
-              )}
+                <span className="flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /> Processing…</span>
+              ) : ('Get Started — ₦5,000')}
             </Button>
 
-            <p className="text-center text-xs text-gray-400 mt-4">
-              Pay by bank transfer · secured by Flutterwave
-            </p>
+            <p className="text-center text-xs text-gray-400 mt-4">Pay by bank transfer · secured by Flutterwave</p>
           </div>
 
           <p className="text-center mt-6 text-sm text-gray-500">
@@ -186,7 +170,7 @@ export default function PostSignupChoice() {
       <QbotGuide
         stepId="plan-starter-pack"
         message="₦5,000 unlocks 3 months of training, the seller community, and my weekly check-ins to keep you on track for profit."
-        imageSrc="https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.2905509906139019.webp"
+        imageSrc="https://dpioixansygkjdbphfd.j.supabase.co/storage/v1/object/public/product-images/0.2905509906139019.webp"
         position="corner"
         delayMs={700}
       />
