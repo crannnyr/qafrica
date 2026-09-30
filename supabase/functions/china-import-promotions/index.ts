@@ -61,13 +61,57 @@ serve(async (req) => {
     const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
 
     if (action === 'validate') {
+      const code = cleanCode(body.code)
+      const customerId = body.customer_id ?? null
+      const subtotalNgn = Number(body.order_subtotal_ngn ?? 0)
+
       const { data, error } = await supabase.rpc('validate_china_import_promotion', {
-        p_code: cleanCode(body.code),
-        p_customer_id: body.customer_id ?? null,
-        p_order_subtotal_ngn: Number(body.order_subtotal_ngn ?? 0),
+        p_code: code,
+        p_customer_id: customerId,
+        p_order_subtotal_ngn: subtotalNgn,
       })
       if (error) return json({ error: error.message }, 400)
-      return json({ promotion: data?.[0] ?? null })
+
+      const promotion = data?.[0] ?? null
+      if (!promotion?.promotion_id || !customerId) {
+        return json({ promotion })
+      }
+
+      // If checkout was started before the promo was applied, keep the same
+      // unpaid China Import order and update its promo snapshot instead of
+      // forcing the customer into a second pending order. We deliberately use
+      // the most recent pending order for this customer/subtotal only.
+      const { data: pendingOrder } = await supabase
+        .from('china_import_orders')
+        .select('id, total_ngn, subtotal_ngn, payment_status')
+        .eq('user_id', customerId)
+        .in('payment_status', ['unpaid', 'failed'])
+        .eq('subtotal_ngn', subtotalNgn)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      let pendingOrderSnapshot: any = null
+      if (pendingOrder) {
+        const discount = Math.max(0, Math.min(Number(promotion.discount_amount_ngn ?? 0), Number(pendingOrder.total_ngn ?? 0)))
+        const updatedTotal = Math.max(0, Number(pendingOrder.total_ngn ?? 0) - discount)
+        const { data: updatedOrder, error: updateError } = await supabase
+          .from('china_import_orders')
+          .update({
+            promotion_id: promotion.promotion_id,
+            promotion_code: promotion.code ?? code,
+            promotion_discount_ngn: discount,
+            total_ngn: updatedTotal,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', pendingOrder.id)
+          .select('id, code, subtotal_ngn, total_ngn, promotion_id, promotion_code, promotion_discount_ngn')
+          .single()
+
+        if (!updateError && updatedOrder) pendingOrderSnapshot = updatedOrder
+      }
+
+      return json({ promotion, pending_order: pendingOrderSnapshot })
     }
 
     if (action === 'admin-list') {
