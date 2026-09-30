@@ -30,5 +30,3 @@ alter table public.import_support_tickets enable row level security;
 
 -- Admin access is intentionally performed through the import-support-tickets Edge Function
 -- using the existing import_admin_sessions/role permission model.
-
-after? 
