@@ -1,11 +1,15 @@
-import { Loader2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Ticket } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import AiSupportInbox from '@/pages/import-admin/AiSupportInbox';
 import AiSupportConversationSearch from './AiSupportConversationSearch';
+import ImportSupportTickets from './ImportSupportTickets';
 import { getManagementToken } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 
 export default function ImportAdminV2Support() {
   const token = getManagementToken();
+  const [searchParams] = useSearchParams();
+  const ticketsView = searchParams.get('view') === 'tickets';
   const { loading, error, hasPermission } = useImportAdminPermissions(token);
 
   if (!token) return null;
@@ -36,8 +40,28 @@ export default function ImportAdminV2Support() {
     );
   }
 
+  if (ticketsView) {
+    return (
+      <div className="space-y-4">
+        <Link to="/import-admin-v2/support" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900">
+          <ArrowLeft className="w-4 h-4" /> Back to Support
+        </Link>
+        <ImportSupportTickets />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">AI Support</h1>
+          <p className="text-sm text-gray-500 mt-1">Live AI, human handoffs and resolved conversations.</p>
+        </div>
+        <Link to="/import-admin-v2/support?view=tickets" className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50">
+          <Ticket className="w-4 h-4" /> Support Tickets
+        </Link>
+      </div>
       <AiSupportConversationSearch token={token} />
       <div data-qafrica-ai-support-inbox>
         <AiSupportInbox token={token} />
