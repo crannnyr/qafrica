@@ -348,6 +348,7 @@ const META_BLOCKED_PREFIXES = [
   '/admin',
   '/management',
   '/import-admin',
+  '/import-admin-v2',
   '/importations/admin',
   '/importations/sourcing',
   '/developer',
