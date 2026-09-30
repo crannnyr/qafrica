@@ -84,9 +84,9 @@ begin
     return;
   end if;
 
-  select * into v_promotion
-  from public.china_import_promotions
-  where code = v_code
+  select p.* into v_promotion
+  from public.china_import_promotions p
+  where p.code = v_code
   limit 1;
 
   if not found then
@@ -122,8 +122,8 @@ begin
 
   if p_customer_id is not null and v_promotion.per_customer_limit is not null then
     select count(*) into v_customer_uses
-    from public.china_import_promotion_redemptions
-    where promotion_id = v_promotion.id and customer_id = p_customer_id;
+    from public.china_import_promotion_redemptions r
+    where r.promotion_id = v_promotion.id and r.customer_id = p_customer_id;
     if v_customer_uses >= v_promotion.per_customer_limit then
       return query select v_promotion.id, v_promotion.code, v_promotion.discount_type, v_promotion.discount_value, 0::numeric, 'You have already used this promo code the maximum number of times.'::text;
       return;
