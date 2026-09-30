@@ -28,5 +28,60 @@ create index if not exists import_support_tickets_updated_idx on public.import_s
 
 alter table public.import_support_tickets enable row level security;
 
+-- A real human handoff automatically creates a ticket so the request is not lost
+-- when the WhatsApp conversation later becomes resolved.
+create or replace function public.create_import_support_ticket_on_handoff()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  last_message text;
+  customer_name text;
+  ticket_exists boolean;
+begin
+  if new.status = 'human_requested' and coalesce(old.status, '') <> 'human_requested' then
+    select exists(
+      select 1 from public.import_support_tickets
+      where conversation_id = new.id and status in ('open','in_progress','waiting_customer')
+    ) into ticket_exists;
+
+    if not ticket_exists then
+      select m.body into last_message
+      from public.import_ai_whatsapp_messages m
+      where m.conversation_id = new.id and m.direction = 'inbound'
+      order by m.created_at desc limit 1;
+
+      select c.full_name into customer_name
+      from public.customers c where c.id = new.customer_id;
+
+      insert into public.import_support_tickets (
+        customer_id,
+        conversation_id,
+        category,
+        subject,
+        description,
+        created_by
+      ) values (
+        new.customer_id,
+        new.id,
+        'human_handoff',
+        coalesce(nullif(customer_name, ''), 'Customer') || ' support request',
+        coalesce(last_message, 'Customer requested human support.'),
+        'ai'
+      );
+    end if;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_import_support_ticket_on_handoff on public.import_ai_whatsapp_conversations;
+create trigger trg_import_support_ticket_on_handoff
+after update of status on public.import_ai_whatsapp_conversations
+for each row execute function public.create_import_support_ticket_on_handoff();
+
 -- Admin access is intentionally performed through the import-support-tickets Edge Function
 -- using the existing import_admin_sessions/role permission model.
