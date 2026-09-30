@@ -1,24 +1,56 @@
 import CONFIG from '@/lib/config';
 
-// Paystack inline script loader
+// Paystack inline script loader. Keep one shared promise so checkout never
+// injects multiple Paystack scripts while the first one is still loading.
+let paystackScriptPromise: Promise<void> | null = null;
+
 export const loadPaystackScript = (): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if (window.PaystackPop) {
-      resolve();
+  if (typeof window === 'undefined') return Promise.resolve();
+
+  if (window.PaystackPop) {
+    return Promise.resolve();
+  }
+
+  if (paystackScriptPromise) {
+    return paystackScriptPromise;
+  }
+
+  paystackScriptPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector<HTMLScriptElement>('script[data-qafrica-paystack="true"]');
+    if (existing) {
+      existing.addEventListener('load', () => {
+        if (window.PaystackPop) resolve();
+        else reject(new Error('Paystack loaded but the checkout client is unavailable'));
+      }, { once: true });
+      existing.addEventListener('error', () => reject(new Error('Failed to load Paystack')), { once: true });
       return;
     }
 
     const script = document.createElement('script');
     script.src = 'https://js.paystack.co/v1/inline.js';
     script.async = true;
+    script.dataset.qafricaPaystack = 'true';
     script.onload = () => {
       if (window.PaystackPop) resolve();
       else reject(new Error('Paystack loaded but the checkout client is unavailable'));
     };
     script.onerror = () => reject(new Error('Failed to load Paystack'));
-    document.body.appendChild(script);
+    document.head.appendChild(script);
+  }).catch(error => {
+    // Allow a later retry if the CDN was temporarily unavailable.
+    paystackScriptPromise = null;
+    throw error;
   });
+
+  return paystackScriptPromise;
 };
+
+// Start loading Paystack as soon as this service is imported. The checkout
+// sheet can therefore call initializePayment from the user's click without
+// waiting for the external script at the moment of the click.
+if (typeof window !== 'undefined') {
+  void loadPaystackScript().catch(() => {});
+}
 
 // Initialize Paystack payment
 export const initializePayment = ({
@@ -39,7 +71,7 @@ export const initializePayment = ({
   onCancel: () => void;
 }) => {
   if (!window.PaystackPop) {
-    throw new Error('Paystack not loaded');
+    throw new Error('Paystack is still loading. Please wait a moment and try again.');
   }
   if (!CONFIG.PAYSTACK_PUBLIC_KEY) {
     throw new Error('Paystack public key is not configured');
