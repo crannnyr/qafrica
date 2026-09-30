@@ -7,7 +7,7 @@ const corsHeaders={
 }
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...corsHeaders,'Content-Type':'application/json'}})
 const clean=(v:unknown,max=8000)=>String(v??'').trim().slice(0,max)
-async function requireAdmin(s:any,token:string){
+async function requireAdmin(s:any,token:string,action:string){
   if(!token)throw new Error('Admin authentication required')
   const {data:session,error:se}=await s.from('import_admin_sessions').select('manager_id').eq('token',token).gt('expires_at',new Date().toISOString()).maybeSingle()
   if(se||!session)throw new Error('Invalid or expired admin session')
@@ -20,7 +20,8 @@ async function requireAdmin(s:any,token:string){
   const {data:perms,error:pe}=await s.from('import_admin_permissions').select('key').in('id',permissionIds)
   if(pe)throw pe
   const keys=new Set((perms??[]).map((p:any)=>p.key))
-  if(!keys.has('import.tickets.view')&&!keys.has('import.tickets.manage'))throw new Error('Missing permission: import.tickets.view')
+  const required=action==='list'?'import.ai_learning.view':'import.ai_learning.manage'
+  if(!keys.has(required))throw new Error(`Missing permission: ${required}`)
   return session.manager_id
 }
 Deno.serve(async(req)=>{
@@ -28,7 +29,9 @@ Deno.serve(async(req)=>{
   if(req.method!=='POST')return json({error:'Method not allowed'},405)
   const s=createClient(Deno.env.get('SUPABASE_URL')??'',Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')??'')
   try{
-    const b=await req.json();const managerId=await requireAdmin(s,clean(b.manager_token,500));const action=clean(b.action,50)||'list'
+    const b=await req.json()
+    const action=clean(b.action,50)||'list'
+    const managerId=await requireAdmin(s,clean(b.manager_token,500),action)
     if(action==='list'){
       const status=['pending','approved','rejected'].includes(b.review_status)?b.review_status:null
       let q=s.from('import_ai_resolution_examples').select('id,conversation_id,customer_id,category,issue_summary,resolution_summary,transcript,approved,review_status,approved_by,approved_at,created_at').order('created_at',{ascending:false}).limit(100)
