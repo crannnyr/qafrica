@@ -170,6 +170,26 @@ export default function AiSupportConversationSearch({ token }: { token: string }
   }, [query, conversations, details]);
 
   const openResult = (result: SearchResult) => {
+    const customer = customerOf(result.conversation);
+    const identifiers = [
+      customer?.full_name,
+      customer?.phone,
+      customer?.email,
+      result.conversation.wa_id,
+    ].map(normalize).filter(Boolean);
+
+    const root = document.querySelector('[data-qafrica-ai-support-inbox]') || document.body;
+    const candidates = Array.from(root.querySelectorAll('button, [role="button"]')) as HTMLElement[];
+    const target = candidates.find(element => {
+      const text = normalize(element.textContent);
+      return identifiers.some(identifier => identifier && text.includes(identifier));
+    });
+
+    if (target) {
+      target.click();
+      return;
+    }
+
     window.dispatchEvent(new CustomEvent('qafrica-open-ai-support', {
       detail: { conversationId: result.conversation.id },
     }));
