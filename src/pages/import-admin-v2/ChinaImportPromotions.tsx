@@ -148,24 +148,19 @@ export default function ChinaImportPromotions() {
 
   return (
     <div className="space-y-4">
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">China Import Promotions</h1>
+        <p className="text-sm text-gray-500 mt-1">Promo codes for /recommendations only. Storefront coupons are not used here.</p>
+      </div>
+
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <Tag className="w-4 h-4 text-gray-400" />
-              <h1 className="font-bold text-gray-900 text-sm">China Import Promotions</h1>
-              <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">{promotions.length.toLocaleString()}</span>
-            </div>
-            <p className="text-[11px] text-gray-400 mt-1">Promo codes for /recommendations only. Storefront coupons are not used here.</p>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button onClick={openCreate} className="inline-flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold">
-              <Plus className="w-3.5 h-3.5" /> New promo
-            </button>
-            <button onClick={() => void load()} disabled={loading} className="p-2 hover:bg-gray-100 rounded-lg" title="Refresh promotions" aria-label="Refresh promotions">
-              <RefreshCw className={`w-4 h-4 text-gray-400 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-end gap-2">
+          <button onClick={() => void load()} disabled={loading} className="p-2 hover:bg-gray-100 rounded-lg" title="Refresh promotions" aria-label="Refresh promotions">
+            <RefreshCw className={`w-4 h-4 text-gray-400 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <button onClick={openCreate} className="inline-flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold">
+            <Plus className="w-3.5 h-3.5" /> New promo
+          </button>
         </div>
 
         {error && <div className="mx-5 mt-4 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs">{error}</div>}
