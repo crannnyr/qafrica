@@ -32,6 +32,7 @@ const PERMISSION_LABELS: Record<string, string> = {
   'import.clients.view': 'View Clients',
   'import.messages.view': 'View Messages',
   'import.messages.send': 'Send Messages',
+  'import.tickets.view': 'View Support Tickets',
   'import.questions.view': 'View Questions',
   'import.broadcast.send': 'Send Broadcasts',
   'import.expenses.view': 'View Expenses',
@@ -80,7 +81,7 @@ const NAV = [
     items: [
       { icon: Users, label: 'Users', path: '/import-admin-v2/users', permission: 'import.clients.view' },
       { icon: MessageCircle, label: 'Support', path: '/import-admin-v2/support', permission: 'import.messages.view' },
-      { icon: Ticket, label: 'Support Tickets', path: '/import-admin-v2/support?view=tickets', permission: 'import.messages.view' },
+      { icon: Ticket, label: 'Support Tickets', path: '/import-admin-v2/support?view=tickets', permission: 'import.tickets.view' },
       { icon: CircleHelp, label: 'Product FAQ', path: '/import-admin-v2/product-faq', permission: 'import.questions.view' },
     ],
   },
@@ -150,8 +151,6 @@ export default function ManagementLayout() {
   const activeLabel = activeItem?.label || 'Dashboard';
   const managerName = manager?.full_name || manager?.name || 'Manager';
 
-  // Nested management routes need their own action permission. Do not let a
-  // parent "view" permission implicitly authorize create/update screens.
   const requiredPermission =
     location.pathname === '/import-admin-v2/products/add'
       ? 'import.products.create'
@@ -159,8 +158,6 @@ export default function ManagementLayout() {
         ? 'import.products.update'
         : activeItem?.permission;
 
-  // The dashboard is a shared landing page. Access to it only requires at least one
-  // Import Admin permission; the dashboard itself must scope its data/cards by permission.
   const isDashboardRoute = location.pathname === '/import-admin-v2';
   const canViewCurrentRoute = isDashboardRoute
     ? permissions.size > 0
