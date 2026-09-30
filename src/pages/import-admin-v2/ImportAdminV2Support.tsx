@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import AiSupportInbox from '@/pages/import-admin/AiSupportInbox';
+import AiSupportConversationSearch from './AiSupportConversationSearch';
 import { getManagementToken } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 
@@ -35,5 +36,12 @@ export default function ImportAdminV2Support() {
     );
   }
 
-  return <AiSupportInbox token={token} />;
+  return (
+    <div className="space-y-4">
+      <AiSupportConversationSearch token={token} />
+      <div data-qafrica-ai-support-inbox>
+        <AiSupportInbox token={token} />
+      </div>
+    </div>
+  );
 }
