@@ -13,8 +13,8 @@ export default function ImportAdminV2Support() {
   const ticketsView = searchParams.get('view') === 'tickets';
   const learningView = searchParams.get('view') === 'learning';
   const { loading, error, hasPermission } = useImportAdminPermissions(token);
-  const canViewTickets = hasPermission('import.tickets.view') || hasPermission('import.messages.view');
-  const canViewLearning = hasPermission('import.messages.view');
+  const canViewTickets = hasPermission('import.tickets.view') || hasPermission('import.tickets.manage');
+  const canViewLearning = hasPermission('import.ai_learning.view') || hasPermission('import.ai_learning.manage');
 
   if (!token) return null;
   if (loading) return <div className="min-h-[240px] flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>;
@@ -23,13 +23,13 @@ export default function ImportAdminV2Support() {
   if (ticketsView || learningView) {
     const allowed = ticketsView ? canViewTickets : canViewLearning;
     if (!allowed) return <div className="rounded-2xl border border-gray-200 bg-white p-6"><h2 className="text-sm font-bold text-gray-900">Support access required</h2><p className="text-xs text-gray-500 mt-1">Your manager account does not have permission to access this section.</p><Link to="/import-admin-v2/support" className="inline-flex items-center gap-2 mt-4 text-sm font-semibold text-gray-600 hover:text-gray-900"><ArrowLeft className="w-4 h-4" /> Back to Support</Link></div>;
-    return <div className="space-y-4"><div className="flex gap-4"><Link to="/import-admin-v2/support" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900"><ArrowLeft className="w-4 h-4" /> Back to Support</Link><Link to="/import-admin-v2/support?view=tickets" className="text-sm font-semibold text-gray-600">Tickets</Link><Link to="/import-admin-v2/support?view=learning" className="text-sm font-semibold text-orange-600">AI Learning</Link></div>{ticketsView?<ImportSupportTickets/>:<ImportAILearning/>}</div>;
+    return <div className="space-y-4"><div className="flex gap-4"><Link to="/import-admin-v2/support" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-900"><ArrowLeft className="w-4 h-4" /> Back to Support</Link>{canViewTickets&&<Link to="/import-admin-v2/support?view=tickets" className="text-sm font-semibold text-gray-600">Tickets</Link>}{canViewLearning&&<Link to="/import-admin-v2/support?view=learning" className="text-sm font-semibold text-orange-600">AI Learning</Link>}</div>{ticketsView?<ImportSupportTickets/>:<ImportAILearning/>}</div>;
   }
 
-  if (!hasPermission('import.messages.view')) return <div className="rounded-2xl border border-gray-200 bg-white p-6"><h2 className="text-sm font-bold text-gray-900">Support access required</h2><p className="text-xs text-gray-500 mt-1">Your manager account does not have permission to view support conversations.</p></div>;
+  if (!hasPermission('import.messages.view') && !canViewTickets && !canViewLearning) return <div className="rounded-2xl border border-gray-200 bg-white p-6"><h2 className="text-sm font-bold text-gray-900">Support access required</h2><p className="text-xs text-gray-500 mt-1">Your manager account does not have permission to view support.</p></div>;
 
   return <div className="space-y-4">
-    <div className="flex items-center justify-between gap-3"><div><h1 className="text-xl font-bold text-gray-900">AI Support</h1><p className="text-sm text-gray-500 mt-1">Live AI, human handoffs, tickets and resolved-conversation learning.</p></div><div className="flex gap-2">{canViewTickets&&<Link to="/import-admin-v2/support?view=tickets" className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50"><Ticket className="w-4 h-4"/> Tickets</Link>}<Link to="/import-admin-v2/support?view=learning" className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50"><Brain className="w-4 h-4"/> AI Learning</Link></div></div>
-    <AiSupportConversationSearch token={token}/><div data-qafrica-ai-support-inbox><AiSupportInbox token={token}/></div>
+    <div className="flex items-center justify-between gap-3"><div><h1 className="text-xl font-bold text-gray-900">AI Support</h1><p className="text-sm text-gray-500 mt-1">Live AI, human handoffs, tickets and resolved-conversation learning.</p></div><div className="flex gap-2">{canViewTickets&&<Link to="/import-admin-v2/support?view=tickets" className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50"><Ticket className="w-4 h-4"/> Tickets</Link>}{canViewLearning&&<Link to="/import-admin-v2/support?view=learning" className="inline-flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-50"><Brain className="w-4 h-4"/> AI Learning</Link>}</div></div>
+    {hasPermission('import.messages.view')&&<><AiSupportConversationSearch token={token}/><div data-qafrica-ai-support-inbox><AiSupportInbox token={token}/></div></>}
   </div>;
 }
