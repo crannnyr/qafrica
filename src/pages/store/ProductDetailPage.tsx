@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  ShoppingCart, ArrowLeft, Heart,
+  ShoppingCart, ArrowLeft, Heart, Store as StoreIcon, ChevronRight,
   Minus, Plus, Check, AlertCircle, Clock,
   ChevronDown, ChevronUp, Truck, Shield, Package,
 } from 'lucide-react';
@@ -16,8 +16,9 @@ import { useForceLightMode } from '@/hooks/useForceLightMode';
 import type { Store as StoreType, Product, ProductVariant } from '@/types';
 import { LookPageHeader } from '@/components/storefront/StoreBrand';
 import { useStoreLook } from '@/hooks/useStoreLook';
-import { applyPreviewOverrides } from '@/lib/storefrontLooks';
-import { recordStoreTouch } from '@/lib/marketplaceAttribution';
+import { applyPreviewOverrides, previewSearch } from '@/lib/storefrontLooks';
+import { recordStoreTouch, marketplaceLink } from '@/lib/marketplaceAttribution';
+import { useSmartBack, MARKETPLACE_STATE } from '@/lib/navigation';
 
 // ── Helper: pick black or white text based on background color ────────────────
 function getContrastColor(hex: string): string {
@@ -130,6 +131,10 @@ export default function ProductDetailPage() {
   useForceLightMode();
   const { slug, productId } = useParams<{ slug: string; productId: string }>();
   const navigate = useNavigate();
+  // Back: marketplace if opened from /stores, otherwise this product's store. Never stacks history.
+  const { goBack, fromMarketplace } = useSmartBack(`/${slug}${previewSearch()}`);
+  const storeHref = fromMarketplace ? marketplaceLink(`/${slug}`) : `/${slug}${previewSearch()}`;
+  const chainState = fromMarketplace ? MARKETPLACE_STATE : undefined;
   const { addItem, addToWishlist, removeFromWishlist, isInWishlist, getTotalItems } = useCartStore();
   const { customer } = useCustomerAuthStore();
 
@@ -398,19 +403,20 @@ export default function ProductDetailPage() {
 
       {/* ── Header ── */}
       {look ? (
-        <LookPageHeader store={viewStore ?? store} look={look} primary={primary} slug={slug ?? store.slug} cartCount={getTotalItems()} />
+        <LookPageHeader store={viewStore ?? store} look={look} primary={primary} slug={slug ?? store.slug} cartCount={getTotalItems()} onBack={goBack} backLabel={fromMarketplace ? 'Back to marketplace' : undefined} storeHref={storeHref} storeState={chainState} />
       ) : (
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <Link
-            to={`/${slug}`}
+          <button
+            type="button"
+            onClick={goBack}
             className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back
-          </Link>
+            {fromMarketplace ? 'Marketplace' : 'Back'}
+          </button>
 
-          <Link to={`/${slug}`} className="flex items-center gap-2">
+          <Link to={storeHref} state={chainState} className="flex items-center gap-2">
             {store.logo_url ? (
               <img src={store.logo_url} alt={store.name} className="w-7 h-7 rounded-md object-cover" />
             ) : (
@@ -467,6 +473,30 @@ export default function ProductDetailPage() {
                 {product.name}
               </h1>
             </div>
+
+            {/* Marketplace visitors: the only way into the seller's store. Back from there returns to /stores. */}
+            {fromMarketplace && (
+              <Link
+                to={storeHref}
+                state={chainState}
+                className="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2.5 hover:border-gray-300 hover:bg-gray-50 transition"
+              >
+                {store.logo_url ? (
+                  <img src={store.logo_url} alt="" className="w-9 h-9 rounded-lg object-cover" />
+                ) : (
+                  <span className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold" style={{ backgroundColor: primary, color: contrastText }}>
+                    {store.name.charAt(0)}
+                  </span>
+                )}
+                <span className="flex-1 min-w-0">
+                  <span className="block text-xs text-gray-500">Sold by</span>
+                  <span className="block text-sm font-semibold text-gray-900 truncate">{store.name}</span>
+                </span>
+                <span className="inline-flex items-center gap-1 text-sm font-medium text-gray-700">
+                  <StoreIcon className="w-4 h-4" /> View store <ChevronRight className="w-4 h-4" />
+                </span>
+              </Link>
+            )}
 
             {/* Price + stock */}
             <div className="flex items-center justify-between">
@@ -624,7 +654,8 @@ export default function ProductDetailPage() {
               {relatedProducts.map(related => (
                 <Link
                   key={related.id}
-                  to={`/${slug}/product/${related.id}`}
+                  to={fromMarketplace ? marketplaceLink(`/${slug}/product/${related.id}`) : `/${slug}/product/${related.id}`}
+                  state={chainState}
                   className="group"
                 >
                   <div className="relative aspect-square bg-gray-50 rounded-xl overflow-hidden mb-3">

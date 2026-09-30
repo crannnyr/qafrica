@@ -30,12 +30,27 @@ export type MarketNiche = { id: string; count: number; image: string };
 const PAGE = 24;
 
 type FeedArgs = { tab: FeedTab; niche: string | null; category: string | null; search: string | null };
+type FeedStatus = 'idle' | 'loading' | 'error' | 'done';
+
+// Remembers loaded pages per filter set, so coming back to /stores (e.g. from a product)
+// shows the same products instantly and the scroll position can be restored.
+const FEED_TTL_MS = 10 * 60 * 1000;
+const feedCache = new Map<string, { items: MarketProduct[]; offset: number; status: FeedStatus; at: number }>();
+const feedKey = (a: FeedArgs) => JSON.stringify([a.tab, a.niche, a.category, a.search?.trim() || null]);
+function cachedFeed(a: FeedArgs) {
+  const hit = feedCache.get(feedKey(a));
+  return hit && Date.now() - hit.at < FEED_TTL_MS ? hit : null;
+}
 
 /** Paged product feed; call loadMore when the sentinel scrolls into view. */
 export function useMarketFeed({ tab, niche, category, search }: FeedArgs) {
-  const [items, setItems] = useState<MarketProduct[]>([]);
-  const [status, setStatus] = useState<'idle' | 'loading' | 'error' | 'done'>('loading');
-  const offset = useRef(0);
+  const args = { tab, niche, category, search };
+  const [items, setItems] = useState<MarketProduct[]>(() => cachedFeed(args)?.items ?? []);
+  const [status, setStatus] = useState<FeedStatus>(() => {
+    const hit = cachedFeed(args);
+    return hit ? (hit.status === 'done' ? 'done' : 'idle') : 'loading';
+  });
+  const offset = useRef(cachedFeed(args)?.offset ?? 0);
   const reqId = useRef(0);
   const statusRef = useRef(status);
   useEffect(() => {
@@ -62,17 +77,30 @@ export function useMarketFeed({ tab, niche, category, search }: FeedArgs) {
       }
       const rows = (data ?? []) as MarketProduct[];
       offset.current += rows.length;
-      setItems((prev) => (reset ? rows : [...prev, ...rows.filter((r) => !prev.some((p) => p.id === r.id))]));
-      setStatus(rows.length < PAGE ? 'done' : 'idle');
+      const nextStatus: FeedStatus = rows.length < PAGE ? 'done' : 'idle';
+      const key = feedKey({ tab, niche, category, search });
+      setItems((prev) => {
+        const next = reset ? rows : [...prev, ...rows.filter((r) => !prev.some((p) => p.id === r.id))];
+        feedCache.set(key, { items: next, offset: offset.current, status: nextStatus, at: Date.now() });
+        return next;
+      });
+      setStatus(nextStatus);
     },
     [tab, niche, category, search],
   );
 
-  // New filters: start over
+  // New filters: start over (or reuse what we already loaded for these filters)
   useEffect(() => {
     let alive = true;
     Promise.resolve().then(() => {
       if (!alive) return;
+      const hit = cachedFeed({ tab, niche, category, search });
+      if (hit) {
+        offset.current = hit.offset;
+        setItems(hit.items);
+        setStatus(hit.status === 'done' ? 'done' : 'idle');
+        return;
+      }
       setItems([]);
       setStatus('loading');
       void fetchPage(true);
@@ -80,7 +108,7 @@ export function useMarketFeed({ tab, niche, category, search }: FeedArgs) {
     return () => {
       alive = false;
     };
-  }, [fetchPage]);
+  }, [fetchPage, tab, niche, category, search]);
 
   const loadMore = useCallback(() => {
     if (statusRef.current !== 'idle') return;

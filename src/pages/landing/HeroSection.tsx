@@ -88,8 +88,9 @@ export default function HeroSection({
               <div className="flex flex-col sm:flex-row gap-2.5">
                 <Link
                   to="/recommendations"
-                  className="group flex items-center justify-center gap-1.5 px-5 py-3 rounded-xl border border-gray-200 dark:border-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:border-orange-300 hover:text-orange-600 transition-colors"
+                  className="group relative flex items-center justify-center gap-1.5 px-5 py-3 rounded-xl border border-red-200 dark:border-red-900/40 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/20 dark:to-orange-950/10 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:border-orange-300 hover:text-orange-600 transition-colors overflow-hidden"
                 >
+                  <span aria-hidden className="text-base leading-none">🇨🇳</span>
                   Order from China
                   <ArrowRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                 </Link>
@@ -99,7 +100,7 @@ export default function HeroSection({
                   rel="noopener noreferrer"
                   className="group flex items-center justify-center gap-1.5 px-5 py-3 rounded-xl border border-gray-200 dark:border-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-300 hover:border-orange-300 hover:text-orange-600 transition-colors"
                 >
-                  Shop from the Genzees
+                  Shop from Verified QAFRICA Vendors
                   <ArrowRight className="w-3.5 h-3.5 opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
                 </a>
               </div>

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useStoreStore, useAuthStore } from '@/stores';
 
 import TabNav from './StoreSettings/TabNav';
+import AccountTab from './StoreSettings/AccountTab';
 import GeneralTab from './StoreSettings/GeneralTab';
 import ImagesTab from './StoreSettings/ImagesTab';
 import BrandingTab from './StoreSettings/BrandingTab';
@@ -18,7 +19,9 @@ export default function StoreSettingsPage() {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const t = new URLSearchParams(window.location.search).get('tab');
-    return TABS.some((x) => x.id === t) ? (t as Tab) : 'general';
+    if (TABS.some((x) => x.id === t)) return t as Tab;
+    // Until the email is confirmed, Settings opens on it (setup guide step 1)
+    return useAuthStore.getState().user?.email_verified ? 'general' : 'account';
   });
 
   return (
@@ -38,6 +41,7 @@ export default function StoreSettingsPage() {
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.15 }}
         >
+          {activeTab === 'account'  && <AccountTab />}
           {activeTab === 'general'  && <GeneralTab />}
           {activeTab === 'images'   && <ImagesTab />}
           {activeTab === 'branding' && <BrandingTab />}

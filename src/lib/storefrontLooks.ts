@@ -2,7 +2,7 @@
 // which only controls colours/fonts palette. A store's colours still come from
 // store.primary_color; the look decides layout, typography and navigation defaults.
 
-import type { Store, StorefrontLook, StorefrontNavStyle } from '@/types';
+import type { Store, StoreCollection, StorefrontLook, StorefrontNavStyle } from '@/types';
 
 export type LookSettingField = {
   key: string;
@@ -28,6 +28,8 @@ export type LookDefinition = {
   fields: LookSettingField[];
   // Things the look needs from the store itself (checked in settings)
   needsBanner?: boolean;
+  /** Premium looks: Growth plan (₦10,000/month) or higher, with curated collections. */
+  premium?: boolean;
 };
 
 export const STOREFRONT_LOOKS: LookDefinition[] = [
@@ -136,6 +138,50 @@ export const STOREFRONT_LOOKS: LookDefinition[] = [
       },
     ],
   },
+  {
+    id: 'atelier',
+    name: 'Atelier',
+    summary: 'Warm white, fine serif headings and soft layered cards. A rotating hero for your curated collections.',
+    bestFor: 'Fashion, beauty, jewellery, gifts.',
+    fonts: {
+      display: "'Fraunces', Georgia, serif",
+      body: "'Manrope', system-ui, sans-serif",
+      googleFamilies: ['Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600', 'Manrope:wght@400;500;600;700'],
+    },
+    defaultNav: 'bottom',
+    premium: true,
+    fields: [
+      {
+        key: 'tagline',
+        label: 'Welcome line',
+        help: 'Shown on your hero when you have no collections yet. Example: "Pieces made to be kept."',
+        placeholder: 'Pieces made to be kept.',
+        maxLength: 70,
+      },
+    ],
+  },
+  {
+    id: 'noir',
+    name: 'Noir',
+    summary: 'A deep charcoal hero with glass navigation over it, crisp modern type and a bright product area.',
+    bestFor: 'Gadgets, sneakers, menswear, lifestyle.',
+    fonts: {
+      display: "'Sora', system-ui, sans-serif",
+      body: "'Inter', system-ui, sans-serif",
+      googleFamilies: ['Sora:wght@400;500;600;700', 'Inter:wght@400;500;600'],
+    },
+    defaultNav: 'bottom',
+    premium: true,
+    fields: [
+      {
+        key: 'headline',
+        label: 'Headline',
+        help: 'Shown on your hero when you have no collections yet. Leave empty to use your store name.',
+        placeholder: 'Built to be noticed',
+        maxLength: 40,
+      },
+    ],
+  },
 ];
 
 export const getLook = (id?: string | null): LookDefinition | undefined =>
@@ -210,10 +256,50 @@ export function applyPreviewOverrides<T extends Store>(store: T, search: string 
     ...(look === 'classic' || isNewLook(look) ? { storefront_look: look as StorefrontLook } : {}),
     ...(nav === 'auto' || nav === 'bottom' || nav === 'sidebar' ? { nav_style: nav } : {}),
     ...(side === 'left' || side === 'right' ? { sidebar_side: side } : {}),
-    ...(settings ? { look_settings: settings } : {}),
+    // Merge so saved collections still show while previewing unsaved text changes
+    ...(settings ? { look_settings: { ...(store.look_settings ?? {}), ...settings } } : {}),
   };
 }
 
 /** Query string to carry the owner preview onto product pages ('' when not previewing). */
 export const previewSearch = (search: string = window.location.search) =>
   new URLSearchParams(search).get('sf_preview') === '1' ? search : '';
+
+// ── Premium looks & plans ────────────────────────────────────────────────────
+/** Plans that unlock premium looks: Growth (₦10,000/month) and above. */
+export const PREMIUM_TIERS = ['three_niches', 'unlimited'] as const;
+export const PREMIUM_PLAN_NAME = 'Growth';
+
+export const isPremiumLook = (id?: string | null) => !!getLook(id)?.premium;
+
+export function canUsePremium(sub: { tier?: string | null; is_active?: boolean | null; expires_at?: string | null } | null | undefined) {
+  if (!sub?.tier || sub.is_active === false) return false;
+  if (sub.expires_at && Date.parse(sub.expires_at) < Date.now()) return false;
+  return (PREMIUM_TIERS as readonly string[]).includes(sub.tier);
+}
+
+// ── Curated collections (premium looks) ──────────────────────────────────────
+export const MAX_COLLECTIONS = 8;
+
+/** All collections saved on the store, cleaned up. */
+export function getCollections(store: Pick<Store, 'look_settings'>): StoreCollection[] {
+  const raw = store.look_settings?.collections;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((c): c is StoreCollection => !!c && typeof c === 'object' && typeof (c as StoreCollection).id === 'string' && typeof (c as StoreCollection).title === 'string')
+    .map((c) => ({ ...c, product_ids: Array.isArray(c.product_ids) ? c.product_ids.filter((x) => typeof x === 'string') : [] }))
+    .slice(0, MAX_COLLECTIONS);
+}
+
+/** Collections a shopper can see right now (not hidden, inside their dates). */
+export function liveCollections(store: Pick<Store, 'look_settings'>, now = Date.now()): StoreCollection[] {
+  return getCollections(store).filter((c) => {
+    if (c.hidden) return false;
+    if (c.starts_at && Date.parse(c.starts_at) > now) return false;
+    if (c.ends_at && Date.parse(c.ends_at) + 24 * 60 * 60 * 1000 <= now) return false; // ends at end of that day
+    return true;
+  });
+}
+
+export const slugifyCollection = (title: string) =>
+  title.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'collection';

@@ -53,18 +53,26 @@ export function StoreBrand({ store, look, primary }: { store: BrandStore; look: 
 }
 
 /** Header for product pages under a new look: back, brand, cart. */
-export function LookPageHeader(p: { store: Store; look: LookDefinition; primary: string; slug: string; cartCount: number }) {
+export function LookPageHeader(p: {
+  store: Store; look: LookDefinition; primary: string; slug: string; cartCount: number;
+  /** Smart back (see lib/navigation). Without it, back links to the store home. */
+  onBack?: () => void; backLabel?: string; storeHref?: string; storeState?: unknown;
+}) {
+  const storeHref = p.storeHref ?? `/${p.slug}${previewSearch()}`;
+  const backClass = '-ml-2 p-2 rounded-full hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400';
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-gray-100">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 grid grid-cols-[auto_1fr_auto] items-center gap-3">
-        <Link
-          to={`/${p.slug}${previewSearch()}`}
-          aria-label={`Back to ${p.store.name}`}
-          className="-ml-2 p-2 rounded-full hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <Link to={`/${p.slug}${previewSearch()}`} className="justify-self-center min-w-0 max-w-full">
+        {p.onBack ? (
+          <button type="button" onClick={p.onBack} aria-label={p.backLabel ?? `Back to ${p.store.name}`} className={backClass}>
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+        ) : (
+          <Link to={storeHref} aria-label={`Back to ${p.store.name}`} className={backClass}>
+            <ArrowLeft className="w-5 h-5" />
+          </Link>
+        )}
+        <Link to={storeHref} state={p.storeState} className="justify-self-center min-w-0 max-w-full">
           <StoreBrand store={p.store} look={p.look} primary={p.primary} />
         </Link>
         <Link

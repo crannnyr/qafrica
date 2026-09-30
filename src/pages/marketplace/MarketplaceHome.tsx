@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { ShieldCheck, RefreshCw, PackageSearch } from 'lucide-react';
 import { marketplaceLink } from '@/lib/marketplaceAttribution';
+import { MARKETPLACE_STATE } from '@/lib/navigation';
 import MarketplaceLayout from './MarketplaceLayout';
 import ProductCard, { ProductCardSkeleton } from './ProductCard';
 import { nicheLabel, useMarketCategories, useMarketFeed, type FeedTab } from './useMarketplace';
@@ -20,7 +21,15 @@ export default function MarketplaceHome() {
   const query = params.get('q') ?? '';
   const niche = params.get('niche');
   const category = params.get('category');
-  const [tab, setTab] = useState<FeedTab>('for_you');
+  // Tab lives in the URL so coming back to /stores restores it
+  const tabParam = params.get('tab') as FeedTab | null;
+  const tab: FeedTab = TABS.some((t) => t.id === tabParam) ? (tabParam as FeedTab) : 'for_you';
+  const setTab = (id: FeedTab) => {
+    const next = new URLSearchParams(params);
+    if (id === 'for_you') next.delete('tab');
+    else next.set('tab', id);
+    setParams(next, { replace: true });
+  };
   const cats = useMarketCategories();
   const feed = useMarketFeed({ tab, niche, category, search: query || null });
   const browsing = !query && !niche && !category;
@@ -245,6 +254,7 @@ function BannerCarousel() {
           <Link
             key={s.id}
             to={marketplaceLink(`/${s.slug}`)}
+            state={MARKETPLACE_STATE}
             aria-roledescription="slide"
             aria-label={`${i + 1} of ${slides.length}: ${s.name}`}
             className="relative shrink-0 w-full snap-start aspect-[2.2/1] sm:aspect-[3.4/1] bg-gray-200"

@@ -135,7 +135,7 @@ export default function Sidebar({
       )}
 
       {/* ── Nav ── */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto min-h-0">
+      <nav data-tour="sidebar-nav" className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto min-h-0">
         {visibleItems.map((item) => (
           <NavGroup
             key={item.path}

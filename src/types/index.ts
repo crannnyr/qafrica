@@ -49,6 +49,8 @@ export interface User {
   // FIX: added onboarding fields used in PaymentCallbackPage & PricingPage
   onboarding_step?: number;
   onboarding_completed?: boolean;
+  /** Free-form onboarding state; `guide` holds the dashboard setup guide progress. */
+  onboarding_data?: Record<string, unknown> | null;
 }
 
 export interface SavedCard {
@@ -59,6 +61,23 @@ export interface SavedCard {
   brand: string;
   exp_month: string;
   exp_year: string;
+  is_default: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A card tokenized with Flutterwave for store-subscription payments (flutterwave_saved_cards). */
+export interface FlutterwaveSavedCard {
+  id: string;
+  user_id: string;
+  provider_customer_id: string;
+  payment_method_id: string;
+  last4: string;
+  first6: string | null;
+  network: string | null;
+  exp_month: number;
+  exp_year: number;
   is_default: boolean;
   is_active: boolean;
   created_at: string;
@@ -90,7 +109,20 @@ export interface StoreOwner extends User {
 // STORE TYPES
 // ============================================
 
-export type StorefrontLook = 'classic' | 'clean' | 'boutique' | 'catalog' | 'social' | 'bento';
+export type StorefrontLook = 'classic' | 'clean' | 'boutique' | 'catalog' | 'social' | 'bento' | 'atelier' | 'noir';
+
+/** A curated list of products with its own hero slide (premium looks). Saved in look_settings.collections. */
+export interface StoreCollection {
+  id: string;            // url-safe, e.g. 'december-sales'
+  title: string;         // "December Sales"
+  subtitle?: string;     // "Up to 30% off gifts"
+  image?: string;        // hero image URL
+  cta?: string;          // button label, default "Shop now"
+  product_ids: string[];
+  starts_at?: string | null; // ISO date; hidden before
+  ends_at?: string | null;   // ISO date; hidden after
+  hidden?: boolean;
+}
 export type StorefrontNavStyle = 'auto' | 'bottom' | 'sidebar';
 
 export interface Store {
@@ -117,6 +149,8 @@ export interface Store {
   block_reason?: string;
   custom_domain?: string;
   domain_status?: 'none' | 'pending' | 'processing' | 'connected' | 'failed';
+  /** Store chose to list on the QAFRICA marketplace (/stores). */
+  marketplace_enabled?: boolean;
   domain_paid_amount?: number;
   created_at: string;
   updated_at: string;
