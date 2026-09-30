@@ -73,6 +73,7 @@ const ImportAdminV2PaymentTransactions = lazy(() => import('@/pages/import-admin
 const ImportAdminV2EmailTemplates = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2EmailTemplates'));
 const ImportAdminV2Broadcast = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Broadcast'));
 const ImportAdminV2ProductFAQ = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2ProductFAQ'));
+const ImportAdminV2Reviews = lazy(() => import('@/pages/import-admin-v2/ImportReviewsManager'));
 const ImportAdminV2Trending = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Trending'));
 const ImportAdminV2Inventory = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2Inventory'));
 const ImportAdminV2ConfirmedPayments = lazy(() => import('@/pages/import-admin-v2/ImportAdminV2ConfirmedPayments'));
@@ -445,6 +446,7 @@ function App() {
             <Route path="email-templates" element={<ImportAdminV2EmailTemplates />} />
             <Route path="broadcast" element={<ImportAdminV2Broadcast />} />
             <Route path="product-faq" element={<ImportAdminV2ProductFAQ />} />
+            <Route path="reviews" element={<ImportAdminV2Reviews />} />
             <Route path="products/add" element={<ImportAdminV2ProductAdd />} />
             <Route path="products/edit/:id" element={<ImportAdminV2ProductAdd />} />
           </Route>
