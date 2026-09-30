@@ -367,7 +367,7 @@ function SitewideMetaPixel() {
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
-    const path = location.pathname.replace(/\\/+$/, '') || '/';
+    const path = location.pathname.endsWith('/') && location.pathname !== '/' ? location.pathname.slice(0, -1) : location.pathname;
     if (META_BLOCKED_PREFIXES.some(prefix => path === prefix || path.startsWith(prefix + '/'))) return;
 
     const w = window as Window & { fbq?: MetaFbq; _fbq?: MetaFbq };
