@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Power, RefreshCw, Tag, X } from 'lucide-react';
 import CONFIG from '@/lib/config';
+import { getManagementToken } from './ManagementAuth';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-promotions`;
 
@@ -51,27 +52,28 @@ export default function ChinaImportPromotions() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const managerToken = typeof window !== 'undefined' ? sessionStorage.getItem('import_manager_token') : null;
-
   const load = async () => {
     setLoading(true);
     setError('');
     try {
+      const managerToken = getManagementToken();
+      if (!managerToken) throw new Error('Management session expired');
       const res = await fetch(`${EDGE_URL}?action=admin-list`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: managerToken }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? 'Could not load promotions');
       setPromotions(data.promotions ?? []);
-    } catch (e: any) {
-      setError(e?.message ?? 'Could not load promotions');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load promotions');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { void load(); }, []);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -100,8 +102,11 @@ export default function ChinaImportPromotions() {
   };
 
   const save = async () => {
-    setSaving(true); setError('');
+    setSaving(true);
+    setError('');
     try {
+      const managerToken = getManagementToken();
+      if (!managerToken) throw new Error('Management session expired');
       const payload = {
         ...form,
         id: editingId ?? undefined,
@@ -113,12 +118,12 @@ export default function ChinaImportPromotions() {
       const res = await fetch(`${EDGE_URL}?action=admin-upsert`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? 'Could not save promotion');
       setShowForm(false);
       await load();
-    } catch (e: any) {
-      setError(e?.message ?? 'Could not save promotion');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save promotion');
     } finally {
       setSaving(false);
     }
@@ -127,59 +132,70 @@ export default function ChinaImportPromotions() {
   const toggle = async (p: Promotion) => {
     setError('');
     try {
+      const managerToken = getManagementToken();
+      if (!managerToken) throw new Error('Management session expired');
       const res = await fetch(`${EDGE_URL}?action=admin-toggle`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: managerToken, id: p.id, is_active: !p.is_active }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? 'Could not update promotion');
       setPromotions(prev => prev.map(x => x.id === p.id ? data.promotion : x));
-    } catch (e: any) {
-      setError(e?.message ?? 'Could not update promotion');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not update promotion');
     }
   };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Tag className="w-5 h-5 text-orange-500" />
-            <h1 className="text-xl font-bold text-gray-900">China Import Promotions</h1>
+    <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Tag className="w-4 h-4 text-gray-400" />
+              <h1 className="font-bold text-gray-900 text-sm">China Import Promotions</h1>
+              <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full font-medium">{promotions.length.toLocaleString()}</span>
+            </div>
+            <p className="text-[11px] text-gray-400 mt-1">Promo codes for /recommendations only. Storefront coupons are not used here.</p>
           </div>
-          <p className="text-sm text-gray-500 mt-1">Promo codes for /recommendations only. Storefront coupons are not used here.</p>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={openCreate} className="inline-flex items-center gap-1.5 px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-bold">
+              <Plus className="w-3.5 h-3.5" /> New promo
+            </button>
+            <button onClick={() => void load()} disabled={loading} className="p-2 hover:bg-gray-100 rounded-lg" title="Refresh promotions" aria-label="Refresh promotions">
+              <RefreshCw className={`w-4 h-4 text-gray-400 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <button onClick={load} className="px-3 py-2 rounded-lg border text-sm flex items-center gap-2"><RefreshCw className="w-4 h-4" />Refresh</button>
-          <button onClick={openCreate} className="px-3 py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold flex items-center gap-2"><Plus className="w-4 h-4" />New promo</button>
+
+        {error && <div className="mx-5 mt-4 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs">{error}</div>}
+
+        <div className="px-5 py-3 border-b border-gray-100">
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search promo code or name…" className="w-full max-w-md px-3 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-orange-500" />
         </div>
-      </div>
 
-      {error && <div className="rounded-lg bg-red-50 border border-red-200 text-red-700 px-4 py-3 text-sm">{error}</div>}
-
-      <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search promo code or name" className="w-full max-w-md border rounded-lg px-3 py-2 text-sm" />
-
-      <div className="bg-white rounded-xl border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left">
-              <tr>
-                <th className="p-3">Code</th><th className="p-3">Discount</th><th className="p-3">Minimum</th><th className="p-3">Usage</th><th className="p-3">Validity</th><th className="p-3">Status</th><th className="p-3"></th>
+          <table className="w-full min-w-[900px] text-left">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr className="text-[10px] uppercase tracking-wide text-gray-400">
+                <th className="px-5 py-3 font-bold">Code</th><th className="px-4 py-3 font-bold">Discount</th><th className="px-4 py-3 font-bold">Minimum</th><th className="px-4 py-3 font-bold">Usage</th><th className="px-4 py-3 font-bold">Validity</th><th className="px-4 py-3 font-bold">Status</th><th className="px-4 py-3 font-bold">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              {loading ? <tr><td colSpan={7} className="p-8 text-center text-gray-400">Loading…</td></tr> : filtered.map(p => (
-                <tr key={p.id} className="border-t">
-                  <td className="p-3"><div className="font-bold">{p.code}</div><div className="text-xs text-gray-500">{p.name ?? '—'}</div></td>
-                  <td className="p-3 font-semibold">{p.discount_type === 'percentage' ? `${p.discount_value}%` : money(p.discount_value)}</td>
-                  <td className="p-3">{money(p.minimum_order_ngn)}</td>
-                  <td className="p-3">{p.usage_count}{p.usage_limit == null ? '' : ` / ${p.usage_limit}`}</td>
-                  <td className="p-3 text-xs">{p.starts_at ? new Date(p.starts_at).toLocaleString() : 'Now'}<br />{p.expires_at ? new Date(p.expires_at).toLocaleString() : 'No expiry'}</td>
-                  <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs font-semibold ${p.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{p.is_active ? 'Active' : 'Inactive'}</span></td>
-                  <td className="p-3"><div className="flex gap-1"><button onClick={() => openEdit(p)} className="p-2 rounded hover:bg-gray-100" title="Edit"><Pencil className="w-4 h-4" /></button><button onClick={() => toggle(p)} className="p-2 rounded hover:bg-gray-100" title="Toggle"><Power className="w-4 h-4" /></button></div></td>
+            <tbody className="divide-y divide-gray-50">
+              {loading ? (
+                <tr><td colSpan={7} className="px-5 py-12 text-center"><RefreshCw className="w-5 h-5 text-orange-500 animate-spin mx-auto" /></td></tr>
+              ) : filtered.map(p => (
+                <tr key={p.id} className="hover:bg-gray-50">
+                  <td className="px-5 py-3"><div className="font-semibold text-sm text-gray-900">{p.code}</div><div className="text-[10px] text-gray-400">{p.name ?? '—'}</div></td>
+                  <td className="px-4 py-3 text-xs font-semibold text-gray-800">{p.discount_type === 'percentage' ? `${p.discount_value}%` : money(p.discount_value)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{money(p.minimum_order_ngn)}</td>
+                  <td className="px-4 py-3 text-xs text-gray-600">{p.usage_count}{p.usage_limit == null ? '' : ` / ${p.usage_limit}`}</td>
+                  <td className="px-4 py-3 text-[10px] text-gray-500">{p.starts_at ? new Date(p.starts_at).toLocaleString() : 'Now'}<br />{p.expires_at ? new Date(p.expires_at).toLocaleString() : 'No expiry'}</td>
+                  <td className="px-4 py-3"><span className={`inline-flex px-2 py-1 rounded-full text-[9px] font-bold ${p.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'}`}>{p.is_active ? 'Active' : 'Inactive'}</span></td>
+                  <td className="px-4 py-3"><div className="flex items-center gap-1"><button onClick={() => openEdit(p)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Edit"><Pencil className="w-3.5 h-3.5" /></button><button onClick={() => void toggle(p)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title={p.is_active ? 'Deactivate' : 'Activate'}><Power className="w-3.5 h-3.5" /></button></div></td>
                 </tr>
               ))}
-              {!loading && filtered.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-gray-400">No China Import promotions found.</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={7} className="px-5 py-12 text-center text-sm text-gray-400">No China Import promotions found.</td></tr>}
             </tbody>
           </table>
         </div>
