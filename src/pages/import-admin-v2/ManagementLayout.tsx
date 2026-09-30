@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingCart, Menu, X, PackageCheck, CheckCircle2, Boxes,
   LogOut, Shield, ChevronLeft, User, Loader, Settings, Tags, ReceiptText, MessageSquare,
-  Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard, Mail, Megaphone, CircleHelp, Users, TrendingUp,
+  Truck, MessageCircle, UserCog, ClipboardList, RotateCcw, WalletCards, CreditCard, Mail, Megaphone, CircleHelp, Users, TrendingUp, Ticket,
 } from 'lucide-react';
 import { getManagementManager, logoutManagementSession, validateManagementSession, getManagementToken, type ManagementManager } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
@@ -80,6 +80,7 @@ const NAV = [
     items: [
       { icon: Users, label: 'Users', path: '/import-admin-v2/users', permission: 'import.clients.view' },
       { icon: MessageCircle, label: 'Support', path: '/import-admin-v2/support', permission: 'import.messages.view' },
+      { icon: Ticket, label: 'Support Tickets', path: '/import-admin-v2/support?view=tickets', permission: 'import.messages.view' },
       { icon: CircleHelp, label: 'Product FAQ', path: '/import-admin-v2/product-faq', permission: 'import.questions.view' },
     ],
   },
@@ -139,10 +140,11 @@ export default function ManagementLayout() {
     navigate('/import-admin-v2/logout');
   };
 
-  const isActive = (path: string) =>
-    path === '/import-admin-v2'
-      ? location.pathname === '/import-admin-v2'
-      : location.pathname === path || location.pathname.startsWith(path + '/');
+  const isActive = (path: string) => {
+    const [pathname, search] = path.split('?');
+    if (search) return location.pathname === pathname && location.search === `?${search}`;
+    return location.pathname === pathname || location.pathname.startsWith(pathname + '/');
+  };
 
   const activeItem = NAV.flatMap(section => section.items).find(n => isActive(n.path));
   const activeLabel = activeItem?.label || 'Dashboard';
@@ -275,7 +277,7 @@ export default function ManagementLayout() {
             </div>
           ) : (
             <AnimatePresence mode="wait">
-              <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
+              <motion.div key={location.pathname + location.search} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.18 }}>
                 <Outlet />
               </motion.div>
             </AnimatePresence>
