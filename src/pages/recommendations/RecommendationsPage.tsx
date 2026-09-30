@@ -24,46 +24,6 @@ import OpticsviewMergerNotice from './OpticsviewMergerNotice';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 
-// Meta Pixel: PageView only. No QAfrica customer, order, address, email,
-// phone, account ID, or Supabase data is passed to Meta by this integration.
-const META_PIXEL_ID = '2267794760686832';
-
-type MetaFbq = ((...args: unknown[]) => void) & { queue?: unknown[]; loaded?: boolean; version?: string; push?: (...args: unknown[]) => void; callMethod?: (...args: unknown[]) => void };
-
-function useRecommendationsMetaPixel() {
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') return;
-
-    const w = window as Window & { fbq?: MetaFbq; _fbq?: MetaFbq };
-    if (w.fbq) {
-      w.fbq('track', 'PageView');
-      return;
-    }
-
-    const fbq = ((...args: unknown[]) => {
-      if (fbq.callMethod) fbq.callMethod(...args);
-      else fbq.queue?.push(args);
-    }) as MetaFbq;
-    fbq.queue = [];
-    fbq.loaded = true;
-    fbq.version = '2.0';
-    fbq.push = (...args: unknown[]) => fbq.queue?.push(args);
-    w.fbq = fbq;
-    w._fbq = fbq;
-
-    const script = document.createElement('script');
-    script.async = true;
-    script.src = 'https://connect.facebook.net/en_US/fbevents.js';
-    script.dataset.qafricaMetaPixel = META_PIXEL_ID;
-    const firstScript = document.getElementsByTagName('script')[0];
-    if (firstScript?.parentNode) firstScript.parentNode.insertBefore(script, firstScript);
-    else document.head.appendChild(script);
-
-    fbq('init', META_PIXEL_ID);
-    fbq('track', 'PageView');
-  }, []);
-}
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface VariantGroup {
   id: string;
@@ -407,7 +367,6 @@ function ProductCard({
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function RecommendationsPage() {
-  useRecommendationsMetaPixel();
   useImportPwaManifest();
   const navigate = useNavigate();
   const { customer, isAuthenticated, logout, fetchProfile } = useCustomerAuthStore();
