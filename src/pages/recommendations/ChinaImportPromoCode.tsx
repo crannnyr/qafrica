@@ -63,7 +63,7 @@ export default function ChinaImportPromoCode({ customerId, orderSubtotalNgn, val
       ) : (
         <div className="flex gap-2">
           <input value={value} onChange={e => onChange(e.target.value.toUpperCase())} onKeyDown={e => { if (e.key === 'Enter') apply(); }} placeholder="Enter promo code" className="min-w-0 flex-1 border rounded-lg px-3 py-2.5 text-sm uppercase" />
-          <button disabled={loading || !value.trim()} onClick={apply} className="px-4 py-2.5 rounded-lg bg-gray-900 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-2">{loading && <Loader2 className="w-4 h-4 animate-spin" />}Apply</button>
+          <button disabled={loading || !value.trim()} onClick={apply} className="px-4 py-2.5 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold disabled:opacity-50 flex items-center gap-2">{loading && <Loader2 className="w-4 h-4 animate-spin" />}Apply</button>
         </div>
       )}
       {message && !quote?.promotion_id && <p className="text-xs text-red-600">{message}</p>}
