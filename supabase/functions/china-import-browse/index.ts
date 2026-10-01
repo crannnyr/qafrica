@@ -43,56 +43,18 @@ function cacheSet(key: string, data: unknown, ttlMs: number) {
   memoryCache.set(key, { data, expires: Date.now() + ttlMs })
 }
 
-// ── Deterministic rotation ───────────────────────────────────────────────────
-// The catalogue is re-ordered every 4 hours so every product gets time near the
-// top, and products from the same category are spread apart so a shoe never
-// sits beside another shoe.
-//
-// Why a SEEDED order rather than random: the grid is paginated with infinite
-// scroll. A genuinely random order would mean page 2 is drawn from a different
-// shuffle than page 1, so a customer sees some products twice and others never
-// at all. A seed makes the order deterministic -- the same for every visitor in
-// the same 4-hour window, stable across pages, reproducible for support, and
-// safe to cache.
-//
-// Why not ORDER BY random() in SQL: it forces a full scan and sort on every
-// request, returns something different each time, and defeats every cache.
 const ROTATION_MS = 4 * 60 * 60 * 1000
-
 function currentSeed(): number {
   return Math.floor(Date.now() / ROTATION_MS)
 }
-
-function mulberry32(a: number) {
-  return function () {
-    a |= 0; a = (a + 0x6D2B79F5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-// Mixes the product id into the seed so a product's position depends on both,
-// not on where it happened to sit in the source array.
 function hashId(id: string, seed: number): number {
   let h = (seed >>> 0) ^ 0x9E3779B9
-  for (let i = 0; i < id.length; i++) {
-    h = Math.imul(h ^ id.charCodeAt(i), 2654435761) >>> 0
-  }
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 2654435761) >>> 0
   return h >>> 0
 }
-
 function seededOrder<T extends { id: string }>(items: T[], seed: number): T[] {
   return [...items].sort((a, b) => hashId(a.id, seed) - hashId(b.id, seed))
 }
-
-// Spreads categories apart by always emitting from whichever category has the
-// most items left, never twice in a row while an alternative exists.
-//
-// Exact when no category exceeds half the catalogue. The largest here is
-// Clothing at ~31%, so zero same-category neighbours is achievable. If a
-// category ever did exceed half, the tail would unavoidably repeat -- this
-// degrades gracefully rather than failing.
 function spreadCategories<T extends { category?: string | null }>(items: T[]): T[] {
   const buckets = new Map<string, T[]>()
   for (const item of items) {
@@ -101,20 +63,15 @@ function spreadCategories<T extends { category?: string | null }>(items: T[]): T
     buckets.get(key)!.push(item)
   }
   if (buckets.size <= 1) return items
-
   const out: T[] = []
   let last: string | null = null
-
   while (out.length < items.length) {
     let pick: string | null = null
     for (const [key, arr] of buckets) {
       if (arr.length === 0 || key === last) continue
       if (pick === null || arr.length > buckets.get(pick)!.length) pick = key
     }
-    // Only the just-used category has anything left; repeating beats dropping.
-    if (pick === null) {
-      for (const [key, arr] of buckets) { if (arr.length) { pick = key; break } }
-    }
+    if (pick === null) for (const [key, arr] of buckets) if (arr.length) { pick = key; break }
     if (pick === null) break
     out.push(buckets.get(pick)!.shift()!)
     last = pick
@@ -185,66 +142,32 @@ serve(async (req: Request) => {
       const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0)
 
       const hasSearch = !!(search && search.trim())
-      const strictSearch = url.searchParams.get('strict_search') === 'true'
-
-      // Rotation applies to ordinary browsing only.
-      //
-      // Search is excluded on purpose: when someone types "sneaker" they want
-      // the best matches, not a fair rotation. Explicit sorts (trending, new,
-      // oldest) are excluded because the order IS the point of those views.
       const rotate = sort === 'default' && !hasSearch
 
       if (rotate) {
-        // The seed can be pinned by the client so an infinite-scroll session
-        // stays on one rotation. Without this, a customer scrolling across a
-        // 4-hour boundary would get page 3 from a different order than page 1
-        // and see duplicates.
         const seedParam = Number(url.searchParams.get('seed'))
         const seed = Number.isFinite(seedParam) && seedParam > 0 ? Math.floor(seedParam) : currentSeed()
-
         const cacheKey = `ordered:${parent ?? ''}:${subcategory ?? ''}:${priceMax ?? ''}:${excludeId ?? ''}:${seed}`
         let ordered = cacheGet<any[]>(cacheKey)
 
         if (!ordered) {
-          // Ordering has to happen across the whole filtered set BEFORE
-          // pagination -- shuffling within a page of 20 would leave every
-          // category still clustered on the same pages.
-          let q = supabase
-            .from('china_import_products')
-            .select(PRODUCT_COLUMNS)
-            .eq('is_active', true)
-
+          let q = supabase.from('china_import_products').select(PRODUCT_COLUMNS).eq('is_active', true)
           if (parent && parent !== 'All') q = q.eq('parent_category', parent)
           if (subcategory && subcategory !== 'All') q = q.eq('category', subcategory)
           if (priceMax) q = q.lte('price_ngn', Number(priceMax))
           if (excludeId) q = q.neq('id', excludeId)
-
           const { data, error } = await q.limit(2000)
           if (error) return json({ error: error.message, products: [] }, 500)
-
           ordered = spreadCategories(seededOrder(data ?? [], seed))
-
-          // Held for 5 minutes rather than the whole 4-hour window so newly
-          // added or deactivated products appear reasonably quickly. One query
-          // per filter per 5 minutes against ~300 rows is negligible.
           cacheSet(cacheKey, ordered, 5 * 60_000)
         }
 
         const total = ordered.length
         const page = ordered.slice(offset, offset + limit)
-        return jsonCached({
-          products: page,
-          total,
-          hasMore: offset + page.length < total,
-          seed,
-        }, 60)
+        return jsonCached({ products: page, total, hasMore: offset + page.length < total, seed }, 60)
       }
 
-      let query = supabase
-        .from('china_import_products')
-        .select(PRODUCT_COLUMNS, { count: 'exact' })
-        .eq('is_active', true)
-
+      let query = supabase.from('china_import_products').select(PRODUCT_COLUMNS, { count: 'exact' }).eq('is_active', true)
       if (parent && parent !== 'All') query = query.eq('parent_category', parent)
       if (subcategory && subcategory !== 'All') query = query.eq('category', subcategory)
       if (priceMax) query = query.lte('price_ngn', Number(priceMax))
@@ -253,13 +176,14 @@ serve(async (req: Request) => {
       if (hasSearch) {
         const tokens = search!.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6)
         for (const token of tokens) {
-          const alts = strictSearch ? [token] : Array.from(new Set([token, ...(SYNONYMS[token] ?? [])]))
+          const alts = Array.from(new Set([token, ...(SYNONYMS[token] ?? [])]))
           const orParts: string[] = []
           for (const alt of alts) {
             const escaped = escapeIlike(alt)
+            // Product searches intentionally use product text only. Category
+            // matching is reserved for explicit category/subcategory pills.
             orParts.push(`name.ilike.%${escaped}%`)
             orParts.push(`description.ilike.%${escaped}%`)
-            orParts.push(`category.ilike.%${escaped}%`)
           }
           query = query.or(orParts.join(','))
         }
@@ -271,26 +195,17 @@ serve(async (req: Request) => {
       else query = query.order('sort_order', { ascending: true }).order('created_at', { ascending: false })
 
       query = query.range(offset, offset + limit - 1)
-
       const { data, error, count } = await query
       if (error) return json({ error: error.message, products: [] }, 500)
-
       const total = count ?? 0
-      return jsonCached({
-        products: data ?? [],
-        total,
-        hasMore: offset + (data?.length ?? 0) < total,
-      }, 20)
+      return jsonCached({ products: data ?? [], total, hasMore: offset + (data?.length ?? 0) < total }, 20)
+    }
+
     if (req.method === 'GET' && action === 'categories') {
       const cached = cacheGet<unknown>('categories')
       if (cached) return jsonCached(cached, 300)
-
-      const { data, error } = await supabase
-        .from('china_import_products')
-        .select('parent_category, category')
-        .eq('is_active', true)
+      const { data, error } = await supabase.from('china_import_products').select('parent_category, category').eq('is_active', true)
       if (error) return json({ error: error.message, categories: [] }, 500)
-
       const order = ['Fashion', 'Electronics', 'Power & Charging', 'Home & Living', 'Beauty', 'Other']
       const map = new Map<string, Set<string>>()
       for (const row of data ?? []) {
@@ -300,16 +215,17 @@ serve(async (req: Request) => {
         if (!map.has(p)) map.set(p, new Set())
         map.get(p)!.add(c)
       }
-      const categories = Array.from(map.entries())
-        .map(([parent, subs]) => ({ parent, subcategories: Array.from(subs).sort() }))
-        .sort((a, b) => {
-          const ai = order.indexOf(a.parent); const bi = order.indexOf(b.parent)
-          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
-        })
-
+      const categories = Array.from(map.entries()).map(([parent, subs]) => ({ parent, subcategories: Array.from(subs).sort() })).sort((a, b) => {
+        const ai = order.indexOf(a.parent); const bi = order.indexOf(b.parent)
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+      })
       const body = { categories }
       cacheSet('categories', body, 300_000)
       return jsonCached(body, 300)
     }
 
-
+    return json({ error: `Unknown action: ${action ?? '(missing)'}` }, 400)
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : 'Unknown error', products: [] }, 500)
+  }
+})
