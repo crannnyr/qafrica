@@ -89,6 +89,7 @@ function ImportAdminRouteBridge() {
 }
 const ImporterDashboardPage = lazy(() => import('@/pages/recommendations/ImporterDashboardPage'));
 const RecommendationsPage = lazy(() => import('@/pages/recommendations/RecommendationsPage'));
+const RecommendationsSearchPage = lazy(() => import('@/pages/recommendations/RecommendationsSearchPage'));
 const CustomOrderRequestPage = lazy(() => import('@/pages/recommendations/CustomOrderRequestPage'));
 const RecommendationsProductDetailPage = lazy(() => import('@/pages/recommendations/ProductDetailPage'));
 const LogisticsBlogPage = lazy(() => import('@/pages/recommendations/LogisticsBlogPage'));
@@ -514,6 +515,7 @@ function App() {
           </Route>
           <Route path="/importations/dashboard" element={<ImporterDashboardPage />} />
           <Route path="/recommendations" element={<RecommendationsPage />} />
+          <Route path="/recommendations/sreach" element={<RecommendationsSearchPage />} />
           <Route path="/custom-order" element={<CustomOrderRequestPage />} />
           <Route path="/recommendations/logistics" element={<LogisticsBlogPage />} />
           <Route path="/recommendations/:id" element={<RecommendationsProductDetailPage />} />

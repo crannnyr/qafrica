@@ -633,7 +633,7 @@ export default function RecommendationsPage() {
                 mobile and desktop now, rather than a separate, more
                 limited inline input on desktop with no results dropdown. */}
             <button
-              onClick={() => setShowSearch(true)}
+              onClick={() => navigate('/recommendations/sreach')}
               className="w-full relative flex items-center pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs text-gray-400 text-left hover:border-gray-300 transition-colors"
             >
               <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
