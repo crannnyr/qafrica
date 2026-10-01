@@ -185,6 +185,7 @@ serve(async (req: Request) => {
       const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0)
 
       const hasSearch = !!(search && search.trim())
+      const strictSearch = url.searchParams.get('strict_search') === 'true'
 
       // Rotation applies to ordinary browsing only.
       //
