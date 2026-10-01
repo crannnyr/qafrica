@@ -85,7 +85,6 @@ export default function RecommendationsSearchPage() {
         const data = await response.json();
         if (!response.ok) throw new Error(data?.error || 'Keyword load failed');
         const source = (data.products ?? []) as (ImportProduct & { parent_category?: string | null })[];
-
         const candidates = new Map<string, SearchKeyword>();
         source.forEach(product => {
           const add = (raw: string | null | undefined, filter: 'parent' | 'subcategory') => {
@@ -97,10 +96,6 @@ export default function RecommendationsSearchPage() {
           add(product.parent_category, 'parent');
           add(product.category, 'subcategory');
         });
-
-        // Keep the exact category/subcategory name stored in the catalogue.
-        // Only the selection order is randomized; the displayed keyword is never
-        // shortened, singularized, or derived from a product name.
         setKeywords(shuffle([...candidates.values()]).slice(0, 5));
       } catch {
         setKeywords([]);
@@ -254,9 +249,9 @@ export default function RecommendationsSearchPage() {
       <main className="max-w-7xl mx-auto px-4 pt-5 pb-16">
         {!submittedQuery && (
           <section className="mb-6">
-            <div className="flex items-center gap-2 mb-3"><Sparkles className="w-5 h-5 text-orange-400" /><h2 className="text-lg font-bold text-gray-900">Trending searches</h2></div>
-            <div className="flex flex-wrap gap-2">
-              {keywordsLoading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-10 w-28 rounded-full bg-white border border-gray-100 animate-pulse" />) : keywords.map(keyword => <button key={`${keyword.filter}-${keyword.value}`} type="button" onClick={() => runSearch(keyword.value, 'category', keyword.filter)} className="px-4 py-2.5 rounded-full bg-white border border-gray-200 text-sm font-semibold text-gray-600 hover:border-gray-300 hover:text-gray-900">{keyword.label}</button>)}
+            <div className="flex items-center gap-2 mb-2"><Sparkles className="w-4 h-4 text-orange-400" /><h2 className="text-base font-bold text-gray-900">Trending searches</h2></div>
+            <div className="flex flex-wrap gap-1.5">
+              {keywordsLoading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-8 w-24 rounded-full bg-white border border-gray-100 animate-pulse" />) : keywords.map(keyword => <button key={`${keyword.filter}-${keyword.value}`} type="button" onClick={() => runSearch(keyword.value, 'category', keyword.filter)} className="px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-600 hover:border-gray-300 hover:text-gray-900">{keyword.label}</button>)}
             </div>
           </section>
         )}
@@ -276,7 +271,6 @@ export default function RecommendationsSearchPage() {
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{products.map(product => <ProductTile key={product.id} product={product} query={submittedQuery} />)}</div>
             <div ref={sentinelRef} className="h-10 flex items-center justify-center">{isLoading && <span className="text-xs text-gray-400">Loading more…</span>}</div>
             {!hasMore && products.length > 0 && <div className="mt-4 text-center text-[11px] text-gray-400">You’ve reached the end of these results.</div>}
-
             {(relatedLoading || relatedProducts.length > 0) && (
               <section className="mt-10 pt-7 border-t border-gray-200">
                 <div className="flex items-center justify-between mb-4"><div><h2 className="text-lg font-bold text-gray-900">People also search for</h2>{relatedCategory && <p className="text-xs text-gray-400 mt-1">More from {relatedCategory}</p>}</div></div>
