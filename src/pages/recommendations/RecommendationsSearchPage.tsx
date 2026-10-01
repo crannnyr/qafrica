@@ -62,7 +62,10 @@ export default function RecommendationsSearchPage() {
     url.searchParams.set('limit', String(PAGE_SIZE));
     url.searchParams.set('offset', String(nextOffset));
     const trimmed = q.trim();
-    if (trimmed) url.searchParams.set('search', trimmed);
+    if (trimmed) {
+      url.searchParams.set('search', trimmed);
+      url.searchParams.set('strict_search', 'true');
+    }
     if (sort !== 'default') url.searchParams.set('sort', sort);
 
     setIsLoading(true);
