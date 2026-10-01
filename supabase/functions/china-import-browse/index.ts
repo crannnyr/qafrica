@@ -167,26 +167,48 @@ serve(async (req: Request) => {
         return jsonCached({ products: page, total, hasMore: offset + page.length < total, seed }, 60)
       }
 
-      let query = supabase.from('china_import_products').select(PRODUCT_COLUMNS, { count: 'exact' }).eq('is_active', true)
-      if (parent && parent !== 'All') query = query.eq('parent_category', parent)
-      if (subcategory && subcategory !== 'All') query = query.eq('category', subcategory)
-      if (priceMax) query = query.lte('price_ngn', Number(priceMax))
-      if (excludeId) query = query.neq('id', excludeId)
-
-      if (hasSearch) {
-        const tokens = search!.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6)
+      const buildSearchOr = (tokens: string[], useSynonyms: boolean) => {
+        const orParts: string[] = []
         for (const token of tokens) {
-          const alts = Array.from(new Set([token, ...(SYNONYMS[token] ?? [])]))
-          const orParts: string[] = []
+          const alts = useSynonyms ? Array.from(new Set([token, ...(SYNONYMS[token] ?? [])])) : [token]
           for (const alt of alts) {
             const escaped = escapeIlike(alt)
-            // Product searches intentionally use product text only. Category
-            // matching is reserved for explicit category/subcategory pills.
             orParts.push(`name.ilike.%${escaped}%`)
             orParts.push(`description.ilike.%${escaped}%`)
           }
-          query = query.or(orParts.join(','))
         }
+        return orParts.join(',')
+      }
+
+      const applyBaseFilters = (q: any) => {
+        if (parent && parent !== 'All') q = q.eq('parent_category', parent)
+        if (subcategory && subcategory !== 'All') q = q.eq('category', subcategory)
+        if (priceMax) q = q.lte('price_ngn', Number(priceMax))
+        if (excludeId) q = q.neq('id', excludeId)
+        return q
+      }
+
+      let query = applyBaseFilters(supabase.from('china_import_products').select(PRODUCT_COLUMNS, { count: 'exact' }).eq('is_active', true))
+
+      if (hasSearch) {
+        const tokens = search!.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6)
+        // First pass: exact product-text search. This prevents broad synonyms
+        // from turning a specific query such as "Polo" into every shirt/top.
+        query = query.or(buildSearchOr(tokens, false))
+        let exactResult = await query.range(offset, offset + limit - 1)
+        if (exactResult.error) return json({ error: exactResult.error.message, products: [] }, 500)
+
+        if ((exactResult.count ?? 0) > 0) {
+          const total = exactResult.count ?? 0
+          const products = exactResult.data ?? []
+          return jsonCached({ products, total, hasMore: offset + products.length < total }, 20)
+        }
+
+        // Only fall back to synonyms when the exact product-text search has
+        // no results at all. This keeps useful fuzzy matching without mixing
+        // unrelated catalogue items into a specific search.
+        query = applyBaseFilters(supabase.from('china_import_products').select(PRODUCT_COLUMNS, { count: 'exact' }).eq('is_active', true))
+        query = query.or(buildSearchOr(tokens, true))
       }
 
       if (sort === 'trending') query = query.eq('is_trending', true).order('trending_order', { ascending: true })
