@@ -10,7 +10,7 @@ const BROWSE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse`;
 const PAGE_SIZE = 24;
 
 function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\\]\\]/g, '\\function ProductTile({ product }: { product: ImportProduct }) {');
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
