@@ -54,7 +54,7 @@ export default function RecommendationsSearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
   const [offset, setOffset] = useState(0);
-  const [category, setCategory] = useState('All');
+  const [sort, setSort] = useState('default');
 
   const search = (q: string, nextOffset = 0, append = false) => {
     const url = new URL(BROWSE_URL);
@@ -63,7 +63,7 @@ export default function RecommendationsSearchPage() {
     url.searchParams.set('offset', String(nextOffset));
     const trimmed = q.trim();
     if (trimmed) url.searchParams.set('search', trimmed);
-    if (category !== 'All') url.searchParams.set('parent', category);
+    if (sort !== 'default') url.searchParams.set('sort', sort);
 
     setIsLoading(true);
     setError(false);
@@ -95,7 +95,7 @@ export default function RecommendationsSearchPage() {
     setOffset(0);
     search(next, 0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQuery, category]);
+  }, [initialQuery, sort]);
 
   const runSearch = () => {
     const next = query.trim();
@@ -159,7 +159,7 @@ export default function RecommendationsSearchPage() {
             </div>
             <div className="flex items-center gap-2">
               {keywordChips.map(({ label, icon: Icon }) => (
-                <button key={label} type="button" onClick={() => setQuery(label)}
+                <button key={label} type="button" onClick={() => { setSort(label === 'Trending' ? 'trending' : 'default'); setOffset(0); }}
                   className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-[11px] font-semibold text-gray-600 hover:border-gray-300">
                   <Icon className="w-3.5 h-3.5" /> {label}
                 </button>
