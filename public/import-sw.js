@@ -16,9 +16,6 @@ async function cacheHtmlAndAssets(cache, url) {
   if (!response.ok) throw new Error(`Shell request failed: ${response.status}`);
   await cache.put(url, response.clone());
 
-  // The page that registers a new service worker is not controlled by it yet.
-  // Discover the Vite-built JS/CSS/font/modulepreload assets during install so
-  // the very first offline reopen has everything needed to boot React.
   const html = await response.clone().text();
   const assetUrls = new Set();
   const attrRe = /(?:src|href)=["']([^"']+)["']/g;
@@ -42,6 +39,31 @@ async function cacheHtmlAndAssets(cache, url) {
   }));
 }
 
+async function cacheImagesFromProducts(products) {
+  if (!Array.isArray(products)) return;
+  const imageUrls = [];
+  for (const product of products) {
+    if (typeof product?.image_url === 'string') imageUrls.push(product.image_url);
+    if (Array.isArray(product?.image_urls)) {
+      for (const image of product.image_urls) {
+        if (typeof image === 'string') imageUrls.push(image);
+      }
+    }
+  }
+
+  const unique = [...new Set(imageUrls)].slice(0, MAX_IMAGES);
+  const cache = await caches.open(IMAGE_CACHE);
+  await Promise.allSettled(unique.map(async imageUrl => {
+    try {
+      const response = await fetch(imageUrl, { mode: 'no-cors', cache: 'no-store' });
+      if (response.ok || response.type === 'opaque') {
+        await cache.put(imageUrl, response.clone());
+      }
+    } catch { /* individual image failure is harmless */ }
+  }));
+  await trimImages();
+}
+
 async function warmApiUrls(urls) {
   const cache = await caches.open(API_CACHE);
   await Promise.allSettled(urls.map(async value => {
@@ -49,9 +71,15 @@ async function warmApiUrls(urls) {
       const url = new URL(value);
       if (url.protocol !== 'https:') return;
       const response = await fetch(url.toString(), { cache: 'no-store' });
-      if (response.ok || response.type === 'opaque') {
-        await cache.put(url.toString(), response.clone());
-      }
+      if (!(response.ok || response.type === 'opaque')) return;
+      await cache.put(url.toString(), response.clone());
+
+      // The catalog response gives us the image URLs needed for the first
+      // offline screen, so cache those at the same time.
+      try {
+        const data = await response.clone().json();
+        await cacheImagesFromProducts(data?.products);
+      } catch { /* non-JSON endpoint */ }
     } catch { /* best effort; never block app startup */ }
   }));
   await trimApi();
@@ -117,8 +145,6 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Supabase catalog/rates/search GETs: network first, exact-response fallback.
-  // Cross-origin requests are supported because the import APIs are public GETs.
   if (url.pathname.includes('/functions/v1/')) {
     event.respondWith((async () => {
       const cache = await caches.open(API_CACHE);
@@ -143,7 +169,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Import navigation: fresh online, cached app shell offline.
   if (request.mode === 'navigate' && isImportPage(url)) {
     event.respondWith((async () => {
       const cache = await caches.open(SHELL_CACHE);
@@ -163,7 +188,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Keep the actual Vite JS/CSS/fonts available to offline navigation.
   if (isImportStatic(request, url)) {
     event.respondWith((async () => {
       const cache = await caches.open(SHELL_CACHE);
@@ -180,7 +204,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Product images: cache while requested by the import experience.
   if (request.destination === 'image' &&
       (isImportPage(url) || isImportReferrer(request))) {
     event.respondWith((async () => {
