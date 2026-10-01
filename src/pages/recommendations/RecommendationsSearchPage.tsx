@@ -148,22 +148,14 @@ export default function RecommendationsSearchPage() {
       const response = await fetch(url.toString());
       const data = await response.json();
       if (!response.ok) throw new Error(data?.error || 'Search failed');
-      let incoming = (data.products ?? []) as ImportProduct[];
-      if (mode === 'product') {
-        const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-        incoming = incoming.filter(product => {
-          const haystack = `${product.name ?? ''} ${product.description ?? ''}`.toLowerCase();
-          return terms.every(term => haystack.includes(term));
-        });
-      }
-      incoming = shuffle(incoming);
+      const incoming = shuffle((data.products ?? []) as ImportProduct[]);
       const nextProducts = append ? [...products, ...incoming] : incoming;
       const deduped = Array.from(new Map(nextProducts.map(item => [item.id, item])).values());
       const capped = deduped.slice(0, MAX_RESULTS);
       const serverHasMore = Boolean(data.hasMore);
       const reachedLimit = capped.length >= MAX_RESULTS;
       setProducts(capped);
-      setTotal(append ? Math.max(total, capped.length) : Number(data.total ?? capped.length));
+      setTotal(append ? Math.max(total, Number(data.total ?? capped.length)) : Number(data.total ?? capped.length));
       setOffset(nextOffset + PAGE_SIZE);
       setHasMore(!reachedLimit && serverHasMore);
       if (!append && capped.length) void fetchRelated(capped);
@@ -247,38 +239,20 @@ export default function RecommendationsSearchPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 pt-5 pb-16">
-        {!submittedQuery && (
-          <section className="mb-6">
-            <div className="flex items-center gap-2 mb-2"><Sparkles className="w-4 h-4 text-orange-400" /><h2 className="text-base font-bold text-gray-900">Trending searches</h2></div>
-            <div className="flex flex-wrap gap-1.5">
-              {keywordsLoading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-8 w-24 rounded-full bg-white border border-gray-100 animate-pulse" />) : keywords.map(keyword => <button key={`${keyword.filter}-${keyword.value}`} type="button" onClick={() => runSearch(keyword.value, 'category', keyword.filter)} className="px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-600 hover:border-gray-300 hover:text-gray-900">{keyword.label}</button>)}
-            </div>
+        {!submittedQuery ? (
+          <section className="pt-2">
+            <div className="flex items-center gap-2 mb-3"><Sparkles className="w-4 h-4 text-orange-500" /><h1 className="text-base font-bold text-gray-900">Trending searches</h1></div>
+            {keywordsLoading ? <div className="flex flex-wrap gap-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-8 w-20 rounded-full bg-white border border-gray-100 animate-pulse" />)}</div> : <div className="flex flex-wrap gap-2">{keywords.map(keyword => <button key={`${keyword.filter}:${keyword.value}`} type="button" onClick={() => runSearch(keyword.value, keyword.mode, keyword.filter)} className="px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-600 hover:border-gray-300">{keyword.label}</button>)}</div>}
           </section>
-        )}
-
-        {submittedQuery && (
-          <div className="flex items-end justify-between gap-4 mb-5"><div><p className="text-[11px] text-gray-400 font-medium"><span className="text-gray-700 font-bold">{total.toLocaleString()}</span> result{total === 1 ? '' : 's'}</p><h1 className="text-xl lg:text-2xl font-bold text-gray-900 mt-1"><HighlightedText text={title} query={submittedQuery} /></h1></div></div>
-        )}
-
-        {error && <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-600">We couldn't load the search results right now. Please try again.</div>}
-
-        {submittedQuery && isLoading && products.length === 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{Array.from({ length: 12 }).map((_, i) => <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div className="aspect-square bg-gray-100" /><div className="p-3 space-y-2"><div className="h-3 bg-gray-100 rounded w-4/5" /><div className="h-3 bg-gray-100 rounded w-3/5" /><div className="h-8 bg-gray-100 rounded-lg mt-3" /></div></div>)}</div>
-        ) : submittedQuery && products.length === 0 && !isLoading ? (
-          <div className="rounded-3xl border border-gray-100 bg-white px-6 py-16 text-center"><div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50"><Package className="w-6 h-6 text-gray-300" /></div><h2 className="text-base font-bold text-gray-800">No products found for “{submittedQuery}”</h2><p className="mt-2 mx-auto max-w-md text-xs leading-relaxed text-gray-400">Try a more specific product name or another keyword.</p></div>
-        ) : submittedQuery ? (
+        ) : (
           <>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{products.map(product => <ProductTile key={product.id} product={product} query={submittedQuery} />)}</div>
-            <div ref={sentinelRef} className="h-10 flex items-center justify-center">{isLoading && <span className="text-xs text-gray-400">Loading more…</span>}</div>
-            {!hasMore && products.length > 0 && <div className="mt-4 text-center text-[11px] text-gray-400">You’ve reached the end of these results.</div>}
-            {(relatedLoading || relatedProducts.length > 0) && (
-              <section className="mt-10 pt-7 border-t border-gray-200">
-                <div className="flex items-center justify-between mb-4"><div><h2 className="text-lg font-bold text-gray-900">People also search for</h2>{relatedCategory && <p className="text-xs text-gray-400 mt-1">More from {relatedCategory}</p>}</div></div>
-                {relatedLoading ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-52 rounded-2xl bg-white border border-gray-100 animate-pulse" />)}</div> : <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{relatedProducts.map(product => <ProductTile key={product.id} product={product} query="" />)}</div>}
-              </section>
-            )}
+            <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
+              <div><p className="text-[11px] text-gray-400 font-medium"><span className="text-gray-700 font-bold">{total.toLocaleString()}</span> result{total === 1 ? '' : 's'}</p><h1 className="text-xl lg:text-2xl font-bold text-gray-900 mt-1"><HighlightedText text={title} query={submittedQuery} /></h1></div>
+            </div>
+            {error && <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-600">We couldn't load the search results right now. Please try again.</div>}
+            {isLoading && products.length === 0 ? <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{Array.from({ length: 12 }).map((_, i) => <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div className="aspect-square bg-gray-100" /><div className="p-3 space-y-2"><div className="h-3 bg-gray-100 rounded w-4/5" /><div className="h-3 bg-gray-100 rounded w-3/5" /><div className="h-8 bg-gray-100 rounded-lg mt-3" /></div></div>)}</div> : products.length === 0 ? <div className="rounded-3xl border border-gray-100 bg-white px-6 py-16 text-center"><div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50"><Package className="w-6 h-6 text-gray-300" /></div><h2 className="text-base font-bold text-gray-800">No products found for “{submittedQuery}”</h2><p className="mt-2 mx-auto max-w-md text-xs leading-relaxed text-gray-400">Try a more specific product name or another keyword.</p></div> : <><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{products.map(product => <ProductTile key={product.id} product={product} query={submittedQuery} />)}</div>{relatedProducts.length > 0 && <section className="mt-10"><div className="mb-3"><h2 className="text-base font-bold text-gray-900">People also search for</h2><p className="text-xs text-gray-400 mt-0.5">More from {relatedCategory}</p></div><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{relatedProducts.map(product => <ProductTile key={product.id} product={product} query="" />)}</div></section>}{relatedLoading && <div className="mt-10 text-center text-xs text-gray-400">Finding related products…</div>}<div ref={sentinelRef} className="h-10" />{isLoading && products.length > 0 && <div className="py-6 text-center text-xs text-gray-400">Loading more…</div>}</>}
           </>
-        ) : null}
+        )}
       </main>
     </div>
   );
