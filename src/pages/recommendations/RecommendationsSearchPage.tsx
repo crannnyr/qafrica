@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ChevronRight, Package, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowLeft, Package, Search, X, Sparkles, TrendingUp } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import type { ImportProduct } from './RecommendationsPage';
 import { fmt } from './RecommendationsPage';
@@ -9,7 +9,22 @@ import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 const BROWSE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse`;
 const PAGE_SIZE = 24;
 
-function ProductTile({ product }: { product: ImportProduct }) {
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\\]\\]/g, '\\function ProductTile({ product }: { product: ImportProduct }) {');
+}
+
+function HighlightedText({ text, query }: { text: string; query: string }) {
+  const terms = query.trim().split(/\s+/).filter(Boolean).slice(0, 6);
+  if (!terms.length) return <>{text}</>;
+  const pattern = new RegExp(`(${terms.map(escapeRegExp).join('|')})`, 'ig');
+  return <>{text.split(pattern).map((part, index) =>
+    terms.some(term => part.toLowerCase() === term.toLowerCase())
+      ? <mark key={index} className="rounded px-0.5 bg-orange-100 text-orange-700">{part}</mark>
+      : <span key={index}>{part}</span>
+  )}</>;
+}
+
+function ProductTile({ product, query }: { product: ImportProduct; query: string }) {
   const navigate = useNavigate();
   return (
     <button type="button" onClick={() => navigate(`/recommendations/${product.id}`, { state: { product } })} className="group text-left bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-gray-200 hover:shadow-md transition-all">
@@ -17,10 +32,10 @@ function ProductTile({ product }: { product: ImportProduct }) {
         <img src={product.image_url} alt={product.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
       </div>
       <div className="p-3">
-        <p className="text-xs lg:text-sm font-semibold text-gray-800 line-clamp-2 leading-snug min-h-[2.25rem]">{product.name}</p>
+        <p className="text-xs lg:text-sm font-semibold text-gray-800 line-clamp-2 leading-snug min-h-[2.25rem]"><HighlightedText text={product.name} query={query} /></p>
         <p className="mt-2 text-sm lg:text-base font-bold text-orange-500">{fmt(product.price_ngn)}</p>
         <div className="mt-1 flex items-center justify-between gap-2 text-[10px] text-gray-400">
-          <span className="truncate">{product.category}</span>
+          <span className="truncate"><HighlightedText text={product.category ?? ''} query={query} /></span>
           {product.moq > 1 && <span>Min. {product.moq}</span>}
         </div>
       </div>
@@ -39,15 +54,7 @@ export default function RecommendationsSearchPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(false);
   const [offset, setOffset] = useState(0);
-  const [categories, setCategories] = useState<{ parent: string; subcategories: string[] }[]>([]);
   const [category, setCategory] = useState('All');
-
-  useEffect(() => {
-    fetch(`${BROWSE_URL}?action=categories`)
-      .then(r => r.json())
-      .then(d => setCategories(d.categories ?? []))
-      .catch(() => setCategories([]));
-  }, []);
 
   const search = (q: string, nextOffset = 0, append = false) => {
     const url = new URL(BROWSE_URL);
@@ -107,9 +114,14 @@ export default function RecommendationsSearchPage() {
 
   const canLoadMore = products.length < total;
   const title = useMemo(
-    () => submittedQuery ? `Results for “${submittedQuery}”` : 'Search the import catalogue',
+    () => submittedQuery ? `Search results for “${submittedQuery}”` : 'What are you looking for?',
     [submittedQuery]
   );
+
+  const keywordChips = [
+    { label: 'Recommended', icon: Sparkles },
+    { label: 'Trending', icon: TrendingUp },
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -136,32 +148,24 @@ export default function RecommendationsSearchPage() {
 
       <main className="max-w-7xl mx-auto px-4 pt-5 pb-16">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-5">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-500 mb-1">QAFRICA Import</p>
-            <h1 className="text-xl lg:text-2xl font-bold text-gray-900">{title}</h1>
-            <p className="mt-1 text-xs lg:text-sm text-gray-400">
-              {submittedQuery
-                ? `${total.toLocaleString()} matching item${total === 1 ? '' : 's'}`
-                : 'Find products from the same catalogue used on Recommendations.'}
-            </p>
-          </div>
-
-          {categories.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <div className="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider flex-shrink-0">
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                Filter
-              </div>
-              {['All', ...categories.map(c => c.parent)].map(parent => (
-                <button key={parent} type="button" onClick={() => setCategory(parent)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap border transition-colors ${category === parent
-                    ? 'bg-gray-900 text-white border-gray-900'
-                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>
-                  {parent}
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] text-gray-400 font-medium">
+                <span className="text-gray-700 font-bold">{total.toLocaleString()}</span> result{total === 1 ? '' : 's'}
+              </p>
+              <h1 className="text-xl lg:text-2xl font-bold text-gray-900 mt-1">
+                <HighlightedText text={title} query={submittedQuery} />
+              </h1>
+            </div>
+            <div className="flex items-center gap-2">
+              {keywordChips.map(({ label, icon: Icon }) => (
+                <button key={label} type="button" onClick={() => setQuery(label)}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-[11px] font-semibold text-gray-600 hover:border-gray-300">
+                  <Icon className="w-3.5 h-3.5" /> {label}
                 </button>
               ))}
             </div>
-          )}
+          </div>
         </div>
 
         {error && <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-600">We couldn't load the search results right now. Please try again.</div>}
@@ -188,9 +192,7 @@ export default function RecommendationsSearchPage() {
               {submittedQuery ? `No products found for “${submittedQuery}”` : 'Start with a product search'}
             </h2>
             <p className="mt-2 mx-auto max-w-md text-xs leading-relaxed text-gray-400">
-              {submittedQuery
-                ? 'Try a broader word such as phone, shoe, bag or charger. You can also request a custom order from Recommendations.'
-                : 'Search by product name, category or a common keyword to explore the import catalogue.'}
+              {submittedQuery ? 'Try a more specific product name or another keyword.' : 'Type a product name above to search.'}
             </p>
             {submittedQuery && (
               <Link to="/custom-order" className="inline-flex items-center gap-2 mt-5 rounded-xl bg-gray-900 px-4 py-2.5 text-xs font-bold text-white hover:bg-gray-800">
@@ -201,7 +203,7 @@ export default function RecommendationsSearchPage() {
         ) : (
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">
-              {products.map(product => <ProductTile key={product.id} product={product} />)}
+              {products.map(product => <ProductTile key={product.id} product={product} query={submittedQuery} />)}
             </div>
             {canLoadMore && (
               <div className="flex justify-center pt-8">
