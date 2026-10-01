@@ -11,7 +11,7 @@ const PAGE_SIZE = 24;
 const MAX_RESULTS = 96;
 const RELATED_LIMIT = 8;
 
-type SearchKeyword = { label: string; value: string; mode: 'product' | 'category' };
+type SearchKeyword = { label: string; value: string; mode: 'product' | 'category'; filter: 'parent' | 'subcategory' };
 
 function shuffle<T>(items: T[]): T[] {
   const copy = [...items];
@@ -22,22 +22,14 @@ function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
-function categoryKeyword(category: string, products: ImportProduct[]): string {
-  const words = category.match(/[A-Za-z0-9]+/g) ?? [];
+function keywordWord(value: string): string {
+  const words = value.match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) ?? [];
+  if (!words.length) return value.trim();
   if (words.length === 1) return words[0];
 
-  const haystacks = products.map(product => `${product.name ?? ''} ${product.description ?? ''}`.toLowerCase());
-  const scored = words
-    .map(word => {
-      const normalized = word.toLowerCase().replace(/'s$/, '');
-      if (normalized.length < 3) return { word, score: -1 };
-      const score = haystacks.reduce((count, text) => count + (text.includes(normalized) ? 1 : 0), 0);
-      return { word: normalized, score };
-    })
-    .filter(item => item.score >= 0)
-    .sort((a, b) => b.score - a.score || b.word.length - a.word.length);
-
-  return scored[0]?.word || words[words.length - 1];
+  const ignored = new Set(['and', 'for', 'the', 'with', 'of', 'to', 'in', 'on', 'men', 'women']);
+  const meaningful = words.filter(word => word.length >= 4 && !ignored.has(word.toLowerCase().replace(/['’-]s$/i, '')));
+  return (meaningful.sort((a, b) => b.length - a.length)[0] ?? words[words.length - 1]).replace(/['’-]s$/i, '');
 }
 
 function escapeRegExp(value: string) {
@@ -72,9 +64,11 @@ export default function RecommendationsSearchPage() {
   const [params, setParams] = useSearchParams();
   const initialQuery = params.get('q') ?? '';
   const initialMode = params.get('type') === 'category' ? 'category' : 'product';
+  const initialFilter = params.get('filter') === 'parent' ? 'parent' : 'subcategory';
   const [query, setQuery] = useState(initialQuery);
   const [submittedQuery, setSubmittedQuery] = useState(initialQuery.trim());
   const [searchMode, setSearchMode] = useState<'product' | 'category'>(initialMode);
+  const [categoryFilter, setCategoryFilter] = useState<'parent' | 'subcategory'>(initialFilter);
   const [products, setProducts] = useState<ImportProduct[]>([]);
   const [relatedProducts, setRelatedProducts] = useState<ImportProduct[]>([]);
   const [relatedCategory, setRelatedCategory] = useState('');
@@ -95,23 +89,33 @@ export default function RecommendationsSearchPage() {
       try {
         const url = new URL(BROWSE_URL);
         url.searchParams.set('action', 'browse-products');
-        url.searchParams.set('limit', '40');
+        url.searchParams.set('limit', '50');
         url.searchParams.set('offset', '0');
-        url.searchParams.set('trending', 'true');
         const response = await fetch(url.toString());
         const data = await response.json();
         if (!response.ok) throw new Error(data?.error || 'Keyword load failed');
-        const source = (data.products ?? []) as ImportProduct[];
-        const categoryMap = new Map<string, SearchKeyword>();
+        const source = (data.products ?? []) as ImportProduct[] & { parent_category?: string }[];
+
+        const candidates = new Map<string, SearchKeyword>();
         source.forEach(product => {
-          const category = product.category?.trim();
-          if (!category) return;
-          const label = categoryKeyword(category, source);
-          if (!categoryMap.has(label.toLowerCase())) {
-            categoryMap.set(label.toLowerCase(), { label: label.charAt(0).toUpperCase() + label.slice(1), value: category, mode: 'category' });
-          }
+          const productWithParent = product as ImportProduct & { parent_category?: string | null };
+          const add = (raw: string | null | undefined, filter: 'parent' | 'subcategory') => {
+            const value = raw?.trim();
+            if (!value) return;
+            const label = keywordWord(value);
+            if (!label || label.length < 3) return;
+            const key = label.toLowerCase();
+            if (!candidates.has(key)) candidates.set(key, { label: label.charAt(0).toUpperCase() + label.slice(1), value, mode: 'category', filter });
+          };
+          add(productWithParent.parent_category, 'parent');
+          add(product.category, 'subcategory');
         });
-        setKeywords(shuffle([...categoryMap.values()]).slice(0, 5));
+
+        // Randomize from the actual catalogue taxonomy, not from product names
+        // and not only from products currently flagged as trending. This keeps
+        // the pills useful even when only a couple of categories are marked
+        // trending, while still rotating what customers see on each visit.
+        setKeywords(shuffle([...candidates.values()]).slice(0, 5));
       } catch {
         setKeywords([]);
       } finally {
@@ -148,7 +152,7 @@ export default function RecommendationsSearchPage() {
     }
   };
 
-  const fetchPage = async (q: string, mode: 'product' | 'category', nextOffset: number, append: boolean) => {
+  const fetchPage = async (q: string, mode: 'product' | 'category', nextOffset: number, append: boolean, filter: 'parent' | 'subcategory' = categoryFilter) => {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setIsLoading(true);
@@ -158,7 +162,7 @@ export default function RecommendationsSearchPage() {
       url.searchParams.set('action', 'browse-products');
       url.searchParams.set('limit', String(PAGE_SIZE));
       url.searchParams.set('offset', String(nextOffset));
-      if (mode === 'category') url.searchParams.set('category', q);
+      if (mode === 'category') url.searchParams.set(filter, q);
       else url.searchParams.set('search', q);
       const response = await fetch(url.toString());
       const data = await response.json();
@@ -188,33 +192,33 @@ export default function RecommendationsSearchPage() {
     } finally { loadingRef.current = false; setIsLoading(false); }
   };
 
-  const runSearch = (value = query, mode: 'product' | 'category' = 'product') => {
+  const runSearch = (value = query, mode: 'product' | 'category' = 'product', filter: 'parent' | 'subcategory' = categoryFilter) => {
     const next = value.trim();
     if (!next) {
       setQuery(''); setSubmittedQuery(''); setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setHasMore(false); setOffset(0);
-      const nextParams = new URLSearchParams(params); nextParams.delete('q'); nextParams.delete('type'); setParams(nextParams, { replace: true });
+      const nextParams = new URLSearchParams(params); nextParams.delete('q'); nextParams.delete('type'); nextParams.delete('filter'); setParams(nextParams, { replace: true });
       return;
     }
-    setQuery(value); setSubmittedQuery(next); setSearchMode(mode); setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setOffset(0); setHasMore(false);
-    const nextParams = new URLSearchParams(params); nextParams.set('q', next); nextParams.set('type', mode); setParams(nextParams, { replace: true });
+    setQuery(value); setSubmittedQuery(next); setSearchMode(mode); setCategoryFilter(filter); setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setOffset(0); setHasMore(false);
+    const nextParams = new URLSearchParams(params); nextParams.set('q', next); nextParams.set('type', mode); if (mode === 'category') nextParams.set('filter', filter); else nextParams.delete('filter'); setParams(nextParams, { replace: true });
   };
 
   useEffect(() => {
     const next = initialQuery.trim();
-    setQuery(initialQuery); setSubmittedQuery(next); setSearchMode(initialMode);
+    setQuery(initialQuery); setSubmittedQuery(next); setSearchMode(initialMode); setCategoryFilter(initialFilter);
     if (!next) { setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setHasMore(false); setOffset(0); return; }
-    setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setOffset(0); fetchPage(next, initialMode, 0, false);
+    setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setOffset(0); fetchPage(next, initialMode, 0, false, initialFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQuery, initialMode]);
+  }, [initialQuery, initialMode, initialFilter]);
 
   useEffect(() => {
     const node = sentinelRef.current;
     if (!node || !submittedQuery || !hasMore) return;
-    const observer = new IntersectionObserver(entries => { if (entries[0]?.isIntersecting && !loadingRef.current) fetchPage(submittedQuery, searchMode, offset, true); }, { rootMargin: '600px 0px' });
+    const observer = new IntersectionObserver(entries => { if (entries[0]?.isIntersecting && !loadingRef.current) fetchPage(submittedQuery, searchMode, offset, true, categoryFilter); }, { rootMargin: '600px 0px' });
     observer.observe(node);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submittedQuery, searchMode, offset, hasMore]);
+  }, [submittedQuery, searchMode, offset, hasMore, categoryFilter]);
 
   const clearSearch = () => runSearch('', 'product');
   const title = useMemo(() => submittedQuery ? `Search results for “${submittedQuery}”` : '', [submittedQuery]);
@@ -231,7 +235,7 @@ export default function RecommendationsSearchPage() {
         {!submittedQuery ? (
           <section className="py-2">
             <div className="flex items-center gap-2 mb-2"><Sparkles className="w-4 h-4 text-orange-500" /><h1 className="text-sm font-bold text-gray-900">Trending searches</h1></div>
-            <div className="flex flex-wrap gap-2">{keywordsLoading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-9 w-24 rounded-full bg-white border border-gray-100 animate-pulse" />) : keywords.length ? keywords.map(keyword => <button key={`${keyword.mode}-${keyword.value}`} type="button" onClick={() => runSearch(keyword.value, keyword.mode)} className="px-4 py-2 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors">{keyword.label}</button>) : <span className="text-xs text-gray-400">No trending searches available right now.</span>}</div>
+            <div className="flex flex-wrap gap-2">{keywordsLoading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-9 w-24 rounded-full bg-white border border-gray-100 animate-pulse" />) : keywords.length ? keywords.map(keyword => <button key={`${keyword.mode}-${keyword.filter}-${keyword.value}`} type="button" onClick={() => runSearch(keyword.value, keyword.mode, keyword.filter)} className="px-4 py-2 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors">{keyword.label}</button>) : <span className="text-xs text-gray-400">No trending searches available right now.</span>}</div>
           </section>
         ) : (
           <div className="mb-5"><p className="text-[11px] text-gray-400 font-medium"><span className="text-gray-700 font-bold">{total.toLocaleString()}</span> result{total === 1 ? '' : 's'}</p><h1 className="text-xl lg:text-2xl font-bold text-gray-900 mt-1"><HighlightedText text={title} query={submittedQuery} /></h1></div>
