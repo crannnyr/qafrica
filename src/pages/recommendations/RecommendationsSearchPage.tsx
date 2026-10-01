@@ -22,16 +22,6 @@ function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
-function keywordWord(value: string): string {
-  const words = value.match(/[A-Za-z0-9]+(?:['’-][A-Za-z0-9]+)*/g) ?? [];
-  if (!words.length) return value.trim();
-  if (words.length === 1) return words[0];
-
-  const ignored = new Set(['and', 'for', 'the', 'with', 'of', 'to', 'in', 'on', 'men', 'women']);
-  const meaningful = words.filter(word => word.length >= 4 && !ignored.has(word.toLowerCase().replace(/['’-]s$/i, '')));
-  return (meaningful.sort((a, b) => b.length - a.length)[0] ?? words[words.length - 1]).replace(/['’-]s$/i, '');
-}
-
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -94,27 +84,23 @@ export default function RecommendationsSearchPage() {
         const response = await fetch(url.toString());
         const data = await response.json();
         if (!response.ok) throw new Error(data?.error || 'Keyword load failed');
-        const source = (data.products ?? []) as ImportProduct[] & { parent_category?: string }[];
+        const source = (data.products ?? []) as (ImportProduct & { parent_category?: string | null })[];
 
         const candidates = new Map<string, SearchKeyword>();
         source.forEach(product => {
-          const productWithParent = product as ImportProduct & { parent_category?: string | null };
           const add = (raw: string | null | undefined, filter: 'parent' | 'subcategory') => {
             const value = raw?.trim();
             if (!value) return;
-            const label = keywordWord(value);
-            if (!label || label.length < 3) return;
-            const key = label.toLowerCase();
-            if (!candidates.has(key)) candidates.set(key, { label: label.charAt(0).toUpperCase() + label.slice(1), value, mode: 'category', filter });
+            const key = `${filter}:${value.toLowerCase()}`;
+            if (!candidates.has(key)) candidates.set(key, { label: value, value, mode: 'category', filter });
           };
-          add(productWithParent.parent_category, 'parent');
+          add(product.parent_category, 'parent');
           add(product.category, 'subcategory');
         });
 
-        // Randomize from the actual catalogue taxonomy, not from product names
-        // and not only from products currently flagged as trending. This keeps
-        // the pills useful even when only a couple of categories are marked
-        // trending, while still rotating what customers see on each visit.
+        // Keep the exact category/subcategory name stored in the catalogue.
+        // Only the selection order is randomized; the displayed keyword is never
+        // shortened, singularized, or derived from a product name.
         setKeywords(shuffle([...candidates.values()]).slice(0, 5));
       } catch {
         setKeywords([]);
@@ -189,59 +175,116 @@ export default function RecommendationsSearchPage() {
     } catch {
       if (!append) { setProducts([]); setTotal(0); setHasMore(false); setRelatedProducts([]); }
       setError(true);
-    } finally { loadingRef.current = false; setIsLoading(false); }
+    } finally {
+      loadingRef.current = false;
+      setIsLoading(false);
+    }
   };
 
   const runSearch = (value = query, mode: 'product' | 'category' = 'product', filter: 'parent' | 'subcategory' = categoryFilter) => {
     const next = value.trim();
-    if (!next) {
-      setQuery(''); setSubmittedQuery(''); setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setHasMore(false); setOffset(0);
-      const nextParams = new URLSearchParams(params); nextParams.delete('q'); nextParams.delete('type'); nextParams.delete('filter'); setParams(nextParams, { replace: true });
-      return;
-    }
-    setQuery(value); setSubmittedQuery(next); setSearchMode(mode); setCategoryFilter(filter); setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setOffset(0); setHasMore(false);
-    const nextParams = new URLSearchParams(params); nextParams.set('q', next); nextParams.set('type', mode); if (mode === 'category') nextParams.set('filter', filter); else nextParams.delete('filter'); setParams(nextParams, { replace: true });
+    setQuery(value);
+    setSubmittedQuery(next);
+    setSearchMode(mode);
+    setCategoryFilter(filter);
+    const nextParams = new URLSearchParams();
+    if (next) nextParams.set('q', next);
+    if (mode === 'category') nextParams.set('type', 'category');
+    if (mode === 'category') nextParams.set('filter', filter);
+    setParams(nextParams, { replace: true });
+    setOffset(0);
+    setProducts([]);
+    setRelatedProducts([]);
+    setTotal(0);
+    setHasMore(false);
+    void fetchPage(next, mode, 0, false, filter);
   };
 
   useEffect(() => {
     const next = initialQuery.trim();
-    setQuery(initialQuery); setSubmittedQuery(next); setSearchMode(initialMode); setCategoryFilter(initialFilter);
-    if (!next) { setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setHasMore(false); setOffset(0); return; }
-    setProducts([]); setRelatedProducts([]); setRelatedCategory(''); setTotal(0); setOffset(0); fetchPage(next, initialMode, 0, false, initialFilter);
+    setQuery(initialQuery);
+    setSubmittedQuery(next);
+    setSearchMode(initialMode);
+    setCategoryFilter(initialFilter);
+    setOffset(0);
+    setProducts([]);
+    setRelatedProducts([]);
+    setTotal(0);
+    setHasMore(false);
+    if (next) void fetchPage(next, initialMode, 0, false, initialFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery, initialMode, initialFilter]);
 
   useEffect(() => {
-    const node = sentinelRef.current;
-    if (!node || !submittedQuery || !hasMore) return;
-    const observer = new IntersectionObserver(entries => { if (entries[0]?.isIntersecting && !loadingRef.current) fetchPage(submittedQuery, searchMode, offset, true, categoryFilter); }, { rootMargin: '600px 0px' });
-    observer.observe(node);
+    if (!sentinelRef.current || !hasMore) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0]?.isIntersecting && !loadingRef.current) void fetchPage(submittedQuery, searchMode, offset, true, categoryFilter);
+    }, { rootMargin: '500px' });
+    observer.observe(sentinelRef.current);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submittedQuery, searchMode, offset, hasMore, categoryFilter]);
+  }, [hasMore, offset, submittedQuery, searchMode, categoryFilter]);
 
-  const clearSearch = () => runSearch('', 'product');
-  const title = useMemo(() => submittedQuery ? `Search results for “${submittedQuery}”` : '', [submittedQuery]);
+  const clearSearch = () => {
+    setQuery('');
+    const nextParams = new URLSearchParams(params);
+    nextParams.delete('q');
+    nextParams.delete('type');
+    nextParams.delete('filter');
+    setParams(nextParams, { replace: true });
+  };
+
+  const title = useMemo(() => submittedQuery ? `Search results for “${submittedQuery}”` : 'What are you looking for?', [submittedQuery]);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
           <Link to="/recommendations" className="flex items-center justify-center w-9 h-9 rounded-xl border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50" aria-label="Back to recommendations"><ArrowLeft className="w-4 h-4" /></Link>
-          <form onSubmit={e => { e.preventDefault(); runSearch(query, 'product'); }} className="flex-1 max-w-3xl mx-auto"><div className="relative"><Search className="w-4 h-4 text-gray-300 absolute left-3.5 top-1/2 -translate-y-1/2" /><input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Search products…" className="w-full h-11 pl-10 pr-12 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 outline-none focus:border-gray-400 focus:ring-4 focus:ring-gray-100" />{query && <button type="button" onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-300 hover:text-gray-600" aria-label="Clear search"><X className="w-4 h-4" /></button>}</div></form>
+          <form onSubmit={e => { e.preventDefault(); runSearch(); }} className="flex-1 max-w-3xl mx-auto">
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-300 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input autoFocus value={query} onChange={e => setQuery(e.target.value)} placeholder="Search products…" className="w-full h-11 pl-10 pr-12 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 outline-none focus:border-gray-400 focus:ring-4 focus:ring-gray-100" />
+              {query && <button type="button" onClick={clearSearch} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-300 hover:text-gray-600" aria-label="Clear search"><X className="w-4 h-4" /></button>}
+            </div>
+          </form>
         </div>
       </header>
-      <main className="max-w-7xl mx-auto px-4 pt-3 pb-16">
-        {!submittedQuery ? (
-          <section className="py-2">
-            <div className="flex items-center gap-2 mb-2"><Sparkles className="w-4 h-4 text-orange-500" /><h1 className="text-sm font-bold text-gray-900">Trending searches</h1></div>
-            <div className="flex flex-wrap gap-2">{keywordsLoading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-9 w-24 rounded-full bg-white border border-gray-100 animate-pulse" />) : keywords.length ? keywords.map(keyword => <button key={`${keyword.mode}-${keyword.filter}-${keyword.value}`} type="button" onClick={() => runSearch(keyword.value, keyword.mode, keyword.filter)} className="px-4 py-2 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors">{keyword.label}</button>) : <span className="text-xs text-gray-400">No trending searches available right now.</span>}</div>
+
+      <main className="max-w-7xl mx-auto px-4 pt-5 pb-16">
+        {!submittedQuery && (
+          <section className="mb-6">
+            <div className="flex items-center gap-2 mb-3"><Sparkles className="w-5 h-5 text-orange-400" /><h2 className="text-lg font-bold text-gray-900">Trending searches</h2></div>
+            <div className="flex flex-wrap gap-2">
+              {keywordsLoading ? Array.from({ length: 5 }).map((_, index) => <div key={index} className="h-10 w-28 rounded-full bg-white border border-gray-100 animate-pulse" />) : keywords.map(keyword => <button key={`${keyword.filter}-${keyword.value}`} type="button" onClick={() => runSearch(keyword.value, 'category', keyword.filter)} className="px-4 py-2.5 rounded-full bg-white border border-gray-200 text-sm font-semibold text-gray-600 hover:border-gray-300 hover:text-gray-900">{keyword.label}</button>)}
+            </div>
           </section>
-        ) : (
-          <div className="mb-5"><p className="text-[11px] text-gray-400 font-medium"><span className="text-gray-700 font-bold">{total.toLocaleString()}</span> result{total === 1 ? '' : 's'}</p><h1 className="text-xl lg:text-2xl font-bold text-gray-900 mt-1"><HighlightedText text={title} query={submittedQuery} /></h1></div>
         )}
-        {error && submittedQuery && <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-600">We couldn't load the search results right now. Please try again.</div>}
-        {submittedQuery && isLoading && products.length === 0 ? <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{Array.from({ length: 12 }).map((_, i) => <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div className="aspect-square bg-gray-100" /><div className="p-3 space-y-2"><div className="h-3 bg-gray-100 rounded w-4/5" /><div className="h-3 bg-gray-100 rounded w-3/5" /><div className="h-8 bg-gray-100 rounded-lg mt-3" /></div></div>)}</div> : submittedQuery && products.length === 0 ? <div className="rounded-3xl border border-gray-100 bg-white px-6 py-16 text-center"><div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50"><Package className="w-6 h-6 text-gray-300" /></div><h2 className="text-base font-bold text-gray-800">No products found for “{submittedQuery}”</h2><p className="mt-2 mx-auto max-w-md text-xs leading-relaxed text-gray-400">Try a more specific product name or another keyword.</p></div> : submittedQuery ? <><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{products.map(product => <ProductTile key={product.id} product={product} query={submittedQuery} />)}</div><div ref={sentinelRef} className="h-20 flex items-center justify-center text-xs text-gray-400">{isLoading && products.length ? 'Loading more…' : ''}</div>{(relatedLoading || relatedProducts.length > 0) && <section className="mt-10 border-t border-gray-200 pt-7"><div className="mb-4"><h2 className="text-base font-bold text-gray-900">People also search for</h2><p className="text-xs text-gray-400 mt-1">More products from {relatedCategory}.</p></div>{relatedLoading ? <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">{Array.from({ length: 8 }).map((_, i) => <div key={i} className="aspect-square rounded-2xl bg-white border border-gray-100 animate-pulse" />)}</div> : <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">{relatedProducts.map(product => <ProductTile key={product.id} product={product} query="" />)}</div>}</section>}</> : null}
+
+        {submittedQuery && (
+          <div className="flex items-end justify-between gap-4 mb-5"><div><p className="text-[11px] text-gray-400 font-medium"><span className="text-gray-700 font-bold">{total.toLocaleString()}</span> result{total === 1 ? '' : 's'}</p><h1 className="text-xl lg:text-2xl font-bold text-gray-900 mt-1"><HighlightedText text={title} query={submittedQuery} /></h1></div></div>
+        )}
+
+        {error && <div className="mb-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs text-red-600">We couldn't load the search results right now. Please try again.</div>}
+
+        {submittedQuery && isLoading && products.length === 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{Array.from({ length: 12 }).map((_, i) => <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div className="aspect-square bg-gray-100" /><div className="p-3 space-y-2"><div className="h-3 bg-gray-100 rounded w-4/5" /><div className="h-3 bg-gray-100 rounded w-3/5" /><div className="h-8 bg-gray-100 rounded-lg mt-3" /></div></div>)}</div>
+        ) : submittedQuery && products.length === 0 && !isLoading ? (
+          <div className="rounded-3xl border border-gray-100 bg-white px-6 py-16 text-center"><div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-50"><Package className="w-6 h-6 text-gray-300" /></div><h2 className="text-base font-bold text-gray-800">No products found for “{submittedQuery}”</h2><p className="mt-2 mx-auto max-w-md text-xs leading-relaxed text-gray-400">Try a more specific product name or another keyword.</p></div>
+        ) : submittedQuery ? (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{products.map(product => <ProductTile key={product.id} product={product} query={submittedQuery} />)}</div>
+            <div ref={sentinelRef} className="h-10 flex items-center justify-center">{isLoading && <span className="text-xs text-gray-400">Loading more…</span>}</div>
+            {!hasMore && products.length > 0 && <div className="mt-4 text-center text-[11px] text-gray-400">You’ve reached the end of these results.</div>}
+
+            {(relatedLoading || relatedProducts.length > 0) && (
+              <section className="mt-10 pt-7 border-t border-gray-200">
+                <div className="flex items-center justify-between mb-4"><div><h2 className="text-lg font-bold text-gray-900">People also search for</h2>{relatedCategory && <p className="text-xs text-gray-400 mt-1">More from {relatedCategory}</p>}</div></div>
+                {relatedLoading ? <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-52 rounded-2xl bg-white border border-gray-100 animate-pulse" />)}</div> : <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{relatedProducts.map(product => <ProductTile key={product.id} product={product} query="" />)}</div>}
+              </section>
+            )}
+          </>
+        ) : null}
       </main>
     </div>
   );
