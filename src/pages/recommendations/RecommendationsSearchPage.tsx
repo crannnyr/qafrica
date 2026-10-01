@@ -85,8 +85,7 @@ export default function RecommendationsSearchPage() {
         if (!response.ok) throw new Error(data?.error || 'Keyword load failed');
         const source = (data.products ?? []) as ImportProduct[];
         const categoryKeywords = Array.from(new Set(source.map(product => product.category).filter(Boolean))).map(category => ({ label: String(category), value: String(category), mode: 'category' as const }));
-        const productKeywords = source.map(product => ({ label: product.name, value: product.name, mode: 'product' as const }));
-        setKeywords(shuffle([...categoryKeywords, ...productKeywords]).slice(0, 5));
+        setKeywords(shuffle(categoryKeywords).slice(0, 5));
       } catch {
         setKeywords([]);
       } finally {
