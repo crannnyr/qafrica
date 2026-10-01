@@ -1,11 +1,8 @@
 // src/hooks/useImportPwaManifest.ts
 // Swaps in a PWA manifest scoped to the importation experience only, while
 // the user is on an /importations, /recommendations, or import-admin page.
-// The main QAFRICA storefront stays a plain web app — this deliberately does
-// NOT touch index.html globally, so "Add to Home Screen" / install prompts
-// only make sense (and only point at the right start_url) while browsing
-// the import side of the site.
 import { useEffect } from 'react';
+import CONFIG from '@/lib/config';
 
 const MANIFEST_HREF = '/manifest-import.json';
 const SW_URL = '/import-sw.js';
@@ -16,7 +13,6 @@ let swRegistered = false;
 
 export function useImportPwaManifest() {
   useEffect(() => {
-    // <link rel="manifest">
     let link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     const hadExistingManifest = !!link;
     const previousHref = link?.getAttribute('href') ?? null;
@@ -28,7 +24,6 @@ export function useImportPwaManifest() {
     }
     link.setAttribute('href', MANIFEST_HREF);
 
-    // theme-color meta (affects the browser chrome color for the installed app)
     let themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     const previousTheme = themeMeta?.getAttribute('content') ?? null;
     if (!themeMeta) {
@@ -38,7 +33,6 @@ export function useImportPwaManifest() {
     }
     themeMeta.setAttribute('content', THEME_COLOR);
 
-    // iOS Safari ignores the manifest's icons/display mode — needs its own tags.
     const appleCapable = document.createElement('meta');
     appleCapable.setAttribute('name', 'apple-mobile-web-app-capable');
     appleCapable.setAttribute('content', 'yes');
@@ -54,20 +48,36 @@ export function useImportPwaManifest() {
     appleIcon.setAttribute('href', APPLE_ICON_HREF);
     document.head.appendChild(appleIcon);
 
-    // Register the import-scoped service worker once per session — needed
-    // for Chrome/Android install-ability criteria.
     if (!swRegistered && 'serviceWorker' in navigator) {
       swRegistered = true;
-      navigator.serviceWorker.register(SW_URL).catch(() => {
-        // Installability just won't trigger — not fatal, app still works.
+      navigator.serviceWorker.register(SW_URL).then(() => {
+        // Warm the exact public catalog endpoints used by the import pages.
+        // The worker also extracts and caches the returned product images.
+        navigator.serviceWorker.ready.then(registration => {
+          registration.active?.postMessage({
+            type: 'WARM_IMPORT_CACHE',
+            urls: [
+              `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse?action=browse-products&limit=50`,
+              `${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=products`,
+            ],
+          });
+        });
+      }).catch(() => {
         swRegistered = false;
       });
+    } else if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(registration => {
+        registration.active?.postMessage({
+          type: 'WARM_IMPORT_CACHE',
+          urls: [
+            `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse?action=browse-products&limit=50`,
+            `${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=products`,
+          ],
+        });
+      }).catch(() => {});
     }
 
     return () => {
-      // Restore whatever was there before (or remove what we added) so the
-      // rest of the site — the store builder, marketplaces, etc. — isn't
-      // left pointing at the import manifest after navigating away.
       if (link) {
         if (hadExistingManifest && previousHref) link.setAttribute('href', previousHref);
         else link.remove();
