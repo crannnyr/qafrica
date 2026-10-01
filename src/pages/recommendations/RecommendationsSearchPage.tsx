@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Package, Search, X, Sparkles, TrendingUp } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Package, Search, X, Sparkles, TrendingUp } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import type { ImportProduct } from './RecommendationsPage';
 import { fmt } from './RecommendationsPage';
