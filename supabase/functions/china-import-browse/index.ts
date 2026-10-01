@@ -252,15 +252,12 @@ serve(async (req: Request) => {
       if (hasSearch) {
         const tokens = search!.trim().toLowerCase().split(/\s+/).filter(Boolean).slice(0, 6)
         for (const token of tokens) {
-          const alts = Array.from(new Set([token, ...(SYNONYMS[token] ?? [])]))
-          const orParts: string[] = []
-          for (const alt of alts) {
-            const escaped = escapeIlike(alt)
-            orParts.push(`name.ilike.%${escaped}%`)
-            orParts.push(`description.ilike.%${escaped}%`)
-            orParts.push(`category.ilike.%${escaped}%`)
-          }
-          query = query.or(orParts.join(','))
+          const escaped = escapeIlike(token)
+          query = query.or([
+            `name.ilike.%${escaped}%`,
+            `description.ilike.%${escaped}%`,
+            `category.ilike.%${escaped}%`,
+          ].join(','))
         }
       }
 
@@ -280,43 +277,4 @@ serve(async (req: Request) => {
         total,
         hasMore: offset + (data?.length ?? 0) < total,
       }, 20)
-    }
 
-    if (req.method === 'GET' && action === 'categories') {
-      const cached = cacheGet<unknown>('categories')
-      if (cached) return jsonCached(cached, 300)
-
-      const { data, error } = await supabase
-        .from('china_import_products')
-        .select('parent_category, category')
-        .eq('is_active', true)
-      if (error) return json({ error: error.message, categories: [] }, 500)
-
-      const order = ['Fashion', 'Electronics', 'Power & Charging', 'Home & Living', 'Beauty', 'Other']
-      const map = new Map<string, Set<string>>()
-      for (const row of data ?? []) {
-        const p = (row as any).parent_category ?? 'Other'
-        const c = (row as any).category
-        if (!c) continue
-        if (!map.has(p)) map.set(p, new Set())
-        map.get(p)!.add(c)
-      }
-      const categories = Array.from(map.entries())
-        .map(([parent, subs]) => ({ parent, subcategories: Array.from(subs).sort() }))
-        .sort((a, b) => {
-          const ai = order.indexOf(a.parent); const bi = order.indexOf(b.parent)
-          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
-        })
-
-      const body = { categories }
-      cacheSet('categories', body, 300_000)
-      return jsonCached(body, 300)
-    }
-
-    return json({ error: `Unknown action: ${action ?? '(none)'}` }, 400)
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Unexpected error'
-    console.error('[china-import-browse]', message)
-    return json({ error: message }, 500)
-  }
-})
