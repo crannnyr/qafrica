@@ -22,6 +22,24 @@ function shuffle<T>(items: T[]): T[] {
   return copy;
 }
 
+function categoryKeyword(category: string, products: ImportProduct[]): string {
+  const words = category.match(/[A-Za-z0-9]+/g) ?? [];
+  if (words.length === 1) return words[0];
+
+  const haystacks = products.map(product => `${product.name ?? ''} ${product.description ?? ''}`.toLowerCase());
+  const scored = words
+    .map(word => {
+      const normalized = word.toLowerCase().replace(/'s$/, '');
+      if (normalized.length < 3) return { word, score: -1 };
+      const score = haystacks.reduce((count, text) => count + (text.includes(normalized) ? 1 : 0), 0);
+      return { word: normalized, score };
+    })
+    .filter(item => item.score >= 0)
+    .sort((a, b) => b.score - a.score || b.word.length - a.word.length);
+
+  return scored[0]?.word || words[words.length - 1];
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -84,8 +102,16 @@ export default function RecommendationsSearchPage() {
         const data = await response.json();
         if (!response.ok) throw new Error(data?.error || 'Keyword load failed');
         const source = (data.products ?? []) as ImportProduct[];
-        const categoryKeywords = Array.from(new Set(source.map(product => product.category).filter(Boolean))).map(category => ({ label: String(category), value: String(category), mode: 'category' as const }));
-        setKeywords(shuffle(categoryKeywords).slice(0, 5));
+        const categoryMap = new Map<string, SearchKeyword>();
+        source.forEach(product => {
+          const category = product.category?.trim();
+          if (!category) return;
+          const label = categoryKeyword(category, source);
+          if (!categoryMap.has(label.toLowerCase())) {
+            categoryMap.set(label.toLowerCase(), { label: label.charAt(0).toUpperCase() + label.slice(1), value: category, mode: 'category' });
+          }
+        });
+        setKeywords(shuffle([...categoryMap.values()]).slice(0, 5));
       } catch {
         setKeywords([]);
       } finally {
