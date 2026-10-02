@@ -534,19 +534,33 @@ serve(async (req) => {
 
     const orderIds = Array.from(new Set(rows.map((row: any) => row.order_id).filter(Boolean)))
 
-    const [{ data: orders, error: ordersError }, { data: paidBills, error: billsError }] = await Promise.all([
+    const chunk = <T,>(values: T[], size = 50) => {
+      const result: T[][] = []
+      for (let i = 0; i < values.length; i += size) result.push(values.slice(i, i + size))
+      return result
+    }
+
+    const orderChunks = chunk(orderIds, 50)
+
+    const orderResults = await Promise.all(orderChunks.map((ids) =>
       supabase.from('china_import_orders')
         .select('id, code, customer_name, customer_whatsapp, user_id, batch_id, status, shipping_method')
-        .in('id', orderIds),
+        .in('id', ids)
+    ))
+    const ordersError = orderResults.find((result) => result.error)?.error
+    if (ordersError) return json({ error: ordersError.message }, 500)
+    const orders = orderResults.flatMap((result) => result.data ?? [])
+
+    const billResults = await Promise.all(orderChunks.map((ids) =>
       supabase.from('china_import_consolidation_bills')
         .select('order_id')
-        .in('order_id', orderIds)
+        .in('order_id', ids)
         .eq('kind', 'consolidation_shipping')
-        .eq('status', 'paid'),
-    ])
-
-    if (ordersError) return json({ error: ordersError.message }, 500)
+        .eq('status', 'paid')
+    ))
+    const billsError = billResults.find((result) => result.error)?.error
     if (billsError) return json({ error: billsError.message }, 500)
+    const paidBills = billResults.flatMap((result) => result.data ?? [])
 
     const paidOrderIds = new Set((paidBills ?? []).map((row: any) => row.order_id))
     const eligibleOrders = (orders ?? []).filter((order: any) => paidOrderIds.has(order.id))
@@ -556,21 +570,26 @@ serve(async (req) => {
     const batchIds = Array.from(new Set(eligibleOrders.map((order: any) => order.batch_id).filter(Boolean)))
     const productIds = Array.from(new Set(rows.map((row: any) => row.product_id).filter(Boolean)))
 
-    const [{ data: customers, error: customersError }, { data: batches, error: batchesError }, { data: inventory, error: inventoryError }] = await Promise.all([
-      customerIds.length
-        ? supabase.from('customers').select('id, full_name, phone, email').in('id', customerIds)
-        : Promise.resolve({ data: [], error: null }),
-      batchIds.length
-        ? supabase.from('import_batches').select('id, opened_at').in('id', batchIds)
-        : Promise.resolve({ data: [], error: null }),
-      productIds.length
-        ? supabase.from('china_import_inventory').select('product_id, variant_options, quantity').in('product_id', productIds)
-        : Promise.resolve({ data: [], error: null }),
-    ])
-
+    const customerResults = await Promise.all(chunk(customerIds, 50).map((ids) =>
+      supabase.from('customers').select('id, full_name, phone, email').in('id', ids)
+    ))
+    const customersError = customerResults.find((result) => result.error)?.error
     if (customersError) return json({ error: customersError.message }, 500)
+    const customers = customerResults.flatMap((result) => result.data ?? [])
+
+    const batchResults = await Promise.all(chunk(batchIds, 50).map((ids) =>
+      supabase.from('import_batches').select('id, opened_at').in('id', ids)
+    ))
+    const batchesError = batchResults.find((result) => result.error)?.error
     if (batchesError) return json({ error: batchesError.message }, 500)
+    const batches = batchResults.flatMap((result) => result.data ?? [])
+
+    const inventoryResults = await Promise.all(chunk(productIds, 50).map((ids) =>
+      supabase.from('china_import_inventory').select('product_id, variant_options, quantity').in('product_id', ids)
+    ))
+    const inventoryError = inventoryResults.find((result) => result.error)?.error
     if (inventoryError) return json({ error: inventoryError.message }, 500)
+    const inventory = inventoryResults.flatMap((result) => result.data ?? [])
 
     const customerMap = new Map((customers ?? []).map((row: any) => [row.id, row]))
     const batchMap = new Map((batches ?? []).map((row: any) => [row.id, row]))
@@ -579,10 +598,11 @@ serve(async (req) => {
       Number(row.quantity ?? 0),
     ]))
 
+    const orderMap = new Map(eligibleOrders.map((order: any) => [order.id, order]))
     const items = rows
       .filter((row: any) => eligibleOrderIds.has(row.order_id))
       .map((row: any) => {
-        const order = eligibleOrders.find((candidate: any) => candidate.id === row.order_id)
+        const order = orderMap.get(row.order_id)
         const customer = order?.user_id ? customerMap.get(order.user_id) : null
         const batch = order?.batch_id ? batchMap.get(order.batch_id) : null
         return {
