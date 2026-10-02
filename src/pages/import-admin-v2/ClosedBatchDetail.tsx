@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Loader, Users, Plane, Ship, ShieldCheck, Send, AlertTriangle,
   ChevronRight, Package, CheckCircle2, Truck, PackageCheck, ExternalLink, Layers,
-  StickyNote, RotateCcw, Boxes, Pencil, Search, Share2, Copy, Check,
+  StickyNote, RotateCcw, Boxes, Pencil, Search, Share2, Copy, Check, X,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { toast } from 'sonner';
@@ -1239,43 +1239,8 @@ export default function ClosedBatchDetail({
             )}
 
             {tab === 'customers' && (
-              selectedCustomer ? (
-                <CustomerCard
-                  customer={selectedCustomer}
-                  billKind={billKind}
-                  setBillKind={setBillKind}
-                  onBack={() => {
-                    setSelectedCustomerForDrilldown(null);
-                    restoreListScroll();
-                  }}
-                  customerPriceFor={customerPriceFor}
-                  isOverridden={isOverridden}
-                  setCustomerPriceDrafts={setCustomerPriceDrafts}
-                  saveCustomerPrice={saveCustomerPrice}
-                  revertCustomerPrice={revertCustomerPrice}
-                  customerBillTotal={customerBillTotal}
-                  adjustments={adjustmentsByCustomer(selectedCustomer.customerId, billKind)}
-                  adjLabel={adjLabel} setAdjLabel={setAdjLabel}
-                  adjAmount={adjAmount} setAdjAmount={setAdjAmount}
-                  savingAdj={savingAdj}
-                  addAdjustment={addAdjustment}
-                  removeAdjustment={removeAdjustment}
-                  applyPercentDiscount={applyPercentDiscount}
-                  isBilled={isBilled}
-                  statusRow={statusRow}
-                  ledgerRow={ledgerRow}
-                  isShippedC={isShippedC}
-                  isReceivedC={isReceivedC}
-                  noteDrafts={noteDrafts} setNoteDrafts={setNoteDrafts}
-                  saveNote={saveNote}
-                  runIndividual={runIndividual}
-                  individualActing={individualActing}
-                  onSetItemShipping={setItemShipping}
-                  productVariants={productVariants}
-                  onSetItemVariant={setItemVariant}
-                />
-              ) : (
-                <>
+              <>
+
                   <div className="flex items-center justify-between mb-1.5">
                     <p className="text-sm font-bold text-gray-800">By customer</p>
                     <div className="flex items-center gap-2">
@@ -1386,7 +1351,71 @@ export default function ClosedBatchDetail({
         )}
       </div>
 
-      {bulkConfirm && (
+
+              </>
+            )}
+
+            {selectedCustomer && (
+              <div
+                className="fixed inset-0 z-[80] bg-black/30 flex justify-end"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Customer batch order details"
+                onMouseDown={e => {
+                  if (e.target === e.currentTarget) setSelectedCustomerForDrilldown(null);
+                }}
+              >
+                <aside className="h-full w-full max-w-[680px] bg-gray-50 shadow-2xl flex flex-col">
+                  <div className="h-14 shrink-0 bg-white border-b border-gray-200 px-4 flex items-center justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Customer Batch Order Details</p>
+                      <p className="text-sm font-bold text-gray-900 truncate">{selectedCustomer.name}</p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedCustomerForDrilldown(null)}
+                      className="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
+                      aria-label="Close customer batch order details"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                    <CustomerCard
+                  customer={selectedCustomer}
+                  billKind={billKind}
+                  setBillKind={setBillKind}
+                  onBack={() => setSelectedCustomerForDrilldown(null)}
+                  customerPriceFor={customerPriceFor}
+                  isOverridden={isOverridden}
+                  setCustomerPriceDrafts={setCustomerPriceDrafts}
+                  saveCustomerPrice={saveCustomerPrice}
+                  revertCustomerPrice={revertCustomerPrice}
+                  customerBillTotal={customerBillTotal}
+                  adjustments={adjustmentsByCustomer(selectedCustomer.customerId, billKind)}
+                  adjLabel={adjLabel} setAdjLabel={setAdjLabel}
+                  adjAmount={adjAmount} setAdjAmount={setAdjAmount}
+                  savingAdj={savingAdj}
+                  addAdjustment={addAdjustment}
+                  removeAdjustment={removeAdjustment}
+                  applyPercentDiscount={applyPercentDiscount}
+                  isBilled={isBilled}
+                  statusRow={statusRow}
+                  ledgerRow={ledgerRow}
+                  isShippedC={isShippedC}
+                  isReceivedC={isReceivedC}
+                  noteDrafts={noteDrafts} setNoteDrafts={setNoteDrafts}
+                  saveNote={saveNote}
+                  runIndividual={runIndividual}
+                  individualActing={individualActing}
+                  onSetItemShipping={setItemShipping}
+                  productVariants={productVariants}
+                  onSetItemVariant={setItemVariant}
+                />
+
+                  </div>
+                </aside>
+              </div>
+            )}      {bulkConfirm && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={() => !isActing && setBulkConfirm(null)}>
           <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl p-5 max-w-sm w-full">
             <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center mb-3">
