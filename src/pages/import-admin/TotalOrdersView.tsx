@@ -13,6 +13,8 @@ import { toast } from 'sonner';
 import { OrderDetails } from '@/pages/management/ManagementOrders';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const BATCH_VIEW_STORAGE_KEY = 'qafrica-import-admin-v2-batch-view';
+const BATCH_SELECTION_STORAGE_KEY = 'qafrica-import-admin-v2-selected-batch';
 
 interface OrderItem {
   id: string;
@@ -107,12 +109,44 @@ function buildGroups(orders: OrderRow[], showClosed: boolean): Group[] {
 export default function TotalOrdersView({ token, onOpenProduct }: { token: string; onOpenProduct?: (productId: string) => void }) {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showClosed, setShowClosed] = useState(false);
+  const [showClosed, setShowClosed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(BATCH_VIEW_STORAGE_KEY) === 'closed';
+    } catch {
+      return false;
+    }
+  });
   const [closingKey, setClosingKey] = useState<string | null>(null);
   const [closingAll, setClosingAll] = useState(false);
   const [profileCustomerId, setProfileCustomerId] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [selectedBatchKey, setSelectedBatchKey] = useState<string | null>(null);
+  const [selectedBatchKey, setSelectedBatchKey] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(BATCH_SELECTION_STORAGE_KEY);
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(BATCH_VIEW_STORAGE_KEY, showClosed ? 'closed' : 'active');
+    } catch {
+      // Ignore storage failures; the tab still works normally in-memory.
+    }
+  }, [showClosed]);
+
+  useEffect(() => {
+    try {
+      if (selectedBatchKey) {
+        localStorage.setItem(BATCH_SELECTION_STORAGE_KEY, selectedBatchKey);
+      } else {
+        localStorage.removeItem(BATCH_SELECTION_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage failures; the batch selection still works in-memory.
+    }
+  }, [selectedBatchKey]);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -244,13 +278,19 @@ export default function TotalOrdersView({ token, onOpenProduct }: { token: strin
     <div className="space-y-4">
       <div className="flex bg-white rounded-xl border border-gray-100 p-1 gap-1">
         <button
-          onClick={() => setShowClosed(false)}
+          onClick={() => {
+            setSelectedBatchKey(null);
+            setShowClosed(false);
+          }}
           className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${!showClosed ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'}`}
         >
           Active
         </button>
         <button
-          onClick={() => setShowClosed(true)}
+          onClick={() => {
+            setSelectedBatchKey(null);
+            setShowClosed(true);
+          }}
           className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-colors ${showClosed ? 'bg-gray-900 text-white' : 'text-gray-400 hover:text-gray-700'}`}
         >
           Closed
