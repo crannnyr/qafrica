@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Loader, Search, X, CheckCircle2 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import ManagementOrdersLegacy, { OrderDetails } from './ManagementOrdersLegacy';
 import { toast } from 'sonner';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const BATCH_VIEW_STORAGE_KEY = 'qafrica-import-admin-v2-batch-view';
+const BATCH_SELECTION_STORAGE_KEY = 'qafrica-import-admin-v2-selected-batch';
 
 export default function ManagementOrders() {
   const [query, setQuery] = useState('');
@@ -12,6 +14,7 @@ export default function ManagementOrders() {
   const [error, setError] = useState('');
   const [found, setFound] = useState<any>(null);
   const [details, setDetails] = useState<any>(null);
+  const legacyRootRef = useRef<HTMLDivElement>(null);
   const token = sessionStorage.getItem('import_manager_token') || '';
 
   const searchOrder = async () => {
@@ -43,6 +46,75 @@ export default function ManagementOrders() {
   const batchLabel = found?.staged_at
     ? `Batch — ${new Date(found.staged_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}`
     : 'Active — not yet assigned to a batch';
+
+  // The batch UI lives inside ManagementOrdersLegacy, so this wrapper persists
+  // the user's actual tab/batch selection without duplicating its state.
+  useEffect(() => {
+    const root = legacyRootRef.current;
+    if (!root) return;
+
+    let restoring = true;
+    const restore = () => {
+      const view = localStorage.getItem(BATCH_VIEW_STORAGE_KEY);
+      const selected = localStorage.getItem(BATCH_SELECTION_STORAGE_KEY);
+      const buttons = Array.from(root.querySelectorAll('button'));
+      const closedButton = buttons.find((button) => button.textContent?.trim() === 'Closed');
+
+      if (view === 'closed' && closedButton) {
+        closedButton.click();
+        if (selected) {
+          window.setTimeout(() => {
+            const viewButtons = Array.from(root.querySelectorAll('button')).filter(
+              (button) => button.textContent?.trim() === 'View'
+            );
+            const match = viewButtons.find((button) => {
+              const row = button.closest('tr');
+              return row?.textContent?.includes(selected) ?? false;
+            });
+            match?.click();
+            restoring = false;
+          }, 100);
+        } else {
+          restoring = false;
+        }
+      } else {
+        restoring = false;
+      }
+    };
+
+    const timer = window.setTimeout(restore, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const root = legacyRootRef.current;
+    if (!root) return;
+
+    const onClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const button = target?.closest('button');
+      if (!button || !root.contains(button)) return;
+      const text = button.textContent?.trim() ?? '';
+
+      if (text === 'Active') {
+        localStorage.setItem(BATCH_VIEW_STORAGE_KEY, 'active');
+        localStorage.removeItem(BATCH_SELECTION_STORAGE_KEY);
+      } else if (text === 'Closed') {
+        localStorage.setItem(BATCH_VIEW_STORAGE_KEY, 'closed');
+        localStorage.removeItem(BATCH_SELECTION_STORAGE_KEY);
+      } else if (text === 'View') {
+        const row = button.closest('tr');
+        const rowText = row?.textContent?.trim();
+        if (rowText) {
+          localStorage.setItem(BATCH_VIEW_STORAGE_KEY, 'closed');
+          localStorage.setItem(BATCH_SELECTION_STORAGE_KEY, rowText);
+        }
+      }
+    };
+
+    root.addEventListener('click', onClick);
+    return () => root.removeEventListener('click', onClick);
+  }, []);
 
   const searchContent = (
     <div className="w-full space-y-3 mt-3 mb-1">
@@ -84,7 +156,9 @@ export default function ManagementOrders() {
 
   return (
     <div className="w-full space-y-4">
-      <ManagementOrdersLegacy belowTabs={searchContent} />
+      <div ref={legacyRootRef}>
+        <ManagementOrdersLegacy belowTabs={searchContent} />
+      </div>
       {details && <OrderDetails
         token={token}
         order={details}
