@@ -51,21 +51,29 @@ serve(async (req: Request) => {
       .order('order_item_index', { ascending: true })
     if (fulfillmentError) return json({ error: fulfillmentError.message }, 500)
 
-    const normalizedFulfillmentItems = (fulfillmentItems ?? []).map((item: any) => ({
-      ...item,
-      // Once an item is received at HQ, public tracking must never present it
-      // as merely "Shipped", even if the historical shipped quantity remains.
-      shipped_quantity: item.received_quantity > 0 ? 0 : item.shipped_quantity,
-    }))
+    // Public tracking is based on the item's physical location, not stale
+    // allocation/shipping counters. Once an item is received at HQ, it must
+    // never be displayed as "Shipped" or "Preparing shipment".
+    const normalizedFulfillmentItems = (fulfillmentItems ?? []).map((item: any) => {
+      if (item.received_quantity > 0) {
+        return {
+          ...item,
+          allocated_quantity: 0,
+          shipped_quantity: 0,
+        }
+      }
+      return item
+    })
+
     const allReceived = normalizedFulfillmentItems.length > 0 && normalizedFulfillmentItems.every(
       (item: any) => item.received_quantity >= item.ordered_quantity,
     )
-    const anyReceived = normalizedFulfillmentItems.some((item: any) => item.received_quantity > 0)
-    const publicOrder = allReceived
-      ? { ...order, status: 'clearance_and_closed', received_at: order.received_at ?? new Date().toISOString() }
-      : anyReceived
-        ? { ...order }
-        : order
+
+    // Reaching HQ is not delivery. Keep the public order at the HQ milestone
+    // until the real order status becomes `received`.
+    const publicOrder = allReceived && order.status !== 'received'
+      ? { ...order, status: 'clearance_and_closed', received_at: null }
+      : order
 
     const { data: shipments, error: shipmentError } = await supabase
       .from('china_import_shipments')
