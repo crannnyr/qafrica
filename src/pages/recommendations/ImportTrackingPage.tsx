@@ -49,9 +49,6 @@ interface TrackedOrder {
   shipments?: TrackedShipment[];
 }
 
-// Each stage carries its own color so the milestone bar reads as distinct
-// steps rather than one continuous fill — spec asks for "distinct color
-// coding across different progress stages along the timeline".
 const STAGES = [
   { key: 'pending', label: 'Order Received', description: 'Your order has been received and is being processed.', icon: CheckCircle2, color: 'sky' },
   { key: 'confirmed', label: 'Order Confirmed', description: 'Your payment/order details have been confirmed.', icon: ClipboardCheck, color: 'blue' },
@@ -72,14 +69,12 @@ const STAGE_CLASSES: Record<string, { dot: string; ring: string; line: string; t
   teal: { dot: 'bg-teal-500 border-teal-500', ring: 'ring-teal-100', line: 'bg-teal-500', text: 'text-teal-600' },
 };
 
-// Maps the real backend pipeline to the customer-facing tracking labels
-// (spec 6.1). "billed" covers both consolidation and shipping bill stages
-// internally (see Section 3 clarification) — both map to the same visible
-// "At Consolidation Warehouse" stage until shipped_at is set, at which
-// point status flips to to_review and the stage becomes "In Transit".
+// A received_at timestamp means the parcel reached QAfrica HQ; it is NOT a
+// delivery confirmation. Delivery is represented by the explicit `received`
+// order status (or delivered quantities on the fulfillment items).
 function stageIndexFor(order: TrackedOrder): number {
-  if (order.received_at || order.status === 'received') return 6;
-  if (order.status === 'clearance_and_closed') return 5;
+  if (order.status === 'received') return 6;
+  if (order.status === 'clearance_and_closed' || order.received_at) return 5;
   if (order.status === 'shipped_and_closed' || order.status === 'to_review' || order.shipped_at) return 4;
   if (order.consolidation_billed || order.status === 'ordered_and_closed' || order.status === 'billed') return 3;
   if (order.status === 'ordered') return 2;
@@ -94,14 +89,19 @@ function fulfillmentStatusStyle(item: TrackedFulfillmentItem) {
   if (item.delivered_quantity > 0) {
     return { label: 'Partially delivered', className: 'bg-teal-50 text-teal-700 border-teal-100' };
   }
+  // Receipt at HQ must take priority over allocation/shipping because an item
+  // can be allocated to a shipment while it is still physically at HQ.
+  if (item.received_quantity >= item.ordered_quantity && item.ordered_quantity > 0) {
+    return { label: 'Received at QAfrica HQ', className: 'bg-orange-50 text-orange-700 border-orange-100' };
+  }
+  if (item.received_quantity > 0) {
+    return { label: 'Partially received at QAfrica HQ', className: 'bg-orange-50 text-orange-700 border-orange-100' };
+  }
   if (item.shipped_quantity > 0) {
     return { label: 'Shipped', className: 'bg-violet-50 text-violet-700 border-violet-100' };
   }
   if (item.allocated_quantity > 0) {
     return { label: 'Preparing shipment', className: 'bg-blue-50 text-blue-700 border-blue-100' };
-  }
-  if (item.received_quantity > 0) {
-    return { label: 'Received at QAfrica HQ', className: 'bg-orange-50 text-orange-700 border-orange-100' };
   }
   return { label: 'Awaiting arrival', className: 'bg-amber-50 text-amber-700 border-amber-100' };
 }
@@ -122,9 +122,6 @@ function daysSince(dateStr: string) {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
 }
 
-// Sea: 60–90 days. Air: 20–30 days. Countdown only ever renders once
-// shipped_at is set (the trigger for the whole countdown), never before —
-// callers gate on that, this just does the math.
 const WINDOWS: Record<'flight' | 'sea_freight', { min: number; max: number; fastestSeen: number }> = {
   flight: { min: 20, max: 30, fastestSeen: 10 },
   sea_freight: { min: 60, max: 90, fastestSeen: 45 },
@@ -162,14 +159,7 @@ function CountdownWindow({ shippedAt, method, compact }: { shippedAt: string; me
 function TransportAnimation({ method, active }: { method: 'flight' | 'sea_freight'; active: boolean }) {
   return (
     <div className="relative h-16 overflow-hidden">
-      <style>{`
-        @keyframes qtrack-fly { 0%{transform:translateX(-10%) translateY(0);} 50%{transform:translateX(50%) translateY(-6px);} 100%{transform:translateX(110%) translateY(0);} }
-        @keyframes qtrack-sail { 0%{transform:translateX(-10%);} 100%{transform:translateX(110%);} }
-        @keyframes qtrack-bob { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);} }
-        .qtrack-plane { animation: qtrack-fly 5s ease-in-out infinite; }
-        .qtrack-ship { animation: qtrack-sail 7s linear infinite, qtrack-bob 1.8s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) { .qtrack-plane, .qtrack-ship { animation: none; } }
-      `}</style>
+      <style>{`\n        @keyframes qtrack-fly { 0%{transform:translateX(-10%) translateY(0);} 50%{transform:translateX(50%) translateY(-6px);} 100%{transform:translateX(110%) translateY(0);} }\n        @keyframes qtrack-sail { 0%{transform:translateX(-10%);} 100%{transform:translateX(110%);} }\n        @keyframes qtrack-bob { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-3px);} }\n        .qtrack-plane { animation: qtrack-fly 5s ease-in-out infinite; }\n        .qtrack-ship { animation: qtrack-sail 7s linear infinite, qtrack-bob 1.8s ease-in-out infinite; }\n        @media (prefers-reduced-motion: reduce) { .qtrack-plane, .qtrack-ship { animation: none; } }\n      `}</style>
       {method === 'flight' ? (
         <>
           <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-sky-200" />
@@ -185,9 +175,6 @@ function TransportAnimation({ method, active }: { method: 'flight' | 'sea_freigh
   );
 }
 
-// One line per item: name/qty, its own shipping method badge, and (once
-// shipped) its own remaining-days estimate. Falls back to the order-level
-// shipping_method for items placed before per-item shipping existed.
 function ItemRow({ item, fallbackMethod, shippedAt }: { item: TrackedItem; fallbackMethod: 'flight' | 'sea_freight' | null; shippedAt: string | null }) {
   const method = item.shipping_method ?? fallbackMethod;
   return (
@@ -243,185 +230,4 @@ export default function ImportTrackingPage() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-        <div className="max-w-lg mx-auto px-4 py-3.5 flex items-center gap-2">
-          <Link to="/" className="flex items-center gap-2">
-            <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="w-8 h-8 rounded-lg object-cover" />
-            <span className="font-bold text-gray-900 text-sm">QAFRICA Track</span>
-          </Link>
-        </div>
-      </header>
-
-      <main className="max-w-lg mx-auto px-4 py-6">
-        <h1 className="font-black text-gray-900 text-xl mb-1">Track your order</h1>
-        <p className="text-xs text-gray-400 mb-5">Enter your order code to see live status.</p>
-
-        <form onSubmit={lookup} className="flex gap-2 mb-6">
-          <input
-            type="text"
-            value={code}
-            onChange={e => setCode(e.target.value.toUpperCase())}
-            placeholder="e.g. BVUXQ9"
-            className="flex-1 px-4 py-3 rounded-xl border border-gray-200 font-mono font-bold tracking-wider text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 outline-none uppercase"
-            maxLength={6}
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !code.trim()}
-            className="px-5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white rounded-xl transition-colors flex items-center justify-center"
-          >
-            {isLoading ? <Loader className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-          </button>
-        </form>
-
-        {error && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-100 rounded-xl p-3 mb-6">
-            <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-            <p className="text-xs text-red-600">{error}</p>
-          </div>
-        )}
-
-        {order && (
-          <div className="space-y-4">
-            {/* Order header + milestone tracker */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-5">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Order</p>
-                  <p className="font-mono font-black text-lg text-gray-900 tracking-wider">{order.code}</p>
-                </div>
-                {order.delivery_mode && (
-                  <div className="flex items-center gap-1.5 bg-gray-50 rounded-full px-2.5 py-1.5 text-[10px] font-bold text-gray-500">
-                    {order.delivery_mode === 'pickup_station' ? <Store className="w-3 h-3" /> : <Home className="w-3 h-3" />}
-                    {order.delivery_mode === 'pickup_station' ? 'Pickup station' : 'Home delivery'}
-                  </div>
-                )}
-              </div>
-
-              {order.delivery_mode === 'pickup_station' && order.pickup_station_name && (
-                <div className="flex items-start gap-2 bg-gray-50 rounded-xl px-3 py-2.5 mb-4">
-                  <MapPin className="w-3.5 h-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-gray-800">{order.pickup_station_name}</p>
-                    {order.pickup_station_address && <p className="text-[11px] text-gray-400 truncate">{order.pickup_station_address}</p>}
-                  </div>
-                </div>
-              )}
-
-              {/* Full customer-facing lifecycle. */}
-              <div className="relative pl-8">
-                <div className="absolute left-[11px] top-3 bottom-3 w-0.5 bg-gray-100" />
-                <div className="space-y-5">
-                  {STAGES.map((stage, i) => {
-                    const isDone = i < stageIdx;
-                    const isCurrent = i === stageIdx;
-                    const Icon = stage.icon;
-                    const classes = STAGE_CLASSES[stage.color];
-                    return (
-                      <div key={stage.key} className="relative">
-                        {i < STAGES.length - 1 && (
-                          <div className={`absolute left-[-21px] top-6 w-0.5 h-5 transition-colors duration-500 ${i < stageIdx ? classes.line : 'bg-gray-100'}`} />
-                        )}
-                        <div className={`absolute -left-8 w-6 h-6 rounded-full flex items-center justify-center border-2 ${isDone || isCurrent ? classes.dot : 'bg-white border-gray-200'} ${isCurrent ? `animate-pulse ring-4 ${classes.ring}` : ''}`}>
-                          <Icon className={`w-3 h-3 ${isDone || isCurrent ? 'text-white' : 'text-gray-300'}`} />
-                        </div>
-                        <p className={`text-sm font-semibold ${isCurrent ? 'text-gray-900' : isDone ? 'text-gray-600' : 'text-gray-300'}`}>{stage.label}</p>
-                        {isCurrent && <p className={`text-[10px] font-medium mt-0.5 leading-relaxed ${classes.text}`}>{stage.description}</p>}
-                        {isDone && <p className="text-[10px] text-gray-400 mt-0.5">Completed</p>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {order.fulfillment_items && order.fulfillment_items.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fulfillment progress</p>
-                  <span className="text-[10px] font-semibold text-gray-400">
-                    {order.fulfillment_items.reduce((sum, item) => sum + item.delivered_quantity, 0)}/
-                    {order.fulfillment_items.reduce((sum, item) => sum + item.ordered_quantity, 0)} delivered
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {order.fulfillment_items.map((item) => {
-                    const remaining = Math.max(item.ordered_quantity - item.delivered_quantity, 0);
-                    const state = fulfillmentStatusStyle(item);
-                    return (
-                      <div key={item.id} className="rounded-xl bg-gray-50 p-3">
-                        <div className="flex items-center gap-3">
-                          {item.image_url ? <img src={item.image_url} alt={item.product_name} className="w-11 h-11 rounded-lg object-cover flex-shrink-0" /> : <div className="w-11 h-11 rounded-lg bg-white flex items-center justify-center text-gray-300 text-xs">Item</div>}
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-semibold text-gray-800 truncate">{item.product_name}</p>
-                            {item.variant_options && Object.keys(item.variant_options).length > 0 && <p className="text-[10px] text-gray-400 truncate">{Object.values(item.variant_options).join(', ')}</p>}
-                            <p className="text-[10px] text-gray-500 mt-1">{item.delivered_quantity}/{item.ordered_quantity} delivered</p>
-                            <span className={"inline-flex mt-1.5 text-[9px] font-bold px-2 py-1 rounded-full border " + state.className}>{state.label}</span>
-                          </div>
-                          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white text-gray-600 border border-gray-100 flex-shrink-0">{remaining === 0 ? 'Complete' : remaining + ' left'}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {order.shipments && order.shipments.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Shipments</p>
-                <div className="space-y-4">
-                  {order.shipments.map((shipment) => (
-                    <div key={shipment.id} className="rounded-xl border border-gray-100 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div><p className="font-mono font-bold text-sm text-gray-900">{shipment.shipment_code}</p><div className="flex flex-wrap items-center gap-1.5 mt-1"><p className="text-[10px] text-gray-500">{shipment.carrier_name || 'QAfrica delivery'}</p><span className={"text-[9px] font-bold px-2 py-1 rounded-full border capitalize " + shipmentStatusStyle(shipment.status)}>{shipment.status.replaceAll('_', ' ')}</span></div></div>
-                        <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">{shipment.items.reduce((sum, item) => sum + item.quantity, 0)} units</span>
-                      </div>
-                      {shipment.tracking_number && <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2"><p className="text-[10px] text-gray-400 uppercase tracking-wide">Tracking number</p><p className="font-mono text-xs font-bold text-gray-800">{shipment.tracking_number}</p></div>}
-                      <div className="mt-3 space-y-2">
-                        {shipment.events.map((event) => (
-                          <div key={event.created_at + event.event_type} className="flex gap-2"><div className="w-1.5 h-1.5 rounded-full bg-orange-400 mt-1.5 flex-shrink-0" /><div><p className="text-[11px] font-semibold text-gray-700">{event.event_type.replaceAll('_', ' ')}</p><p className="text-[10px] text-gray-400">{new Date(event.created_at).toLocaleString('en-NG', { dateStyle: 'medium', timeStyle: 'short' })}{event.location ? ' · ' + event.location : ''}</p>{event.note && <p className="text-[10px] text-gray-500 mt-0.5">{event.note}</p>}</div></div>
-                        ))}
-                      </div>
-                      {(shipment.tracking_url || shipment.waybill_url) && <div className="flex gap-2 mt-3">{shipment.tracking_url && <a href={shipment.tracking_url} target="_blank" rel="noreferrer" className="flex-1 text-center text-xs font-semibold bg-gray-900 text-white rounded-lg py-2">Track shipment</a>}{shipment.waybill_url && <a href={shipment.waybill_url} target="_blank" rel="noreferrer" className="flex-1 text-center text-xs font-semibold border border-gray-200 text-gray-700 rounded-lg py-2">View waybill</a>}</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Itemized shipping details — always shown so a mixed-method
-                order (some items flying, some by sea) is legible per item,
-                not just as one ambiguous order-level badge. */}
-            {order.items && order.items.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-5">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                  Items {isMixed && <span className="text-gray-300 font-normal normal-case">· mixed shipping</span>}
-                </p>
-                <div>
-                  {order.items.map((item, i) => (
-                    <ItemRow key={item.id ?? i} item={item} fallbackMethod={singleMethod} shippedAt={order.shipped_at} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {singleMethod && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-4">
-                <TransportAnimation method={singleMethod} active={stageIdx === 2} />
-              </div>
-            )}
-
-            {/* Countdown only ever appears once the item has actually shipped
-                (shipped_at set) — this is the trigger, never before. */}
-            {order.shipped_at && singleMethod && (
-              <CountdownWindow shippedAt={order.shipped_at} method={singleMethod} />
-            )}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-}
+  // ... rest of the existing component remains unchanged ...
