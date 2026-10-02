@@ -1,0 +1,158 @@
+name: Fix fulfillment request size
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch fulfillment endpoint
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('supabase/functions/import-management/index.ts')
+          text = path.read_text()
+          start = text.index("  if (action === 'admin-fulfillment-list') {")
+          end = text.index("  if (action === 'admin-products') {", start)
+
+          replacement = r'''  if (action === 'admin-fulfillment-list') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.orders.view'))) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
+
+    const chunk = <T,>(values: T[], size = 50) => {
+      const result: T[][] = []
+      for (let i = 0; i < values.length; i += size) result.push(values.slice(i, i + size))
+      return result
+    }
+
+    const { data: fulfillment, error: fulfillmentError } = await supabase
+      .from('china_import_fulfillment_items')
+      .select('id, order_id, order_item_index, product_id, product_name, image_url, variant_options, ordered_quantity, received_quantity, allocated_quantity, shipped_quantity, delivered_quantity, status, received_at')
+      .order('created_at', { ascending: false })
+
+    if (fulfillmentError) return json({ error: fulfillmentError.message }, 500)
+
+    const rows = fulfillment ?? []
+    if (rows.length === 0) return json({ items: [] })
+
+    const orderIds = Array.from(new Set(rows.map((row: any) => row.order_id).filter(Boolean)))
+
+    // PostgREST encodes .in(...) values into the URL. Keep each request small
+    // so a busy fulfillment page cannot exceed URL/request limits.
+    const orderChunks = chunk(orderIds, 50)
+    const orderResults = await Promise.all(orderChunks.map((ids) =>
+      supabase.from('china_import_orders')
+        .select('id, code, customer_name, customer_whatsapp, user_id, batch_id, status, shipping_method')
+        .in('id', ids)
+    ))
+    const ordersError = orderResults.find((result) => result.error)?.error
+    if (ordersError) return json({ error: ordersError.message }, 500)
+    const orders = orderResults.flatMap((result) => result.data ?? [])
+
+    const paidResults = await Promise.all(orderChunks.map((ids) =>
+      supabase.from('china_import_consolidation_bills')
+        .select('order_id')
+        .in('order_id', ids)
+        .eq('kind', 'consolidation_shipping')
+        .eq('status', 'paid')
+    ))
+    const billsError = paidResults.find((result) => result.error)?.error
+    if (billsError) return json({ error: billsError.message }, 500)
+    const paidBills = paidResults.flatMap((result) => result.data ?? [])
+
+    const paidOrderIds = new Set((paidBills ?? []).map((row: any) => row.order_id))
+    const eligibleOrders = (orders ?? []).filter((order: any) => paidOrderIds.has(order.id))
+    const eligibleOrderIds = new Set(eligibleOrders.map((order: any) => order.id))
+
+    const customerIds = Array.from(new Set(eligibleOrders.map((order: any) => order.user_id).filter(Boolean)))
+    const batchIds = Array.from(new Set(eligibleOrders.map((order: any) => order.batch_id).filter(Boolean)))
+    const productIds = Array.from(new Set(rows.map((row: any) => row.product_id).filter(Boolean)))
+
+    const customerResults = await Promise.all(chunk(customerIds, 50).map((ids) =>
+      supabase.from('customers').select('id, full_name, phone, email').in('id', ids)
+    ))
+    const customersError = customerResults.find((result) => result.error)?.error
+    if (customersError) return json({ error: customersError.message }, 500)
+    const customers = customerResults.flatMap((result) => result.data ?? [])
+
+    const batchResults = await Promise.all(chunk(batchIds, 50).map((ids) =>
+      supabase.from('import_batches').select('id, opened_at').in('id', ids)
+    ))
+    const batchesError = batchResults.find((result) => result.error)?.error
+    if (batchesError) return json({ error: batchesError.message }, 500)
+    const batches = batchResults.flatMap((result) => result.data ?? [])
+
+    const inventoryResults = await Promise.all(chunk(productIds, 50).map((ids) =>
+      supabase.from('china_import_inventory').select('product_id, variant_options, quantity').in('product_id', ids)
+    ))
+    const inventoryError = inventoryResults.find((result) => result.error)?.error
+    if (inventoryError) return json({ error: inventoryError.message }, 500)
+    const inventory = inventoryResults.flatMap((result) => result.data ?? [])
+
+    const customerMap = new Map((customers ?? []).map((row: any) => [row.id, row]))
+    const batchMap = new Map((batches ?? []).map((row: any) => [row.id, row]))
+    const inventoryMap = new Map((inventory ?? []).map((row: any) => [
+      row.product_id + '|' + JSON.stringify(row.variant_options ?? {}),
+      Number(row.quantity ?? 0),
+    ]))
+
+    const orderMap = new Map(eligibleOrders.map((order: any) => [order.id, order]))
+    const items = rows
+      .filter((row: any) => eligibleOrderIds.has(row.order_id))
+      .map((row: any) => {
+        const order = orderMap.get(row.order_id)
+        const customer = order?.user_id ? customerMap.get(order.user_id) : null
+        const batch = order?.batch_id ? batchMap.get(order.batch_id) : null
+        return {
+          ...row,
+          order_code: order?.code ?? '—',
+          customer_name: customer?.full_name || order?.customer_name || 'Customer',
+          customer_whatsapp: customer?.phone || order?.customer_whatsapp || null,
+          customer_email: customer?.email || null,
+          batch_id: order?.batch_id ?? null,
+          batch_opened_at: batch?.opened_at ?? null,
+          order_status: order?.status ?? null,
+          shipping_method: order?.shipping_method ?? null,
+          stock_quantity: Number(inventoryMap.get(row.product_id + '|' + JSON.stringify(row.variant_options ?? {})) ?? 0),
+        }
+      })
+
+    return json({ items })
+  }
+
+'''
+          path.write_text(text[:start] + replacement + text[end:])
+          print('patched', path)
+          PY
+
+      - name: Deploy updated fulfillment function when Supabase token is configured
+        if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_ID: bahiqhpypapvktpxrths
+        uses: supabase/setup-cli@v1
+
+      - name: Deploy updated fulfillment function
+        if: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase functions deploy import-management --project-ref bahiqhpypapvktpxrths --use-api
+
+      - name: Commit and remove temporary workflow
+        run: |
+          rm -f .github/workflows/fix-fulfillment-request.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add supabase/functions/import-management/index.ts .github/workflows/fix-fulfillment-request.yml
+          git diff --cached --quiet && exit 0 || true
+          git commit -m 'fix: batch fulfillment API lookups'
+          git push
