@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Loader, Users, Plane, Ship, ShieldCheck, Send, AlertTriangle,
   ChevronRight, Package, CheckCircle2, Truck, PackageCheck, ExternalLink, Layers,
-  StickyNote, RotateCcw, Boxes, Pencil, Search, Share2, Copy, Check, X,
+  StickyNote, RotateCcw, Boxes, Pencil, Search, Share2, Copy, Check,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { toast } from 'sonner';
@@ -1344,16 +1344,7 @@ export default function ClosedBatchDetail({
                       );
                     })}
                   </div>
-                </>
-              )
-            )}
-          </>
-        )}
-      </div>
-
-
               </>
-
             )}
 
             {selectedCustomer && (
@@ -1366,18 +1357,19 @@ export default function ClosedBatchDetail({
                   if (e.target === e.currentTarget) setSelectedCustomerForDrilldown(null);
                 }}
               >
-                <aside className="h-full w-full max-w-[680px] bg-gray-50 shadow-2xl flex flex-col">
-                  <div className="h-14 shrink-0 bg-white border-b border-gray-200 px-4 flex items-center justify-between">
+                <aside className="h-full w-full max-w-[680px] bg-white shadow-2xl border-l border-gray-200 flex flex-col">
+                  <div className="h-14 shrink-0 border-b border-gray-200 px-4 flex items-center justify-between">
                     <div className="min-w-0">
                       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Customer Batch Order Details</p>
                       <p className="text-sm font-bold text-gray-900 truncate">{selectedCustomer.name}</p>
                     </div>
                     <button
+                      type="button"
                       onClick={() => setSelectedCustomerForDrilldown(null)}
-                      className="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
+                      className="h-9 w-9 rounded-xl border border-gray-200 text-gray-500 hover:bg-gray-50 text-xl leading-none"
                       aria-label="Close customer batch order details"
                     >
-                      <X className="w-5 h-5" />
+                      ×
                     </button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -1416,6 +1408,7 @@ export default function ClosedBatchDetail({
                 </aside>
               </div>
             )}
+
           </>
         )}
       </div>
