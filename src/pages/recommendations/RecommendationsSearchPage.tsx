@@ -253,14 +253,23 @@ export default function RecommendationsSearchPage() {
   }, [hasMore, offset, submittedQuery, searchMode, categoryFilter]);
 
   useEffect(() => {
-    if (submittedQuery || !recommendedHasMore || !recommendedProducts.length && recommendedOffset !== 0) return;
+    if (submittedQuery) return;
+    setRecommendedProducts([]);
+    setRecommendedOffset(0);
+    setRecommendedHasMore(true);
+    void fetchRecommended(0, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submittedQuery]);
+
+  useEffect(() => {
+    if (submittedQuery || !recommendedHasMore || !recommendedProducts.length || !sentinelRef.current) return;
     const observer = new IntersectionObserver(entries => {
       if (entries[0]?.isIntersecting && !recommendedLoadingRef.current) void fetchRecommended(recommendedOffset, true);
     }, { rootMargin: '600px' });
-    observer.observe(sentinelRef.current!);
+    observer.observe(sentinelRef.current);
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submittedQuery, recommendedHasMore, recommendedOffset]);
+  }, [submittedQuery, recommendedHasMore, recommendedOffset, recommendedProducts.length]);
 
   const clearSearch = () => {
     setQuery('');
