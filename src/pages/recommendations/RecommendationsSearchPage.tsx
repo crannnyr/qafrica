@@ -9,6 +9,7 @@ import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 const BROWSE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse`;
 const PAGE_SIZE = 24;
 const MAX_RESULTS = 96;
+const RECOMMENDED_LIMIT = 50;
 const RELATED_LIMIT = 8;
 
 type SearchKeyword = { label: string; value: string; mode: 'product' | 'category'; filter: 'parent' | 'subcategory' };
@@ -70,6 +71,11 @@ export default function RecommendationsSearchPage() {
   const [error, setError] = useState(false);
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [recommendedProducts, setRecommendedProducts] = useState<ImportProduct[]>([]);
+  const [recommendedOffset, setRecommendedOffset] = useState(0);
+  const [recommendedHasMore, setRecommendedHasMore] = useState(true);
+  const [recommendedLoading, setRecommendedLoading] = useState(false);
+  const recommendedLoadingRef = useRef(false);
   const loadingRef = useRef(false);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -168,6 +174,34 @@ export default function RecommendationsSearchPage() {
     }
   };
 
+  const fetchRecommended = async (nextOffset = 0, append = false) => {
+    if (recommendedLoadingRef.current || nextOffset >= RECOMMENDED_LIMIT) return;
+    recommendedLoadingRef.current = true;
+    setRecommendedLoading(true);
+    try {
+      const url = new URL(BROWSE_URL);
+      url.searchParams.set('action', 'browse-products');
+      url.searchParams.set('limit', String(Math.min(PAGE_SIZE, RECOMMENDED_LIMIT - nextOffset)));
+      url.searchParams.set('offset', String(nextOffset));
+      const response = await fetch(url.toString());
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.error || 'Recommendations failed');
+      const incoming = shuffle((data.products ?? []) as ImportProduct[]);
+      const nextProducts = append ? [...recommendedProducts, ...incoming] : incoming;
+      const deduped = Array.from(new Map(nextProducts.map(item => [item.id, item])).values()).slice(0, RECOMMENDED_LIMIT);
+      setRecommendedProducts(deduped);
+      const next = nextOffset + incoming.length;
+      setRecommendedOffset(next);
+      setRecommendedHasMore(next < RECOMMENDED_LIMIT && Boolean(data.hasMore) && incoming.length > 0);
+    } catch {
+      if (!append) setRecommendedProducts([]);
+      setRecommendedHasMore(false);
+    } finally {
+      recommendedLoadingRef.current = false;
+      setRecommendedLoading(false);
+    }
+  };
+
   const runSearch = (value = query, mode: 'product' | 'category' = 'product', filter: 'parent' | 'subcategory' = categoryFilter) => {
     const next = value.trim();
     setQuery(value);
@@ -184,6 +218,9 @@ export default function RecommendationsSearchPage() {
     setRelatedProducts([]);
     setTotal(0);
     setHasMore(false);
+    setRecommendedProducts([]);
+    setRecommendedOffset(0);
+    setRecommendedHasMore(true);
     void fetchPage(next, mode, 0, false, filter);
   };
 
@@ -198,6 +235,9 @@ export default function RecommendationsSearchPage() {
     setRelatedProducts([]);
     setTotal(0);
     setHasMore(false);
+    setRecommendedProducts([]);
+    setRecommendedOffset(0);
+    setRecommendedHasMore(true);
     if (next) void fetchPage(next, initialMode, 0, false, initialFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuery, initialMode, initialFilter]);
@@ -211,6 +251,16 @@ export default function RecommendationsSearchPage() {
     return () => observer.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasMore, offset, submittedQuery, searchMode, categoryFilter]);
+
+  useEffect(() => {
+    if (submittedQuery || !recommendedHasMore || !recommendedProducts.length && recommendedOffset !== 0) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0]?.isIntersecting && !recommendedLoadingRef.current) void fetchRecommended(recommendedOffset, true);
+    }, { rootMargin: '600px' });
+    observer.observe(sentinelRef.current!);
+    return () => observer.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submittedQuery, recommendedHasMore, recommendedOffset]);
 
   const clearSearch = () => {
     setQuery('');
@@ -243,6 +293,13 @@ export default function RecommendationsSearchPage() {
           <section className="pt-2">
             <div className="flex items-center gap-2 mb-3"><Sparkles className="w-4 h-4 text-orange-500" /><h1 className="text-base font-bold text-gray-900">Trending searches</h1></div>
             {keywordsLoading ? <div className="flex flex-wrap gap-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-8 w-20 rounded-full bg-white border border-gray-100 animate-pulse" />)}</div> : <div className="flex flex-wrap gap-2">{keywords.map(keyword => <button key={`${keyword.filter}:${keyword.value}`} type="button" onClick={() => runSearch(keyword.value, keyword.mode, keyword.filter)} className="px-3 py-1.5 rounded-full bg-white border border-gray-200 text-xs font-semibold text-gray-600 hover:border-gray-300">{keyword.label}</button>)}</div>}
+            <div className="mt-10">
+              <div className="mb-4">
+                <h2 className="text-base lg:text-lg font-bold text-gray-900">Recommended products</h2>
+                <p className="text-xs text-gray-400 mt-0.5">A selection of products you might like.</p>
+              </div>
+              {recommendedProducts.length === 0 && recommendedLoading ? <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{Array.from({ length: 12 }).map((_, i) => <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"><div className="aspect-square bg-gray-100" /><div className="p-3 space-y-2"><div className="h-3 bg-gray-100 rounded w-4/5" /><div className="h-3 bg-gray-100 rounded w-3/5" /></div></div>)}</div> : recommendedProducts.length > 0 ? <><div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 lg:gap-4">{recommendedProducts.map(product => <ProductTile key={product.id} product={product} query="" />)}</div><div ref={sentinelRef} className="h-10" />{recommendedLoading && <div className="py-6 text-center text-xs text-gray-400">Loading more recommended products…</div>}{!recommendedLoading && !recommendedHasMore && <p className="py-6 text-center text-xs text-gray-400">You’ve reached the end of the recommendations.</p>}</> : <div className="rounded-2xl border border-gray-100 bg-white px-5 py-10 text-center text-xs text-gray-400">No recommendations available right now.</div>}
+            </div>
           </section>
         ) : (
           <>
