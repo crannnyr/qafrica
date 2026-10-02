@@ -15,6 +15,7 @@ export default function ManagementOrders() {
   const [found, setFound] = useState<any>(null);
   const [details, setDetails] = useState<any>(null);
   const legacyRootRef = useRef<HTMLDivElement>(null);
+  const restoringRef = useRef(false);
   const token = sessionStorage.getItem('import_manager_token') || '';
 
   const searchOrder = async () => {
@@ -47,43 +48,64 @@ export default function ManagementOrders() {
     ? `Batch — ${new Date(found.staged_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })}`
     : 'Active — not yet assigned to a batch';
 
-  // The batch UI lives inside ManagementOrdersLegacy, so this wrapper persists
-  // the user's actual tab/batch selection without duplicating its state.
   useEffect(() => {
     const root = legacyRootRef.current;
     if (!root) return;
 
-    let restoring = true;
+    const view = localStorage.getItem(BATCH_VIEW_STORAGE_KEY);
+    const selected = localStorage.getItem(BATCH_SELECTION_STORAGE_KEY);
+    if (view !== 'closed') return;
+
+    restoringRef.current = true;
+    let attempts = 0;
+    let timer: number | undefined;
+
     const restore = () => {
-      const view = localStorage.getItem(BATCH_VIEW_STORAGE_KEY);
-      const selected = localStorage.getItem(BATCH_SELECTION_STORAGE_KEY);
+      attempts += 1;
       const buttons = Array.from(root.querySelectorAll('button'));
       const closedButton = buttons.find((button) => button.textContent?.trim() === 'Closed');
 
-      if (view === 'closed' && closedButton) {
-        closedButton.click();
-        if (selected) {
-          window.setTimeout(() => {
-            const viewButtons = Array.from(root.querySelectorAll('button')).filter(
-              (button) => button.textContent?.trim() === 'View'
-            );
-            const match = viewButtons.find((button) => {
-              const row = button.closest('tr');
-              return row?.textContent?.includes(selected) ?? false;
-            });
-            match?.click();
-            restoring = false;
-          }, 100);
-        } else {
-          restoring = false;
-        }
-      } else {
-        restoring = false;
+      if (!closedButton) {
+        if (attempts < 50) timer = window.setTimeout(restore, 100);
+        else restoringRef.current = false;
+        return;
       }
+
+      closedButton.click();
+
+      if (!selected) {
+        restoringRef.current = false;
+        return;
+      }
+
+      const findAndOpenBatch = () => {
+        const viewButtons = Array.from(root.querySelectorAll('button')).filter(
+          (button) => button.textContent?.trim() === 'View'
+        );
+        const match = viewButtons.find((button) => {
+          const row = button.closest('tr');
+          return row?.textContent?.includes(selected) ?? false;
+        });
+
+        if (match) {
+          match.click();
+          restoringRef.current = false;
+          return;
+        }
+
+        attempts += 1;
+        if (attempts < 50) timer = window.setTimeout(findAndOpenBatch, 100);
+        else restoringRef.current = false;
+      };
+
+      timer = window.setTimeout(findAndOpenBatch, 100);
     };
 
-    const timer = window.setTimeout(restore, 0);
-    return () => window.clearTimeout(timer);
+    timer = window.setTimeout(restore, 0);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      restoringRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -91,6 +113,7 @@ export default function ManagementOrders() {
     if (!root) return;
 
     const onClick = (event: MouseEvent) => {
+      if (restoringRef.current) return;
       const target = event.target as HTMLElement | null;
       const button = target?.closest('button');
       if (!button || !root.contains(button)) return;
