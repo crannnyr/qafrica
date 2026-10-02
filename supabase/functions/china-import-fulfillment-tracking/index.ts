@@ -51,6 +51,22 @@ serve(async (req: Request) => {
       .order('order_item_index', { ascending: true })
     if (fulfillmentError) return json({ error: fulfillmentError.message }, 500)
 
+    const normalizedFulfillmentItems = (fulfillmentItems ?? []).map((item: any) => ({
+      ...item,
+      // Once an item is received at HQ, public tracking must never present it
+      // as merely "Shipped", even if the historical shipped quantity remains.
+      shipped_quantity: item.received_quantity > 0 ? 0 : item.shipped_quantity,
+    }))
+    const allReceived = normalizedFulfillmentItems.length > 0 && normalizedFulfillmentItems.every(
+      (item: any) => item.received_quantity >= item.ordered_quantity,
+    )
+    const anyReceived = normalizedFulfillmentItems.some((item: any) => item.received_quantity > 0)
+    const publicOrder = allReceived
+      ? { ...order, status: 'clearance_and_closed', received_at: order.received_at ?? new Date().toISOString() }
+      : anyReceived
+        ? { ...order }
+        : order
+
     const { data: shipments, error: shipmentError } = await supabase
       .from('china_import_shipments')
       .select('id, shipment_code, status, delivery_mode, carrier_name, tracking_number, tracking_url, waybill_url, shipped_at, delivered_at, created_at, notes')
@@ -70,7 +86,7 @@ serve(async (req: Request) => {
           .order('created_at', { ascending: true })).data ?? []
       : []
 
-    const byId = new Map((fulfillmentItems ?? []).map((item: any) => [item.id, item]))
+    const byId = new Map(normalizedFulfillmentItems.map((item: any) => [item.id, item]))
     const publicShipments = (shipments ?? []).map((shipment: any) => ({
       ...shipment,
       items: shipmentItems
@@ -98,10 +114,10 @@ serve(async (req: Request) => {
 
     return json({
       order: {
-        ...order,
+        ...publicOrder,
         consolidation_billed: !!bill,
         consolidation_bill_status: bill?.status ?? null,
-        fulfillment_items: fulfillmentItems ?? [],
+        fulfillment_items: normalizedFulfillmentItems,
         shipments: publicShipments,
       },
     })
