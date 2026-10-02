@@ -191,7 +191,12 @@ export default function ClosedBatchDetail({
     }
   };
 
-  const [billStatusTab, setBillStatusTab] = useState<'unbilled' | 'billed' | 'paid'>('unbilled');
+  const [billStatusTab, setBillStatusTab] = useState<'unbilled' | 'billed' | 'paid'>(() => {
+    try {
+      const saved = localStorage.getItem(`qafrica-import-v2-bill-status:${batchKey}`);
+      return saved === 'billed' || saved === 'paid' ? saved : 'unbilled';
+    } catch { return 'unbilled'; }
+  });
   const [adjLabel, setAdjLabel] = useState('');
   const [adjAmount, setAdjAmount] = useState('');
   const [savingAdj, setSavingAdj] = useState(false);
@@ -213,7 +218,52 @@ export default function ClosedBatchDetail({
   const [sourcingShareUrl, setSourcingShareUrl] = useState<string | null>(null);
   const [sourcingShareLoading, setSourcingShareLoading] = useState(false);
   const [sourcingShareCopied, setSourcingShareCopied] = useState(false);
+  const scrollKey = `qafrica-import-v2-scroll:${batchKey}`;
   const listScrollPos = useRef(0);
+  const restoreTimerRef = useRef<number | null>(null);
+
+  const readSavedScroll = useCallback(() => {
+    try {
+      const parsed = Number(localStorage.getItem(scrollKey) || 0);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    } catch { return 0; }
+  }, [scrollKey]);
+
+  const saveListScroll = useCallback(() => {
+    if (selectedCustomerForDrilldown) return;
+    const y = window.scrollY || window.pageYOffset || 0;
+    if (!Number.isFinite(y)) return;
+    listScrollPos.current = y;
+    try { localStorage.setItem(scrollKey, String(y)); } catch {}
+  }, [scrollKey, selectedCustomerForDrilldown]);
+
+  const restoreListScroll = useCallback(() => {
+    const y = listScrollPos.current || readSavedScroll();
+    if (y <= 0) return;
+    if (restoreTimerRef.current !== null) window.clearTimeout(restoreTimerRef.current);
+    const attempt = (n: number) => {
+      window.scrollTo({ top: y, left: 0, behavior: 'auto' });
+      if (n < 10) restoreTimerRef.current = window.setTimeout(() => requestAnimationFrame(() => attempt(n + 1)), 50);
+    };
+    requestAnimationFrame(() => attempt(0));
+  }, [readSavedScroll]);
+
+  useEffect(() => {
+    try { localStorage.setItem(`qafrica-import-v2-bill-status:${batchKey}`, billStatusTab); } catch {}
+  }, [batchKey, billStatusTab]);
+
+  useEffect(() => {
+    const onScroll = () => saveListScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (restoreTimerRef.current !== null) window.clearTimeout(restoreTimerRef.current);
+    };
+  }, [saveListScroll]);
+
+  useEffect(() => {
+    if (!selectedCustomerForDrilldown) restoreListScroll();
+  }, [selectedCustomerForDrilldown, billStatusTab, restoreListScroll]);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -1196,7 +1246,7 @@ export default function ClosedBatchDetail({
                   setBillKind={setBillKind}
                   onBack={() => {
                     setSelectedCustomerForDrilldown(null);
-                    requestAnimationFrame(() => window.scrollTo(0, listScrollPos.current));
+                    restoreListScroll();
                   }}
                   customerPriceFor={customerPriceFor}
                   isOverridden={isOverridden}
@@ -1264,7 +1314,10 @@ export default function ClosedBatchDetail({
                       ] as const).map(([value, label, count]) => (
                         <button
                           key={value}
-                          onClick={() => setBillStatusTab(value)}
+                          onClick={() => {
+                          saveListScroll();
+                          setBillStatusTab(value);
+                        }}
                           className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-colors ${billStatusTab === value ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-100'}`}
                         >
                           {label} · {count}
@@ -1300,7 +1353,7 @@ export default function ClosedBatchDetail({
                         <button
                           key={c.customerId}
                           onClick={() => {
-                            listScrollPos.current = window.scrollY;
+                            saveListScroll();
                             setSelectedCustomerForDrilldown(c.customerId)
                           }}
                           className="w-full flex items-center justify-between p-3 bg-white rounded-xl border border-gray-100 text-left hover:border-gray-200 transition-colors"
