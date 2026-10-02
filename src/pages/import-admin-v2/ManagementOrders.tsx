@@ -7,6 +7,10 @@ import { toast } from 'sonner';
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const BATCH_VIEW_STORAGE_KEY = 'qafrica-import-admin-v2-batch-view';
 const BATCH_SELECTION_STORAGE_KEY = 'qafrica-import-admin-v2-selected-batch';
+const BATCH_CUSTOMER_TAB_KEY = 'qafrica-import-admin-v2-customer-bill-tab';
+const BATCH_CUSTOMER_SCROLL_KEY = 'qafrica-import-admin-v2-customer-scroll';
+
+type CustomerBillTab = 'unbilled' | 'billed' | 'paid';
 
 export default function ManagementOrders() {
   const [query, setQuery] = useState('');
@@ -17,6 +21,46 @@ export default function ManagementOrders() {
   const legacyRootRef = useRef<HTMLDivElement>(null);
   const restoringRef = useRef(false);
   const token = sessionStorage.getItem('import_manager_token') || '';
+
+  const getBatchStorageId = () => localStorage.getItem(BATCH_SELECTION_STORAGE_KEY) || 'current';
+
+  const getStoredCustomerTab = (batchId = getBatchStorageId()): CustomerBillTab => {
+    const value = localStorage.getItem(`${BATCH_CUSTOMER_TAB_KEY}:${batchId}`);
+    return value === 'billed' || value === 'paid' ? value : 'unbilled';
+  };
+
+  const restoreCustomerTabAndScroll = (batchId = getBatchStorageId()) => {
+    const root = legacyRootRef.current;
+    if (!root) return;
+
+    let attempts = 0;
+    const tab = getStoredCustomerTab(batchId);
+    const savedScroll = Number(localStorage.getItem(`${BATCH_CUSTOMER_SCROLL_KEY}:${batchId}:${tab}`) || '0');
+
+    const restore = () => {
+      attempts += 1;
+      const buttons = Array.from(root.querySelectorAll('button'));
+      const tabButton = buttons.find((button) => {
+        const text = button.textContent?.trim() || '';
+        return text.startsWith(tab === 'unbilled' ? '1. Unbilled' : tab === 'billed' ? '2. Billed' : '3. Paid');
+      });
+
+      if (!tabButton) {
+        if (attempts < 60) window.setTimeout(restore, 100);
+        return;
+      }
+
+      if (tabButton.textContent?.trim().startsWith(tab === 'unbilled' ? '1. Unbilled' : tab === 'billed' ? '2. Billed' : '3. Paid')) {
+        tabButton.click();
+      }
+
+      window.setTimeout(() => {
+        window.scrollTo({ top: Math.max(0, savedScroll), behavior: 'auto' });
+      }, 80);
+    };
+
+    window.setTimeout(restore, 80);
+  };
 
   const searchOrder = async () => {
     const code = query.trim().toUpperCase();
@@ -90,6 +134,7 @@ export default function ManagementOrders() {
         if (match) {
           match.click();
           restoringRef.current = false;
+          restoreCustomerTabAndScroll(selected);
           return;
         }
 
@@ -112,6 +157,14 @@ export default function ManagementOrders() {
     const root = legacyRootRef.current;
     if (!root) return;
 
+    const saveScroll = () => {
+      if (restoringRef.current) return;
+      const selected = localStorage.getItem(BATCH_SELECTION_STORAGE_KEY);
+      if (!selected) return;
+      const tab = getStoredCustomerTab(selected);
+      localStorage.setItem(`${BATCH_CUSTOMER_SCROLL_KEY}:${selected}:${tab}`, String(window.scrollY));
+    };
+
     const onClick = (event: MouseEvent) => {
       if (restoringRef.current) return;
       const target = event.target as HTMLElement | null;
@@ -131,12 +184,27 @@ export default function ManagementOrders() {
         if (rowText) {
           localStorage.setItem(BATCH_VIEW_STORAGE_KEY, 'closed');
           localStorage.setItem(BATCH_SELECTION_STORAGE_KEY, rowText);
+          restoreCustomerTabAndScroll(rowText);
+        }
+      } else if (text.startsWith('1. Unbilled') || text.startsWith('2. Billed') || text.startsWith('3. Paid')) {
+        const selected = localStorage.getItem(BATCH_SELECTION_STORAGE_KEY);
+        if (selected) {
+          const tab: CustomerBillTab = text.startsWith('1. Unbilled') ? 'unbilled' : text.startsWith('2. Billed') ? 'billed' : 'paid';
+          localStorage.setItem(`${BATCH_CUSTOMER_TAB_KEY}:${selected}`, tab);
+          window.setTimeout(() => {
+            const saved = Number(localStorage.getItem(`${BATCH_CUSTOMER_SCROLL_KEY}:${selected}:${tab}`) || '0');
+            window.scrollTo({ top: Math.max(0, saved), behavior: 'auto' });
+          }, 80);
         }
       }
     };
 
+    window.addEventListener('scroll', saveScroll, { passive: true });
     root.addEventListener('click', onClick);
-    return () => root.removeEventListener('click', onClick);
+    return () => {
+      window.removeEventListener('scroll', saveScroll);
+      root.removeEventListener('click', onClick);
+    };
   }, []);
 
   const searchContent = (
