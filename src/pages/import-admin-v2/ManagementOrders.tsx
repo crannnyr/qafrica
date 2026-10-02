@@ -22,6 +22,18 @@ export default function ManagementOrders() {
   const restoringRef = useRef(false);
   const token = sessionStorage.getItem('import_manager_token') || '';
 
+  const getScrollContainer = (): HTMLElement | null => {
+    let node: HTMLElement | null = legacyRootRef.current;
+    while (node) {
+      const style = window.getComputedStyle(node);
+      if ((style.overflowY === 'auto' || style.overflowY === 'scroll') && node.scrollHeight > node.clientHeight) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return null;
+  };
+
   const getBatchStorageId = () => localStorage.getItem(BATCH_SELECTION_STORAGE_KEY) || 'current';
 
   const getStoredCustomerTab = (batchId = getBatchStorageId()): CustomerBillTab => {
@@ -50,13 +62,24 @@ export default function ManagementOrders() {
         return;
       }
 
-      if (tabButton.textContent?.trim().startsWith(tab === 'unbilled' ? '1. Unbilled' : tab === 'billed' ? '2. Billed' : '3. Paid')) {
-        tabButton.click();
-      }
+      tabButton.click();
 
-      window.setTimeout(() => {
-        window.scrollTo({ top: Math.max(0, savedScroll), behavior: 'auto' });
-      }, 80);
+      const restorePosition = (remaining: number) => {
+        const container = getScrollContainer();
+        if (!container) {
+          if (remaining > 0) window.setTimeout(() => restorePosition(remaining - 1), 100);
+          return;
+        }
+        container.scrollTop = Math.max(0, savedScroll);
+        if (remaining > 0) {
+          window.requestAnimationFrame(() => {
+            container.scrollTop = Math.max(0, savedScroll);
+            window.setTimeout(() => restorePosition(remaining - 1), 60);
+          });
+        }
+      };
+
+      window.setTimeout(() => restorePosition(10), 80);
     };
 
     window.setTimeout(restore, 80);
@@ -71,20 +94,15 @@ export default function ManagementOrders() {
     try {
       if (!token) throw new Error('Management session expired');
       const res = await fetch(`${EDGE_URL}?action=load-code`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, code }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ manager_token: token, code }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error || !data.order) throw new Error(data.error ?? 'Order not found');
       setFound(data.order);
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Order not found';
-      setError(message);
-      toast.error(message);
-    } finally {
-      setLoading(false);
-    }
+      setError(message); toast.error(message);
+    } finally { setLoading(false); }
   };
 
   const clearSearch = () => { setQuery(''); setFound(null); setError(''); };
@@ -95,7 +113,6 @@ export default function ManagementOrders() {
   useEffect(() => {
     const root = legacyRootRef.current;
     if (!root) return;
-
     const view = localStorage.getItem(BATCH_VIEW_STORAGE_KEY);
     const selected = localStorage.getItem(BATCH_SELECTION_STORAGE_KEY);
     if (view !== 'closed') return;
@@ -103,54 +120,35 @@ export default function ManagementOrders() {
     restoringRef.current = true;
     let attempts = 0;
     let timer: number | undefined;
-
     const restore = () => {
       attempts += 1;
       const buttons = Array.from(root.querySelectorAll('button'));
       const closedButton = buttons.find((button) => button.textContent?.trim() === 'Closed');
-
       if (!closedButton) {
         if (attempts < 50) timer = window.setTimeout(restore, 100);
         else restoringRef.current = false;
         return;
       }
-
       closedButton.click();
-
-      if (!selected) {
-        restoringRef.current = false;
-        return;
-      }
+      if (!selected) { restoringRef.current = false; return; }
 
       const findAndOpenBatch = () => {
-        const viewButtons = Array.from(root.querySelectorAll('button')).filter(
-          (button) => button.textContent?.trim() === 'View'
-        );
-        const match = viewButtons.find((button) => {
-          const row = button.closest('tr');
-          return row?.textContent?.includes(selected) ?? false;
-        });
-
+        const viewButtons = Array.from(root.querySelectorAll('button')).filter((button) => button.textContent?.trim() === 'View');
+        const match = viewButtons.find((button) => button.closest('tr')?.textContent?.includes(selected) ?? false);
         if (match) {
           match.click();
-          restoringRef.current = false;
           restoreCustomerTabAndScroll(selected);
+          restoringRef.current = false;
           return;
         }
-
         attempts += 1;
         if (attempts < 50) timer = window.setTimeout(findAndOpenBatch, 100);
         else restoringRef.current = false;
       };
-
       timer = window.setTimeout(findAndOpenBatch, 100);
     };
-
     timer = window.setTimeout(restore, 0);
-    return () => {
-      if (timer !== undefined) window.clearTimeout(timer);
-      restoringRef.current = false;
-    };
+    return () => { if (timer !== undefined) window.clearTimeout(timer); restoringRef.current = false; };
   }, []);
 
   useEffect(() => {
@@ -162,7 +160,8 @@ export default function ManagementOrders() {
       const selected = localStorage.getItem(BATCH_SELECTION_STORAGE_KEY);
       if (!selected) return;
       const tab = getStoredCustomerTab(selected);
-      localStorage.setItem(`${BATCH_CUSTOMER_SCROLL_KEY}:${selected}:${tab}`, String(window.scrollY));
+      const container = getScrollContainer();
+      if (container) localStorage.setItem(`${BATCH_CUSTOMER_SCROLL_KEY}:${selected}:${tab}`, String(container.scrollTop));
     };
 
     const onClick = (event: MouseEvent) => {
@@ -193,16 +192,19 @@ export default function ManagementOrders() {
           localStorage.setItem(`${BATCH_CUSTOMER_TAB_KEY}:${selected}`, tab);
           window.setTimeout(() => {
             const saved = Number(localStorage.getItem(`${BATCH_CUSTOMER_SCROLL_KEY}:${selected}:${tab}`) || '0');
-            window.scrollTo({ top: Math.max(0, saved), behavior: 'auto' });
+            const container = getScrollContainer();
+            if (container) container.scrollTop = Math.max(0, saved);
           }, 80);
         }
       }
     };
 
-    window.addEventListener('scroll', saveScroll, { passive: true });
+    const container = getScrollContainer();
+    if (container) container.addEventListener('scroll', saveScroll, { passive: true });
     root.addEventListener('click', onClick);
+
     return () => {
-      window.removeEventListener('scroll', saveScroll);
+      if (container) container.removeEventListener('scroll', saveScroll);
       root.removeEventListener('click', onClick);
     };
   }, []);
@@ -212,22 +214,12 @@ export default function ManagementOrders() {
       <div className="bg-white rounded-2xl border border-gray-100 p-4">
         <div className="flex items-center gap-2">
           <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          <input
-            value={query}
-            onChange={e => { setQuery(e.target.value.toUpperCase()); setError(''); }}
-            onKeyDown={e => { if (e.key === 'Enter') void searchOrder(); }}
-            placeholder="Search any order by order code…"
-            className="flex-1 min-w-0 px-1 py-2 text-sm outline-none font-mono uppercase"
-            aria-label="Search batch orders by order code"
-          />
+          <input value={query} onChange={e => { setQuery(e.target.value.toUpperCase()); setError(''); }} onKeyDown={e => { if (e.key === 'Enter') void searchOrder(); }} placeholder="Search any order by order code…" className="flex-1 min-w-0 px-1 py-2 text-sm outline-none font-mono uppercase" aria-label="Search batch orders by order code" />
           {query && <button onClick={clearSearch} className="p-1.5 rounded-lg hover:bg-gray-100" aria-label="Clear search"><X className="w-4 h-4 text-gray-400" /></button>}
-          <button onClick={() => void searchOrder()} disabled={loading || !query.trim()} className="px-4 py-2 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white text-xs font-bold rounded-xl flex items-center gap-1.5">
-            {loading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />} Search
-          </button>
+          <button onClick={() => void searchOrder()} disabled={loading || !query.trim()} className="px-4 py-2 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 text-white text-xs font-bold rounded-xl flex items-center gap-1.5">{loading ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />} Search</button>
         </div>
         {error && <p className="mt-2 text-[11px] text-red-500">{error}</p>}
       </div>
-
       {found && (
         <div className="bg-white rounded-2xl border border-orange-100 p-4">
           <div className="flex items-start justify-between gap-4">
@@ -250,13 +242,7 @@ export default function ManagementOrders() {
       <div ref={legacyRootRef}>
         <ManagementOrdersLegacy belowTabs={searchContent} />
       </div>
-      {details && <OrderDetails
-        token={token}
-        order={details}
-        onClose={() => setDetails(null)}
-        onReload={async () => { setDetails(null); }}
-        onOpenClient={() => toast.info('Open this order from the batch list to view client details.')}
-      />}
+      {details && <OrderDetails token={token} order={details} onClose={() => setDetails(null)} onReload={async () => { setDetails(null); }} onOpenClient={() => toast.info('Open this order from the batch list to view client details.')} />}
     </div>
   );
 }
