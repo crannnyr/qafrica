@@ -1371,11 +1371,7 @@ export default function ClosedBatchDetail({
                       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Customer Batch Order Details</p>
                       <p className="text-sm font-bold text-gray-900 truncate">{selectedCustomer.name}</p>
                     </div>
-                    <button
-                      onClick={() => setSelectedCustomerForDrilldown(null)}
-                      className="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
-                      aria-label="Close customer batch order details"
-                    >
+                    <button onClick={() => setSelectedCustomerForDrilldown(null)} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500" aria-label="Close customer batch order details">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
@@ -1415,7 +1411,12 @@ export default function ClosedBatchDetail({
                   </div>
                 </aside>
               </div>
-            )}      {bulkConfirm && (
+            )}
+          </>
+        )}
+      </div>
+
+      {bulkConfirm && (
         <div className="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4" onClick={() => !isActing && setBulkConfirm(null)}>
           <div onClick={e => e.stopPropagation()} className="bg-white rounded-2xl p-5 max-w-sm w-full">
             <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center mb-3">
