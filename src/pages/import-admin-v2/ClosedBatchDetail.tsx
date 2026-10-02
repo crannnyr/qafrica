@@ -1353,6 +1353,7 @@ export default function ClosedBatchDetail({
 
 
               </>
+
             )}
 
             {selectedCustomer && (
@@ -1371,43 +1372,46 @@ export default function ClosedBatchDetail({
                       <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Customer Batch Order Details</p>
                       <p className="text-sm font-bold text-gray-900 truncate">{selectedCustomer.name}</p>
                     </div>
-                    <button onClick={() => setSelectedCustomerForDrilldown(null)} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500" aria-label="Close customer batch order details">
+                    <button
+                      onClick={() => setSelectedCustomerForDrilldown(null)}
+                      className="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
+                      aria-label="Close customer batch order details"
+                    >
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                   <div className="min-h-0 flex-1 overflow-y-auto p-4">
                     <CustomerCard
-                  customer={selectedCustomer}
-                  billKind={billKind}
-                  setBillKind={setBillKind}
-                  onBack={() => setSelectedCustomerForDrilldown(null)}
-                  customerPriceFor={customerPriceFor}
-                  isOverridden={isOverridden}
-                  setCustomerPriceDrafts={setCustomerPriceDrafts}
-                  saveCustomerPrice={saveCustomerPrice}
-                  revertCustomerPrice={revertCustomerPrice}
-                  customerBillTotal={customerBillTotal}
-                  adjustments={adjustmentsByCustomer(selectedCustomer.customerId, billKind)}
-                  adjLabel={adjLabel} setAdjLabel={setAdjLabel}
-                  adjAmount={adjAmount} setAdjAmount={setAdjAmount}
-                  savingAdj={savingAdj}
-                  addAdjustment={addAdjustment}
-                  removeAdjustment={removeAdjustment}
-                  applyPercentDiscount={applyPercentDiscount}
-                  isBilled={isBilled}
-                  statusRow={statusRow}
-                  ledgerRow={ledgerRow}
-                  isShippedC={isShippedC}
-                  isReceivedC={isReceivedC}
-                  noteDrafts={noteDrafts} setNoteDrafts={setNoteDrafts}
-                  saveNote={saveNote}
-                  runIndividual={runIndividual}
-                  individualActing={individualActing}
-                  onSetItemShipping={setItemShipping}
-                  productVariants={productVariants}
-                  onSetItemVariant={setItemVariant}
-                />
-
+                      customer={selectedCustomer}
+                      billKind={billKind}
+                      setBillKind={setBillKind}
+                      onBack={() => setSelectedCustomerForDrilldown(null)}
+                      customerPriceFor={customerPriceFor}
+                      isOverridden={isOverridden}
+                      setCustomerPriceDrafts={setCustomerPriceDrafts}
+                      saveCustomerPrice={saveCustomerPrice}
+                      revertCustomerPrice={revertCustomerPrice}
+                      customerBillTotal={customerBillTotal}
+                      adjustments={adjustmentsByCustomer(selectedCustomer.customerId, billKind)}
+                      adjLabel={adjLabel} setAdjLabel={setAdjLabel}
+                      adjAmount={adjAmount} setAdjAmount={setAdjAmount}
+                      savingAdj={savingAdj}
+                      addAdjustment={addAdjustment}
+                      removeAdjustment={removeAdjustment}
+                      applyPercentDiscount={applyPercentDiscount}
+                      isBilled={isBilled}
+                      statusRow={statusRow}
+                      ledgerRow={ledgerRow}
+                      isShippedC={isShippedC}
+                      isReceivedC={isReceivedC}
+                      noteDrafts={noteDrafts} setNoteDrafts={setNoteDrafts}
+                      saveNote={saveNote}
+                      runIndividual={runIndividual}
+                      individualActing={individualActing}
+                      onSetItemShipping={setItemShipping}
+                      productVariants={productVariants}
+                      onSetItemVariant={setItemVariant}
+                    />
                   </div>
                 </aside>
               </div>
