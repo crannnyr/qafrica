@@ -12,6 +12,7 @@ import { useImportCartStore } from '@/stores/importCartStore';
 import { toast } from 'sonner';
 
 export const CHECKOUT_SELECTION_KEY = 'qafrica_checkout_selection';
+export const MARKETPLACE_CHECKOUT_SELECTION_KEY = 'qafrica_marketplace_checkout_selection';
 
 export default function CartPage() {
   useForceLightMode();
@@ -85,6 +86,13 @@ export default function CartPage() {
       sessionStorage.setItem(
         'qafrica_import_checkout_selection',
         JSON.stringify(selectedImportItems.map(i => i.cart_key))
+      );
+      sessionStorage.setItem(
+        MARKETPLACE_CHECKOUT_SELECTION_KEY,
+        JSON.stringify({
+          product_cart_ids: selected.map(i => i.id),
+          china_product_ids: selectedImportItems.map(i => i.id),
+        })
       );
     } catch { /* ignore */ }
 
@@ -170,7 +178,7 @@ export default function CartPage() {
                     <div className="mt-1.5 flex items-center justify-between gap-2">
                       <div>
                         <span className="text-[15px] font-bold text-[#E8590C]">{naira(Number(i.price_ngn || 0))}</span>
-                        <p className="text-[10px] text-gray-400">Shipping calculated at checkout</p>
+                        <p className="text-[10px] text-gray-400">Air shipping included</p>
                       </div>
                       <QtyStepper
                         value={i.quantity}
