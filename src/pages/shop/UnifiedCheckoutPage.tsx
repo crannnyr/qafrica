@@ -33,6 +33,16 @@ export default function UnifiedCheckoutPage() {
 
   const selectedNormals = normalItems.filter(i => selectedNormalIds.includes(i.id));
   const selectedImports = importItems.filter(i => selectedImportKeys.includes(i.cart_key));
+
+  const handleImportAdd = (cartKey: string) => addOne(cartKey);
+  const handleImportRemove = (cartKey: string) => {
+    const item = importItems.find(i => i.cart_key === cartKey);
+    removeOne(cartKey, item?.moq ?? 1);
+  };
+  const handleImportSetQuantity = (cartKey: string, quantity: number) => {
+    const item = importItems.find(i => i.cart_key === cartKey);
+    setQuantity(cartKey, quantity, item?.moq ?? 1);
+  };
   const hasNormal = selectedNormals.length > 0;
   const hasImport = selectedImports.length > 0;
 
@@ -48,7 +58,7 @@ export default function UnifiedCheckoutPage() {
         </div>
       );
     }
-    return <ImportCheckoutSheet cart={selectedImports} customer={customer} onClose={() => navigate('/cart')} onAdd={addOne} onRemove={removeOne} onSetQuantity={setQuantity} />;
+    return <ImportCheckoutSheet cart={selectedImports} customer={customer} onClose={() => navigate('/cart')} onAdd={handleImportAdd} onRemove={handleImportRemove} onSetQuantity={handleImportSetQuantity} />;
   }
 
   if (params.get('source') === 'normal' || (hasNormal && !hasImport)) {
