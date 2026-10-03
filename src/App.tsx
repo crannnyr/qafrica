@@ -553,6 +553,7 @@ function App() {
           <Route path="/help-pay/leaderboard" element={<LeaderboardPage />} />
           <Route path="/help-pay/claim" element={<ClaimClearPage />} />
           <Route path="/stores-v2" element={<UnifiedMarketplaceHome />} />
+          <Route path="/stores-v2/checkout" element={<MarketplaceCheckoutPage />} />
           <Route path="/stores-v2/product/:sourceType/:sourceId" element={<UnifiedProductPage />} />
           <Route path="/stores" element={<MarketplaceHome />} />
           <Route path="/stores/categories" element={<MarketplaceCategories />} />
