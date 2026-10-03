@@ -1,22 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, BadgeCheck, ChevronDown, ChevronUp, Clock, Heart,
-  Minus, Plus, Shield, ShoppingCart, Truck
+  ShoppingCart, ArrowLeft, Heart, Store as StoreIcon, ChevronRight,
+  Minus, Plus, Check, AlertCircle, Clock, ChevronDown, ChevronUp,
+  Truck, Shield, Package, BadgeCheck,
 } from 'lucide-react';
-import ImageCarousel from '@/components/ImageCarousel';
+import { supabase } from '@/services';
 import Reviews from '@/components/Reviews';
 import ImportReviews from '@/components/ImportReviews';
-import { supabase } from '@/services';
+import ImageCarousel from '@/components/ImageCarousel';
 import UnifiedProductCard from './UnifiedProductCard';
 import type { UnifiedMarketplaceProduct } from './types';
 import { naira } from './useUnifiedMarketplace';
 
+type StoreMeta = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  primary_color: string | null;
+  delivery_window_days: number | null;
+  is_verified: boolean;
+};
+
 function getVariantNames(variants: unknown): string[] {
   if (!Array.isArray(variants)) return [];
   const first = variants[0] as any;
-  if (first?.name && Array.isArray(first?.options)) return (variants as any[]).map(v => String(v.name)).filter(Boolean);
-  if (first?.options && typeof first.options === 'object') return Object.keys(first.options);
+  if (first?.name && Array.isArray(first?.options)) {
+    return (variants as any[]).map(v => String(v.name)).filter(Boolean);
+  }
+  if (first?.options && typeof first.options === 'object') {
+    return Object.keys(first.options);
+  }
   return [];
 }
 
@@ -36,25 +51,86 @@ function getVariantOptions(variants: unknown, name: string): string[] {
 
 function CollapsibleDescription({ text }: { text: string }) {
   const [expanded, setExpanded] = useState(false);
-  const long = text.length > 180;
+  const maxLength = 150;
+  const truncate = text.length > maxLength;
+  if (!text) return null;
+
   return (
     <div>
-      <p className="whitespace-pre-wrap text-sm leading-6 text-gray-600">
-        {long && !expanded ? `${text.slice(0, 180)}…` : text}
+      <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-500">
+        {truncate && !expanded ? text.slice(0, maxLength) + '…' : text}
       </p>
-      {long && (
-        <button type="button" onClick={() => setExpanded(v => !v)} className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-gray-500">
-          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          {expanded ? 'Show less' : 'Read more'}
+      {truncate && (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="mt-2 text-xs font-medium text-gray-400 hover:text-gray-600 flex items-center gap-1 transition"
+        >
+          {expanded ? <><ChevronUp className="w-3.5 h-3.5" />Show less</> : <><ChevronDown className="w-3.5 h-3.5" />Read more</>}
         </button>
       )}
     </div>
   );
 }
 
+function QAfricaVerifiedBadge({ label = 'Verified by QAfrica' }: { label?: string }) {
+  return (
+    <span title={label} className="inline-flex items-center">
+      <BadgeCheck className="w-4 h-4 fill-[#E8590C] text-[#E8590C]" aria-label={label} />
+    </span>
+  );
+}
+
+function RelatedProductCard({ item }: { item: UnifiedMarketplaceProduct }) {
+  const image = item.images?.[0];
+  const price = Number(item.price_ngn || 0);
+  const compareAt = Number(item.compare_at_price_ngn || 0);
+  const onSale = !item.is_china_import && compareAt > price && price > 0;
+
+  return (
+    <Link
+      to={`/stores-v2/product/${item.source_type}/${item.source_id}`}
+      className="group"
+    >
+      <div className="relative aspect-square bg-gray-50 rounded-xl overflow-hidden mb-3">
+        {image ? (
+          <img
+            src={image}
+            alt={item.name}
+            loading="lazy"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-2xl font-bold text-gray-200">
+            {item.name.charAt(0)}
+          </div>
+        )}
+        <div className="absolute bottom-0 right-0 px-2 py-0.5 pointer-events-none bg-white">
+          <span className="text-[7px] font-bold tracking-widest uppercase text-black">
+            {item.seller_name}
+          </span>
+        </div>
+        {item.is_china_import && (
+          <span className="absolute top-0 left-0 bg-gray-900 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-br-md">
+            China Import
+          </span>
+        )}
+      </div>
+      <p className="text-sm font-medium text-gray-800 line-clamp-1 mb-0.5">{item.name}</p>
+      <div className="flex items-baseline gap-1.5">
+        <p className={`text-sm font-bold ${onSale ? 'text-[#FA6338]' : 'text-[#E8590C]'}`}>
+          {naira(price)}
+        </p>
+        {onSale && <s className="text-[11px] text-gray-400">{naira(compareAt)}</s>}
+      </div>
+    </Link>
+  );
+}
+
 export default function UnifiedProductPage() {
   const { sourceType, sourceId } = useParams<{ sourceType: string; sourceId: string }>();
   const [product, setProduct] = useState<UnifiedMarketplaceProduct | null>(null);
+  const [store, setStore] = useState<StoreMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -63,99 +139,140 @@ export default function UnifiedProductPage() {
 
   useEffect(() => {
     let active = true;
+
     async function load() {
       if (!sourceType || !sourceId || !['product', 'china_import'].includes(sourceType)) {
         setError('Product not found');
         setLoading(false);
         return;
       }
+
       setLoading(true);
+
       const { data, error: rpcError } = await supabase.rpc('marketplace_unified_product', {
         p_source_type: sourceType,
         p_source_id: sourceId,
       });
+
       if (!active) return;
+
       if (rpcError) {
         console.error('marketplace_unified_product failed', rpcError);
         setError(rpcError.message || 'Could not load product');
         setProduct(null);
-      } else {
-        // Supabase RPCs that return TABLE(...) always return an array of rows.
-        // The detail endpoint returns at most one row, so resolve the first row
-        // before rendering it as a product object.
-        const row = Array.isArray(data) ? data[0] : data;
-        if (!row) {
-          setError('Product not found');
-          setProduct(null);
-        } else {
-          const resolvedProduct = row as UnifiedMarketplaceProduct;
-          setProduct(resolvedProduct);
-          setError(null);
+        setLoading(false);
+        return;
+      }
 
-          // Keep related products inside the same source-aware unified catalog.
-          const viewerSeed = typeof window !== 'undefined'
-            ? window.localStorage.getItem('qafrica_unified_marketplace_seed') || ''
-            : '';
-          const baseParams = {
-            p_tab: 'for_you',
-            p_niche: resolvedProduct.niche,
-            p_category: resolvedProduct.category,
-            p_search: null,
-            p_limit: 12,
-            p_offset: 0,
-            p_viewer_seed: viewerSeed,
-          };
+      const row = Array.isArray(data) ? data[0] : data;
+      if (!row) {
+        setError('Product not found');
+        setProduct(null);
+        setLoading(false);
+        return;
+      }
 
-          const firstRelated = await supabase.rpc('marketplace_unified_products', baseParams);
-          let candidates = Array.isArray(firstRelated.data)
-            ? firstRelated.data as UnifiedMarketplaceProduct[]
-            : [];
+      const resolvedProduct = row as UnifiedMarketplaceProduct;
+      setProduct(resolvedProduct);
+      setError(null);
 
-          candidates = candidates.filter(item =>
-            !(item.source_type === resolvedProduct.source_type && item.source_id === resolvedProduct.source_id)
-          );
+      // Normal marketplace products keep the original seller/store presentation.
+      if (resolvedProduct.source_type === 'product' && resolvedProduct.seller_id) {
+        const { data: storeData } = await supabase
+          .from('stores')
+          .select('id, name, slug, logo_url, primary_color, delivery_window_days, is_verified')
+          .eq('id', resolvedProduct.seller_id)
+          .maybeSingle();
 
-          // If the category is too small, broaden the pool instead of leaving
-          // the recommendation section empty.
-          if (candidates.length < 4) {
-            const broadRelated = await supabase.rpc('marketplace_unified_products', {
-              ...baseParams,
-              p_niche: null,
-              p_category: null,
-              p_limit: 16,
-            });
-            const broad = Array.isArray(broadRelated.data)
-              ? broadRelated.data as UnifiedMarketplaceProduct[]
-              : [];
-            const seen = new Set(candidates.map(item => item.source_type + ':' + item.source_id));
-            for (const item of broad) {
-              const key = item.source_type + ':' + item.source_id;
-              if (
-                item.source_type === resolvedProduct.source_type &&
-                item.source_id === resolvedProduct.source_id
-              ) continue;
-              if (seen.has(key)) continue;
-              seen.add(key);
-              candidates.push(item);
-              if (candidates.length >= 4) break;
-            }
-          }
+        if (active && storeData) setStore(storeData as StoreMeta);
+      }
 
-          setRelatedProducts(candidates.slice(0, 4));
+      const viewerSeed = typeof window !== 'undefined'
+        ? window.localStorage.getItem('qafrica_unified_marketplace_seed') || ''
+        : '';
+
+      const baseParams = {
+        p_tab: 'for_you',
+        p_niche: resolvedProduct.niche,
+        p_category: resolvedProduct.category,
+        p_search: null,
+        p_limit: 12,
+        p_offset: 0,
+        p_viewer_seed: viewerSeed,
+      };
+
+      const firstRelated = await supabase.rpc('marketplace_unified_products', baseParams);
+      let candidates = Array.isArray(firstRelated.data)
+        ? firstRelated.data as UnifiedMarketplaceProduct[]
+        : [];
+
+      candidates = candidates.filter(item =>
+        !(item.source_type === resolvedProduct.source_type && item.source_id === resolvedProduct.source_id)
+      );
+
+      if (candidates.length < 4) {
+        const broadRelated = await supabase.rpc('marketplace_unified_products', {
+          ...baseParams,
+          p_niche: null,
+          p_category: null,
+          p_limit: 16,
+        });
+
+        const broad = Array.isArray(broadRelated.data)
+          ? broadRelated.data as UnifiedMarketplaceProduct[]
+          : [];
+
+        const seen = new Set(candidates.map(item => item.source_type + ':' + item.source_id));
+
+        for (const item of broad) {
+          const key = item.source_type + ':' + item.source_id;
+          if (
+            item.source_type === resolvedProduct.source_type &&
+            item.source_id === resolvedProduct.source_id
+          ) continue;
+          if (seen.has(key)) continue;
+
+          seen.add(key);
+          candidates.push(item);
+
+          if (candidates.length >= 4) break;
         }
       }
-      setLoading(false);
+
+      if (active) {
+        setRelatedProducts(candidates.slice(0, 4));
+        setLoading(false);
+      }
     }
+
     void load();
     return () => { active = false; };
   }, [sourceType, sourceId]);
 
-  const variantNames = useMemo(() => getVariantNames(product?.variants), [product?.variants]);
+  const variantNames = useMemo(
+    () => getVariantNames(product?.variants),
+    [product?.variants]
+  );
+
   const selectedAll = variantNames.every(name => Boolean(selectedVariants[name]));
   const stock = product?.stock_quantity;
   const available = product?.is_available !== false && (stock == null || stock > 0);
+  const price = Number(product?.price_ngn || 0);
+  const compareAt = Number(product?.compare_at_price_ngn || 0);
+  const discountPct = compareAt > price && price > 0
+    ? Math.round((1 - price / compareAt) * 100)
+    : 0;
+  const china = product?.is_china_import === true;
+  const primary = store?.primary_color || '#f97316';
 
-  if (loading) return <div className="min-h-screen bg-white flex items-center justify-center text-sm text-gray-500">Loading product…</div>;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="w-6 h-6 border-2 border-t-transparent border-orange-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   if (error || !product) {
     return (
       <div className="min-h-screen bg-white flex flex-col items-center justify-center gap-4 px-6">
@@ -165,66 +282,172 @@ export default function UnifiedProductPage() {
     );
   }
 
-  const price = Number(product.price_ngn || 0);
-  const compareAt = Number(product.compare_at_price_ngn || 0);
-  const discountPct = compareAt > price && price > 0 ? Math.round((1 - price / compareAt) * 100) : 0;
-  const china = product.is_china_import;
+  const sellerLogo = store?.logo_url;
+  const sellerCard = (
+    <div className="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2.5 hover:border-gray-300 hover:bg-gray-50 transition">
+      {sellerLogo ? (
+        <img src={sellerLogo} alt="" className="w-9 h-9 rounded-lg object-cover" />
+      ) : (
+        <span
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold"
+          style={{ backgroundColor: primary, color: '#fff' }}
+        >
+          {product.seller_name.charAt(0)}
+        </span>
+      )}
+
+      <span className="flex-1 min-w-0">
+        <span className="block text-xs text-gray-500">Sold by</span>
+        <span className="block text-sm font-semibold text-gray-900 truncate">{product.seller_name}</span>
+      </span>
+
+      {product.seller_type === 'store' && product.seller_slug ? (
+        <Link
+          to={`/stores/${product.seller_slug}`}
+          className="inline-flex items-center gap-1 text-sm font-medium text-gray-700"
+        >
+          <StoreIcon className="w-4 h-4" /> View store <ChevronRight className="w-4 h-4" />
+        </Link>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-sm font-medium text-gray-700">
+          <QAfricaVerifiedBadge /> Verified
+        </span>
+      )}
+    </div>
+  );
 
   return (
-    <main className="min-h-screen bg-white">
-      <header className="sticky top-0 z-30 border-b border-gray-100 bg-white/95 backdrop-blur">
-        <div className="max-w-6xl mx-auto h-14 px-4 sm:px-6 flex items-center justify-between">
-          <Link to="/stores-v2" className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900">
-            <ArrowLeft className="w-4 h-4" /> Marketplace
+    <div className="min-h-screen bg-white">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          <Link
+            to="/stores-v2"
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 transition"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Marketplace
           </Link>
-          <span className="text-sm font-semibold text-gray-900">Product details</span>
-          <Link to="/cart" className="p-2 rounded-full hover:bg-gray-100" aria-label="Cart">
+
+          <div className="flex items-center gap-2">
+            {sellerLogo ? (
+              <img src={sellerLogo} alt="" className="w-7 h-7 rounded-md object-cover" />
+            ) : (
+              <span className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-bold bg-gray-100 text-gray-700">
+                {product.seller_name.slice(0, 2).toUpperCase()}
+              </span>
+            )}
+            <span className="text-sm font-semibold text-gray-900 hidden sm:block">
+              {product.seller_name}
+            </span>
+          </div>
+
+          <Link to="/cart" className="p-2 rounded-full hover:bg-gray-100 transition" aria-label="Cart">
             <ShoppingCart className="w-4 h-4 text-gray-700" />
           </Link>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 lg:py-10">
-        <div className="grid lg:grid-cols-2 gap-8 lg:gap-14">
-          <section>
-            <ImageCarousel images={product.images || []} aspectRatio="square" showThumbnails enableZoom className="w-full" />
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-16">
+
+          <section className="relative rounded-2xl overflow-hidden bg-gray-50">
+            <ImageCarousel
+              images={product.images || []}
+              aspectRatio="square"
+              showThumbnails
+              enableZoom
+              className="w-full"
+            />
+            <div className="absolute bottom-0 right-0 px-2.5 py-1 pointer-events-none z-10 bg-white">
+              <span className="text-[9px] font-bold tracking-widest uppercase text-black">
+                {product.seller_name}
+              </span>
+            </div>
           </section>
 
           <section className="flex flex-col gap-5">
+
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                {china && <span className="inline-flex rounded-full bg-gray-900 text-white px-2.5 py-1 text-[11px] font-bold">China Import</span>}
-                {discountPct > 0 && !china && <span className="inline-flex rounded-full bg-[#FA6338] text-white px-2.5 py-1 text-[11px] font-bold">-{discountPct}%</span>}
-              </div>
-              <h1 className="mt-3 text-2xl sm:text-3xl font-bold leading-tight text-gray-900">{product.name}</h1>
-              <div className="mt-3 flex items-end gap-2 flex-wrap">
-                <span className="text-3xl font-bold text-gray-900">{naira(price)}</span>
-                {discountPct > 0 && <s className="text-sm text-gray-400 mb-1">{naira(compareAt)}</s>}
-              </div>
+              <p className="text-xs text-gray-400 mb-1">{product.category}</p>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight">
+                {product.name}
+              </h1>
             </div>
 
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <span>Sold by <strong className="text-gray-900">{product.seller_name}</strong></span>
-              {product.seller_verified && <span title={china ? 'Verified by QAfrica' : 'Verified marketplace seller'}><BadgeCheck className="w-4 h-4 fill-[#E8590C] text-[#E8590C]" aria-label="Verified" /></span>}
+            {sellerCard}
+
+            <div className="flex items-center justify-between">
+              <div className="flex items-end gap-2 flex-wrap">
+                <span className="text-3xl font-bold" style={{ color: primary }}>
+                  {naira(price)}
+                </span>
+                {discountPct > 0 && !china && (
+                  <s className="text-sm text-gray-400 mb-1">{naira(compareAt)}</s>
+                )}
+              </div>
+
+              {stock === 0 ? (
+                <span className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5" /> Out of stock
+                </span>
+              ) : stock != null && stock <= 5 ? (
+                <span className="flex items-center gap-1.5 text-xs text-orange-500 font-medium">
+                  <Clock className="w-3.5 h-3.5" /> Only {stock} left
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs text-green-500 font-medium">
+                  <Check className="w-3.5 h-3.5" /> In stock
+                </span>
+              )}
             </div>
 
             {product.rating != null && product.review_count > 0 && (
-              <div className="text-sm text-gray-600">★ {Number(product.rating).toFixed(1)} <span className="text-gray-400">({product.review_count} reviews)</span></div>
+              <div className="flex items-center gap-1.5 text-sm text-gray-500">
+                <span className="text-gray-800">★ {Number(product.rating).toFixed(1)}</span>
+                <span>({product.review_count} reviews)</span>
+              </div>
+            )}
+
+            {product.description && (
+              <CollapsibleDescription text={product.description} />
+            )}
+
+            <hr className="border-gray-100" />
+
+            {china && product.flight_shipping_cost_ngn != null && (
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex gap-3">
+                <Truck className="w-5 h-5 text-gray-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">Flight shipping</p>
+                  <p className="mt-0.5 text-sm text-gray-600">
+                    {naira(Number(product.flight_shipping_cost_ngn))}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Shipping is handled through the China-import fulfillment flow.
+                  </p>
+                </div>
+              </div>
             )}
 
             {variantNames.length > 0 && (
-              <div className="space-y-4 border-y border-gray-100 py-5">
+              <div className="space-y-4">
                 {variantNames.map(name => (
                   <div key={name}>
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{name.toLowerCase() === 'type' ? 'Size' : name}</p>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                      {name.toLowerCase() === 'type' ? 'Size' : name}
+                    </p>
                     <div className="flex flex-wrap gap-2">
                       {getVariantOptions(product.variants, name).map(option => (
                         <button
                           key={option}
                           type="button"
-                          onClick={() => setSelectedVariants(v => ({ ...v, [name]: option }))}
-                          className="px-3.5 py-2 rounded-lg border text-sm font-medium transition"
-                          style={selectedVariants[name] === option ? { borderColor: '#E8590C', color: '#E8590C', backgroundColor: '#E8590C12' } : { borderColor: '#E5E7EB', color: '#4B5563' }}
+                          onClick={() => setSelectedVariants(prev => ({ ...prev, [name]: option }))}
+                          className="px-3.5 py-1.5 rounded-lg border text-sm font-medium transition-all"
+                          style={
+                            selectedVariants[name] === option
+                              ? { borderColor: primary, backgroundColor: `${primary}15`, color: primary }
+                              : { borderColor: '#e5e7eb', color: '#6b7280' }
+                          }
                         >
                           {option}
                         </button>
@@ -235,81 +458,119 @@ export default function UnifiedProductPage() {
               </div>
             )}
 
-            {china && product.flight_shipping_cost_ngn != null && (
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 flex gap-3">
-                <Truck className="w-5 h-5 text-gray-700 shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">Flight shipping</p>
-                  <p className="mt-0.5 text-sm text-gray-600">{naira(Number(product.flight_shipping_cost_ngn))}</p>
-                  <p className="mt-1 text-xs text-gray-400">Shipping is handled through the China-import fulfillment flow.</p>
+            {available && (
+              <div className="flex items-center gap-3">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Qty</p>
+                <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(q => Math.max(1, q - 1))}
+                    disabled={quantity <= 1}
+                    className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 transition"
+                  >
+                    <Minus className="w-3.5 h-3.5 text-gray-600" />
+                  </button>
+                  <span className="w-10 text-center text-sm font-semibold">{quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(q => Math.min(stock ?? 99, q + 1))}
+                    disabled={stock != null && quantity >= stock}
+                    className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-gray-600" />
+                  </button>
                 </div>
               </div>
             )}
 
-            {product.description && (
-              <div className="pt-1">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Description</p>
-                <CollapsibleDescription text={product.description} />
-              </div>
-            )}
-
-            <div className="flex items-center gap-3">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Qty</p>
-              <div className="inline-flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                <button type="button" onClick={() => setQuantity(q => Math.max(1, q - 1))} disabled={quantity <= 1} className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30"><Minus className="w-3.5 h-3.5" /></button>
-                <span className="w-10 text-center text-sm font-semibold">{quantity}</span>
-                <button type="button" onClick={() => setQuantity(q => Math.min(stock ?? 99, q + 1))} disabled={stock != null && quantity >= stock} className="w-9 h-9 flex items-center justify-center hover:bg-gray-50 disabled:opacity-30"><Plus className="w-3.5 h-3.5" /></button>
-              </div>
-              <span className={`text-xs ${available ? 'text-green-600' : 'text-red-500'}`}>{available ? 'In stock' : 'Out of stock'}</span>
-            </div>
-
             <div className="flex gap-2.5">
-              <button type="button" disabled={!available || (variantNames.length > 0 && !selectedAll)} className="flex-1 h-12 rounded-xl bg-[#E8590C] text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40" title="Cart integration is completed in Step 6">
+              <button
+                type="button"
+                disabled={!available || (variantNames.length > 0 && !selectedAll)}
+                className="flex-1 h-12 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition hover:opacity-90 disabled:opacity-40"
+                style={{ backgroundColor: primary }}
+                title="Cart integration is completed in Step 6"
+              >
                 <ShoppingCart className="w-4 h-4" />
-                Add to cart
+                {available ? 'Add to cart' : 'Out of stock'}
               </button>
-              <button type="button" disabled className="w-12 h-12 rounded-xl border border-gray-200 flex items-center justify-center opacity-50" aria-label="Wishlist coming later">
-                <Heart className="w-4 h-4" />
+
+              <button
+                type="button"
+                disabled={!available || (variantNames.length > 0 && !selectedAll)}
+                className="flex-1 h-12 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition"
+                title="Checkout integration is completed in Step 7"
+              >
+                Buy now
+              </button>
+
+              <button
+                type="button"
+                disabled
+                className="w-12 h-12 flex items-center justify-center rounded-xl border border-gray-200 hover:border-gray-300 transition opacity-60"
+                aria-label="Wishlist integration coming later"
+              >
+                <Heart className="w-4 h-4 text-gray-400" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div className="rounded-xl bg-gray-50 p-3">
-                <Shield className="w-4 h-4 text-gray-600 mb-2" />
-                <p className="text-xs font-semibold text-gray-800">Secure payment</p>
-              </div>
-              <div className="rounded-xl bg-gray-50 p-3">
-                <Clock className="w-4 h-4 text-gray-600 mb-2" />
-                <p className="text-xs font-semibold text-gray-800">{china ? 'China import delivery' : 'Marketplace delivery'}</p>
-              </div>
+            <div className="flex items-center gap-5 pt-1">
+              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                <Truck className="w-3.5 h-3.5" /> Fast delivery
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                <Shield className="w-3.5 h-3.5" /> Secure payment
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-gray-400">
+                <Clock className="w-3.5 h-3.5" />
+                {store?.delivery_window_days || (china ? 'China import' : 7)}{store ? ' day delivery' : ' delivery'}
+              </span>
             </div>
+
+            {product.seller_type === 'store' && (
+              <Link
+                to={`/stores/${product.seller_slug}`}
+                className="self-start flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 hover:border-gray-300 rounded-full px-3 py-1.5 transition"
+              >
+                <Package className="w-3 h-3" />
+                Dropship this item
+              </Link>
+            )}
           </section>
         </div>
-      </div>
 
-      <section className="mt-16" aria-label="Product reviews">
-        {china ? (
-          <ImportReviews productId={product.source_id} />
-        ) : (
-          <Reviews productId={product.source_id} />
-        )}
-      </section>
-
-      {relatedProducts.length > 0 && (
-        <section className="mt-16" aria-labelledby="unified-related-products">
-          <p
-            id="unified-related-products"
-            className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-5"
-          >
-            You may also like
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
-            {relatedProducts.map(item => (
-              <UnifiedProductCard key={item.source_type + ':' + item.source_id} p={item} />
-            ))}
-          </div>
+        <section className="mt-16" aria-label="Product reviews">
+          {china ? (
+            <ImportReviews productId={product.source_id} />
+          ) : (
+            <Reviews productId={product.source_id} storeId={product.seller_id || undefined} />
+          )}
         </section>
-      )}
-    </main>
+
+        {relatedProducts.length > 0 && (
+          <section className="mt-16" aria-labelledby="unified-related-products">
+            <p
+              id="unified-related-products"
+              className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-5"
+            >
+              You may also like
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
+              {relatedProducts.map(item => (
+                <RelatedProductCard key={item.source_type + ':' + item.source_id} item={item} />
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+
+      <footer className="border-t border-gray-100 mt-16">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 text-center">
+          <p className="text-xs text-gray-400">
+            © {new Date().getFullYear()} {product.seller_name} · Powered by QAFRICA
+          </p>
+        </div>
+      </footer>
+    </div>
   );
 }
