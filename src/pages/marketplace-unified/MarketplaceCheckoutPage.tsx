@@ -33,7 +33,7 @@ export default function MarketplaceCheckoutPage() {
   const totalItems = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
 
   useEffect(() => {
-    if (!isAuthenticated) { navigate('/customer/login?return=/checkout', { replace: true }); return; }
+    if (!isAuthenticated) { navigate('/customer/login?return=/stores-v2/checkout', { replace: true }); return; }
     if (customer) { setName(customer.full_name ?? ''); setEmail(customer.email ?? ''); setPhone(customer.phone ?? ''); }
     void fetchAddresses();
   }, [isAuthenticated, customer?.id]);
