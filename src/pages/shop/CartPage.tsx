@@ -69,7 +69,8 @@ export default function CartPage() {
     + selectedImportItems.reduce((sum, i) => sum + Number(i.price_ngn || 0) * i.quantity, 0);
   const totalSelectedCount = selected.reduce((n, i) => n + i.quantity, 0)
     + selectedImportItems.reduce((n, i) => n + i.quantity, 0);
-  const hasImportSelected = selectedImportItems.length > 0;
+  const selectedChinaCartItems = selected.filter(i => i.sourceType === 'china_import');
+  const hasImportSelected = selectedImportItems.length > 0 || selectedChinaCartItems.length > 0;
   const allSelectableCount = items.filter(i => !problemFor(i)).length + importItems.length;
   const allSelected = allSelectableCount > 0
     && selected.length === items.filter(i => !problemFor(i)).length
@@ -98,7 +99,10 @@ export default function CartPage() {
         MARKETPLACE_CHECKOUT_SELECTION_KEY,
         JSON.stringify({
           product_cart_ids: selected.map(i => i.id),
-          china_product_ids: selectedImportItems.map(i => i.id),
+          china_product_ids: [
+            ...selectedImportItems.map(i => i.id),
+            ...selectedChinaCartItems.map(i => i.sourceId).filter((id): id is string => Boolean(id)),
+          ],
         })
       );
     } catch { /* ignore */ }
@@ -106,7 +110,7 @@ export default function CartPage() {
     // Any China Import selection must use the unified checkout. If the cart is
     // currently being used from /stores-v2, normal marketplace products should
     // use the same unified checkout too; legacy /stores remains on /checkout.
-    if (importItems.length > 0 || location.pathname.startsWith('/stores-v2')) {
+    if (hasImportSelected || location.pathname.startsWith('/stores-v2')) {
       goWithSelection('/stores-v2/checkout');
       return;
     }
@@ -302,7 +306,7 @@ export default function CartPage() {
           </label>
           <div className="flex-1 text-right">
             <p className="text-[16px] font-bold leading-tight">{naira(total)}</p>
-            <p className="text-[11px] text-gray-500">+ delivery / import shipping</p>
+            <p className="text-[11px] text-gray-500">{hasImportSelected ? 'Air shipping included' : '+ delivery / import shipping'}</p>
           </div>
           <button
             type="button"
