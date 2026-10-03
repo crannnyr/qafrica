@@ -9,7 +9,6 @@ import { supabase } from '@/services';
 import Reviews from '@/components/Reviews';
 import ImportReviews from '@/components/ImportReviews';
 import ImageCarousel from '@/components/ImageCarousel';
-import UnifiedProductCard from './UnifiedProductCard';
 import type { UnifiedMarketplaceProduct } from './types';
 import { naira } from './useUnifiedMarketplace';
 
