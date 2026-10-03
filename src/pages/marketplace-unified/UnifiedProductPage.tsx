@@ -6,6 +6,11 @@ import {
   Truck, Shield, Package, BadgeCheck,
 } from 'lucide-react';
 import { supabase } from '@/services';
+import { toast } from 'sonner';
+import { useCartStore, useCustomerAuthStore } from '@/stores';
+import { useImportCartStore, type ImportProduct } from '@/stores/importCartStore';
+import { useSavedItems } from '@/pages/recommendations/useSavedItems';
+import type { Product, Store } from '@/types';
 import Reviews from '@/components/Reviews';
 import ImportReviews from '@/components/ImportReviews';
 import ImageCarousel from '@/components/ImageCarousel';
@@ -135,6 +140,13 @@ export default function UnifiedProductPage() {
   const [quantity, setQuantity] = useState(1);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [relatedProducts, setRelatedProducts] = useState<UnifiedMarketplaceProduct[]>([]);
+  const addItem = useCartStore(s => s.addItem);
+  const addToWishlist = useCartStore(s => s.addToWishlist);
+  const removeFromWishlist = useCartStore(s => s.removeFromWishlist);
+  const isInWishlist = useCartStore(s => s.isInWishlist);
+  const { customer, isAuthenticated } = useCustomerAuthStore();
+  const addImportToCart = useImportCartStore(s => s.addToCart);
+  const { isSaved, toggleSave } = useSavedItems();
 
   useEffect(() => {
     let active = true;
@@ -282,6 +294,100 @@ export default function UnifiedProductPage() {
   }
 
   const sellerLogo = store?.logo_url;
+
+  const handleAddToCart = () => {
+    if (!available) {
+      toast.error('This product is out of stock');
+      return;
+    }
+    if (variantNames.length > 0 && !selectedAll) {
+      toast.error('Please select all options');
+      return;
+    }
+
+    if (china) {
+      const importProduct: ImportProduct = {
+        id: product.source_id,
+        name: product.name,
+        description: product.description || '',
+        image_url: product.images?.[0] || '',
+        image_urls: product.images || [],
+        price_cny: 0,
+        price_ngn: price,
+        category: product.category || '',
+        moq: 1,
+        has_variants: variantNames.length > 0,
+        variants: Array.isArray(product.variants)
+          ? product.variants.map((v: any, index: number) => ({
+              id: String(v?.id || product.source_id + '-' + index),
+              name: String(v?.name || 'Option'),
+              options: Array.isArray(v?.options) ? v.options.map(String) : [],
+            }))
+          : [],
+        flight_shipping_cost_ngn: Number(product.flight_shipping_cost_ngn || 0),
+      };
+      addImportToCart(importProduct, quantity, price, Object.keys(selectedVariants).length ? selectedVariants : undefined);
+      toast.success(product.name + ' added to cart');
+      return;
+    }
+
+    if (!store) {
+      toast.error('Store information is unavailable');
+      return;
+    }
+
+    const cartProduct = {
+      id: product.source_id,
+      name: product.name,
+      images: product.images || [],
+      selling_price: price,
+    } as Product;
+
+    addItem(
+      cartProduct,
+      store as unknown as Store,
+      quantity,
+      Object.keys(selectedVariants).length ? selectedVariants : undefined,
+      price
+    );
+    toast.success(product.name + ' added to cart');
+  };
+
+  const handleWishlistToggle = async () => {
+    if (china) {
+      const result = await toggleSave(product.source_id);
+      if (result === 'needs-auth') {
+        window.location.assign('/customer/login?return=' + encodeURIComponent(window.location.pathname));
+      }
+      return;
+    }
+
+    if (!store) {
+      toast.error('Store information is unavailable');
+      return;
+    }
+
+    if (!isAuthenticated || !customer?.id) {
+      window.location.assign('/customer/login?return=' + encodeURIComponent(window.location.pathname));
+      return;
+    }
+
+    const wishlistProduct = {
+      id: product.source_id,
+      name: product.name,
+      images: product.images || [],
+      selling_price: price,
+    } as Product;
+
+    if (isInWishlist(product.source_id)) {
+      await removeFromWishlist(product.source_id, customer.id);
+      toast.success('Removed from wishlist');
+    } else {
+      await addToWishlist(wishlistProduct, store as unknown as Store, customer.id);
+      toast.success('Added to wishlist');
+    }
+  };
+
   const sellerCard = (
     <div className="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2.5 hover:border-gray-300 hover:bg-gray-50 transition">
       {china ? (
@@ -490,10 +596,10 @@ export default function UnifiedProductPage() {
             <div className="flex gap-2.5">
               <button
                 type="button"
+                onClick={handleAddToCart}
                 disabled={!available || (variantNames.length > 0 && !selectedAll)}
                 className="flex-1 h-12 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition hover:opacity-90 disabled:opacity-40"
                 style={{ backgroundColor: primary }}
-                title="Cart integration is completed in Step 6"
               >
                 <ShoppingCart className="w-4 h-4" />
                 {available ? 'Add to cart' : 'Out of stock'}
@@ -510,11 +616,17 @@ export default function UnifiedProductPage() {
 
               <button
                 type="button"
-                disabled
-                className="w-12 h-12 flex items-center justify-center rounded-xl border border-gray-200 hover:border-gray-300 transition opacity-60"
-                aria-label="Wishlist integration coming later"
+                onClick={handleWishlistToggle}
+                className="w-12 h-12 flex items-center justify-center rounded-xl border border-gray-200 hover:border-gray-300 transition"
+                aria-label={china
+                  ? (isSaved(product.source_id) ? 'Remove from wishlist' : 'Add to wishlist')
+                  : (isInWishlist(product.source_id) ? 'Remove from wishlist' : 'Add to wishlist')}
               >
-                <Heart className="w-4 h-4 text-gray-400" />
+                <Heart
+                  className={china
+                    ? (isSaved(product.source_id) ? 'w-4 h-4 fill-red-500 text-red-500' : 'w-4 h-4 text-gray-400')
+                    : (isInWishlist(product.source_id) ? 'w-4 h-4 fill-red-500 text-red-500' : 'w-4 h-4 text-gray-400')}
+                />
               </button>
             </div>
 
