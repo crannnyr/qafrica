@@ -6,16 +6,45 @@ const PAGE = 24;
 type FeedStatus = 'idle' | 'loading' | 'error' | 'done';
 type Args = { tab: UnifiedFeedTab; niche: string | null; category: string | null; search: string | null };
 const cache = new Map<string, { items: UnifiedMarketplaceProduct[]; offset: number; status: FeedStatus; at: number }>();
-const keyFor = (a: Args) => JSON.stringify([a.tab, a.niche, a.category, a.search?.trim() || null]);
-const cached = (a: Args) => {
-  const hit = cache.get(keyFor(a));
+const keyFor = (a: Args, viewerSeed: string) => JSON.stringify([a.tab, a.niche, a.category, a.search?.trim() || null, viewerSeed]);
+const cached = (a: Args, viewerSeed: string) => {
+  const hit = cache.get(keyFor(a, viewerSeed));
   return hit && Date.now() - hit.at < 10 * 60 * 1000 ? hit : null;
 };
 
+const createViewerSeed = () => {
+  try {
+    const existing = window.localStorage.getItem('qafrica_unified_marketplace_seed');
+    if (existing) return existing;
+    const seed = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}`;
+    window.localStorage.setItem('qafrica_unified_marketplace_seed', seed);
+    return seed;
+  } catch {
+    return `${Date.now()}-${Math.random()}`;
+  }
+};
+
+const score = (seed: string, id: string) => {
+  let hash = 2166136261;
+  const value = `${seed}:${id}`;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+const personalize = (rows: UnifiedMarketplaceProduct[], viewerSeed: string) =>
+  [...rows].sort((a, b) => score(viewerSeed, a.id) - score(viewerSeed, b.id));
+
 export function useUnifiedMarketplaceFeed(args: Args) {
-  const [items, setItems] = useState<UnifiedMarketplaceProduct[]>(() => cached(args)?.items ?? []);
-  const [status, setStatus] = useState<FeedStatus>(() => cached(args)?.status ?? 'loading');
-  const offset = useRef(cached(args)?.offset ?? 0);
+  const [viewerSeed] = useState(createViewerSeed);
+  const initialCache = cached(args, viewerSeed);
+  const [items, setItems] = useState<UnifiedMarketplaceProduct[]>(initialCache?.items ?? []);
+  const [status, setStatus] = useState<FeedStatus>(initialCache?.status ?? 'loading');
+  const offset = useRef(initialCache?.offset ?? 0);
   const request = useRef(0);
   const statusRef = useRef(status);
 
@@ -38,20 +67,20 @@ export function useUnifiedMarketplaceFeed(args: Args) {
       setStatus('error');
       return;
     }
-    const rows = (data ?? []) as UnifiedMarketplaceProduct[];
+    const rows = personalize((data ?? []) as UnifiedMarketplaceProduct[], viewerSeed);
     offset.current += rows.length;
     const nextStatus: FeedStatus = rows.length < PAGE ? 'done' : 'idle';
-    const cacheKey = keyFor(args);
+    const cacheKey = keyFor(args, viewerSeed);
     setItems((previous) => {
       const next = reset ? rows : [...previous, ...rows.filter((r) => !previous.some((p) => p.id === r.id))];
       cache.set(cacheKey, { items: next, offset: offset.current, status: nextStatus, at: Date.now() });
       return next;
     });
     setStatus(nextStatus);
-  }, [args.tab, args.niche, args.category, args.search]);
+  }, [args.tab, args.niche, args.category, args.search, viewerSeed]);
 
   useEffect(() => {
-    const hit = cached(args);
+    const hit = cached(args, viewerSeed);
     if (hit) {
       offset.current = hit.offset;
       setItems(hit.items);
@@ -61,7 +90,7 @@ export function useUnifiedMarketplaceFeed(args: Args) {
     setItems([]);
     setStatus('loading');
     void fetchPage(true);
-  }, [fetchPage, args.tab, args.niche, args.category, args.search]);
+  }, [fetchPage, args.tab, args.niche, args.category, args.search, viewerSeed]);
 
   const loadMore = useCallback(() => {
     if (statusRef.current !== 'idle') return;
