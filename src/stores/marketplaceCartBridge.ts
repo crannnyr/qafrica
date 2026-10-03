@@ -13,8 +13,15 @@ function mirror(item: ImportCartItem) {
 }
 
 let started = false;
+export function syncMarketplaceImportCart() {
+  const store = useImportCartStore.getState();
+  const items = store.cart;
+  items.forEach(mirror);
+  if (items.length) store.clearCart();
+}
+
 export function startMarketplaceCartBridge() {
   if (started) return; started = true;
-  const sync = () => { if (!marketplaceRouteActive()) return; const store = useImportCartStore.getState(); const items = store.cart; items.forEach(mirror); if (items.length) store.clearCart(); };
+  const sync = () => { if (!marketplaceRouteActive()) return; syncMarketplaceImportCart(); };
   useImportCartStore.subscribe(sync); window.addEventListener('popstate', sync); sync();
 }
