@@ -424,7 +424,7 @@ export default function UnifiedProductPage() {
 
       {product.seller_type === 'store' && product.seller_slug ? (
         <Link
-          to={`/stores/${product.seller_slug}`}
+          to="/stores-v2"
           className="inline-flex items-center gap-1 text-sm font-medium text-gray-700"
         >
           <StoreIcon className="w-4 h-4" /> View store <ChevronRight className="w-4 h-4" />
@@ -655,11 +655,11 @@ export default function UnifiedProductPage() {
 
             {product.seller_type === 'store' && (
               <Link
-                to={`/stores/${product.seller_slug}`}
+                to="/stores-v2"
                 className="self-start flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 hover:border-gray-300 rounded-full px-3 py-1.5 transition"
               >
                 <Package className="w-3 h-3" />
-                Dropship this item
+                View more marketplace products
               </Link>
             )}
           </section>
