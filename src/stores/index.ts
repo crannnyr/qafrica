@@ -1,3 +1,7 @@
+import { startMarketplaceCartBridge } from './marketplaceCartBridge';
+
+startMarketplaceCartBridge();
+
 export { useAuthStore } from './authStore';
 export { useStoreStore } from './storeStore';
 export { useWalletStore } from './walletStore';
