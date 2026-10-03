@@ -36,7 +36,8 @@ const BlogIndexPage = lazy(() => import('@/pages/blog/BlogIndexPage'));
 const BlogPostPage = lazy(() => import('@/pages/blog/BlogPostPage'));
 
 // China Import / Recommendations Pages
-const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
+// Temporarily unused while /importations redirects to /recommendations.
+// const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
 const ImportAdminPage = lazy(() => import('@/pages/import-admin/ImportAdminPage'));
 const ImportSourcingSharePage = lazy(() => import('@/pages/import-admin/ImportSourcingSharePage'));
 const ManagementLogin = lazy(() => import('@/pages/management/ManagementLogin'));
@@ -466,7 +467,10 @@ function App() {
           <Route path="/blog/:slug" element={<BlogPostPage />} />
 
           {/* ── China Import & Recommendations — public, no auth needed ── */}
-          <Route path="/importations" element={<ImportPage />} />
+          {/* /importations is temporarily disabled — redirect to /recommendations.
+              To re-enable, restore: <Route path="/importations" element={<ImportPage />} /> */}
+          <Route path="/importations" element={<Navigate to="/recommendations" replace />} />
+          <Route path="/importation" element={<Navigate to="/recommendations" replace />} />
           <Route path="/importations/admin/login" element={<ImportAdminV2Login />} />
           <Route path="/importations/admin/logout" element={<ImportAdminV2Logout />} />
           <Route path="/importations/admin" element={<ImportAdminRouteBridge />} />

@@ -11,11 +11,22 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Button } from '@/components/ui/button';
 import {
   checkSubscriptionPayment, startSubscriptionPayment,
-  type SubscriptionPlanRequest, type TransferAccount,
+  type PaymentStatus, type StartResult, type SubscriptionPlanRequest, type TransferAccount,
 } from '@/services/flutterwave';
 
+type StartFn = () => Promise<StartResult>;
+type CheckFn = (reference: string) => Promise<{ ok: true; status: PaymentStatus; paid: boolean } | { ok: false; message: string }>;
+
 type Props = {
-  plan: SubscriptionPlanRequest;
+  /** A plan to pay for. Leave out when passing `start` and `check` for another kind of payment. */
+  plan?: SubscriptionPlanRequest;
+  /** Custom start/check (e.g. custom domains). Default: subscription plan payment. */
+  start?: StartFn;
+  check?: CheckFn;
+  /** What the payer is buying, used in the copy. Default "plan". */
+  itemNoun?: string;
+  /** Shown under "Payment received". */
+  paidMessage?: string;
   /** e.g. "Starter Pack · 3 months" */
   planLabel: string;
   onClose: () => void;
@@ -27,7 +38,7 @@ type Phase = 'starting' | 'waiting' | 'checking' | 'paid' | 'review' | 'expired'
 const naira = (n: number) => `₦${n.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 export const PENDING_PAYMENT_KEY = 'qafrica_pending_payment';
 
-export default function FlutterwavePayDialog({ plan, planLabel, onClose, onPaid }: Props) {
+export default function FlutterwavePayDialog({ plan, start, check: checkFn, itemNoun = 'plan', paidMessage, planLabel, onClose, onPaid }: Props) {
   const [phase, setPhase] = useState<Phase>('starting');
   const [error, setError] = useState('');
   const [reference, setReference] = useState('');
@@ -35,20 +46,22 @@ export default function FlutterwavePayDialog({ plan, planLabel, onClose, onPaid 
   const [account, setAccount] = useState<TransferAccount | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [attempt, setAttempt] = useState(0);
-  const planRef = useRef(plan);
+  const startRef = useRef<StartFn>(start ?? (() => startSubscriptionPayment(plan as SubscriptionPlanRequest)));
+  const checkRef = useRef<CheckFn>(checkFn ?? checkSubscriptionPayment);
+  const isPlanRef = useRef(!start);
   const paidRef = useRef(false);
 
   // Start (or restart after expiry)
   useEffect(() => {
     let alive = true;
-    startSubscriptionPayment(planRef.current).then((res) => {
+    startRef.current().then((res) => {
       if (!alive) return;
       if (!res.ok) { setError(res.message); setPhase('error'); return; }
       setReference(res.reference);
       setPrice(res.amount);
       setAccount(res.account);
       setPhase('waiting');
-      try { sessionStorage.setItem(PENDING_PAYMENT_KEY, res.reference); } catch { /* private mode */ }
+      if (isPlanRef.current) { try { sessionStorage.setItem(PENDING_PAYMENT_KEY, res.reference); } catch { /* private mode */ } }
     });
     return () => { alive = false; };
   }, [attempt]);
@@ -56,7 +69,7 @@ export default function FlutterwavePayDialog({ plan, planLabel, onClose, onPaid 
   const check = useCallback(async (manual = false) => {
     if (!reference || paidRef.current) return;
     if (manual) setPhase('checking');
-    const res = await checkSubscriptionPayment(reference);
+    const res = await checkRef.current(reference);
     if (!res.ok) { if (manual) { setPhase('waiting'); toast.error(res.message); } return; }
     if (res.paid) {
       paidRef.current = true;
@@ -125,7 +138,7 @@ export default function FlutterwavePayDialog({ plan, planLabel, onClose, onPaid 
                 </div>
 
                 {fee > 0 && (
-                  <p className="mt-2 text-xs text-gray-500">Plan {naira(price)} + {naira(fee)} Flutterwave transfer fee.</p>
+                  <p className="mt-2 text-xs text-gray-500"><span className="capitalize">{itemNoun}</span> {naira(price)} + {naira(fee)} Flutterwave transfer fee.</p>
                 )}
 
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 text-sm">
@@ -145,7 +158,7 @@ export default function FlutterwavePayDialog({ plan, planLabel, onClose, onPaid 
 
                 <ul className="mt-4 space-y-1.5 text-xs text-gray-500">
                   <li className="flex gap-2"><Building2 className="w-3.5 h-3.5 mt-0.5 shrink-0" /> This account is only for this payment. Don’t save it for later.</li>
-                  <li className="flex gap-2"><ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" /> Your plan switches on by itself when the money lands, even if you close this window.</li>
+                  <li className="flex gap-2"><ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" /> {itemNoun === 'plan' ? 'Your plan switches on by itself' : 'We record your payment by itself'} when the money lands, even if you close this window.</li>
                 </ul>
               </motion.div>
             )}
@@ -156,7 +169,7 @@ export default function FlutterwavePayDialog({ plan, planLabel, onClose, onPaid 
                   <CheckCircle2 className="w-14 h-14 text-green-500" />
                 </motion.div>
                 <p className="font-semibold text-gray-900 dark:text-white">Payment received</p>
-                <p className="text-sm text-gray-500">Your plan is active. Taking you in…</p>
+                <p className="text-sm text-gray-500">{paidMessage ?? 'Your plan is active. Taking you in…'}</p>
               </motion.div>
             )}
 
@@ -164,7 +177,7 @@ export default function FlutterwavePayDialog({ plan, planLabel, onClose, onPaid 
               <motion.div key="expired" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-6 text-center">
                 <Clock className="w-10 h-10 mx-auto text-gray-400" />
                 <p className="mt-3 font-semibold text-gray-900 dark:text-white">This account has expired</p>
-                <p className="mt-1 text-sm text-gray-500">If you already sent the money, it will still be matched and your plan switched on. Otherwise get a new account.</p>
+                <p className="mt-1 text-sm text-gray-500">If you already sent the money, it will still be matched to your {itemNoun}. Otherwise get a new account.</p>
                 <Button onClick={restart} className="mt-5 w-full bg-orange-500 hover:bg-orange-600 text-white"><RefreshCw className="w-4 h-4 mr-2" /> Get a new account</Button>
               </motion.div>
             )}
@@ -173,7 +186,7 @@ export default function FlutterwavePayDialog({ plan, planLabel, onClose, onPaid 
               <motion.div key="review" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="py-6 text-center">
                 <AlertCircle className="w-10 h-10 mx-auto text-amber-500" />
                 <p className="mt-3 font-semibold text-gray-900 dark:text-white">We received a transfer that needs checking</p>
-                <p className="mt-1 text-sm text-gray-500">The amount didn’t match the plan. Our team will sort it out and contact you. Your reference: <span className="font-mono">{reference}</span></p>
+                <p className="mt-1 text-sm text-gray-500">The amount didn’t match the {itemNoun}. Our team will sort it out and contact you. Your reference: <span className="font-mono">{reference}</span></p>
                 <Button variant="outline" onClick={onClose} className="mt-5 w-full">Close</Button>
               </motion.div>
             )}

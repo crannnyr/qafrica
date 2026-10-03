@@ -22,6 +22,9 @@
 //                                 leaving auto-renew silently pointing at a dead card.
 //   POST ?action=set-default-card signed-in owner marks one saved card default.
 //   POST ?action=status           signed-in owner asks "has it landed yet?" (works for any method).
+//   POST ?action=domain-start     signed-in owner starts a bank-transfer payment for a custom domain
+//                                 (row in domain_requests, priced here). Admin connects it afterwards.
+//   POST ?action=domain-status    signed-in owner asks whether the domain payment has landed.
 //   POST ?action=webhook          Flutterwave says a charge completed. Signature checked, then we
 //                                 re-fetch the charge from Flutterwave (never trust the body),
 //                                 activate, and — for a card charge that asked to be saved — save it.
@@ -556,7 +559,14 @@ async function webhook(req: Request) {
       // Match by our reference first; otherwise the latest open payment for this Flutterwave customer
       const reference = String(charge.reference ?? data.reference ?? '')
       let { data: payment } = await admin.from('subscription_payments').select('*').eq('reference', reference).maybeSingle()
-      if (!payment) {
+
+      // A custom-domain payment? (matched by our reference)
+      let domainRow: DomainRow | null = null
+      if (!payment && reference) {
+        const res = await admin.from('domain_requests').select('*').eq('payment_reference', reference).maybeSingle()
+        domainRow = res.data as DomainRow | null
+      }
+      if (!payment && !domainRow) {
         const cus = String(charge.customer?.id ?? charge.customer ?? charge.customer_id ?? data.customer?.id ?? '')
         if (cus) {
           const res = await admin.from('subscription_payments').select('*')
@@ -564,9 +574,23 @@ async function webhook(req: Request) {
             .gte('created_at', new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
             .order('created_at', { ascending: false }).limit(1).maybeSingle()
           payment = res.data
+          // The latest open domain payment for this customer, if it is newer than the plan payment
+          const dres = await admin.from('domain_requests').select('*')
+            .eq('provider_customer_id', cus).eq('payment_provider', 'flutterwave').in('payment_status', ['pending', 'failed'])
+            .gte('created_at', new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString())
+            .order('created_at', { ascending: false }).limit(1).maybeSingle()
+          if (dres.data && (!payment || Date.parse(dres.data.created_at) > Date.parse(payment.created_at))) {
+            domainRow = dres.data as DomainRow
+            payment = null
+          }
         }
       }
-      if (!payment) processError = 'not a subscription payment'
+      if (domainRow) {
+        if (domainRow.payment_status !== 'paid') {
+          const res = await activateDomain(domainRow, charge)
+          if (!res.ok) processError = res.message ?? 'domain not activated'
+        }
+      } else if (!payment) processError = 'not a subscription payment'
       else if (payment.status !== 'paid') {
         const res = await activate(payment as PaymentRow, charge)
         if (!res.ok) processError = res.message ?? 'not activated'
@@ -882,6 +906,176 @@ async function setDefaultCard(req: Request) {
   return json({ ok: true })
 }
 
+// ── Custom domains ────────────────────────────────────────────────────────────────────
+// Same bank-transfer flow as plans, but the row lives in domain_requests. The price is set
+// here, never by the browser. Must match DOMAIN_PRICES in src/pages/dashboard/DomainPage.tsx.
+const DOMAIN_PRICES = { com: 30000, shop: 12900, store: 12900, otherNew: 12900, connect: 7000 }
+function domainPrice(type: 'new' | 'existing', domain: string): number {
+  if (type === 'existing') return DOMAIN_PRICES.connect
+  const tld = domain.split('.').pop() ?? ''
+  if (tld === 'com') return DOMAIN_PRICES.com
+  if (tld === 'shop' || tld === 'store') return DOMAIN_PRICES.shop
+  return DOMAIN_PRICES.otherNew
+}
+function cleanDomain(input: string): string {
+  return input.toLowerCase().trim().replace(/^https?:\/\//, '').split(/[/?#]/)[0].replace(/\.$/, '').replace(/^www\./, '')
+}
+const DOMAIN_RE = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/
+const OPEN_DOMAIN_STATUSES = ['pending', 'processing']
+
+type DomainRow = {
+  id: string; user_id: string; store_id: string; domain_name: string; domain_type: string
+  status: string; payment_status: string; amount_paid: number; payment_reference: string
+  provider_charge_id: string | null; provider_customer_id: string | null; payment_expires_at: string | null
+}
+
+async function activateDomain(row: DomainRow, charge: Charge): Promise<{ ok: boolean; message?: string }> {
+  if (row.payment_status === 'paid') return { ok: true }
+  if (!succeeded(charge)) return { ok: false, message: 'not_paid' }
+
+  const currency = String(charge.currency ?? 'NGN').toUpperCase()
+  const paid = Number(charge.amount ?? 0)
+  if (currency !== 'NGN' || !(paid + 0.5 >= Number(row.amount_paid))) {
+    await admin.from('domain_requests').update({
+      payment_status: 'review', provider_charge_id: String(charge.id ?? ''), paid_amount: paid,
+      payment_error: `Paid ${paid} ${currency}, domain costs ${row.amount_paid} NGN`, raw_confirm: charge, updated_at: now(),
+    }).eq('id', row.id)
+    console.error('[flutterwave] domain underpaid', row.payment_reference, paid, currency, row.amount_paid)
+    return { ok: false, message: 'underpaid' }
+  }
+
+  // Claim it once: a webhook and a status poll can arrive together
+  const { data: claimed } = await admin.from('domain_requests').update({
+    payment_status: 'paid', status: 'pending', paid_amount: paid, paid_at: now(),
+    provider_charge_id: String(charge.id ?? ''), raw_confirm: charge, payment_error: null, updated_at: now(),
+  }).eq('id', row.id).in('payment_status', ['pending', 'failed']).select('id').maybeSingle()
+  if (!claimed) return { ok: true }
+
+  // Show the domain on the store as pending review (not live until an admin connects it)
+  const { data: store } = await admin.from('stores').select('domain_status').eq('id', row.store_id).maybeSingle()
+  if (store && store.domain_status !== 'connected') {
+    await admin.from('stores').update({ custom_domain: row.domain_name, domain_status: 'pending', domain_paid_amount: Number(row.amount_paid) }).eq('id', row.store_id)
+  }
+
+  // Tell the admins (best effort)
+  try {
+    const { data: admins } = await admin.from('profiles').select('email').eq('role', 'admin')
+    const emails = (admins ?? []).map((a: { email?: string }) => a.email).filter(Boolean).slice(0, 5) as string[]
+    const html = `<p>A store paid ₦${Number(row.amount_paid).toLocaleString('en-NG')} by Flutterwave to ${row.domain_type === 'new' ? 'register' : 'connect'} <strong>${row.domain_name}</strong>.</p><p>Review it in Admin, Domain requests. Ref ${row.payment_reference}</p>`
+    for (const to of emails) {
+      await admin.functions.invoke('send-email', { body: { to, subject: `New domain request: ${row.domain_name}`, html } })
+    }
+  } catch (e) { console.error('[flutterwave] admin domain email failed', (e as Error).message) }
+  return { ok: true }
+}
+
+async function domainStart(req: Request) {
+  const userId = await callerId(req)
+  if (!userId) return json({ ok: false, message: 'Please sign in again.' }, 401)
+  if (!FLW_ID || !FLW_SECRET) return json({ ok: false, message: 'Payments are not set up yet. Contact support.' }, 500)
+
+  let body: Record<string, unknown> = {}
+  try { body = await req.json() } catch { /* empty */ }
+  const type = body.domain_type === 'existing' ? 'existing' : body.domain_type === 'new' ? 'new' : null
+  const domain = cleanDomain(String(body.domain ?? ''))
+  if (!type) return json({ ok: false, message: 'Choose whether you are buying a new domain or connecting one you own.' }, 400)
+  if (!DOMAIN_RE.test(domain)) return json({ ok: false, message: 'Enter a full domain with its ending, like mystore.com.' }, 400)
+  if (/qafrica\.store$|netlify\.app$|bolt\.host$/.test(domain)) return json({ ok: false, message: 'That address can’t be used as a custom domain.' }, 400)
+
+  const { data: store } = body.store_id
+    ? await admin.from('stores').select('id, owner_id, name, custom_domain, domain_status').eq('id', String(body.store_id)).maybeSingle()
+    : await admin.from('stores').select('id, owner_id, name, custom_domain, domain_status').eq('owner_id', userId).order('created_at').limit(1).maybeSingle()
+  if (!store || store.owner_id !== userId) return json({ ok: false, message: 'Store not found on your account.' }, 403)
+
+  if (store.domain_status === 'connected') return json({ ok: false, message: `Your store is already live on ${store.custom_domain}. Contact support to change it.` }, 409)
+  const { data: open } = await admin.from('domain_requests').select('domain_name, status')
+    .eq('store_id', store.id).eq('payment_status', 'paid').in('status', OPEN_DOMAIN_STATUSES).limit(1).maybeSingle()
+  if (open) return json({ ok: false, message: `You already have a paid request for ${open.domain_name} being reviewed.` }, 409)
+
+  const { data: taken } = await admin.from('stores').select('id').ilike('custom_domain', domain)
+    .eq('domain_status', 'connected').neq('id', store.id).limit(1).maybeSingle()
+  if (taken) return json({ ok: false, message: `${domain} is already in use by another store.` }, 409)
+
+  const price = domainPrice(type, domain)
+
+  // Same domain asked again while its account is still open: show the same account
+  const { data: recent } = await admin.from('domain_requests')
+    .select('payment_reference, amount_paid, payment_account, payment_expires_at')
+    .eq('store_id', store.id).eq('domain_name', domain).eq('domain_type', type)
+    .eq('status', 'awaiting_payment').eq('payment_status', 'pending')
+    .gt('payment_expires_at', new Date(Date.now() + 10 * 60 * 1000).toISOString())
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  const recentAccount = recent ? toAccount(recent.payment_account as Record<string, unknown>, Number(recent.amount_paid)) : null
+  if (recent && recentAccount) {
+    return json({ ok: true, reference: recent.payment_reference, amount: Number(recent.amount_paid), account: recentAccount, reused: true })
+  }
+
+  const { data: profile } = await admin.from('profiles').select('full_name, email').eq('id', userId).maybeSingle()
+  const { data: authUser } = await admin.auth.admin.getUserById(userId)
+  const email = authUser?.user?.email ?? profile?.email
+  if (!email) return json({ ok: false, message: 'Add an email address to your account first.' }, 400)
+  const nameParts = String(profile?.full_name || store.name || 'QAFRICA Seller').trim().split(/\s+/)
+  const first = (nameParts[0] || 'QAFRICA').slice(0, 50)
+  const last = (nameParts.slice(1).join(' ') || 'Seller').slice(0, 50)
+
+  const reference = `QDOM${Date.now().toString(36)}${randomId(10)}`.toUpperCase()
+  const { data: row, error: rowErr } = await admin.from('domain_requests').insert({
+    store_id: store.id, user_id: userId, domain_name: domain, domain_type: type,
+    status: 'awaiting_payment', payment_status: 'pending', payment_provider: 'flutterwave',
+    amount_paid: price, payment_reference: reference, requested_at: now(),
+  }).select('id').single()
+  if (rowErr) {
+    console.error('[flutterwave] could not save domain request', rowErr.message)
+    return json({ ok: false, message: 'Could not start the payment. Please try again.' }, 500)
+  }
+
+  try {
+    const cus = await customerId(email, first, last, userId)
+    const r = await flw('POST', '/virtual-accounts', {
+      reference, customer_id: cus, amount: price, currency: 'NGN',
+      account_type: 'dynamic', expiry: ACCOUNT_MINUTES * 60, narration: 'QAFRICA DOMAIN',
+    }, reference)
+    const va = r.data?.data as Record<string, unknown> | undefined
+    const account = toAccount(va ?? null, price)
+    if (!r.ok || !account) {
+      console.error('[flutterwave] domain account failed', r.status, JSON.stringify(r.data).slice(0, 500))
+      await admin.from('domain_requests').update({ status: 'failed', payment_status: 'failed', provider_customer_id: cus, payment_error: flwError(r.data), updated_at: now() }).eq('id', row.id)
+      return json({ ok: false, message: `Payment could not start: ${flwError(r.data)}` }, 502)
+    }
+    await admin.from('domain_requests').update({
+      provider_customer_id: cus, payment_account: va,
+      payment_expires_at: account.expires_at ?? new Date(Date.now() + ACCOUNT_MINUTES * 60 * 1000).toISOString(), updated_at: now(),
+    }).eq('id', row.id)
+    return json({ ok: true, reference, amount: price, account })
+  } catch (e) {
+    await admin.from('domain_requests').update({ status: 'failed', payment_status: 'failed', payment_error: (e as Error).message, updated_at: now() }).eq('id', row.id)
+    return json({ ok: false, message: (e as Error).message }, 502)
+  }
+}
+
+async function domainStatus(req: Request) {
+  const userId = await callerId(req)
+  if (!userId) return json({ ok: false, message: 'Please sign in again.' }, 401)
+  let body: Record<string, unknown> = {}
+  try { body = await req.json() } catch { /* empty */ }
+  const reference = String(body.reference ?? '')
+
+  const { data: row } = await admin.from('domain_requests').select('*').eq('payment_reference', reference).maybeSingle()
+  if (!row || row.user_id !== userId) return json({ ok: false, message: 'Payment not found.' }, 404)
+
+  if (row.payment_provider === 'flutterwave' && ['pending', 'failed'].includes(row.payment_status)) {
+    const charge = row.provider_charge_id
+      ? await chargeById(row.provider_charge_id)
+      : (await chargesByReference(row.payment_reference)).find(succeeded) ?? null
+    if (charge && succeeded(charge)) await activateDomain(row as DomainRow, charge)
+  }
+
+  const { data: p } = await admin.from('domain_requests').select('status, payment_status, payment_expires_at').eq('id', row.id).single()
+  const expired = p?.payment_status === 'pending' && p.payment_expires_at && Date.parse(p.payment_expires_at) < Date.now()
+  const status = p?.payment_status === 'paid' ? 'paid' : expired ? 'expired' : p?.payment_status
+  return json({ ok: true, reference, status, paid: p?.payment_status === 'paid', request_status: p?.status })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -895,6 +1089,8 @@ Deno.serve(async (req) => {
     if (action === 'remove-card') return await removeCard(req)
     if (action === 'set-default-card') return await setDefaultCard(req)
     if (action === 'status') return await status(req)
+    if (action === 'domain-start') return await domainStart(req)
+    if (action === 'domain-status') return await domainStatus(req)
     if (action === 'webhook') return await webhook(req)
     return json({ error: 'Unknown action' }, 400)
   } catch (e) {
