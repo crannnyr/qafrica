@@ -1,497 +1,360 @@
-import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { 
-  Globe, Check, Loader2, AlertCircle, ArrowRight, 
-  ExternalLink, Shield, Sparkles, Info, CreditCard, X
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useStoreStore, useAuthStore } from '@/stores';
-import { toast } from 'sonner';
-import { supabase } from '@/services';
-import { loadPaystackScript, initializePayment, generateReference, toKobo } from '@/services/paystack';
+// Custom domain for a store: buy a new one or connect one the owner already has.
+// Payment is a Flutterwave bank transfer; the price is set and the payment confirmed on the
+// server (supabase/functions/flutterwave, actions domain-start / domain-status). The browser
+// never writes domain_requests or the store's domain fields itself.
 
-// Change 1: Updated pricing with per-extension breakdown
-const DOMAIN_PRICING = {
-  com: 30000,
-  shop: 12900,
-  store: 12900,
-  connect: 7000,
-};
+import { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, Check, CheckCircle2, Clock, ExternalLink, Globe, Info, Loader2, Lock, RefreshCw, XCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useAuthStore, useStoreStore } from '@/stores';
+import { supabase } from '@/services';
+import { toast } from 'sonner';
+import FlutterwavePayDialog from '@/components/payments/FlutterwavePayDialog';
+import { checkDomainPayment, startDomainPayment } from '@/services/flutterwave';
+
+// Must match DOMAIN_PRICES in supabase/functions/flutterwave/index.ts (the server decides the price).
+const DOMAIN_PRICES = { com: 30000, shop: 12900, store: 12900, otherNew: 12900, connect: 7000 };
 
 type DomainType = 'new' | 'existing';
 
-// Change 2: Extension detector + dynamic price resolver
-function detectExtension(domain: string): string | null {
-  const clean = domain.toLowerCase().trim().replace(/^https?:\/\//, '').split('/')[0];
-  const parts = clean.split('.');
-  if (parts.length >= 2) return parts[parts.length - 1];
-  return null;
-}
+type DomainRequest = {
+  id: string;
+  domain_name: string;
+  domain_type: DomainType;
+  status: string;
+  payment_status: string;
+  payment_provider: string | null;
+  amount_paid: number;
+  payment_reference: string | null;
+  admin_notes: string | null;
+  created_at: string;
+  paid_at: string | null;
+  approved_at: string | null;
+  refunded_at: string | null;
+};
 
-function getPriceForDomain(domainType: DomainType, domain: string): number {
-  if (domainType === 'existing') return DOMAIN_PRICING.connect;
-  const ext = detectExtension(domain);
-  if (ext === 'com') return DOMAIN_PRICING.com;
-  if (ext === 'shop' || ext === 'store') return DOMAIN_PRICING.shop;
-  // Default for any other extension when buying new
-  return DOMAIN_PRICING.store;
+const naira = (n: number) => `₦${Number(n).toLocaleString('en-NG')}`;
+const DOMAIN_RE = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/;
+
+function cleanDomain(input: string) {
+  return input.toLowerCase().trim().replace(/\s+/g, '').replace(/^https?:\/\//, '').split(/[/?#]/)[0].replace(/\.$/, '').replace(/^www\./, '');
 }
+function priceFor(type: DomainType, domain: string) {
+  if (type === 'existing') return DOMAIN_PRICES.connect;
+  const tld = domain.split('.').pop() ?? '';
+  if (tld === 'com') return DOMAIN_PRICES.com;
+  if (tld === 'shop' || tld === 'store') return DOMAIN_PRICES.shop;
+  return DOMAIN_PRICES.otherNew;
+}
+const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
 export default function DomainPage() {
   const { currentStore, fetchStore } = useStoreStore();
   const { user } = useAuthStore();
+  const isOwner = !!currentStore && !!user && currentStore.owner_id === user.id;
+
+  const [requests, setRequests] = useState<DomainRequest[]>([]);
+  const [loading, setLoading] = useState(true);
   const [domainType, setDomainType] = useState<DomainType>('new');
-  const [domainInput, setDomainInput] = useState('');
-  const [isChecking, setIsChecking] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [checkResult, setCheckResult] = useState<{
-    available?: boolean;
-    message?: string;
-    formatted?: string;
-  } | null>(null);
-  const [isPaystackReady, setIsPaystackReady] = useState(false);
-  const [paystackError, setPaystackError] = useState<string | null>(null);
+  const [input, setInput] = useState('');
+  const [touched, setTouched] = useState(false);
+  const [paying, setPaying] = useState<{ domain: string; type: DomainType } | null>(null);
+
+  const storeId = currentStore?.id;
+  const fetchRequests = useCallback(async (): Promise<DomainRequest[]> => {
+    if (!storeId) return [];
+    const { data, error } = await supabase
+      .from('domain_requests')
+      .select('id, domain_name, domain_type, status, payment_status, payment_provider, amount_paid, payment_reference, admin_notes, created_at, paid_at, approved_at, refunded_at')
+      .eq('store_id', storeId)
+      .neq('status', 'awaiting_payment')
+      .order('created_at', { ascending: false })
+      .limit(10);
+    if (error) toast.error('Could not load your domain requests. Refresh the page to try again.');
+    return (data ?? []) as DomainRequest[];
+  }, [storeId]);
+
+  const load = useCallback(async () => {
+    setRequests(await fetchRequests());
+    setLoading(false);
+  }, [fetchRequests]);
 
   useEffect(() => {
-    loadPaystackScript()
-      .then(() => {
-        console.log('Paystack script loaded successfully');
-        setIsPaystackReady(true);
-        setPaystackError(null);
-      })
-      .catch((err) => {
-        console.error('Paystack load error:', err);
-        setPaystackError('Payment system failed to load');
-        toast.error('Payment system failed to load');
-      });
-  }, []);
+    let alive = true;
+    fetchRequests().then((rows) => { if (alive) { setRequests(rows); setLoading(false); } });
+    return () => { alive = false; };
+  }, [fetchRequests]);
 
-  useEffect(() => {
-    if (currentStore?.custom_domain) {
-      setDomainInput(currentStore.custom_domain);
-      setDomainType('existing');
-    }
-  }, [currentStore]);
+  const active = requests.find((r) => ['pending', 'processing', 'connected', 'purchased'].includes(r.status) && r.payment_status !== 'refunded');
+  const lastClosed = !active ? requests.find((r) => ['rejected', 'disconnected'].includes(r.status)) : undefined;
 
-  // Clear check result when input changes
-  useEffect(() => {
-    setCheckResult(null);
-  }, [domainInput, domainType]);
+  const domain = cleanDomain(input);
+  const valid = DOMAIN_RE.test(domain);
+  const price = valid ? priceFor(domainType, domain) : null;
+  const tld = valid ? domain.split('.').pop() : null;
 
-  // Change 3: formatDomain no longer auto-appends .store — user must type full domain
-  const formatDomain = (input: string): string => {
-    return input.toLowerCase().trim()
-      .replace(/\s+/g, '')
-      .replace(/^(https?:\/\/)/, '')
-      .split('/')[0];
+  const onPaid = async () => {
+    setPaying(null);
+    setInput('');
+    setTouched(false);
+    toast.success('Payment received. We’ll set up your domain within 24–48 hours.');
+    await Promise.all([load(), currentStore?.id ? fetchStore(currentStore.id) : Promise.resolve()]);
   };
 
-  const handleCheckDomain = async () => {
-    if (!domainInput.trim()) {
-      toast.error('Please enter a domain name');
-      return;
-    }
-
-    // Change 3: use formatDomain without type argument
-    const formatted = formatDomain(domainInput);
-    console.log('Checking domain:', formatted);
-
-    const isValid = /^[a-z0-9][a-z0-9-]*\.[a-z]{2,}$/.test(formatted);
-    
-    if (!isValid) {
-      setCheckResult({
-        available: false,
-        message: 'Invalid domain format. Please enter a full domain including extension (e.g. mystore.com).',
-        formatted
-      });
-      return;
-    }
-
-    setIsChecking(true);
-    setCheckResult(null);
-
-    setTimeout(() => {
-      const isTaken = formatted.includes('taken') || formatted === 'test.store';
-      const isAvailable = domainType === 'new' ? !isTaken : true;
-      
-      setCheckResult({
-        available: isAvailable,
-        formatted: formatted,
-        message: domainType === 'new' 
-          ? (isAvailable ? `${formatted} is available!` : `${formatted} is already taken. Try another.`)
-          : `${formatted} will be connected to your store`
-      });
-      setIsChecking(false);
-    }, 800);
+  const startPay = () => {
+    setTouched(true);
+    if (!valid) return;
+    setPaying({ domain, type: domainType });
   };
 
-  // This is called by Paystack - MUST NOT be async
-  const handlePaystackCallback = (response: any) => {
-    console.log('Paystack callback received:', response);
-    processPaymentSuccess(response).catch(err => {
-      console.error('Payment processing error:', err);
-      toast.error('Payment succeeded but failed to save. Contact support.');
-    });
-  };
-
-  const processPaymentSuccess = async (response: any) => {
-    console.log('Processing payment success:', response);
-    
-    if (!currentStore?.id || !checkResult?.formatted) {
-      toast.error('Missing store information');
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    // Change 5: use getPriceForDomain for the saved amount
-    const amountPaid = getPriceForDomain(domainType, checkResult.formatted ?? domainInput);
-
-    try {
-      const { error: requestError } = await supabase
-        .from('domain_requests')
-        .insert({
-          store_id: currentStore.id,
-          user_id: user?.id,
-          domain_name: checkResult.formatted,
-          domain_type: domainType,
-          amount_paid: amountPaid,
-          payment_reference: response.reference,
-          payment_status: 'paid',
-          status: 'pending',
-          requested_at: new Date().toISOString(),
-        });
-
-      if (requestError) {
-        console.error('Domain request insert error:', requestError);
-        throw requestError;
-      }
-
-      const { error: storeError } = await supabase
-        .from('stores')
-        .update({
-          custom_domain: checkResult.formatted,
-          domain_status: 'pending',
-          domain_paid_amount: amountPaid,
-        })
-        .eq('id', currentStore.id);
-
-      if (storeError) {
-        console.error('Store update error:', storeError);
-        throw storeError;
-      }
-
-      await fetchStore(currentStore.id);
-      toast.success('Payment successful! Domain request submitted to admin.');
-      
-      setCheckResult(null);
-      setDomainInput('');
-      
-    } catch (err: any) {
-      console.error('Full error:', err);
-      toast.error(`Failed to save request: ${err.message || 'Unknown error'}`);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleSubmitRequest = () => {
-    console.log('Submit clicked - User:', user?.email, 'CheckResult:', checkResult);
-
-    if (!checkResult?.available) {
-      toast.error('Please check domain availability first');
-      return;
-    }
-
-    if (!user?.email) {
-      toast.error('User email not found. Please log in again.');
-      return;
-    }
-
-    if (!isPaystackReady) {
-      toast.error('Payment system not ready. Please refresh.');
-      return;
-    }
-
-    // Change 5: dynamic amount via getPriceForDomain
-    const amount = getPriceForDomain(domainType, checkResult.formatted ?? domainInput);
-    const reference = generateReference('DOM');
-    
-    console.log('Initializing payment:', { email: user.email, amount, reference });
-
-    try {
-      initializePayment({
-        email: user.email,
-        amount: toKobo(amount),
-        reference,
-        metadata: {
-          store_id: currentStore?.id,
-          user_id: user?.id,
-          domain_name: checkResult.formatted,
-          domain_type: domainType,
-        },
-        onSuccess: handlePaystackCallback,
-        onCancel: () => {
-          console.log('Payment cancelled by user');
-          toast.error('Payment cancelled');
-        }
-      });
-    } catch (err: any) {
-      console.error('Payment initialization error:', err);
-      toast.error(`Payment failed: ${err.message || 'Unknown error'}`);
-    }
-  };
-
-  const clearSearch = () => {
-    setDomainInput('');
-    setCheckResult(null);
-  };
-
-  if (paystackError) {
-    return (
-      <div className="p-6 bg-red-50 border border-red-200 rounded-xl">
-        <h3 className="text-red-800 font-semibold mb-2">Payment System Error</h3>
-        <p className="text-red-600">{paystackError}</p>
-        <Button onClick={() => window.location.reload()} className="mt-4 bg-orange-500">
-          Refresh Page
-        </Button>
-      </div>
-    );
-  }
+  if (!currentStore) return null;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Custom Domain</h1>
-        <p className="text-gray-500 mt-1">Connect your own domain to your store</p>
-      </div>
+    <div className="max-w-3xl space-y-6">
+      <header>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Custom domain</h1>
+        <p className="mt-1 text-gray-500 dark:text-gray-400">
+          Give your store its own web address, like <span className="font-medium text-gray-700 dark:text-gray-300">{currentStore.slug}.com</span>.
+        </p>
+      </header>
 
-      {/* Current Domain Status */}
-      {currentStore?.custom_domain && (
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-xl border border-gray-100 p-6"
-        >
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Current Domain Request</h2>
-          <div className="p-4 bg-gray-50 rounded-lg space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                  <Globe className="w-6 h-6 text-orange-600" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900">{currentStore.custom_domain}</p>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    currentStore.domain_status === 'connected' ? 'bg-green-100 text-green-700' :
-                    currentStore.domain_status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                    currentStore.domain_status === 'processing' ? 'bg-blue-100 text-blue-700' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
-                    {(currentStore.domain_status || 'pending').toUpperCase()}
-                  </span>
-                </div>
-              </div>
-              {currentStore.domain_status === 'connected' && (
-                <a 
-                  href={`https://${currentStore.custom_domain}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600"
-                >
-                  Visit
-                  <ExternalLink className="w-4 h-4" />
-                </a>
-              )}
-            </div>
-            
-            <div className="text-sm text-gray-600">
-              <p>Your current store URL: <strong>{currentStore.slug}.store</strong></p>
-              <p className="mt-1 text-gray-500">This will redirect to your custom domain once approved.</p>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Domain Selection */}
-      {!currentStore?.custom_domain && (
+      {loading ? (
+        <div className="py-16 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-orange-500" /></div>
+      ) : active ? (
+        <ActiveRequest req={active} slug={currentStore.slug} onRefresh={load} />
+      ) : (
         <>
-          <div className="grid md:grid-cols-2 gap-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              onClick={() => { setDomainType('new'); clearSearch(); }}
-              className={`p-6 rounded-xl border-2 cursor-pointer transition-all ${
-                domainType === 'new'
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-gray-200 hover:border-orange-300 bg-white'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                  <Sparkles className="w-6 h-6 text-orange-500" />
-                </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-gray-900">from ₦{DOMAIN_PRICING.store.toLocaleString()}</p>
-                  <p className="text-sm text-gray-500">one-time</p>
-                </div>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Buy New Domain</h3>
-              <p className="text-gray-600 text-sm mb-4">Get a .store, .com, or other domain extension.</p>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />.store / .shop — ₦{DOMAIN_PRICING.store.toLocaleString()}</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />.com — ₦{DOMAIN_PRICING.com.toLocaleString()}</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Free SSL included</li>
-              </ul>
-            </motion.div>
+          {lastClosed && <ClosedNotice req={lastClosed} />}
 
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              onClick={() => { setDomainType('existing'); clearSearch(); }}
-              className={`p-6 rounded-xl border-2 cursor-pointer transition-all ${
-                domainType === 'existing'
-                  ? 'border-orange-500 bg-orange-50'
-                  : 'border-gray-200 hover:border-orange-300 bg-white'
-              }`}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-blue-500" />
+          {!isOwner ? (
+            <div className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 flex gap-3">
+              <Lock className="w-5 h-5 text-gray-400 shrink-0 mt-0.5" />
+              <p className="text-sm text-gray-600 dark:text-gray-300">Only the store owner can buy or connect a domain. Ask them to sign in and open this page.</p>
+            </div>
+          ) : (
+            <section className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+              {/* Choice */}
+              <div className="p-5 sm:p-6">
+                <div role="radiogroup" aria-label="Domain option" className="grid grid-cols-2 gap-1 rounded-xl bg-gray-100 dark:bg-gray-900/60 p-1">
+                  {([
+                    ['new', 'Buy a new domain'],
+                    ['existing', 'Connect one I own'],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={domainType === value}
+                      onClick={() => setDomainType(value)}
+                      className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 ${
+                        domainType === value
+                          ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-gray-900">₦{DOMAIN_PRICING.connect.toLocaleString()}</p>
-                  <p className="text-sm text-gray-500">setup fee</p>
+
+                <p className="mt-4 text-sm text-gray-600 dark:text-gray-300">
+                  {domainType === 'new'
+                    ? 'We register the domain in your store’s name and set it up for you. Renewal reminders come from us each year.'
+                    : `Already bought a domain from Namecheap, GoDaddy, Whogohost or another provider? We connect it for a one-time ${naira(DOMAIN_PRICES.connect)} setup fee.`}
+                </p>
+
+                {/* Address bar */}
+                <label htmlFor="domain-input" className="mt-5 block text-sm font-medium text-gray-700 dark:text-gray-200">
+                  {domainType === 'new' ? 'The domain you want' : 'Your domain'}
+                </label>
+                <div className={`mt-1.5 flex items-center rounded-xl border bg-gray-50 dark:bg-gray-900/40 transition-colors focus-within:ring-2 focus-within:ring-orange-500/30 ${
+                  touched && input && !valid ? 'border-red-300 dark:border-red-500/50' : 'border-gray-200 dark:border-gray-700 focus-within:border-orange-500'
+                }`}>
+                  <span className="pl-4 pr-1 flex items-center gap-1.5 text-gray-400 select-none">
+                    <Lock className="w-4 h-4" /><span className="text-base hidden sm:inline">https://</span>
+                  </span>
+                  <input
+                    id="domain-input"
+                    type="text"
+                    inputMode="url"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onBlur={() => setTouched(true)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') startPay(); }}
+                    placeholder={`${currentStore.slug || 'mystore'}.com`}
+                    className="min-w-0 flex-1 bg-transparent py-3.5 pr-4 text-lg text-gray-900 dark:text-white placeholder:text-gray-300 dark:placeholder:text-gray-600 outline-none"
+                  />
                 </div>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">Connect Existing</h3>
-              <p className="text-gray-600 text-sm mb-4">Already own a domain? We'll connect it.</p>
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Any extension works</li>
-                <li className="flex items-center gap-2"><Check className="w-4 h-4 text-green-500" />Expert assistance</li>
-              </ul>
-            </motion.div>
-          </div>
+                {touched && input && !valid && (
+                  <p className="mt-1.5 text-sm text-red-600 dark:text-red-400">Enter the full domain with its ending, like {currentStore.slug || 'mystore'}.com</p>
+                )}
 
-          {/* Domain Input */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="bg-white rounded-xl border border-gray-100 p-6"
-          >
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              {domainType === 'new' ? 'Search for Your Domain' : 'Enter Your Domain'}
-            </h2>
-
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  value={domainInput}
-                  onChange={(e) => setDomainInput(e.target.value)}
-                  placeholder={domainType === 'new' ? 'yourstore.com' : 'yourstore.com'}
-                  className="w-full px-4 py-4 pr-12 rounded-lg border border-gray-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none text-lg"
-                />
-                {domainInput && (
-                  <button 
-                    onClick={clearSearch}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
+                {domainType === 'new' && (
+                  <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
+                    {[['.com', DOMAIN_PRICES.com], ['.store', DOMAIN_PRICES.store], ['.shop', DOMAIN_PRICES.shop]].map(([ext, p]) => (
+                      <div key={ext as string} className={`rounded-xl border px-2 py-2.5 ${tld && `.${tld}` === ext ? 'border-orange-400 bg-orange-50 dark:bg-orange-500/10' : 'border-gray-200 dark:border-gray-700'}`}>
+                        <dt className="text-sm font-semibold text-gray-900 dark:text-white">{ext}</dt>
+                        <dd className="text-xs text-gray-500 dark:text-gray-400">{naira(p as number)} first year</dd>
+                      </div>
+                    ))}
+                  </dl>
                 )}
               </div>
-              <Button
-                onClick={handleCheckDomain}
-                disabled={isChecking || !domainInput.trim()}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-8 h-14"
-              >
-                {isChecking ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Check'}
-              </Button>
-            </div>
 
-            {/* Results */}
-            {checkResult && (
-              <div className={`mt-4 p-4 rounded-lg ${
-                checkResult.available 
-                  ? 'bg-green-50 border border-green-200 text-green-700' 
-                  : 'bg-red-50 border border-red-200 text-red-700'
-              }`}>
-                <div className="flex items-center gap-2">
-                  {checkResult.available 
-                    ? <Check className="w-5 h-5 text-green-500" /> 
-                    : <AlertCircle className="w-5 h-5 text-red-500" />
-                  }
-                  <p>{checkResult.message}</p>
+              {/* Pay bar */}
+              <div className="border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-5 sm:px-6 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{domainType === 'new' ? (tld ? `.${tld} domain` : 'Price depends on the ending') : 'One-time setup fee'}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white tabular-nums">{price !== null ? naira(price) : '—'}</p>
                 </div>
+                <Button
+                  onClick={startPay}
+                  disabled={!input.trim()}
+                  className="h-12 px-6 bg-orange-500 hover:bg-orange-600 text-white font-semibold"
+                >
+                  {price !== null ? `Pay ${naira(price)} by bank transfer` : 'Continue to payment'}
+                </Button>
               </div>
-            )}
+            </section>
+          )}
 
-            {/* Change 5: Payment Section with dynamic pricing */}
-            {checkResult?.available && (
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div>
-                    <p className="text-gray-500">Total Cost</p>
-                    <p className="text-3xl font-bold text-gray-900">
-                      ₦{getPriceForDomain(domainType, checkResult.formatted ?? domainInput).toLocaleString()}
-                    </p>
-                    {/* Change 5: show detected extension and its price */}
-                    <p className="text-sm text-gray-500 mt-1">
-                      {domainType === 'new'
-                        ? `.${detectExtension(checkResult.formatted ?? '')} domain`
-                        : 'Connection fee'
-                      }
-                    </p>
-                  </div>
-                  <Button
-                    onClick={handleSubmitRequest}
-                    disabled={isSubmitting || !isPaystackReady}
-                    className="bg-green-500 hover:bg-green-600 text-white px-8 h-14"
-                  >
-                    {isSubmitting ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <>
-                        <CreditCard className="w-5 h-5 mr-2" />
-                        Pay & Submit
-                      </>
-                    )}
-                  </Button>
-                </div>
-                <p className="text-sm text-gray-500 mt-4 flex items-center gap-1">
-                  <Info className="w-4 h-4" />
-                  Your store URL stays <strong>{currentStore?.slug}.store</strong> until admin approves.
-                </p>
-              </div>
+          {/* How it works: a real sequence, so it is numbered */}
+          <section aria-labelledby="how-it-works" className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 sm:p-6">
+            <h2 id="how-it-works" className="font-semibold text-gray-900 dark:text-white">What happens next</h2>
+            <ol className="mt-3 space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <li className="flex gap-3"><Step n={1} />You pay by bank transfer to a one-time Flutterwave account. It’s confirmed automatically.</li>
+              <li className="flex gap-3"><Step n={2} />
+                {domainType === 'new'
+                  ? 'Our team registers the domain and links it to your store, usually within 24–48 hours.'
+                  : 'Our team sends you the DNS settings to add at your domain provider, then links it once they’re in place.'}
+              </li>
+              <li className="flex gap-3"><Step n={3} />Your store opens on the new address. Links to {currentStore.slug} on QAFRICA keep working.</li>
+            </ol>
+            {domainType === 'new' && (
+              <p className="mt-4 flex gap-2 text-xs text-gray-500 dark:text-gray-400">
+                <Info className="w-4 h-4 shrink-0" />
+                If the domain is already taken, we’ll contact you within 24 hours with close alternatives or refund you in full.
+              </p>
             )}
-          </motion.div>
-
-          {/* Info Box */}
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
-            <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-medium text-blue-900 mb-1">How it works</h4>
-                <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
-                  <li>Enter your desired domain name (including extension) and check availability</li>
-                  <li>Pay securely via Paystack (one-time fee)</li>
-                  <li>Admin receives your request and configures the domain (24-48 hours)</li>
-                  <li>Your custom domain goes live and original URL redirects</li>
-                </ol>
-                {/* Change 4: Availability notice */}
-                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3 flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" />
-                  Domain acquisition is subject to availability. If your chosen domain is unavailable or cannot be registered, our support team will reach out within 24 hours with alternatives. Your payment will be refunded if we cannot fulfil the request.
-                </p>
-              </div>
-            </div>
-          </div>
+          </section>
         </>
       )}
+
+      {paying && (
+        <FlutterwavePayDialog
+          start={() => startDomainPayment({ domain: paying.domain, domain_type: paying.type, store_id: currentStore.id })}
+          check={checkDomainPayment}
+          itemNoun="domain"
+          planLabel={`${paying.type === 'new' ? 'New domain' : 'Connect domain'}: ${paying.domain}`}
+          paidMessage="Your domain request is with our team."
+          onClose={() => setPaying(null)}
+          onPaid={onPaid}
+        />
+      )}
+    </div>
+  );
+}
+
+function Step({ n }: { n: number }) {
+  return <span className="shrink-0 w-6 h-6 rounded-full bg-orange-100 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300 text-xs font-bold flex items-center justify-center">{n}</span>;
+}
+
+// ── A paid request in progress or live ─────────────────────────────────────────────────
+function ActiveRequest({ req, slug, onRefresh }: { req: DomainRequest; slug: string; onRefresh: () => void }) {
+  const live = req.status === 'connected';
+  const stage = live ? 2 : req.status === 'processing' ? 1 : 0;
+  const steps = ['Paid', req.domain_type === 'new' ? 'Registering' : 'Connecting', 'Live'];
+  const unverified = req.payment_provider === 'paystack';
+
+  return (
+    <section className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+      <div className="p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm text-gray-500 dark:text-gray-400">{live ? 'Your store is live at' : 'Setting up'}</p>
+            <p className="mt-0.5 text-2xl font-bold text-gray-900 dark:text-white break-all">{req.domain_name}</p>
+          </div>
+          {live ? (
+            <a href={`https://${req.domain_name}`} target="_blank" rel="noopener noreferrer"
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-orange-500 hover:bg-orange-600 px-3.5 py-2 text-sm font-semibold text-white">
+              Visit <ExternalLink className="w-4 h-4" />
+            </a>
+          ) : (
+            <button type="button" onClick={onRefresh} aria-label="Refresh status"
+              className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Progress */}
+        <ol className="mt-6 grid grid-cols-3" aria-label="Progress">
+          {steps.map((label, i) => {
+            const done = i < stage || live;
+            const current = i === stage && !live;
+            return (
+              <li key={label} className="relative flex flex-col items-center text-center">
+                {i > 0 && <span aria-hidden className={`absolute top-3.5 right-1/2 w-full h-0.5 ${i <= stage ? 'bg-orange-500' : 'bg-gray-200 dark:bg-gray-700'}`} />}
+                <span className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center ring-4 ring-white dark:ring-gray-800 ${
+                  done ? 'bg-orange-500 text-white' : current ? 'bg-white dark:bg-gray-800 border-2 border-orange-500' : 'bg-gray-200 dark:bg-gray-700'
+                }`}>
+                  {done ? <Check className="w-4 h-4" /> : current ? <span className="w-2 h-2 rounded-full bg-orange-500 animate-pulse" /> : null}
+                </span>
+                <span className={`mt-2 text-xs font-medium ${done || current ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>{label}</span>
+              </li>
+            );
+          })}
+        </ol>
+
+        {!live && (
+          <p className="mt-5 text-sm text-gray-600 dark:text-gray-300">
+            {req.domain_type === 'existing'
+              ? 'We’ll email you the DNS records to add at your domain provider. Until the domain is live, customers keep using your QAFRICA link.'
+              : 'Registration usually takes 24–48 hours. Until then, customers keep using your QAFRICA link.'}
+          </p>
+        )}
+
+        {req.admin_notes && (
+          <div className="mt-4 rounded-xl bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 p-4">
+            <p className="text-xs font-semibold text-blue-800 dark:text-blue-300">Message from QAFRICA</p>
+            <p className="mt-1 text-sm text-blue-900 dark:text-blue-100 whitespace-pre-line">{req.admin_notes}</p>
+          </div>
+        )}
+
+        {unverified && !live && (
+          <p className="mt-4 flex gap-2 text-xs text-amber-700 dark:text-amber-300">
+            <AlertCircle className="w-4 h-4 shrink-0" /> This request was paid with our old checkout. Our team is confirming the payment manually.
+          </p>
+        )}
+      </div>
+
+      <dl className="border-t border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/40 px-5 sm:px-6 py-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        <dt className="text-gray-500">Paid</dt><dd className="text-right font-medium text-gray-800 dark:text-gray-200">{naira(req.amount_paid)}{req.paid_at ? ` on ${fmtDate(req.paid_at)}` : ''}</dd>
+        <dt className="text-gray-500">Reference</dt><dd className="text-right font-mono text-gray-800 dark:text-gray-200 truncate">{req.payment_reference ?? '—'}</dd>
+        <dt className="text-gray-500">QAFRICA link</dt><dd className="text-right text-gray-800 dark:text-gray-200 truncate">qafrica.store/{slug}</dd>
+      </dl>
+    </section>
+  );
+}
+
+function ClosedNotice({ req }: { req: DomainRequest }) {
+  const refunded = req.payment_status === 'refunded';
+  const owed = !refunded && ['paid', 'review'].includes(req.payment_status) && req.status === 'rejected';
+  return (
+    <div className="rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 p-4 flex gap-3">
+      <XCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+      <div className="text-sm">
+        <p className="font-semibold text-red-900 dark:text-red-200">
+          {req.status === 'disconnected' ? `${req.domain_name} was disconnected` : `We couldn’t set up ${req.domain_name}`}
+        </p>
+        {req.admin_notes && <p className="mt-1 text-red-800 dark:text-red-300 whitespace-pre-line">{req.admin_notes}</p>}
+        {refunded && <p className="mt-1 flex items-center gap-1.5 text-red-800 dark:text-red-300"><CheckCircle2 className="w-4 h-4" /> Refunded {fmtDate(req.refunded_at)}</p>}
+        {owed && <p className="mt-1 flex items-center gap-1.5 text-red-800 dark:text-red-300"><Clock className="w-4 h-4" /> Your {naira(req.amount_paid)} refund is on its way (3–5 working days).</p>}
+        <p className="mt-2 text-red-700/80 dark:text-red-300/80 flex items-center gap-1.5"><Globe className="w-4 h-4" /> You can request another domain below.</p>
+      </div>
     </div>
   );
 }

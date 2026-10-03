@@ -222,6 +222,7 @@ export default function DashboardLayout() {
       .select('admin_approved, status, domain_name')
       .eq('store_id', currentStore.id)
       .order('created_at', { ascending: false })
+      .limit(1)
       .maybeSingle();
     setDomainRequest(!error && data ? data : null);
   };

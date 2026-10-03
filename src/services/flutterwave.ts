@@ -102,3 +102,19 @@ export function removeSavedCard(cardId: string) {
 export function setDefaultSavedCard(cardId: string) {
   return call<{ ok: true } | { ok: false; message: string }>('set-default-card', { card_id: cardId });
 }
+
+// ── Custom domains (bank transfer) ──────────────────────────────────────────────────────
+export type DomainPaymentRequest = {
+  domain: string;
+  domain_type: 'new' | 'existing';
+  store_id?: string | null;
+};
+
+/** Start paying for a custom domain. The server sets the price and creates the request. */
+export function startDomainPayment(req: DomainPaymentRequest) {
+  return call<StartResult>('domain-start', req) as Promise<StartResult>;
+}
+
+export function checkDomainPayment(reference: string) {
+  return call<{ ok: true; status: PaymentStatus; paid: boolean; request_status: string }>('domain-status', { reference });
+}

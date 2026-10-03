@@ -24,12 +24,13 @@ interface StoreRow {
 const DOMAIN_STATUS: Record<string, { label: string; color: string }> = {
   none:    { label: 'No domain',  color: 'bg-gray-100 text-gray-500'   },
   pending: { label: 'Pending',    color: 'bg-amber-100 text-amber-700' },
-  active:  { label: 'Live',       color: 'bg-green-100 text-green-700' },
+  processing: { label: 'In setup', color: 'bg-blue-100 text-blue-700' },
+  connected: { label: 'Live',     color: 'bg-green-100 text-green-700' },
   failed:  { label: 'Failed',     color: 'bg-red-100 text-red-600'     },
 };
 
 function getStoreUrl(store: StoreRow): string {
-  if (store.custom_domain && store.domain_status === 'active') {
+  if (store.custom_domain && store.domain_status === 'connected') {
     return `https://${store.custom_domain}`;
   }
   return `${window.location.origin}/${store.slug}`;
@@ -130,16 +131,6 @@ export default function AdminStores() {
     setIsSaving(false);
   };
 
-  const handleApproveDomain = async (storeId: string) => {
-    setIsSaving(true);
-    const { error } = await supabase
-      .from('stores')
-      .update({ domain_status: 'connected' })
-      .eq('id', storeId);
-    if (error) toast.error('Failed to approve domain');
-    else { toast.success('Domain approved'); await fetchStores(); }
-    setIsSaving(false);
-  };
 
   return (
     <div className="space-y-4">
@@ -243,11 +234,10 @@ export default function AdminStores() {
                       {store.custom_domain && (
                         <p className="text-[10px] text-gray-400 truncate max-w-[120px]">{store.custom_domain}</p>
                       )}
-                      {store.domain_status === 'pending' && (
-                        <button onClick={() => handleApproveDomain(store.id)} disabled={isSaving}
-                          className="text-[10px] text-orange-500 hover:underline text-left">
-                          Approve →
-                        </button>
+                      {(store.domain_status === 'pending' || store.domain_status === 'processing') && (
+                        <a href="/admin/domain-requests" className="text-[10px] text-orange-500 hover:underline text-left">
+                          Review request
+                        </a>
                       )}
                     </div>
                   </td>
