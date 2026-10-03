@@ -1,6 +1,6 @@
 // /cart: one cart across all stores, grouped by store (SHEIN-style).
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Trash2, ShieldCheck, ChevronRight, ShoppingBag, AlertCircle, Gift } from 'lucide-react';
 import { useCartStore } from '@/stores';
 import type { CartItem } from '@/stores/cartStore';
@@ -17,6 +17,7 @@ export const MARKETPLACE_CHECKOUT_SELECTION_KEY = 'qafrica_marketplace_checkout_
 export default function CartPage() {
   useForceLightMode();
   const navigate = useNavigate();
+  const location = useLocation();
   const items = useCartStore((s) => s.items);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
@@ -27,14 +28,15 @@ export default function CartPage() {
   const [quote, setQuote] = useState<Quote | null>(null);
 
   // Live prices + availability from the server (no state yet, so no delivery fees)
-  const itemsKey = items.map((i) => `${i.id}:${i.quantity}`).join('|');
+  const quoteItems = items.filter((i) => i.sourceType !== 'china_import');
+  const itemsKey = quoteItems.map((i) => `${i.id}:${i.quantity}`).join('|');
   useEffect(() => {
-    if (!items.length) {
+    if (!quoteItems.length) {
       setQuote(null);
       return;
     }
     let alive = true;
-    fetchQuote(items, null).then((q) => alive && setQuote(q)).catch(() => {});
+    fetchQuote(quoteItems, null).then((q) => alive && setQuote(q)).catch(() => {});
     return () => {
       alive = false;
     };
@@ -43,7 +45,12 @@ export default function CartPage() {
 
   const livePrice = (i: CartItem) =>
     quote?.stores.find((s) => s.store_id === i.storeId)?.items.find((l) => l.product_id === i.productId)?.unit_price ?? i.unitPrice;
-  const problemFor = (i: CartItem) => quote?.errors.find((e) => e.product_id === i.productId && (!e.store_id || e.store_id === i.storeId));
+  const problemFor = (i: CartItem) => {
+    // China Import lines are owned by the unified marketplace, not a seller store.
+    // Never run them through the legacy checkout_quote store-availability rules.
+    if (i.sourceType === 'china_import') return undefined;
+    return quote?.errors.find((e) => e.product_id === i.productId && (!e.store_id || e.store_id === i.storeId));
+  };
 
   const groups = useMemo(() => {
     const m = new Map<string, { storeId: string; storeName: string; storeSlug: string; items: CartItem[] }>();
@@ -96,7 +103,10 @@ export default function CartPage() {
       );
     } catch { /* ignore */ }
 
-    if (selectedImportItems.length > 0) {
+    // Any China Import selection must use the unified checkout. If the cart is
+    // currently being used from /stores-v2, normal marketplace products should
+    // use the same unified checkout too; legacy /stores remains on /checkout.
+    if (selectedImportItems.length > 0 || location.pathname.startsWith('/stores-v2')) {
       goWithSelection('/stores-v2/checkout');
       return;
     }
