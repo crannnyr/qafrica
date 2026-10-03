@@ -80,6 +80,7 @@ export default function CartPage() {
   const isImportSelected = (cartKey: string) => !deselected.has('import:' + cartKey);
   const selected = items.filter(isSelected);
   const selectedImportItems = importItems.filter(i => isImportSelected(i.cart_key));
+  const selectedChinaCartItems = selected.filter(i => i.sourceType === 'china_import');
   const selectedChinaShippingTotal = selectedChinaCartItems.reduce(
     (sum, i) => sum + (chinaShippingById[String(i.sourceId)] || 0) * i.quantity,
     0
@@ -92,7 +93,6 @@ export default function CartPage() {
     + selectedChinaShippingTotal;
   const totalSelectedCount = selected.reduce((n, i) => n + i.quantity, 0)
     + selectedImportItems.reduce((n, i) => n + i.quantity, 0);
-  const selectedChinaCartItems = selected.filter(i => i.sourceType === 'china_import');
   const hasImportSelected = selectedImportItems.length > 0 || selectedChinaCartItems.length > 0;
   const allSelectableCount = items.filter(i => !problemFor(i)).length + importItems.length;
   const allSelected = allSelectableCount > 0
