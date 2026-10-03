@@ -5,7 +5,10 @@ import {
   Minus, Plus, Shield, ShoppingCart, Truck
 } from 'lucide-react';
 import ImageCarousel from '@/components/ImageCarousel';
+import Reviews from '@/components/Reviews';
+import ImportReviews from '@/components/ImportReviews';
 import { supabase } from '@/services';
+import UnifiedProductCard from './UnifiedProductCard';
 import type { UnifiedMarketplaceProduct } from './types';
 import { naira } from './useUnifiedMarketplace';
 
@@ -56,6 +59,7 @@ export default function UnifiedProductPage() {
   const [error, setError] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
+  const [relatedProducts, setRelatedProducts] = useState<UnifiedMarketplaceProduct[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -84,8 +88,60 @@ export default function UnifiedProductPage() {
           setError('Product not found');
           setProduct(null);
         } else {
-          setProduct(row as UnifiedMarketplaceProduct);
+          const resolvedProduct = row as UnifiedMarketplaceProduct;
+          setProduct(resolvedProduct);
           setError(null);
+
+          // Keep related products inside the same source-aware unified catalog.
+          const viewerSeed = typeof window !== 'undefined'
+            ? window.localStorage.getItem('qafrica_unified_marketplace_seed') || ''
+            : '';
+          const baseParams = {
+            p_tab: 'for_you',
+            p_niche: resolvedProduct.niche,
+            p_category: resolvedProduct.category,
+            p_search: null,
+            p_limit: 12,
+            p_offset: 0,
+            p_viewer_seed: viewerSeed,
+          };
+
+          const firstRelated = await supabase.rpc('marketplace_unified_products', baseParams);
+          let candidates = Array.isArray(firstRelated.data)
+            ? firstRelated.data as UnifiedMarketplaceProduct[]
+            : [];
+
+          candidates = candidates.filter(item =>
+            !(item.source_type === resolvedProduct.source_type && item.source_id === resolvedProduct.source_id)
+          );
+
+          // If the category is too small, broaden the pool instead of leaving
+          // the recommendation section empty.
+          if (candidates.length < 4) {
+            const broadRelated = await supabase.rpc('marketplace_unified_products', {
+              ...baseParams,
+              p_niche: null,
+              p_category: null,
+              p_limit: 16,
+            });
+            const broad = Array.isArray(broadRelated.data)
+              ? broadRelated.data as UnifiedMarketplaceProduct[]
+              : [];
+            const seen = new Set(candidates.map(item => item.source_type + ':' + item.source_id));
+            for (const item of broad) {
+              const key = item.source_type + ':' + item.source_id;
+              if (
+                item.source_type === resolvedProduct.source_type &&
+                item.source_id === resolvedProduct.source_id
+              ) continue;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              candidates.push(item);
+              if (candidates.length >= 4) break;
+            }
+          }
+
+          setRelatedProducts(candidates.slice(0, 4));
         }
       }
       setLoading(false);
@@ -230,6 +286,30 @@ export default function UnifiedProductPage() {
           </section>
         </div>
       </div>
+
+      <section className="mt-16" aria-label="Product reviews">
+        {china ? (
+          <ImportReviews productId={product.source_id} />
+        ) : (
+          <Reviews productId={product.source_id} />
+        )}
+      </section>
+
+      {relatedProducts.length > 0 && (
+        <section className="mt-16" aria-labelledby="unified-related-products">
+          <p
+            id="unified-related-products"
+            className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-5"
+          >
+            You may also like
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-5">
+            {relatedProducts.map(item => (
+              <UnifiedProductCard key={item.source_type + ':' + item.source_id} p={item} />
+            ))}
+          </div>
+        </section>
+      )}
     </main>
   );
 }
