@@ -4,6 +4,7 @@ import { ArrowLeft, Lock, ShoppingCart } from 'lucide-react';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
 import { useImportCartStore } from '@/stores/importCartStore';
 import ImportCheckoutSheet from '@/pages/recommendations/ImportCheckoutSheet';
+import ShopCheckoutPage from './CheckoutPage';
 import { CHECKOUT_SELECTION_KEY } from './CartPage';
 
 export default function UnifiedCheckoutPage() {
@@ -50,10 +51,9 @@ export default function UnifiedCheckoutPage() {
     return <ImportCheckoutSheet cart={selectedImports} customer={customer} onClose={() => navigate('/cart')} onAdd={addOne} onRemove={removeOne} onSetQuantity={setQuantity} />;
   }
 
-  if (hasNormal && !hasImport) {
+  if (params.get('source') === 'normal' || (hasNormal && !hasImport)) {
     sessionStorage.setItem(CHECKOUT_SELECTION_KEY, JSON.stringify(selectedNormals.map(i => i.id)));
-    window.location.replace('/checkout');
-    return null;
+    return <ShopCheckoutPage />;
   }
 
   if (!hasNormal && !hasImport) {
@@ -76,7 +76,7 @@ export default function UnifiedCheckoutPage() {
           <h2 className="text-base font-semibold">Choose a fulfillment checkout</h2>
           <p className="mt-2 text-sm text-gray-500">Store products and China Import products use separate server-side order and payment pipelines. Complete either group first; the other remains in your cart.</p>
           <div className="mt-5 space-y-3">
-            {hasNormal && <button onClick={() => { sessionStorage.setItem(CHECKOUT_SELECTION_KEY, JSON.stringify(selectedNormals.map(i => i.id))); navigate('/checkout'); }} className="w-full rounded-xl border p-4 text-left"><p className="font-semibold text-sm">Store products</p><p className="mt-1 text-xs text-gray-500">{selectedNormals.length} item{selectedNormals.length === 1 ? '' : 's'}</p></button>}
+            {hasNormal && <button onClick={() => { sessionStorage.setItem(CHECKOUT_SELECTION_KEY, JSON.stringify(selectedNormals.map(i => i.id))); navigate('/checkout?source=normal'); }} className="w-full rounded-xl border p-4 text-left"><p className="font-semibold text-sm">Store products</p><p className="mt-1 text-xs text-gray-500">{selectedNormals.length} item{selectedNormals.length === 1 ? '' : 's'}</p></button>}
             {hasImport && <button onClick={() => { sessionStorage.setItem('qafrica_import_checkout_selection', JSON.stringify(selectedImports.map(i => i.cart_key))); navigate('/checkout?source=china_import'); }} className="w-full rounded-xl border p-4 text-left"><p className="font-semibold text-sm">QAFRICA · China Import</p><p className="mt-1 text-xs text-gray-500">{selectedImports.length} item{selectedImports.length === 1 ? '' : 's'}</p></button>}
           </div>
         </section>
