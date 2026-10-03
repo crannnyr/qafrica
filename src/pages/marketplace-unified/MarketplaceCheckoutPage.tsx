@@ -57,18 +57,34 @@ export default function MarketplaceCheckoutPage() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
+      if (!items.length) { setChinaShippingTotal(0); return; }
+      const chinaIds = items.filter(i => i.sourceType === 'china_import' && i.sourceId).map(i => i.sourceId!).filter(Boolean);
+      if (!chinaIds.length) { setChinaShippingTotal(0); return; }
+      const { data: chinaProducts } = await supabase
+        .from('china_import_products')
+        .select('id,flight_shipping_cost_ngn')
+        .in('id', chinaIds);
+      if (cancelled) return;
+      const byId = new Map((chinaProducts ?? []).map((p: any) => [String(p.id), Number(p.flight_shipping_cost_ngn || 0)]));
+      setChinaShippingTotal(
+        items
+          .filter(i => i.sourceType === 'china_import')
+          .reduce((sum, i) => sum + (byId.get(String(i.sourceId)) || 0) * i.quantity, 0)
+      );
+    };
+    void run();
+    return () => { cancelled = true; };
+  }, [items]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
       if (!items.length || !state.trim()) { setQuote(null); return; }
       setLoadingQuote(true); setQuoteError('');
       const { data, error } = await supabase.functions.invoke('marketplace-checkout', { body: { action: 'quote', state: state.trim(), items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) } });
       if (cancelled) return; setLoadingQuote(false);
       if (error || !data?.ok) { setQuote(null); setQuoteError(data?.errors?.[0]?.message ?? error?.message ?? 'Could not calculate checkout total'); return; }
       setQuote({ stores: data.stores ?? [], amount: Number(data.amount ?? 0) });
-      const chinaIds = items.filter(i => i.sourceType === 'china_import' && i.sourceId).map(i => i.sourceId!).filter(Boolean);
-      if (chinaIds.length) {
-        const { data: chinaProducts } = await supabase.from('china_import_products').select('id,flight_shipping_cost_ngn').in('id', chinaIds);
-        const byId = new Map((chinaProducts ?? []).map((p: any) => [String(p.id), Number(p.flight_shipping_cost_ngn || 0)]));
-        setChinaShippingTotal(items.filter(i => i.sourceType === 'china_import').reduce((sum, i) => sum + (byId.get(String(i.sourceId)) || 0) * i.quantity, 0));
-      } else setChinaShippingTotal(0);
     };
     const timer = window.setTimeout(run, 250); return () => { cancelled = true; window.clearTimeout(timer); };
   }, [items, state]);
@@ -95,7 +111,7 @@ export default function MarketplaceCheckoutPage() {
         {hasChinaImport && <div className="rounded-2xl border border-orange-100 bg-orange-50/60 p-4"><div className="flex gap-3"><div className="rounded-xl bg-white p-2"><img src="/qafrica-bag-logo.svg" alt="" className="h-8 w-8"/></div><div><p className="text-sm font-bold text-gray-900">China Import items</p><p className="mt-1 text-xs leading-5 text-gray-600">China Import items have a separate air shipping fee of <strong>{naira(chinaShippingTotal)}</strong>. It is added to your checkout total and paid in the same payment. No second consolidation bill is requested after payment.</p></div></div></div>}
         <div className="rounded-2xl border bg-white p-5"><div className="mb-4 flex items-center gap-2"><Truck className="h-5 w-5 text-orange-500"/><h2 className="font-bold text-gray-900">Order items</h2><span className="text-xs text-gray-400">{totalItems} item{totalItems === 1 ? '' : 's'}</span></div><div className="space-y-4">{items.map(item => <div key={item.id} className="flex gap-3"><div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-gray-100">{item.image ? <img src={item.image} alt="" className="h-full w-full object-cover"/> : <Package className="m-auto h-full w-6 text-gray-300"/>}{item.sourceType === 'china_import' && <span className="absolute left-0 top-0 rounded-br-md bg-gray-900 px-1.5 py-0.5 text-[8px] font-bold text-white">China</span>}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900">{item.name}</p><p className="mt-1 text-xs text-gray-500">Qty {item.quantity}</p></div><p className="text-sm font-bold text-gray-900">{naira(item.totalPrice)}</p></div>)}</div></div>
       </section>
-      <aside className="lg:sticky lg:top-24 lg:self-start"><div className="rounded-2xl border bg-white p-5"><h2 className="text-lg font-bold text-gray-900">Order summary</h2><div className="mt-4 space-y-3">{(quote?.stores ?? []).map(store => <div key={store.store_id} className="border-b pb-3 last:border-0"><div className="flex items-center justify-between text-sm"><span className="font-semibold text-gray-800">{store.store_name}</span><span>{naira(store.total)}</span></div>{store.shipping_included ? <div className="mt-1 text-xs text-green-600"><div>Air shipping: {naira(chinaShippingTotal)}</div><div className="text-[11px] text-gray-400">Already included in marketplace price</div></div> : <p className="mt-1 text-xs text-gray-500">Delivery {store.delivery_fee ? naira(store.delivery_fee) : '—'}</p>}</div>)}</div>{quoteError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-600">{quoteError}</p>}<div className="mt-4 flex items-center justify-between border-t pt-4"><span className="font-semibold text-gray-700">Total</span><span className="text-xl font-black text-orange-600">{quote ? naira(quote.amount) : '—'}</span></div><button onClick={handleCheckout} disabled={processing || loadingQuote || !quote?.amount} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50">{processing ? <><Loader2 className="h-4 w-4 animate-spin"/> Opening secure payment…</> : <>Continue to payment <ChevronRight className="h-4 w-4"/></>}</button><p className="mt-3 text-center text-[11px] leading-4 text-gray-400">You will complete the single payment on QAfrica's secure payment page.</p></div></aside>
+      <aside className="lg:sticky lg:top-24 lg:self-start"><div className="rounded-2xl border bg-white p-5"><h2 className="text-lg font-bold text-gray-900">Order summary</h2><div className="mt-4 space-y-3">{(quote?.stores ?? []).map(store => <div key={store.store_id} className="border-b pb-3 last:border-0"><div className="flex items-center justify-between text-sm"><span className="font-semibold text-gray-800">{store.store_name}</span><span>{naira(store.total)}</span></div>{store.shipping_included ? <div className="mt-1 text-xs text-green-600"><div>Air shipping: {naira(chinaShippingTotal)}</div><div className="text-[11px] text-gray-400">Added to checkout total</div></div> : <p className="mt-1 text-xs text-gray-500">Delivery {store.delivery_fee ? naira(store.delivery_fee) : '—'}</p>}</div>)}</div>{quoteError && <p className="mt-4 rounded-xl bg-red-50 p-3 text-xs text-red-600">{quoteError}</p>}<div className="mt-4 flex items-center justify-between border-t pt-4"><span className="font-semibold text-gray-700">Total</span><span className="text-xl font-black text-orange-600">{quote ? naira(quote.amount) : '—'}</span></div><button onClick={handleCheckout} disabled={processing || loadingQuote || !quote?.amount} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50">{processing ? <><Loader2 className="h-4 w-4 animate-spin"/> Opening secure payment…</> : <>Continue to payment <ChevronRight className="h-4 w-4"/></>}</button><p className="mt-3 text-center text-[11px] leading-4 text-gray-400">You will complete the single payment on QAfrica's secure payment page.</p></div></aside>
     </main>
   </div>;
 }
