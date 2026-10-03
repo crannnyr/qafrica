@@ -106,7 +106,7 @@ export default function CartPage() {
     // Any China Import selection must use the unified checkout. If the cart is
     // currently being used from /stores-v2, normal marketplace products should
     // use the same unified checkout too; legacy /stores remains on /checkout.
-    if (selectedImportItems.length > 0 || location.pathname.startsWith('/stores-v2')) {
+    if (importItems.length > 0 || location.pathname.startsWith('/stores-v2')) {
       goWithSelection('/stores-v2/checkout');
       return;
     }
