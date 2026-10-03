@@ -10,6 +10,7 @@ import { naira } from './format';
 import { fetchQuote, type Quote } from './checkoutApi';
 import { useImportCartStore } from '@/stores/importCartStore';
 import { toast } from 'sonner';
+import { supabase } from '@/services';
 
 export const CHECKOUT_SELECTION_KEY = 'qafrica_checkout_selection';
 export const MARKETPLACE_CHECKOUT_SELECTION_KEY = 'qafrica_marketplace_checkout_selection';
@@ -26,9 +27,23 @@ export default function CartPage() {
   const removeImportItem = useImportCartStore((s) => s.removeItem);
   const [deselected, setDeselected] = useState<Set<string>>(new Set());
   const [quote, setQuote] = useState<Quote | null>(null);
+  const [chinaShippingById, setChinaShippingById] = useState<Record<string, number>>({});
 
   // Live prices + availability from the server (no state yet, so no delivery fees)
   const quoteItems = items.filter((i) => i.sourceType !== 'china_import');
+
+  useEffect(() => {
+    const ids = items.filter(i => i.sourceType === 'china_import' && i.sourceId).map(i => i.sourceId!).filter(Boolean);
+    if (!ids.length) { setChinaShippingById({}); return; }
+    let alive = true;
+    void supabase.from('china_import_products').select('id,flight_shipping_cost_ngn').in('id', ids).then(({ data }) => {
+      if (!alive) return;
+      const next: Record<string, number> = {};
+      for (const row of data ?? []) next[String(row.id)] = Number(row.flight_shipping_cost_ngn || 0);
+      setChinaShippingById(next);
+    });
+    return () => { alive = false; };
+  }, [items.map(i => `${i.sourceType}:${i.sourceId}`).join('|')]);
   const itemsKey = quoteItems.map((i) => `${i.id}:${i.quantity}`).join('|');
   useEffect(() => {
     if (!quoteItems.length) {
@@ -125,7 +140,7 @@ export default function CartPage() {
           <ShoppingBag className="w-12 h-12 mx-auto text-gray-300" aria-hidden />
           <p className="mt-4 text-[15px] font-semibold">Your cart is empty</p>
           <p className="mt-1 text-[13px] text-gray-500">Items you add from any store show up here.</p>
-          <Link to="/stores" className="mt-6 inline-flex h-10 px-6 items-center rounded-lg bg-gray-900 text-white text-[13px] font-semibold">
+          <Link to={location.pathname.startsWith('/stores-v2') ? '/stores-v2' : '/stores'} className="mt-6 inline-flex h-10 px-6 items-center rounded-lg bg-gray-900 text-white text-[13px] font-semibold">
             Start shopping
           </Link>
         </div>
@@ -192,7 +207,7 @@ export default function CartPage() {
                     <div className="mt-1.5 flex items-center justify-between gap-2">
                       <div>
                         <span className="text-[15px] font-bold text-[#E8590C]">{naira(Number(i.price_ngn || 0))}</span>
-                        <p className="text-[10px] text-gray-400">Air shipping included</p>
+                        <p className="text-[10px] text-gray-400">Air shipping included{chinaShippingById[i.id] ? ` · ${naira(chinaShippingById[i.id])}` : ''}</p>
                       </div>
                       <QtyStepper
                         value={i.quantity}
@@ -280,7 +295,7 @@ export default function CartPage() {
             </p>
             <p className="text-[12px] text-gray-500">Share a link. They pay, you receive.</p>
           </div>
-          <button type="button" onClick={() => goWithSelection('/cart/share')} disabled={selected.length === 0} className="h-9 px-3 rounded-lg border border-gray-900 text-[12px] font-semibold disabled:opacity-40">
+          <button type="button" onClick={() => goWithSelection(location.pathname.startsWith('/stores-v2') ? '/stores-v2/cart/share' : '/cart/share')} disabled={selected.length === 0} className="h-9 px-3 rounded-lg border border-gray-900 text-[12px] font-semibold disabled:opacity-40">
             Get link
           </button>
         </div>
