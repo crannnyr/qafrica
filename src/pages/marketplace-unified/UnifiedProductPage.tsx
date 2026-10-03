@@ -335,11 +335,14 @@ export default function UnifiedProductPage() {
 
           <Link
             to="/stores-v2"
-            aria-label="QAFRICA marketplace home"
-            className="flex items-center gap-1.5"
+            aria-label={china ? 'QAFRICA marketplace home' : `${product.seller_name} marketplace home`}
+            className="flex items-center justify-center"
           >
-            <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="w-7 h-7" />
-            <span className="font-black tracking-tight text-sm">QAFRICA</span>
+            <img
+              src={china ? '/qafrica-bag-logo.svg' : (sellerLogo || '/qafrica-bag-logo.svg')}
+              alt={china ? 'QAFRICA' : product.seller_name}
+              className="w-8 h-8 rounded-md object-contain"
+            />
           </Link>
 
           <Link to="/cart" className="p-2 rounded-full hover:bg-gray-100 transition" aria-label="Cart">
