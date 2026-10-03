@@ -109,6 +109,8 @@ const HelpPayPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then(
 const LeaderboardPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.LeaderboardPage })));
 const ClaimClearPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.ClaimClearPage })));
 const MarketplaceHome = lazy(() => import('@/pages/marketplace/MarketplaceHome'));
+const UnifiedMarketplaceHome = lazy(() => import('@/pages/marketplace-unified/UnifiedMarketplaceHome'));
+const UnifiedProductPage = lazy(() => import('@/pages/marketplace-unified/UnifiedProductPage'));
 const MarketplaceCategories = lazy(() => import('@/pages/marketplace/MarketplaceCategories'));
 const CartPage = lazy(() => import('@/pages/shop/CartPage'));
 const ShopCheckoutPage = lazy(() => import('@/pages/shop/CheckoutPage'));
@@ -549,6 +551,8 @@ function App() {
           <Route path="/help-pay" element={<HelpPayPage />} />
           <Route path="/help-pay/leaderboard" element={<LeaderboardPage />} />
           <Route path="/help-pay/claim" element={<ClaimClearPage />} />
+          <Route path="/stores-v2" element={<UnifiedMarketplaceHome />} />
+          <Route path="/stores-v2/product/:sourceType/:sourceId" element={<UnifiedProductPage />} />
           <Route path="/stores" element={<MarketplaceHome />} />
           <Route path="/stores/categories" element={<MarketplaceCategories />} />
           <Route path="/cart" element={<CartPage />} />
