@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronRight, Loader2, Lock, MapPin, Package, ShoppingBag, T
 import { toast } from 'sonner';
 import { supabase } from '@/services';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
+import { MARKETPLACE_CHECKOUT_SELECTION_KEY } from '@/pages/shop/CartPage';
 import { syncMarketplaceImportCart } from '@/stores/marketplaceCartBridge';
 
 const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
@@ -13,7 +14,12 @@ type QuoteStore = { store_id: string; store_name: string; items: any[]; subtotal
 export default function MarketplaceCheckoutPage() {
   const navigate = useNavigate();
   const { customer, isAuthenticated, addresses, getDefaultAddress, fetchAddresses } = useCustomerAuthStore();
-  const items = useCartStore(s => s.items);
+  const allItems = useCartStore(s => s.items);
+  const [selectedIds, setSelectedIds] = useState<{ product_cart_ids: string[]; china_product_ids: string[] } | null>(null);
+  const items = useMemo(() => {
+    if (!selectedIds) return allItems;
+    return allItems.filter(i => selectedIds.product_cart_ids.includes(i.id) || (i.sourceType === 'china_import' && i.sourceId && selectedIds.china_product_ids.includes(i.sourceId)));
+  }, [allItems, selectedIds]);
   const [name, setName] = useState(customer?.full_name ?? '');
   const [email, setEmail] = useState(customer?.email ?? '');
   const [phone, setPhone] = useState(customer?.phone ?? '');
@@ -28,6 +34,10 @@ export default function MarketplaceCheckoutPage() {
   const hasChinaImport = useMemo(() => items.some(i => i.sourceType === 'china_import'), [items]);
 
   useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(MARKETPLACE_CHECKOUT_SELECTION_KEY);
+      if (raw) setSelectedIds(JSON.parse(raw));
+    } catch { /* ignore */ }
     syncMarketplaceImportCart();
   }, []);
   const totalItems = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
