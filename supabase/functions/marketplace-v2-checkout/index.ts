@@ -9,7 +9,7 @@
 // to the customer payment and recorded as prepaid internally.
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
-// Standalone Nomba client for v2 checkout so the function has no dependency on legacy checkout code.\nconst ENV = (Deno.env.get('NOMBA_ENV') ?? 'live').toLowerCase();\nconst NOMBA_BASE = ENV === 'sandbox' ? 'https://sandbox.nomba.com' : 'https://api.nomba.com';\nconst ACCOUNT_ID = Deno.env.get('NOMBA_ACCOUNT_ID') ?? '';\nconst CLIENT_ID = Deno.env.get('NOMBA_CLIENT_ID') ?? '';\nconst CLIENT_SECRET = Deno.env.get('NOMBA_CLIENT_SECRET') ?? '';\nclass NombaError extends Error { constructor(message: string, public status: number, public code?: string, public description?: string) { super(message); } }\nlet tokenCache: { token: string; expiresAt: number } | null = null;\nasync function nombaFetch(path: string, init: { method?: string; body?: unknown; idempotencyKey?: string } = {}): Promise<any> {\n  if (!tokenCache || tokenCache.expiresAt - Date.now() <= 5*60_000) {\n    if (!ACCOUNT_ID || !CLIENT_ID || !CLIENT_SECRET) throw new NombaError('Nomba secrets missing',500);\n    const auth=await fetch(\x60\${NOMBA_BASE}/v1/auth/token/issue\x60,{method:'POST',headers:{'Content-Type':'application/json',accountId:ACCOUNT_ID},body:JSON.stringify({grant_type:'client_credentials',client_id:CLIENT_ID,client_secret:CLIENT_SECRET})});\n    const ab=await auth.json().catch(()=>({}));\n    if (!auth.ok || ab?.code !== '00' || !ab?.data?.access_token) throw new NombaError('Nomba authentication failed',auth.status,ab?.code,ab?.description);\n    tokenCache={token:ab.data.access_token,expiresAt:Date.parse(ab.data.expiresAt??'')||Date.now()+30*60_000};\n  }\n  const res=await fetch(\x60\${NOMBA_BASE}\${path}\x60,{method:init.method??'GET',headers:{Authorization:\x60Bearer \${tokenCache.token}\x60,accountId:ACCOUNT_ID,'Content-Type':'application/json','X-Idempotent-key':init.idempotencyKey??''},body:init.body===undefined?undefined:JSON.stringify(init.body)});\n  const body=await res.json().catch(()=>({}));\n  if(!res.ok || (body?.code && body.code!=='00')) throw new NombaError(\x60Nomba \${init.method??'GET'} \${path} failed\x60,res.status,body?.code,body?.description);\n  return body;\n}
+import { NombaError, nombaFetch } from '../_shared/nomba.ts';
 
 const SITE = Deno.env.get('APP_URL') ?? 'https://qafrica.store';
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -187,9 +187,10 @@ Deno.serve(async (req) => {
   if (action === 'confirm') {
     const reference = clean(body?.reference, 80);
     if (!/^QAF-MKT-[A-Z0-9-]+$/.test(reference)) return json(400, { error: 'Invalid reference' });
-    const sessionResult = await supabase.from('marketplace_checkout_sessions').select('status,amount,expires_at,order_ids,china_import_order_ids').eq('reference', reference).maybeSingle();
+    const sessionResult = await supabase.from('marketplace_checkout_sessions').select('status,amount,expires_at,order_ids,china_import_order_ids,customer_id').eq('reference', reference).maybeSingle();
     const session = sessionResult.data;
     if (!session) return json(404, { error: 'Checkout not found' });
+    if (session.customer_id !== customer.id) return json(403, { error: 'You are not allowed to confirm this checkout' });
 
     if (session.status !== 'paid') {
       try {
@@ -210,6 +211,7 @@ Deno.serve(async (req) => {
         }
       } catch (e) {
         console.error('marketplace-v2 confirm failed', e);
+        return json(502, { error: 'We could not confirm your payment yet. Please try again.' });
       }
     }
 
