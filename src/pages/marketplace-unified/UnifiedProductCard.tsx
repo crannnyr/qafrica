@@ -5,7 +5,7 @@ import { naira, soldLabel } from './useUnifiedMarketplace';
 import type { UnifiedMarketplaceProduct } from './types';
 
 export default function UnifiedProductCard({ p, priority = false }: { p: UnifiedMarketplaceProduct; priority?: boolean }) {
-  const href = `/stores?source_type=${encodeURIComponent(p.source_type)}&source_id=${encodeURIComponent(p.source_id)}`;
+  const href = `/stores-v2/product/${p.source_type}/${p.source_id}`;
   const sold = soldLabel(p.sold);
   const onSale = p.discount_pct > 0 && p.compare_at_price;
 
