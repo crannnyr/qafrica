@@ -180,7 +180,7 @@ export default function CartPage() {
 
         {groups.map((g) => {
           const groupSelectable = g.items.filter((i) => !problemFor(i));
-          const groupAll = groupSelectable.length > 0 && groupSelectable.every((i) => !deselected.has(i.id));
+          const groupAll = groupSelectable.length > 0 && groupSelectable.every((i) => !deselected.has('product:' + i.id));
           return (
             <section key={g.storeId} className="mt-2 bg-white" aria-label={g.storeName}>
               <div className="flex items-center gap-3 px-4 pt-3 pb-2">
@@ -201,7 +201,12 @@ export default function CartPage() {
                       <div className="pt-8">
                         <RoundCheck checked={isSelected(i)} onChange={(v) => toggle(['product:' + i.id], v)} label={`Select ${i.name}`} />
                       </div>
-                      <Link to={`/${i.storeSlug}/product/${i.productId}`} className="shrink-0 w-[84px] h-[84px] rounded-md overflow-hidden bg-gray-100">
+                      <Link
+                        to={i.sourceType === 'product' && i.sourceId
+                          ? '/stores-v2/product/product/' + i.sourceId
+                          : `/${i.storeSlug}/product/${i.productId}`}
+                        className="shrink-0 w-[84px] h-[84px] rounded-md overflow-hidden bg-gray-100"
+                      >
                         {i.image && <img src={i.image} alt="" className={`w-full h-full object-cover ${problem ? 'opacity-40' : ''}`} />}
                       </Link>
                       <div className="flex-1 min-w-0">
