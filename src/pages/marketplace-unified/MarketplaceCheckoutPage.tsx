@@ -35,7 +35,7 @@ export default function MarketplaceCheckoutPage() {
 
   useEffect(() => {
     const saved = getDefaultAddress(); if (!saved) return;
-    setAddress(v => v || saved.address_line1 || ''); setCity(v => v || saved.city || ''); setState(v => v || saved.state || ''); setLandmark(v => v || saved.landmark || ''); setPhone(v => v || saved.phone || ''); setName(v => v || saved.name || '');
+    setAddress(v => v || saved.address_line1 || ''); setCity(v => v || saved.city || ''); setState(v => v || saved.state || ''); setLandmark(v => v || ''); setPhone(v => v || saved.phone || ''); setName(v => v || saved.name || '');
   }, [addresses.length]);
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export default function MarketplaceCheckoutPage() {
     const run = async () => {
       if (!items.length || !state.trim()) { setQuote(null); return; }
       setLoadingQuote(true); setQuoteError('');
-      const { data, error } = await supabase.functions.invoke('marketplace-checkout', { body: { action: 'quote', state: state.trim(), items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution?.source === 'marketplace' ? 'marketplace' : 'own' })) } });
+      const { data, error } = await supabase.functions.invoke('marketplace-checkout', { body: { action: 'quote', state: state.trim(), items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) } });
       if (cancelled) return; setLoadingQuote(false);
       if (error || !data?.ok) { setQuote(null); setQuoteError(data?.errors?.[0]?.message ?? error?.message ?? 'Could not calculate checkout total'); return; }
       setQuote({ stores: data.stores ?? [], amount: Number(data.amount ?? 0) });
@@ -51,7 +51,7 @@ export default function MarketplaceCheckoutPage() {
     const timer = window.setTimeout(run, 250); return () => { cancelled = true; window.clearTimeout(timer); };
   }, [items, state]);
 
-  const handleUseAddress = (id: string) => { const selected = addresses.find(a => a.id === id); if (!selected) return; setName(selected.name || name); setPhone(selected.phone || phone); setAddress(selected.address_line1 || ''); setCity(selected.city || ''); setState(selected.state || ''); setLandmark(selected.landmark || ''); };
+  const handleUseAddress = (id: string) => { const selected = addresses.find(a => a.id === id); if (!selected) return; setName(selected.name || name); setPhone(selected.phone || phone); setAddress(selected.address_line1 || ''); setCity(selected.city || ''); setState(selected.state || ''); setLandmark(''); };
 
   const handleCheckout = async () => {
     if (!quote?.amount) return;
