@@ -1,6 +1,6 @@
 // Small, consistent building blocks for shopper pages (cart, checkout, tracking, account).
 import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft, Info, X, Check, Minus, Plus } from 'lucide-react';
 
 
@@ -46,13 +46,15 @@ export function InfoButton({ title, children, label }: { title: string; children
 
 export function PageHeader({ title, right, back = true }: { title: ReactNode; right?: ReactNode; back?: boolean | string }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  const defaultBack = location.pathname.startsWith('/stores-v2') ? '/stores-v2' : '/stores';
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-gray-100" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       <div className="max-w-2xl mx-auto h-12 px-2 flex items-center gap-1">
         {back ? (
           <button
             type="button"
-            onClick={() => (typeof back === 'string' ? navigate(back) : window.history.length > 1 ? navigate(-1) : navigate('/stores'))}
+            onClick={() => (typeof back === 'string' ? navigate(back) : window.history.length > 1 ? navigate(-1) : navigate(defaultBack))}
             aria-label="Back"
             className="p-2 rounded-full hover:bg-gray-100"
           >
