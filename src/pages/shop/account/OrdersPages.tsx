@@ -63,13 +63,13 @@ export function OrdersPage() {
         {shown.map((o) => (
           <Link key={o.id} to={`/customer/orders/${o.id}`} className="block bg-white px-4 py-3">
             <div className="flex items-center justify-between gap-2 text-[12px]">
-              <span className="font-semibold truncate">{o.stores?.name ?? 'Store'}</span>
+              <span className="font-semibold truncate">{o.source_type === 'china_import' ? 'QAFRICA · China Import' : (o.stores?.name ?? 'Store')}</span>
               <span className={o.buyer_reported_issue ? 'text-[#C4320A]' : 'text-gray-600'}>{statusLabel(o)}</span>
             </div>
             <div className="mt-2 flex items-center gap-2">
               {o.order_items.slice(0, 4).map((it, i) => (
                 <span key={i} className="w-14 h-14 rounded-md bg-gray-100 overflow-hidden shrink-0">
-                  {it.product_id && images[it.product_id] && <img src={images[it.product_id]} alt="" className="w-full h-full object-cover" />}
+                  {(it.image_url || (it.product_id ? images[it.product_id] : '')) && <img src={it.image_url || images[it.product_id!] } alt="" className="w-full h-full object-cover" />}
                 </span>
               ))}
               {o.order_items.length === 1 && <span className="text-[12px] text-gray-700 line-clamp-2 flex-1">{o.order_items[0].product_name}</span>}
@@ -110,8 +110,9 @@ export function OrderPage() {
   if (o === undefined) return <div className="min-h-screen bg-white"><PageHeader title="Order" back="/customer/orders" /><div className="h-40 m-4 bg-gray-100 rounded-xl animate-pulse" /></div>;
   if (o === null) return <div className="min-h-screen bg-white"><PageHeader title="Order" back="/customer/orders" /><p className="p-10 text-center text-[13px] text-gray-600">We couldn't find this order on your account.</p></div>;
 
-  const canConfirm = o.payment_status === 'paid' && ['shipped', 'out_for_delivery', 'delivered'].includes(o.status) && !o.is_escrow_released && !o.buyer_reported_issue;
-  const canReport = o.payment_status === 'paid' && !o.is_escrow_released && !o.buyer_reported_issue;
+  const isChinaImport = o.source_type === 'china_import';
+  const canConfirm = !isChinaImport && o.payment_status === 'paid' && ['shipped', 'out_for_delivery', 'delivered'].includes(o.status) && !o.is_escrow_released && !o.buyer_reported_issue;
+  const canReport = !isChinaImport && o.payment_status === 'paid' && !o.is_escrow_released && !o.buyer_reported_issue;
 
   const confirm = async () => {
     if (!window.confirm('Confirm you received everything in this order? The seller will then be paid.')) return;
@@ -146,15 +147,26 @@ export function OrderPage() {
             {' '}<InfoButton title="Buyer protection"><EscrowExplainer /></InfoButton>
           </p>
           {o.tracking_number && <p className="mt-2 text-[12px]">Tracking: <span className="font-medium">{o.tracking_number}</span></p>}
-          <Link to={`/track?order=${encodeURIComponent(o.order_number)}&email=${encodeURIComponent(o.customer_email ?? '')}`} className="mt-3 inline-block text-[12px] font-semibold underline underline-offset-2">See full timeline</Link>
+          {o.source_type === 'china_import' ? (
+            <p className="mt-3 text-[12px] font-semibold text-orange-700">China Import fulfillment is tracked from this same order page.</p>
+          ) : (
+            <Link to={`/track?order=${encodeURIComponent(o.order_number)}&email=${encodeURIComponent(o.customer_email ?? '')}`} className="mt-3 inline-block text-[12px] font-semibold underline underline-offset-2">See full timeline</Link>
+          )}
         </section>
 
         <section className="bg-white px-4 py-4">
-          <Link to={`/${o.stores?.slug ?? ''}`} className="text-[13px] font-semibold">{o.stores?.name}</Link>
+          {o.source_type === 'china_import' ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-semibold">QAFRICA · China Import</span>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">Landed price · shipping included</span>
+            </div>
+          ) : (
+            <Link to={`/${o.stores?.slug ?? ''}`} className="text-[13px] font-semibold">{o.stores?.name}</Link>
+          )}
           <ul className="mt-3 space-y-2.5">
             {o.order_items.map((it, i) => (
               <li key={i} className="flex gap-3">
-                <span className="w-14 h-14 rounded-md bg-gray-100 overflow-hidden shrink-0">{it.product_id && images[it.product_id] && <img src={images[it.product_id]} alt="" className="w-full h-full object-cover" />}</span>
+                <span className="w-14 h-14 rounded-md bg-gray-100 overflow-hidden shrink-0">{(it.image_url || (it.product_id ? images[it.product_id] : '')) && <img src={it.image_url || images[it.product_id!] } alt="" className="w-full h-full object-cover" />}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] line-clamp-2">{it.product_name}</p>
                   <p className="text-[12px] text-gray-500">Qty {it.quantity}{it.variant_options ? ` · ${Object.values(it.variant_options).join(' / ')}` : ''}</p>
@@ -172,9 +184,15 @@ export function OrderPage() {
           {o.delivery_address && (
             <p className="mt-3 text-[12px] text-gray-600">Delivering to {[o.delivery_address.address, o.delivery_address.city, o.delivery_address.state].filter(Boolean).join(', ')}</p>
           )}
+          {o.source_type === 'china_import' && (
+            <div className="mt-3 rounded-lg bg-orange-50 border border-orange-100 px-3 py-2 text-[12px] text-orange-800">
+              {o.china_batch_id ? 'Assigned to a China shipping batch.' : 'Awaiting China shipping batch assignment.'}
+              {o.china_shipping_method ? ` · ${o.china_shipping_method}` : ''}
+            </div>
+          )}
         </section>
 
-        {(o.status === 'delivered' || o.is_escrow_released) && <ReviewWriter orderId={o.id} />}
+        {!isChinaImport && (o.status === 'delivered' || o.is_escrow_released) && <ReviewWriter orderId={o.id} />}
 
         {reporting && (
           <section className="bg-white px-4 py-4">
