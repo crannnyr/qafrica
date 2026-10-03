@@ -144,9 +144,16 @@ export default function UnifiedProductPage() {
   const addToWishlist = useCartStore(s => s.addToWishlist);
   const removeFromWishlist = useCartStore(s => s.removeFromWishlist);
   const isInWishlist = useCartStore(s => s.isInWishlist);
+  const loadWishlist = useCartStore(s => s.loadWishlist);
   const { customer, isAuthenticated } = useCustomerAuthStore();
   const addImportToCart = useImportCartStore(s => s.addToCart);
   const { isSaved, toggleSave } = useSavedItems();
+
+  useEffect(() => {
+    if (isAuthenticated && customer?.id) {
+      void loadWishlist(customer.id);
+    }
+  }, [isAuthenticated, customer?.id, loadWishlist]);
 
   useEffect(() => {
     let active = true;
@@ -296,6 +303,7 @@ export default function UnifiedProductPage() {
   const sellerLogo = store?.logo_url;
 
   const handleAddToCart = () => {
+    if (!product) return;
     if (!available) {
       toast.error('This product is out of stock');
       return;
@@ -354,6 +362,7 @@ export default function UnifiedProductPage() {
   };
 
   const handleWishlistToggle = async () => {
+    if (!product) return;
     if (china) {
       const result = await toggleSave(product.source_id);
       if (result === 'needs-auth') {
