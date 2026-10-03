@@ -94,6 +94,12 @@ export default function CartPage() {
   const totalSelectedCount = selected.reduce((n, i) => n + i.quantity, 0)
     + selectedImportItems.reduce((n, i) => n + i.quantity, 0);
   const hasImportSelected = selectedImportItems.length > 0 || selectedChinaCartItems.length > 0;
+
+  useEffect(() => {
+    if (location.pathname === '/cart' && hasImportSelected) {
+      navigate('/stores-v2/cart', { replace: true });
+    }
+  }, [location.pathname, hasImportSelected, navigate]);
   const allSelectableCount = items.filter(i => !problemFor(i)).length + importItems.length;
   const allSelected = allSelectableCount > 0
     && selected.length === items.filter(i => !problemFor(i)).length
