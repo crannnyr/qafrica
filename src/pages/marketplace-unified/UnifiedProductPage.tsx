@@ -284,7 +284,13 @@ export default function UnifiedProductPage() {
   const sellerLogo = store?.logo_url;
   const sellerCard = (
     <div className="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2.5 hover:border-gray-300 hover:bg-gray-50 transition">
-      {sellerLogo ? (
+      {china ? (
+        <img
+          src="/qafrica-bag-logo.svg"
+          alt="QAFRICA"
+          className="w-9 h-9 rounded-lg object-contain bg-white"
+        />
+      ) : sellerLogo ? (
         <img src={sellerLogo} alt="" className="w-9 h-9 rounded-lg object-cover" />
       ) : (
         <span
@@ -327,18 +333,14 @@ export default function UnifiedProductPage() {
             Marketplace
           </Link>
 
-          <div className="flex items-center gap-2">
-            {sellerLogo ? (
-              <img src={sellerLogo} alt="" className="w-7 h-7 rounded-md object-cover" />
-            ) : (
-              <span className="w-7 h-7 rounded-md flex items-center justify-center text-[10px] font-bold bg-gray-100 text-gray-700">
-                {product.seller_name.slice(0, 2).toUpperCase()}
-              </span>
-            )}
-            <span className="text-sm font-semibold text-gray-900 hidden sm:block">
-              {product.seller_name}
-            </span>
-          </div>
+          <Link
+            to="/stores-v2"
+            aria-label="QAFRICA marketplace home"
+            className="flex items-center gap-1.5"
+          >
+            <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="w-7 h-7" />
+            <span className="font-black tracking-tight text-sm">QAFRICA</span>
+          </Link>
 
           <Link to="/cart" className="p-2 rounded-full hover:bg-gray-100 transition" aria-label="Cart">
             <ShoppingCart className="w-4 h-4 text-gray-700" />
