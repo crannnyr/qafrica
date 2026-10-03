@@ -3,7 +3,7 @@ import { PackageSearch, RefreshCw } from 'lucide-react';
 import MarketplaceLayout from '@/pages/marketplace/MarketplaceLayout';
 import UnifiedProductCard from './UnifiedProductCard';
 import UnifiedProductPage from './UnifiedProductPage';
-import { useUnifiedMarketplaceFeed } from './useUnifiedMarketplace';
+import { useUnifiedMarketplaceMixed } from './useUnifiedMarketplaceMixed';
 import type { UnifiedFeedTab } from './types';
 
 const TABS: { id: UnifiedFeedTab; label: string }[] = [
@@ -28,7 +28,7 @@ function UnifiedMarketplaceFeedPage() {
   const category = params.get('category');
   const rawTab = params.get('tab') as UnifiedFeedTab | null;
   const tab = TABS.some((t) => t.id === rawTab) ? rawTab! : 'for_you';
-  const feed = useUnifiedMarketplaceFeed({ tab, niche, category, search: query || null });
+  const feed = useUnifiedMarketplaceMixed({ tab, niche, category, search: query || null });
   const sentinel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
