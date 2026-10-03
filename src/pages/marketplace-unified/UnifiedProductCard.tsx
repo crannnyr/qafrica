@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { BadgeCheck, Star } from 'lucide-react';
 import { MARKETPLACE_STATE } from '@/lib/navigation';
-import { naira, soldLabel } from './useUnifiedMarketplace';
+import { naira } from './useUnifiedMarketplace';
 import type { UnifiedMarketplaceProduct } from './types';
 
 export default function UnifiedProductCard({ p, priority = false }: { p: UnifiedMarketplaceProduct; priority?: boolean }) {
@@ -11,7 +11,6 @@ export default function UnifiedProductCard({ p, priority = false }: { p: Unified
   const price = Number(p.price_ngn || 0);
   const discountPct = compareAt > price && price > 0 ? Math.round((1 - price / compareAt) * 100) : 0;
   const onSale = !p.is_china_import && discountPct > 0;
-  const sold = soldLabel(p.sold);
 
   return (
     <Link to={href} state={MARKETPLACE_STATE} className="group block bg-white rounded-md overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500">
