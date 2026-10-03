@@ -356,7 +356,8 @@ export default function UnifiedProductPage() {
       store as unknown as Store,
       quantity,
       Object.keys(selectedVariants).length ? selectedVariants : undefined,
-      price
+      price,
+      { sourceType: 'product', sourceId: product.source_id }
     );
     toast.success(product.name + ' added to cart');
   };
