@@ -17,9 +17,12 @@ export default function UnifiedMarketplaceHome() {
   const params = new URLSearchParams(window.location.search);
   const sourceType = params.get('source_type');
   const sourceId = params.get('source_id');
-
   if (sourceType && sourceId) return <UnifiedProductPage />;
+  return <UnifiedMarketplaceFeedPage />;
+}
 
+function UnifiedMarketplaceFeedPage() {
+  const params = new URLSearchParams(window.location.search);
   const query = params.get('q') ?? '';
   const niche = params.get('niche');
   const category = params.get('category');
