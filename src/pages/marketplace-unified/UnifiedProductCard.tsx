@@ -1,18 +1,16 @@
 import { Link } from 'react-router-dom';
-import { Check, Star } from 'lucide-react';
+import { BadgeCheck, Star } from 'lucide-react';
 import { MARKETPLACE_STATE } from '@/lib/navigation';
 import { naira } from './useUnifiedMarketplace';
 import type { UnifiedMarketplaceProduct } from './types';
 
 function QAfricaVerifiedBadge() {
   return (
-    <span
-      className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#E8590C] text-white shadow-sm ring-1 ring-white"
+    <BadgeCheck
+      className="h-4 w-4 shrink-0 fill-[#E8590C] text-[#E8590C]"
       aria-label="Verified by QAfrica"
       title="Verified by QAfrica"
-    >
-      <Check className="h-2.5 w-2.5 stroke-[3]" aria-hidden />
-    </span>
+    />
   );
 }
 
