@@ -8,6 +8,8 @@ import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { EscrowExplainer, InfoButton, PageHeader, QtyStepper, RoundCheck } from './ui';
 import { naira } from './format';
 import { fetchQuote, type Quote } from './checkoutApi';
+import { useImportCartStore } from '@/stores/importCartStore';
+import { toast } from 'sonner';
 
 export const CHECKOUT_SELECTION_KEY = 'qafrica_checkout_selection';
 
@@ -17,13 +19,19 @@ export default function CartPage() {
   const items = useCartStore((s) => s.items);
   const updateQuantity = useCartStore((s) => s.updateQuantity);
   const removeItem = useCartStore((s) => s.removeItem);
+  const importItems = useImportCartStore((s) => s.cart);
+  const updateImportQuantity = useImportCartStore((s) => s.setQuantity);
+  const removeImportItem = useImportCartStore((s) => s.removeItem);
   const [deselected, setDeselected] = useState<Set<string>>(new Set());
   const [quote, setQuote] = useState<Quote | null>(null);
 
   // Live prices + availability from the server (no state yet, so no delivery fees)
   const itemsKey = items.map((i) => `${i.id}:${i.quantity}`).join('|');
   useEffect(() => {
-    if (!items.length) return;
+    if (!items.length) {
+      setQuote(null);
+      return;
+    }
     let alive = true;
     fetchQuote(items, null).then((q) => alive && setQuote(q)).catch(() => {});
     return () => {
@@ -45,10 +53,19 @@ export default function CartPage() {
     return [...m.values()];
   }, [items]);
 
-  const isSelected = (i: CartItem) => !deselected.has(i.id) && !problemFor(i);
+  const isSelected = (i: CartItem) => !deselected.has('product:' + i.id) && !problemFor(i);
+  const isImportSelected = (cartKey: string) => !deselected.has('import:' + cartKey);
   const selected = items.filter(isSelected);
-  const total = selected.reduce((sum, i) => sum + livePrice(i) * i.quantity, 0);
-  const allSelected = items.length > 0 && items.every((i) => !deselected.has(i.id));
+  const selectedImportItems = importItems.filter(i => isImportSelected(i.cart_key));
+  const total = selected.reduce((sum, i) => sum + livePrice(i) * i.quantity, 0)
+    + selectedImportItems.reduce((sum, i) => sum + Number(i.price_ngn || 0) * i.quantity, 0);
+  const totalSelectedCount = selected.reduce((n, i) => n + i.quantity, 0)
+    + selectedImportItems.reduce((n, i) => n + i.quantity, 0);
+  const hasImportSelected = selectedImportItems.length > 0;
+  const allSelectableCount = items.filter(i => !problemFor(i)).length + importItems.length;
+  const allSelected = allSelectableCount > 0
+    && selected.length === items.filter(i => !problemFor(i)).length
+    && selectedImportItems.length === importItems.length;
 
   const toggle = (ids: string[], on: boolean) =>
     setDeselected((prev) => {
@@ -63,9 +80,15 @@ export default function CartPage() {
     } catch { /* ignore */ }
     navigate(path);
   };
-  const checkout = () => goWithSelection('/checkout');
+  const checkout = () => {
+    if (hasImportSelected) {
+      toast.info('China Import checkout is being connected next. Deselect those items to checkout regular products.');
+      return;
+    }
+    goWithSelection('/checkout');
+  };
 
-  if (items.length === 0) {
+  if (items.length === 0 && importItems.length === 0) {
     return (
       <div className="min-h-screen bg-white">
         <PageHeader title="Cart" />
@@ -93,6 +116,67 @@ export default function CartPage() {
             <EscrowExplainer />
           </InfoButton>
         </div>
+
+        {importItems.length > 0 && (
+          <section className="mt-2 bg-white" aria-label="China Import">
+            <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+              <RoundCheck
+                checked={importItems.every(i => isImportSelected(i.cart_key))}
+                onChange={(v) => toggle(importItems.map(i => 'import:' + i.cart_key), v)}
+                label="Select all China Import items"
+              />
+              <span className="text-[14px] font-semibold">QAFRICA · China Import</span>
+            </div>
+            <ul>
+              {importItems.map((i) => (
+                <li key={i.cart_key} className="flex gap-3 px-4 py-3">
+                  <div className="pt-8">
+                    <RoundCheck
+                      checked={isImportSelected(i.cart_key)}
+                      onChange={(v) => toggle(['import:' + i.cart_key], v)}
+                      label={'Select ' + i.name}
+                    />
+                  </div>
+                  <Link
+                    to={'/stores-v2/product/china_import/' + i.id}
+                    className="shrink-0 w-[84px] h-[84px] rounded-md overflow-hidden bg-gray-100"
+                  >
+                    {i.image_url && <img src={i.image_url} alt="" className="w-full h-full object-cover" />}
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start gap-2">
+                      <p className="flex-1 text-[13px] leading-snug line-clamp-2">{i.name}</p>
+                      <button
+                        type="button"
+                        onClick={() => removeImportItem(i.cart_key)}
+                        aria-label={'Remove ' + i.name}
+                        className="p-1 -m-1 text-gray-400 hover:text-gray-700"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {i.variant_selection && (
+                      <p className="mt-0.5 text-[12px] text-gray-500 truncate">
+                        {Object.values(i.variant_selection).filter(Boolean).join(' / ')}
+                      </p>
+                    )}
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[15px] font-bold text-[#E8590C]">{naira(Number(i.price_ngn || 0))}</span>
+                        <p className="text-[10px] text-gray-400">Shipping calculated at checkout</p>
+                      </div>
+                      <QtyStepper
+                        value={i.quantity}
+                        onChange={(n) => updateImportQuantity(i.cart_key, n, i.moq || 1)}
+                        label={i.name}
+                      />
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {groups.map((g) => {
           const groupSelectable = g.items.filter((i) => !problemFor(i));
@@ -173,20 +257,31 @@ export default function CartPage() {
       <div className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="max-w-2xl mx-auto h-16 px-4 flex items-center gap-3">
           <label className="flex items-center gap-2 text-[13px]">
-            <RoundCheck checked={allSelected} onChange={(v) => toggle(items.map((i) => i.id), v)} label="Select all items" />
+            <RoundCheck
+              checked={allSelected}
+              onChange={(v) => toggle(
+                [
+                  ...items.map(i => 'product:' + i.id),
+                  ...importItems.map(i => 'import:' + i.cart_key),
+                ],
+                v
+              )}
+              label="Select all items"
+            />
             All
           </label>
           <div className="flex-1 text-right">
             <p className="text-[16px] font-bold leading-tight">{naira(total)}</p>
-            <p className="text-[11px] text-gray-500">+ delivery</p>
+            <p className="text-[11px] text-gray-500">+ delivery / import shipping</p>
           </div>
           <button
             type="button"
             onClick={checkout}
-            disabled={selected.length === 0}
+            disabled={selected.length === 0 || hasImportSelected}
             className="h-11 px-5 rounded-lg bg-gray-900 text-white text-[14px] font-semibold disabled:opacity-40"
+            title={hasImportSelected ? 'Deselect China Import items to checkout regular products' : undefined}
           >
-            Checkout ({selected.reduce((n, i) => n + i.quantity, 0)})
+            Checkout ({totalSelectedCount})
           </button>
         </div>
       </div>
