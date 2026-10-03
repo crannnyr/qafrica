@@ -80,8 +80,16 @@ export default function CartPage() {
   const isImportSelected = (cartKey: string) => !deselected.has('import:' + cartKey);
   const selected = items.filter(isSelected);
   const selectedImportItems = importItems.filter(i => isImportSelected(i.cart_key));
+  const selectedChinaShippingTotal = selectedChinaCartItems.reduce(
+    (sum, i) => sum + (chinaShippingById[String(i.sourceId)] || 0) * i.quantity,
+    0
+  ) + selectedImportItems.reduce(
+    (sum, i) => sum + (chinaShippingById[String(i.id)] || 0) * i.quantity,
+    0
+  );
   const total = selected.reduce((sum, i) => sum + livePrice(i) * i.quantity, 0)
-    + selectedImportItems.reduce((sum, i) => sum + Number(i.price_ngn || 0) * i.quantity, 0);
+    + selectedImportItems.reduce((sum, i) => sum + Number(i.price_ngn || 0) * i.quantity, 0)
+    + selectedChinaShippingTotal;
   const totalSelectedCount = selected.reduce((n, i) => n + i.quantity, 0)
     + selectedImportItems.reduce((n, i) => n + i.quantity, 0);
   const selectedChinaCartItems = selected.filter(i => i.sourceType === 'china_import');
@@ -207,7 +215,7 @@ export default function CartPage() {
                     <div className="mt-1.5 flex items-center justify-between gap-2">
                       <div>
                         <span className="text-[15px] font-bold text-[#E8590C]">{naira(Number(i.price_ngn || 0))}</span>
-                        <p className="text-[10px] text-gray-400">Air shipping included{chinaShippingById[i.id] ? ` · ${naira(chinaShippingById[i.id])}` : ''}</p>
+                        <p className="text-[10px] text-gray-400">Air shipping{chinaShippingById[i.id] ? ` · ${naira(chinaShippingById[i.id])}` : ''}</p>
                       </div>
                       <QtyStepper
                         value={i.quantity}
@@ -321,7 +329,7 @@ export default function CartPage() {
           </label>
           <div className="flex-1 text-right">
             <p className="text-[16px] font-bold leading-tight">{naira(total)}</p>
-            <p className="text-[11px] text-gray-500">{hasImportSelected ? 'Air shipping included' : '+ delivery / import shipping'}</p>
+            <p className="text-[11px] text-gray-500">{hasImportSelected ? `Air shipping · ${naira(selectedChinaShippingTotal)}` : '+ delivery / import shipping'}</p>
           </div>
           <button
             type="button"
