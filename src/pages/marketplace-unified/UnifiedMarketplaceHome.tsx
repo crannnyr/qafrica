@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { PackageSearch, RefreshCw } from 'lucide-react';
 import MarketplaceLayout from '@/pages/marketplace/MarketplaceLayout';
 import UnifiedProductCard from './UnifiedProductCard';
+import UnifiedProductPage from './UnifiedProductPage';
 import { useUnifiedMarketplaceFeed } from './useUnifiedMarketplace';
 import type { UnifiedFeedTab } from './types';
 
@@ -14,6 +15,11 @@ const TABS: { id: UnifiedFeedTab; label: string }[] = [
 
 export default function UnifiedMarketplaceHome() {
   const params = new URLSearchParams(window.location.search);
+  const sourceType = params.get('source_type');
+  const sourceId = params.get('source_id');
+
+  if (sourceType && sourceId) return <UnifiedProductPage />;
+
   const query = params.get('q') ?? '';
   const niche = params.get('niche');
   const category = params.get('category');
@@ -31,11 +37,7 @@ export default function UnifiedMarketplaceHome() {
   }, [feed.loadMore]);
 
   return (
-    <MarketplaceLayout initialQuery={query} subheader={
-      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 text-xs text-gray-500">
-        Unified marketplace · Store products + China imports
-      </div>
-    }>
+    <MarketplaceLayout initialQuery={query} subheader={<div className="max-w-6xl mx-auto px-3 sm:px-4 py-2 text-xs text-gray-500">Unified marketplace · Store products + China imports</div>}>
       <div className="px-3 sm:px-4 pt-3 pb-2 flex gap-2 overflow-x-auto scrollbar-hide" role="tablist" aria-label="Sort products">
         {TABS.map((t) => (
           <button key={t.id} type="button" role="tab" aria-selected={tab === t.id}
@@ -50,14 +52,9 @@ export default function UnifiedMarketplaceHome() {
           </button>
         ))}
       </div>
-
       {query || niche || category ? <div className="px-3 sm:px-4 pb-3"><h1 className="text-lg font-bold">{query ? `Results for “${query}”` : category ?? niche}</h1></div> : null}
-
       {feed.status === 'error' && feed.items.length === 0 ? (
-        <div className="text-center py-16 px-6">
-          <p className="text-gray-700">Products couldn't load.</p>
-          <button type="button" onClick={feed.retry} className="mt-4 inline-flex items-center gap-2 rounded-full bg-gray-900 text-white px-5 py-2 text-sm font-semibold"><RefreshCw className="w-4 h-4" /> Try again</button>
-        </div>
+        <div className="text-center py-16 px-6"><p className="text-gray-700">Products couldn't load.</p><button type="button" onClick={feed.retry} className="mt-4 inline-flex items-center gap-2 rounded-full bg-gray-900 text-white px-5 py-2 text-sm font-semibold"><RefreshCw className="w-4 h-4" /> Try again</button></div>
       ) : feed.status === 'done' && feed.items.length === 0 ? (
         <div className="text-center py-16 px-6"><PackageSearch className="w-12 h-12 text-gray-300 mx-auto" /><p className="mt-3 text-gray-700">Nothing matches that yet.</p></div>
       ) : (
