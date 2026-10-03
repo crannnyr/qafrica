@@ -22,6 +22,9 @@ export interface CartItem {
   addedAt: string;
   /** Marketplace attribution captured when the item is added. */
   attribution?: Attribution;
+  /** Source-aware identity used by the unified marketplace. */
+  sourceType?: 'product' | 'china_import';
+  sourceId?: string;
 }
 
 // Wishlist item matching database structure
@@ -54,7 +57,7 @@ interface CartStore {
   getStoreSubtotal: (storeId: string) => number;
   
   // Cart Actions
-  addItem: (product: Product, store: Store, quantity?: number, variantOptions?: Record<string, string>, overridePrice?: number) => void;
+  addItem: (product: Product, store: Store, quantity?: number, variantOptions?: Record<string, string>, overridePrice?: number, source?: { sourceType: 'product' | 'china_import'; sourceId: string }) => void;
   removeItem: (cartItemId: string) => void;
   updateQuantity: (cartItemId: string, quantity: number) => void;
   clearCart: () => void;
@@ -131,7 +134,7 @@ export const useCartStore = create<CartStore>()(
           .reduce((sum, item) => sum + item.totalPrice, 0);
       },
 
-      addItem: (product, store, quantity = 1, variantOptions, overridePrice) => {
+      addItem: (product, store, quantity = 1, variantOptions, overridePrice, source) => {
         const unitPrice = overridePrice ?? product.selling_price;
         set((state) => {
           // Check if same product already in cart from same store (and same variants)
@@ -168,6 +171,8 @@ export const useCartStore = create<CartStore>()(
             variantOptions,
             addedAt: new Date().toISOString(),
             attribution: attributionFor(store.id),
+            sourceType: source?.sourceType ?? 'product',
+            sourceId: source?.sourceId ?? product.id,
           };
 
           return { items: [...state.items, newItem] };

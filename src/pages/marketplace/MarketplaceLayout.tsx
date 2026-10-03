@@ -10,9 +10,11 @@ type Props = {
   initialQuery?: string;
   /** Optional row under the search bar (category tabs) */
   subheader?: ReactNode;
+  /** Base route used by an isolated marketplace surface. */
+  basePath?: string;
 };
 
-export default function MarketplaceLayout({ children, initialQuery = '', subheader }: Props) {
+export default function MarketplaceLayout({ children, initialQuery = '', subheader, basePath = '/stores' }: Props) {
   useForceLightMode();
   const navigate = useNavigate();
   const [q, setQ] = useState(initialQuery);
@@ -22,7 +24,7 @@ export default function MarketplaceLayout({ children, initialQuery = '', subhead
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const term = q.trim();
-    navigate(term ? `/stores?q=${encodeURIComponent(term)}` : '/stores');
+    navigate(term ? `${basePath}?q=${encodeURIComponent(term)}` : basePath);
   };
 
 
@@ -30,7 +32,7 @@ export default function MarketplaceLayout({ children, initialQuery = '', subhead
     <div className="min-h-screen bg-[#F6F6F6] text-gray-900" style={{ fontFamily: "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" }}>
       <header className="sticky top-0 z-40 bg-white" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center gap-2.5">
-          <Link to="/stores" aria-label="QAFRICA marketplace home" className="shrink-0 flex items-center gap-1.5">
+          <Link to={basePath} aria-label="QAFRICA marketplace home" className="shrink-0 flex items-center gap-1.5">
             <img src="/qafrica-bag-logo.svg" alt="" className="w-7 h-7" />
             <span className="hidden sm:inline font-black tracking-tight text-lg">QAFRICA</span>
           </Link>
@@ -50,7 +52,7 @@ export default function MarketplaceLayout({ children, initialQuery = '', subhead
                 type="button"
                 onClick={() => {
                   setQ('');
-                  navigate('/stores');
+                  navigate(basePath);
                 }}
                 aria-label="Clear search"
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full text-gray-400 hover:text-gray-700"
