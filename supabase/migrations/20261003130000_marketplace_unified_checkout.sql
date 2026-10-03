@@ -96,3 +96,7 @@ end;
 $$;
 revoke all on function public.finalize_marketplace_checkout_session(text,numeric,numeric,text) from public;
 grant execute on function public.finalize_marketplace_checkout_session(text,numeric,numeric,text) to service_role;
+
+
+-- v2 checkout hardening: standalone marketplace checkout owns the final China Import order total.
+-- This keeps the unified /stores-v2 flow independent from the legacy checkout functions.
