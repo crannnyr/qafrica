@@ -71,8 +71,23 @@ export default function UnifiedProductPage() {
         p_source_id: sourceId,
       });
       if (!active) return;
-      if (rpcError || !data) setError(rpcError?.message || 'Product not found');
-      else setProduct(data as UnifiedMarketplaceProduct);
+      if (rpcError) {
+        console.error('marketplace_unified_product failed', rpcError);
+        setError(rpcError.message || 'Could not load product');
+        setProduct(null);
+      } else {
+        // Supabase RPCs that return TABLE(...) always return an array of rows.
+        // The detail endpoint returns at most one row, so resolve the first row
+        // before rendering it as a product object.
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row) {
+          setError('Product not found');
+          setProduct(null);
+        } else {
+          setProduct(row as UnifiedMarketplaceProduct);
+          setError(null);
+        }
+      }
       setLoading(false);
     }
     void load();
