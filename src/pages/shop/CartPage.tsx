@@ -81,10 +81,13 @@ export default function CartPage() {
     navigate(path);
   };
   const checkout = () => {
-    if (hasImportSelected) {
-      toast.info('China Import checkout is being connected next. Deselect those items to checkout regular products.');
-      return;
-    }
+    try {
+      sessionStorage.setItem(
+        'qafrica_import_checkout_selection',
+        JSON.stringify(selectedImportItems.map(i => i.cart_key))
+      );
+    } catch { /* ignore */ }
+
     goWithSelection('/checkout');
   };
 
@@ -282,9 +285,8 @@ export default function CartPage() {
           <button
             type="button"
             onClick={checkout}
-            disabled={selected.length === 0 || hasImportSelected}
+            disabled={selected.length === 0 && selectedImportItems.length === 0}
             className="h-11 px-5 rounded-lg bg-gray-900 text-white text-[14px] font-semibold disabled:opacity-40"
-            title={hasImportSelected ? 'Deselect China Import items to checkout regular products' : undefined}
           >
             Checkout ({totalSelectedCount})
           </button>
