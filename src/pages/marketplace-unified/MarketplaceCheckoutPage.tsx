@@ -4,6 +4,7 @@ import { ArrowLeft, ChevronRight, Loader2, Lock, MapPin, Package, ShoppingBag, T
 import { toast } from 'sonner';
 import { supabase } from '@/services';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
+import { syncMarketplaceImportCart } from '@/stores/marketplaceCartBridge';
 
 const naira = (value: number) => `₦${Math.round(value).toLocaleString()}`;
 
@@ -25,6 +26,10 @@ export default function MarketplaceCheckoutPage() {
   const [processing, setProcessing] = useState(false);
   const [quoteError, setQuoteError] = useState('');
   const hasChinaImport = useMemo(() => items.some(i => i.sourceType === 'china_import'), [items]);
+
+  useEffect(() => {
+    syncMarketplaceImportCart();
+  }, []);
   const totalItems = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
 
   useEffect(() => {
