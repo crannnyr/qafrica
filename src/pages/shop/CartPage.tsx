@@ -184,7 +184,7 @@ export default function CartPage() {
           return (
             <section key={g.storeId} className="mt-2 bg-white" aria-label={g.storeName}>
               <div className="flex items-center gap-3 px-4 pt-3 pb-2">
-                <RoundCheck checked={groupAll} onChange={(v) => toggle(g.items.map((i) => i.id), v)} label={`Select all from ${g.storeName}`} />
+                <RoundCheck checked={groupAll} onChange={(v) => toggle(g.items.map((i) => 'product:' + i.id), v)} label={`Select all from ${g.storeName}`} />
                 <Link to={`/${g.storeSlug}`} className="flex items-center gap-0.5 text-[14px] font-semibold min-w-0">
                   <span className="truncate">{g.storeName}</span>
                   <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" aria-hidden />
@@ -199,7 +199,7 @@ export default function CartPage() {
                   return (
                     <li key={i.id} className="flex gap-3 px-4 py-3">
                       <div className="pt-8">
-                        <RoundCheck checked={isSelected(i)} onChange={(v) => toggle([i.id], v)} label={`Select ${i.name}`} />
+                        <RoundCheck checked={isSelected(i)} onChange={(v) => toggle(['product:' + i.id], v)} label={`Select ${i.name}`} />
                       </div>
                       <Link to={`/${i.storeSlug}/product/${i.productId}`} className="shrink-0 w-[84px] h-[84px] rounded-md overflow-hidden bg-gray-100">
                         {i.image && <img src={i.image} alt="" className={`w-full h-full object-cover ${problem ? 'opacity-40' : ''}`} />}
