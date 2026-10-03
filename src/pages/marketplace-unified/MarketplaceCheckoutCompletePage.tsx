@@ -7,7 +7,7 @@ import { useCartStore } from '@/stores';
 export default function MarketplaceCheckoutCompletePage() {
   const [params] = useSearchParams(); const reference = params.get('ref') || ''; const clearCart = useCartStore(s => s.clearCart);
   const [status,setStatus]=useState('checking'); const [attempt,setAttempt]=useState(0);
-  useEffect(()=>{ if(!reference){setStatus('failed');return;} let cancelled=false; let timer:number|undefined; const check=async()=>{const {data,error}=await supabase.functions.invoke('marketplace-checkout',{body:{action:'confirm',reference}}); if(cancelled)return; if(!error&&data?.status==='paid'){
+  useEffect(()=>{ if(!reference){setStatus('failed');return;} let cancelled=false; let timer:number|undefined; const check=async()=>{const {data,error}=await supabase.functions.invoke('marketplace-v2-checkout',{body:{action:'confirm',reference}}); if(cancelled)return; if(!error&&data?.status==='paid'){
         try {
           const raw = sessionStorage.getItem('qafrica_marketplace_checkout_selection');
           const selection = raw ? JSON.parse(raw) as { product_cart_ids?: string[]; china_product_ids?: string[] } : null;
