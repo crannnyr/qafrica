@@ -1,6 +1,6 @@
 // /cart/share: turn the selected cart items into a pay-for-me link.
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Copy, Check, Share2, MessageCircle, ShieldCheck, HandHeart } from 'lucide-react';
 import { supabase } from '@/services';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
@@ -15,6 +15,9 @@ const STATES: string[] = (CONFIG as unknown as { NIGERIAN_STATES: string[] }).NI
 
 export default function ShareCartPage() {
   useForceLightMode();
+  const location = useLocation();
+  const cartPath = location.pathname.startsWith('/stores-v2') ? '/stores-v2/cart' : '/cart';
+  const shopPath = location.pathname.startsWith('/stores-v2') ? '/stores-v2' : '/stores';
   const allItems = useCartStore((s) => s.items);
   const { customer, isAuthenticated } = useCustomerAuthStore();
   const items = useMemo(() => {
@@ -58,8 +61,8 @@ export default function ShareCartPage() {
   if (!items.length) {
     return (
       <div className="min-h-screen bg-white">
-        <PageHeader title="Ask someone to pay" back="/cart" />
-        <p className="p-10 text-center text-[13px] text-gray-600">Your cart is empty. <Link to="/stores" className="underline">Browse products</Link></p>
+        <PageHeader title="Ask someone to pay" back={cartPath} />
+        <p className="p-10 text-center text-[13px] text-gray-600">Your cart is empty. <Link to={shopPath} className="underline">Browse products</Link></p>
       </div>
     );
   }
