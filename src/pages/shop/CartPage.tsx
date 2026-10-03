@@ -27,14 +27,18 @@ export default function CartPage() {
   const [quote, setQuote] = useState<Quote | null>(null);
 
   // Live prices + availability from the server (no state yet, so no delivery fees)
-  const itemsKey = items.map((i) => `${i.id}:${i.quantity}`).join('|');
+  const isStoresV2 = typeof window !== 'undefined' && window.location.pathname.startsWith('/stores-v2');
+  const chinaItems = isStoresV2 ? items.filter((i) => i.sourceType === 'china_import') : [];
+  const normalItems = isStoresV2 ? items.filter((i) => i.sourceType !== 'china_import') : items;
+
+  const itemsKey = normalItems.map((i) => `${i.id}:${i.quantity}`).join('|');
   useEffect(() => {
-    if (!items.length) {
+    if (!normalItems.length) {
       setQuote(null);
       return;
     }
     let alive = true;
-    fetchQuote(items, null).then((q) => alive && setQuote(q)).catch(() => {});
+    fetchQuote(normalItems, null).then((q) => alive && setQuote(q)).catch(() => {});
     return () => {
       alive = false;
     };
@@ -47,7 +51,7 @@ export default function CartPage() {
 
   const groups = useMemo(() => {
     const m = new Map<string, { storeId: string; storeName: string; storeSlug: string; items: CartItem[] }>();
-    for (const i of items) {
+    for (const i of normalItems) {
       if (!m.has(i.storeId)) m.set(i.storeId, { storeId: i.storeId, storeName: i.storeName, storeSlug: i.storeSlug, items: [] });
       m.get(i.storeId)!.items.push(i);
     }
@@ -57,15 +61,18 @@ export default function CartPage() {
   const isSelected = (i: CartItem) => !deselected.has('product:' + i.id) && !problemFor(i);
   const isImportSelected = (cartKey: string) => !deselected.has('import:' + cartKey);
   const selected = items.filter(isSelected);
+  const selectedNormalItems = normalItems.filter(isSelected);
+  const selectedChinaItems = chinaItems.filter(isSelected);
   const selectedImportItems = importItems.filter(i => isImportSelected(i.cart_key));
   const total = selected.reduce((sum, i) => sum + livePrice(i) * i.quantity, 0)
     + selectedImportItems.reduce((sum, i) => sum + Number(i.price_ngn || 0) * i.quantity, 0);
   const totalSelectedCount = selected.reduce((n, i) => n + i.quantity, 0)
     + selectedImportItems.reduce((n, i) => n + i.quantity, 0);
-  const hasImportSelected = selectedImportItems.length > 0;
-  const allSelectableCount = items.filter(i => !problemFor(i)).length + importItems.length;
+  const hasImportSelected = selectedImportItems.length > 0 || selectedChinaItems.length > 0;
+  const allSelectableCount = normalItems.filter(i => !problemFor(i)).length + chinaItems.length + importItems.length;
   const allSelected = allSelectableCount > 0
-    && selected.length === items.filter(i => !problemFor(i)).length
+    && selectedNormalItems.length === normalItems.filter(i => !problemFor(i)).length
+    && selectedChinaItems.length === chinaItems.length
     && selectedImportItems.length === importItems.length;
 
   const toggle = (ids: string[], on: boolean) =>
@@ -90,13 +97,13 @@ export default function CartPage() {
       sessionStorage.setItem(
         MARKETPLACE_CHECKOUT_SELECTION_KEY,
         JSON.stringify({
-          product_cart_ids: selected.map(i => i.id),
-          china_product_ids: selectedImportItems.map(i => i.id),
+          product_cart_ids: selectedNormalItems.map(i => i.id),
+          china_product_ids: [...selectedChinaItems.map(i => i.sourceId).filter(Boolean), ...selectedImportItems.map(i => i.id)],
         })
       );
     } catch { /* ignore */ }
 
-    if (selectedImportItems.length > 0) {
+    if (selectedChinaItems.length > 0 || selectedImportItems.length > 0) {
       goWithSelection('/stores-v2/checkout');
       return;
     }
@@ -185,6 +192,45 @@ export default function CartPage() {
                         onChange={(n) => updateImportQuantity(i.cart_key, n, i.moq || 1)}
                         label={i.name}
                       />
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {chinaItems.length > 0 && (
+          <section className="mt-2 bg-white" aria-label="QAFRICA China Import">
+            <div className="flex items-center gap-3 px-4 pt-3 pb-2">
+              <RoundCheck
+                checked={chinaItems.every(isSelected)}
+                onChange={(v) => toggle(chinaItems.map(i => 'product:' + i.id), v)}
+                label="Select all QAFRICA China Import items"
+              />
+              <span className="text-[14px] font-semibold">QAFRICA · China Import</span>
+            </div>
+            <ul>
+              {chinaItems.map((i) => (
+                <li key={i.id} className="flex gap-3 px-4 py-3">
+                  <div className="pt-8">
+                    <RoundCheck checked={isSelected(i)} onChange={(v) => toggle(['product:' + i.id], v)} label={'Select ' + i.name} />
+                  </div>
+                  <Link to={'/stores-v2/product/china_import/' + i.sourceId} className="shrink-0 w-[84px] h-[84px] rounded-md overflow-hidden bg-gray-100">
+                    {i.image && <img src={i.image} alt="" className="w-full h-full object-cover" />}
+                  </Link>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start gap-2">
+                      <p className="flex-1 text-[13px] leading-snug line-clamp-2">{i.name}</p>
+                      <button type="button" onClick={() => removeItem(i.id)} aria-label={'Remove ' + i.name} className="p-1 -m-1 text-gray-400 hover:text-gray-700"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                    {i.variantOptions && <p className="mt-0.5 text-[12px] text-gray-500 truncate">{Object.values(i.variantOptions).filter(Boolean).join(' / ')}</p>}
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[15px] font-bold text-[#E8590C]">{naira(i.unitPrice)}</span>
+                        <p className="text-[10px] text-gray-400">Air shipping included</p>
+                      </div>
+                      <QtyStepper value={i.quantity} onChange={(n) => updateQuantity(i.id, n)} label={i.name} />
                     </div>
                   </div>
                 </li>
