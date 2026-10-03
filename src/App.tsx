@@ -111,6 +111,7 @@ const ClaimClearPage = lazy(() => import('@/pages/shop/account/HelpPayPages').th
 const MarketplaceHome = lazy(() => import('@/pages/marketplace/MarketplaceHome'));
 const UnifiedMarketplaceHome = lazy(() => import('@/pages/marketplace-unified/UnifiedMarketplaceHome'));
 const UnifiedProductPage = lazy(() => import('@/pages/marketplace-unified/UnifiedProductPage'));
+const MarketplaceCheckoutPage = lazy(() => import('@/pages/marketplace-unified/MarketplaceCheckoutPage'));
 const MarketplaceCategories = lazy(() => import('@/pages/marketplace/MarketplaceCategories'));
 const CartPage = lazy(() => import('@/pages/shop/CartPage'));
 const ShopCheckoutPage = lazy(() => import('@/pages/shop/CheckoutPage'));
