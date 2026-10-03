@@ -6,11 +6,12 @@ import type { UnifiedMarketplaceProduct } from './types';
 
 function QAfricaVerifiedBadge() {
   return (
-    <BadgeCheck
-      className="h-4 w-4 shrink-0 fill-[#E8590C] text-[#E8590C]"
-      aria-label="Verified by QAfrica"
-      title="Verified by QAfrica"
-    />
+    <span title="Verified by QAfrica" className="inline-flex shrink-0">
+      <BadgeCheck
+        className="h-4 w-4 fill-[#E8590C] text-[#E8590C]"
+        aria-label="Verified by QAfrica"
+      />
+    </span>
   );
 }
 
