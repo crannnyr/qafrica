@@ -559,7 +559,7 @@ function App() {
           <Route path="/cart" element={<CartPage />} />
           <Route path="/cart/share" element={<ShareCartPage />} />
           <Route path="/pay/:code" element={<PaySharedCartPage />} />
-          <Route path="/checkout" element={<UnifiedCheckoutPage />} />
+          <Route path="/checkout" element={<ShopCheckoutPage />} />
           <Route path="/checkout/complete" element={<CheckoutCompletePage />} />
 
           {/* ── Staff invite ── */}
