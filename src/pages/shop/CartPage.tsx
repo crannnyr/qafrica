@@ -88,6 +88,10 @@ export default function CartPage() {
       );
     } catch { /* ignore */ }
 
+    if (selectedImportItems.length > 0) {
+      goWithSelection('/stores-v2/checkout');
+      return;
+    }
     goWithSelection('/checkout');
   };
 
