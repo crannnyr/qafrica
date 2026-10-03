@@ -1,9 +1,14 @@
 // Shopper bottom menu: Shop · Category · Help Pay · Cart · Me
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { Home, LayoutGrid, HandHeart, ShoppingBag, User } from 'lucide-react';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
 
 export default function BottomNav() {
+  const location = useLocation();
+  const unified = location.pathname.startsWith('/stores-v2');
+  const shopHref = unified ? '/stores-v2' : '/stores';
+  const categoryHref = unified ? '/stores-v2' : '/stores/categories';
+  const cartHref = unified ? '/stores-v2/cart' : '/cart';
   const cartCount = useCartStore((s) => s.getTotalItems());
   const { isAuthenticated } = useCustomerAuthStore();
   const meHref = isAuthenticated ? '/customer/dashboard' : `/customer/login?return=${encodeURIComponent('/customer/dashboard')}`;
@@ -12,16 +17,16 @@ export default function BottomNav() {
   return (
     <nav aria-label="Main" className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       <div className="max-w-6xl mx-auto flex">
-        <NavLink to="/stores" end className={cls}>
+        <NavLink to={shopHref} end className={cls}>
           {({ isActive }) => (<><Home className="w-[22px] h-[22px]" strokeWidth={isActive ? 2.25 : 1.6} fill={isActive ? 'currentColor' : 'none'} />Shop</>)}
         </NavLink>
-        <NavLink to="/stores/categories" className={cls}>
+        <NavLink to={categoryHref} className={cls}>
           {({ isActive }) => (<><LayoutGrid className="w-[22px] h-[22px]" strokeWidth={isActive ? 2.25 : 1.6} />Category</>)}
         </NavLink>
         <NavLink to="/help-pay" className={cls}>
           {({ isActive }) => (<><HandHeart className="w-[22px] h-[22px]" strokeWidth={isActive ? 2.25 : 1.6} />Help Pay</>)}
         </NavLink>
-        <Link to="/cart" className={`${tab} text-gray-500`}>
+        <Link to={cartHref} className={`${tab} text-gray-500`}>
           <span className="relative">
             <ShoppingBag className="w-[22px] h-[22px]" strokeWidth={1.6} />
             {cartCount > 0 && (
