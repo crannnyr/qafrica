@@ -11,6 +11,14 @@ const naira = (value: number) => `₦${Number(value || 0).toLocaleString(undefin
 
 type QuoteStore = { store_id: string; store_name: string; items: any[]; subtotal: number; delivery_fee: number; total: number; shipping_included?: boolean; flight_shipping_total?: number };
 
+async function invokeCheckout(body: Record<string, unknown>) {
+  const result = await supabase.functions.invoke('marketplace-v2-checkout', { body });
+  if (!result.error) return result;
+  let serverBody: any = null;
+  try { serverBody = result.error.context ? await result.error.context.clone().json() : null; } catch { /* non-JSON response */ }
+  return { data: serverBody ?? result.data, error: result.error };
+}
+
 export default function MarketplaceCheckoutPage() {
   const navigate = useNavigate();
   const { customer, isAuthenticated, addresses, getDefaultAddress, fetchAddresses } = useCustomerAuthStore();
@@ -81,7 +89,7 @@ export default function MarketplaceCheckoutPage() {
     const run = async () => {
       if (!items.length || !state.trim()) { setQuote(null); return; }
       setLoadingQuote(true); setQuoteError('');
-      const { data, error } = await supabase.functions.invoke('marketplace-v2-checkout', { body: { action: 'quote', state: state.trim(), items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) } });
+      const { data, error } = await invokeCheckout({ action: 'quote', state: state.trim(), items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
       if (cancelled) return; setLoadingQuote(false);
       if (error || !data?.ok) { setQuote(null); setQuoteError(data?.errors?.[0]?.message ?? error?.message ?? 'Could not calculate checkout total'); return; }
       setQuote({ stores: data.stores ?? [], amount: Number(data.amount ?? 0) });
@@ -95,7 +103,7 @@ export default function MarketplaceCheckoutPage() {
     if (!quote?.amount) return;
     if (!name.trim() || !email.trim() || !phone.trim() || !address.trim() || !city.trim() || !state.trim()) { toast.error('Please complete your delivery and contact details'); return; }
     setProcessing(true);
-    const { data, error } = await supabase.functions.invoke('marketplace-v2-checkout', { body: { action: 'create', customer: { name: name.trim(), email: email.trim(), phone: phone.trim() }, delivery: { address: address.trim(), city: city.trim(), state: state.trim(), landmark: landmark.trim() }, items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) } });
+    const { data, error } = await invokeCheckout({ action: 'create', customer: { name: name.trim(), email: email.trim(), phone: phone.trim() }, delivery: { address: address.trim(), city: city.trim(), state: state.trim(), landmark: landmark.trim() }, items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
     if (error || !data?.checkout_link) { setProcessing(false); toast.error(data?.error ?? error?.message ?? 'Could not start payment'); return; }
     window.location.assign(data.checkout_link);
   };
