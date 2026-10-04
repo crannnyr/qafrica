@@ -13,7 +13,7 @@ type ChinaProduct = {
   image_urls: string[] | null;
   price_ngn: number | null;
   cost_ngn: number | null;
-  flight_shipping_cost_ngn: number | null;
+  air_shipping_customer_ngn: number | null;
   category: string | null;
   has_variants: boolean | null;
   variants: unknown;
@@ -49,8 +49,10 @@ export default function ChinaImportCatalogSection() {
       await Promise.all([
         supabase
           .from('china_import_products')
-          .select('id,name,description,image_url,image_urls,price_ngn,cost_ngn,flight_shipping_cost_ngn,category,has_variants,variants,is_active')
-          .eq('is_active', true)
+          .select('id,name,description,image_url,image_urls,price_ngn,cost_ngn,air_shipping_customer_ngn,category,has_variants,variants,is_active')
+           .eq('is_active', true)
+          .not('air_shipping_customer_ngn', 'is', null)
+          .gt('air_shipping_customer_ngn', 0)
           .order('created_at', { ascending: false }),
         supabase
           .from('china_import_dropship_catalog')
@@ -89,7 +91,7 @@ export default function ChinaImportCatalogSection() {
 
     const existing = catalogByProduct.get(product.id);
     const supplierCost = Math.max(Number(product.cost_ngn ?? product.price_ngn ?? 0), 0);
-    const shipping = Math.max(Number(product.flight_shipping_cost_ngn ?? 0), 0);
+    const shipping = Math.max(Number(product.air_shipping_customer_ngn ?? 0), 0);
     const landed = supplierCost + shipping;
     const entered = Number(prices[product.id]);
     const sellerPrice = Number.isFinite(entered) && entered > 0
@@ -184,7 +186,7 @@ export default function ChinaImportCatalogSection() {
           {filtered.map(product => {
             const row = catalogByProduct.get(product.id);
             const supplier = Math.max(Number(product.cost_ngn ?? product.price_ngn ?? 0), 0);
-            const shipping = Math.max(Number(product.flight_shipping_cost_ngn ?? 0), 0);
+            const shipping = Math.max(Number(product.air_shipping_customer_ngn ?? 0), 0);
             const landed = row?.landed_cost_ngn ?? supplier + shipping;
             const suggested = Math.ceil(landed * 1.2);
             const margin = Math.max((row?.seller_price_ngn ?? suggested) - landed, 0);
