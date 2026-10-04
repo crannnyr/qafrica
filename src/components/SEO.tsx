@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 
 interface SEOProps {
@@ -24,6 +25,12 @@ export default function SEO({
   noindex = false,
 }: SEOProps) {
   const fullTitle = title.includes('QAFRICA') ? title : `${title} | QAFRICA`;
+
+  // index.html ships default description/share tags for crawlers that don't run
+  // JS. Once a page renders its own, remove them so the tags aren't duplicated.
+  useEffect(() => {
+    document.head.querySelectorAll('[data-static-seo]').forEach(el => el.remove());
+  }, []);
 
   return (
     <Helmet>

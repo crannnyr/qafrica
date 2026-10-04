@@ -7,6 +7,7 @@ import {
   ChevronRight, Search, X, User, LogOut, LayoutDashboard, Heart, Sparkles,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
+import SEO from '@/components/SEO';
 import { formatSoldCount } from '@/lib/utils';
 import { useCustomerAuthStore } from '@/stores';
 import { useImportCartStore, buildImportCartKey } from '@/stores/importCartStore';
@@ -564,8 +565,23 @@ export default function RecommendationsPage() {
 
   const displayItems = products;
 
+  // Title/description follow the category being browsed.
+  const seoCategory = activeSubcategory ?? (activeParent !== 'All' ? activeParent : null);
+  const seoTitle = seoCategory
+    ? `${seoCategory} from China — Factory Prices, Delivered to Nigeria`
+    : 'Shop from China at Factory Prices — Delivered to Nigeria';
+  const seoDescription = seoCategory
+    ? `Shop ${seoCategory.toLowerCase()} sourced direct from China. Pay in naira, track your order, and get it delivered anywhere in Nigeria.`
+    : 'Fashion, phones, electronics, beauty and home goods sourced direct from China. Pay in naira, track every order, and get it delivered anywhere in Nigeria.';
+
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEO
+        title={seoTitle}
+        description={seoDescription}
+        url={`${window.location.origin}/recommendations`}
+        keywords={['buy from China', 'China import Nigeria', 'factory prices', 'QAFRICA', ...(seoCategory ? [seoCategory] : [])]}
+      />
       {isAuthenticated && <DailyPromoModal customerId={customer?.id} />}
       <OpticsviewMergerNotice />
 

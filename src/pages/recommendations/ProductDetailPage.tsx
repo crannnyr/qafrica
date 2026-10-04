@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { fmt, buildCartKey, computeVariantPriceNgn, variantPriceRange } from './RecommendationsPage';
 import type { ImportProduct, VariantGroup } from './RecommendationsPage';
+import SEO, { ProductSchema } from '@/components/SEO';
 import { useImportCartStore } from '@/stores/importCartStore';
 import ImportQtyControl from '@/components/ImportQtyControl';
 import { useCustomerAuthStore } from '@/stores';
@@ -421,8 +422,36 @@ export default function ProductDetailPage() {
 
   const usdPrice = fmtUsd(product.price_ngn, usdRate);
 
+  // Share/search tags for this product. The same values are written server-side
+  // by netlify/edge-functions/import-meta.ts for crawlers that don't run JS.
+  const seoUrl = `${window.location.origin}/recommendations/${product.id}`;
+  const seoPrice = `₦${Math.round(product.price_ngn).toLocaleString('en-NG')}`;
+  const seoTrail = [(product as any).parent_category, product.category].filter(Boolean).join(' › ');
+  const seoText = (product.description ?? '').replace(/\s+/g, ' ').trim();
+  const seoDescription = `${[seoPrice, seoTrail, 'Shipped from China to Nigeria'].filter(Boolean).join(' · ')}. ${seoText}`.slice(0, 200);
+  const seoImage = images[0];
+
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEO
+        title={`${product.name} — ${seoPrice}`}
+        description={seoDescription}
+        image={seoImage}
+        url={seoUrl}
+        type="product"
+        keywords={[product.name, product.category, 'buy from China', 'China import Nigeria', 'QAFRICA'].filter(Boolean)}
+      />
+      {seoImage && (
+        <ProductSchema
+          name={product.name}
+          description={seoText || product.name}
+          image={seoImage}
+          price={product.price_ngn}
+          brand="QAFRICA"
+          sku={product.id}
+          url={seoUrl}
+        />
+      )}
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
         <div className="max-w-lg lg:max-w-6xl mx-auto flex items-center justify-between">

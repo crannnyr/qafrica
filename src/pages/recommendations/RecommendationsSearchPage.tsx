@@ -4,6 +4,7 @@ import { ArrowLeft, Package, Search, X, Sparkles } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import type { ImportProduct } from './RecommendationsPage';
 import { fmt } from './RecommendationsPage';
+import SEO from '@/components/SEO';
 import { useImportPwaManifest } from '@/hooks/useImportPwaManifest';
 
 const BROWSE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse`;
@@ -284,6 +285,16 @@ export default function RecommendationsSearchPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Search result pages are thin/duplicate content, so they are kept out of the index. */}
+      <SEO
+        title={submittedQuery ? `"${submittedQuery}" — Search products from China` : 'Search products from China'}
+        description={submittedQuery
+          ? `Results for "${submittedQuery}" — products sourced direct from China, priced in naira and delivered to Nigeria.`
+          : 'Search thousands of products sourced direct from China, priced in naira and delivered to Nigeria.'}
+        url={`${window.location.origin}/recommendations`}
+        keywords={['buy from China', 'China import Nigeria', 'QAFRICA']}
+        noindex
+      />
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-3">
           <Link to="/recommendations" className="flex items-center justify-center w-9 h-9 rounded-xl border border-gray-200 text-gray-500 hover:text-gray-900 hover:bg-gray-50" aria-label="Back to recommendations"><ArrowLeft className="w-4 h-4" /></Link>
