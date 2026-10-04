@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
     if (!delivery.city) errors.city = 'Enter your city or area';
     if (!delivery.state) errors.state = 'Choose your state';
     if (!items.length) errors.cart = 'Your cart is empty';
-    if (Object.keys(errors).length) { console.error('marketplace-v2 validation failed', Object.keys(errors)); return json(200, { ok: false, error: 'Please check your details', field_errors: errors }); }
+    if (Object.keys(errors).length) { console.error('marketplace-v2 validation failed', Object.keys(errors)); return json(400, { error: 'Please check your details', field_errors: errors }); }
 
     try {
       const quote = await quoteV2(items, state);
@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
       return json(200, { reference, checkout_link: link, amount: quote.amount });
     } catch (e) {
       console.error('marketplace-v2 create failed', e instanceof NombaError ? { status: e.status, code: e.code, description: e.description } : e);
-      return json(200, { ok: false, error: 'Payment service is busy. Please try again in a moment.' });
+      return json(502, { error: e instanceof NombaError ? (e.description || e.message) : (e instanceof Error ? e.message : 'Payment service is busy. Please try again in a moment.'), code: e instanceof NombaError ? e.code ?? null : null });
     }
   }
 
