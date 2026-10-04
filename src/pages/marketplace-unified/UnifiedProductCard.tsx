@@ -16,7 +16,9 @@ function QAfricaVerifiedBadge() {
 }
 
 export default function UnifiedProductCard({ p, priority = false }: { p: UnifiedMarketplaceProduct; priority?: boolean }) {
-  const href = `/stores-v2/product/${p.source_type}/${p.source_id}`;
+  const href = p.source_type === 'china_import' && p.seller_id
+    ? `/stores-v2/product/${p.source_type}/${p.source_id}?store=${encodeURIComponent(p.seller_id)}`
+    : `/stores-v2/product/${p.source_type}/${p.source_id}`;
   const image = p.images?.[0] || '/placeholder.svg';
   const compareAt = Number(p.compare_at_price_ngn || 0);
   const price = Number(p.price_ngn || 0);
