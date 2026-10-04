@@ -1,424 +1,45 @@
-import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Search, Plus, Store, Filter, X, Check, AlertCircle, DollarSign, Loader2, MessageCircle, ArrowRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useStoreStore, useImportStore, useAuthStore } from '@/stores';
-import { toast } from 'sonner';
-import { importCatalogService } from '@/services';
-import type { StoreOwner } from '@/types';
-import ChinaImportCatalogSection from './ChinaImportCatalogSection';
-type FilterType = 'all' | 'my_niches' | 'other';
-
-export default function ImportCatalogPage() {
-  const { currentStore } = useStoreStore();
-  const { user } = useAuthStore();
-  const { imports, fetchStoreImports, importProduct, updateImport, deleteImport } = useImportStore();
-  const [activeTab, setActiveTab] = useState<'browse' | 'imported' | 'china'>('browse');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<FilterType>('my_niches');
-  const [isImporting, setIsImporting] = useState<string | null>(null);
-  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // NEW: State for the Price Configuration Modal
-  const [configuringProduct, setConfiguringProduct] = useState<any | null>(null);
-  const [markupPrice, setMarkupPrice] = useState<string>('');
-  const [editingImportId, setEditingImportId] = useState<string | null>(null);
-  const [editingPrice, setEditingPrice] = useState<string>('');
-  const [isDeletingImport, setIsDeletingImport] = useState<string | null>(null);
-
-  const storeNiches = currentStore?.niches || [];
-  const isUnlimited = (user as any)?.subscription_tier === 'unlimited';
-  useEffect(() => {
-    if (currentStore?.id) {
-      fetchStoreImports(currentStore.id);
-      fetchProducts();
-    }
-  }, [currentStore, filterType]);
-
-  const fetchProducts = async () => {
-    if (!currentStore?.id) return;
-    
-    setIsLoading(true);
-    try {
-      let query = importCatalogService.getAvailableProducts('', currentStore.id);
-      
-      // Apply niche filtering
-      if (filterType === 'my_niches' && storeNiches.length > 0 && !isUnlimited) {
-        // Only show products from user's niches (unless unlimited)
-        const { data, error } = await importCatalogService.getAvailableProductsByNiches(
-          storeNiches,
-          currentStore.id
-        );
-        if (error) throw error;
-        setAvailableProducts(data || []);
-      } else if (filterType === 'other' && !isUnlimited) {
-        // Show products from other niches (excluding user's niches)
-        const { data, error } = await importCatalogService.getAvailableProductsExcludingNiches(
-          storeNiches,
-          currentStore.id
-        );
-        if (error) throw error;
-        setAvailableProducts(data || []);
-      } else {
-        // Show all (for unlimited plans or 'all' filter)
-        const { data, error } = await importCatalogService.getAllAvailableProducts(currentStore.id);
-        if (error) throw error;
-        setAvailableProducts(data || []);
-      }
-    } catch (err) {
-      console.error('Error fetching products:', err);
-      toast.error('Failed to load products');
-    }
-    setIsLoading(false);
-  };
-
-  // UPDATED: Opens the modal instead of instantly importing
-  const startImportConfiguration = (product: any) => {
-    if (!currentStore?.id || !currentStore?.owner_id) return;
-
-    // Check if user can import from this niche
-    if (!isUnlimited && !storeNiches.includes(product.niche)) {
-      toast.error(`Upgrade to import products from the "${product.niche}" niche`);
-      return;
-    }
-
-    setConfiguringProduct(product);
-    
-    // Suggest a 20% markup by default based on dropship price (or selling price if dropship price is 0)
-    const basePrice = product.dropship_price || product.selling_price;
-    const suggestedPrice = Math.ceil(basePrice * 1.2);
-    setMarkupPrice(suggestedPrice.toString());
-  };
-
-  // NEW: Finalizes the import with the custom price
-  const handleFinalizeImport = async () => {
-    if (!configuringProduct || !currentStore?.id || !currentStore?.owner_id) return;
-
-    const customPrice = parseFloat(markupPrice);
-    const baseCost = configuringProduct.dropship_price || 0;
-
-    if (isNaN(customPrice) || customPrice <= baseCost) {
-      toast.error(`Your selling price must be higher than the supplier's dropship price (₦${baseCost.toLocaleString()})`);
-      return;
-    }
-
-    setIsImporting(configuringProduct.id);
-
-    const result = await importProduct({
-      original_product_id: configuringProduct.id,
-      original_store_id: configuringProduct.store_id,
-      original_owner_id: configuringProduct.owner_id,
-      importer_store_id: currentStore.id,
-      importer_owner_id: currentStore.owner_id,
-      name: configuringProduct.name,
-      description: configuringProduct.description,
-      images: configuringProduct.images,
-      category: configuringProduct.category,
-      niche: configuringProduct.niche,
-      selling_price: configuringProduct.selling_price, 
-      dropship_price: configuringProduct.dropship_price,
-      custom_selling_price: customPrice, // Injecting the markup price here
-      is_active: true,
-      total_sales: 0,
-    });
-
-    if (result.success) {
-      toast.success('Product imported successfully!');
-      fetchStoreImports(currentStore.id); // Refresh imports list
-      setConfiguringProduct(null); // Close modal
-    } else {
-      toast.error(result.error || 'Failed to import product');
-    }
-
-    setIsImporting(null);
-  };
-
-  const handleDeleteImport = async (importId: string) => {
-    setIsDeletingImport(importId);
-    const result = await deleteImport(importId);
-    if (result.success) {
-      toast.success('Product removed from your store');
-      fetchStoreImports(currentStore!.id);
-    } else {
-      toast.error(result.error || 'Failed to remove product');
-    }
-    setIsDeletingImport(null);
-  };
-
-  const handleSavePrice = async (importId: string, dropshipPrice: number) => {
-    const newPrice = parseFloat(editingPrice);
-    if (isNaN(newPrice) || newPrice <= dropshipPrice) {
-      toast.error(`Price must be higher than the dropship cost (₦${dropshipPrice.toLocaleString()})`);
-      return;
-    }
-    const result = await updateImport(importId, { custom_selling_price: newPrice });
-    if (result.success) {
-      toast.success('Price updated');
-      setEditingImportId(null);
-    } else {
-      toast.error(result.error || 'Failed to update price');
-    }
-  };
-
-  const filteredProducts = availableProducts.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Build a set of already-imported product IDs for O(1) lookup
-  const importedProductIds = new Set(imports.map(i => i.original_product_id));
-
-  const getFilterLabel = (type: FilterType) => {
-    switch (type) {
-      case 'my_niches': return 'My Niches';
-      case 'other': return 'Other Niches';
-      case 'all': return 'All Products';
-      default: return 'Filter';
-    }
-  };
-
-  return (
-    <div className="space-y-6 relative">
-     {/* Header */}
-     <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Import Catalog</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">Browse and import products from other sellers</p>
-        </div>
-        {user && (
-          <div className="text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-4 py-2 rounded-lg">
-            Plan: <span className="font-medium text-orange-600 capitalize">
-              {((user as StoreOwner)?.subscription_tier || 'free').replace('_', ' ')}
-            </span>
-            {!isUnlimited && (
-              <span className="ml-2 text-gray-500 dark:text-gray-400">
-                (Showing {filterType === 'my_niches' ? 'your niches' : 'other niches'})
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-      {/* Tabs */}
-      <div className="flex gap-4 border-b border-gray-200 dark:border-gray-700">
-        <button
-          onClick={() => setActiveTab('browse')}
-          className={`px-4 py-3 font-medium border-b-2 transition-colors ${
-            activeTab === 'browse'
-              ? 'border-orange-500 text-orange-600 dark:text-orange-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-          }`}
-        >
-          Browse Products
-        </button>
-        <button
-          onClick={() => setActiveTab('china')}
-          className={`px-4 py-3 font-medium border-b-2 transition-colors ${
-            activeTab === 'china'
-              ? 'border-orange-500 text-orange-600 dark:text-orange-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-          }`}
-        >
-          China Import
-        </button>
-        <button
-          onClick={() => setActiveTab('imported')}
-          className={`px-4 py-3 font-medium border-b-2 transition-colors ${
-            activeTab === 'imported'
-              ? 'border-orange-500 text-orange-600 dark:text-orange-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-          }`}
-        >
-          My Imports ({imports.length})
-        </button>
-      </div>
-
-      {activeTab === 'china' ? (
-        <ChinaImportCatalogSection />
-      ) : activeTab === 'browse' ? (
-        <>
-          {/* Search and Filter */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search products to import..."
-                className="w-full pl-12 pr-4 py-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 outline-none"
-              />
-            </div>
-            
-            {/* Filter Buttons */}
-            <div className="flex gap-2">
-              {(['my_niches', 'other', 'all'] as FilterType[]).map((type) => (
-                <button
-                  key={type}
-                  onClick={() => setFilterType(type)}
-                  className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                    filterType === type
-                      ? 'bg-orange-500 text-white border-orange-500'
-                      : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-orange-300'
-                  }`}
-                >
-                  {getFilterLabel(type)}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Warning for non-unlimited users */}
-          {!isUnlimited && filterType === 'other' && (
-            <div className="bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-yellow-900 dark:text-yellow-300">Limited Access</p>
-                <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">
-                  You can browse products from other niches, but you need the Unlimited plan to import them. 
-                  <button 
-                    onClick={() => window.location.href = '/dashboard/subscription'}
-                    className="text-orange-600 hover:underline font-medium ml-1"
-                  >
-                    Upgrade now
-                  </button>
-                </p>
+        <div className="space-y-6">
+          {isLoadingChinaImports ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-orange-500" /></div>
+          ) : chinaImports.length > 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-orange-100 dark:border-orange-900/30 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700">
+                <h3 className="font-semibold text-gray-900 dark:text-white">China Import</h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Products you added from the China Import catalog</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-700/50"><tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Your Price</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {chinaImports.map(item => {
+                      const product = item.product;
+                      const image = product?.image_urls?.[0] || product?.image_url;
+                      return (
+                        <tr key={item.id}>
+                          <td className="px-6 py-4"><div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden flex items-center justify-center">
+                              {image ? <img src={image} alt="" className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-gray-400" />}
+                            </div>
+                            <div><div className="font-medium text-gray-900 dark:text-white">{product?.name || 'China Import product'}</div><div className="text-[11px] text-orange-600">China Import</div></div>
+                          </div></td>
+                          <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{product?.category || '—'}</td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">₦{Number(item.seller_price_ngn || 0).toLocaleString()}</td>
+                          <td className="px-6 py-4"><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${item.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>{item.status === 'active' ? 'Active' : 'Paused'}</span></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             </div>
-          )}
+          ) : null}
 
-          {/* Products Grid */}
-          {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <div className="w-8 h-8 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 p-12 text-center">
-              <div className="w-20 h-20 bg-orange-100 dark:bg-orange-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Package className="w-10 h-10 text-orange-500" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No products found</h3>
-              <p className="text-gray-500 dark:text-gray-400 mb-4">
-                {filterType === 'my_niches' 
-                  ? "No products available in your niches yet. Try browsing 'Other Niches' or check back later."
-                  : "No products match your search criteria."}
-              </p>
-              {filterType !== 'my_niches' && (
-                <button
-                  onClick={() => setFilterType('my_niches')}
-                  className="text-orange-500 hover:text-orange-600 font-medium"
-                >
-                  View products in my niches
-                </button>
-              )}
-            </div>
-          ) : (
-            // Change 3 — mobile grid resize
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 lg:gap-6">
-              {filteredProducts.map((product, index) => {
-                const canImport = isUnlimited || storeNiches.includes(product.niche);
-                const isOwnProduct = product.store_id === currentStore?.id;
-                const alreadyImported = importedProductIds.has(product.id);
-                
-                return (
-                  <motion.div
-                    key={product.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-shadow hover:shadow-lg ${
-                      canImport ? 'border-gray-100 dark:border-gray-700' : 'border-gray-200 dark:border-gray-600 opacity-75'
-                    }`}
-                  >
-                    <div className="aspect-square bg-gray-100 dark:bg-gray-700 relative overflow-hidden">
-                      {product.images && product.images.length > 0 ? (
-                        <img 
-                          src={product.images[0]} 
-                          alt={product.name} 
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIGZpbGw9IiNGM0Y0RjYiLz48cGF0aCBkPSJNMyA2QzMgNC4zNDMxNSA0LjM0MzE1IDMgNiAzSDE4QzE5LjY1NjkgMyAyMSA0LjM0MzE1IDIxIDZWMThDMjEgMTkuNjU2OSAxOS42NTY5IDIxIDE4IDIxSDZDNC4zNDMxNSAyMSAzIDE5LjY1NjkgMyAxOFY2WiIgZmlsbD0iI0UzRTRFNiIvPjxwYXRoIGQ9Ik0xMiAxNi41QzE0LjQ4NTMgMTYuNSAxNi41IDE0LjQ4NTMgMTYuNSAxMkMxNi41IDkuNTE0NzIgMTQuNDg1MyA3LjUgMTIgNy41QzkuNTE0NzIgNy41IDcuNSA5LjUxNDcyIDcuNSAxMkM3LjUgMTQuNDg1MyA5LjUxNDcyIDE2LjUgMTIgMTYuNVoiIGZpbGw9IiM5Q0EzQUYiLz48L3N2Zz4=';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <Package className="w-16 h-16 text-gray-300" />
-                        </div>
-                      )}
-                      <div className="absolute top-3 left-3">
-                        <span className="px-2 py-1 bg-gray-900/70 text-white text-xs rounded backdrop-blur-sm">
-                          {product.niche}
-                        </span>
-                      </div>
-                      {!canImport && (
-                        <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center">
-                          <span className="px-3 py-1 bg-gray-900 text-white text-xs rounded-full">
-                            Upgrade to Import
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    {/* Change 3 — tightened card padding on mobile */}
-                    <div className="p-2 lg:p-4">
-                      <h3 className="font-semibold text-gray-900 dark:text-white mb-1 line-clamp-1 text-xs lg:text-sm">{product.name}</h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 lg:mb-3 line-clamp-2">{product.description}</p>
-                      
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-                          {product.category}
-                        </span>
-                        {product.is_importable && (
-                          <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-1 rounded flex items-center gap-1">
-                            <Check className="w-3 h-3" />
-                            Available
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Change 3 — tightened price + button row */}
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm lg:text-lg font-bold text-orange-600">₦{product.selling_price?.toLocaleString()}</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 hidden lg:block">Dropship: ₦{(product.dropship_price || 0).toLocaleString()}</p>
-                        </div>
-                        <Button
-                          onClick={() => !alreadyImported && startImportConfiguration(product)}
-                          disabled={isImporting === product.id || !canImport || isOwnProduct || alreadyImported}
-                          className={`${
-                            alreadyImported
-                              ? 'bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400 cursor-not-allowed'
-                              : canImport && !isOwnProduct
-                                ? 'bg-orange-500 hover:bg-orange-600 text-white'
-                                : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                          }`}
-                          size="sm"
-                        >
-                          {isImporting === product.id ? (
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          ) : isOwnProduct ? (
-                            'Yours'
-                          ) : alreadyImported ? (
-                            <>
-                              <Check className="w-4 h-4 mr-1" />
-                              Added
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="w-4 h-4 mr-1" />
-                              Import
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </div>
-          )}
-        </>
-      ) : (
-        /* Imported Products */
+        {/* Seller-to-seller Imports */}
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
           {imports.length === 0 ? (
             <div className="p-12 text-center">
@@ -553,6 +174,10 @@ export default function ImportCatalogPage() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+
         </div>
       )}
 
