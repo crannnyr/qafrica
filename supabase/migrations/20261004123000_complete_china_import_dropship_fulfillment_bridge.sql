@@ -477,6 +477,13 @@ begin
           returning id into v_china_fulfillment_id;
         end if;
 
+        -- Record the seller-facing China Import earnings separately from
+        -- legacy product_earnings because this source is not a products row.
+        perform public.record_china_import_dropship_earning(
+          v_order_id,
+          v_china_fulfillment_id
+        );
+
         -- For China lines the placeholder link above is intentionally not
         -- inserted. The actual China order and fulfillment row are created
         -- below in the same transaction, then linked with both IDs.
