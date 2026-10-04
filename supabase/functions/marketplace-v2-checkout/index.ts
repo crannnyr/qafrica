@@ -18,7 +18,7 @@ const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const clean = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : '';
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v);
-const isPhone = (v: string) => /^\+?\d{10,14}$/.test(v.replace(/[^\d+]/g, ''));
+const isPhone = (v: string) => { const digits = v.replace(/\D/g, ''); return digits.length >= 7 && digits.length <= 15; };
 
 function newReference() {
   const bytes = crypto.getRandomValues(new Uint8Array(6));
@@ -136,14 +136,14 @@ Deno.serve(async (req) => {
     const phone = clean(body?.customer?.phone ?? customer.phone, 20).replace(/[^\d+]/g, '');
     const delivery = { address: clean(body?.delivery?.address, 200), city: clean(body?.delivery?.city, 60), state, landmark: clean(body?.delivery?.landmark, 120) };
     const errors: Record<string, string> = {};
-    if (name.length < 2) errors.name = 'Enter your full name';
+    if (name.length < 1) errors.name = 'Enter your full name';
     if (!isEmail(email)) errors.email = 'Enter a valid email address';
     if (!isPhone(phone)) errors.phone = 'Enter a valid phone number';
     if (delivery.address.length < 5) errors.address = 'Enter your street address';
     if (!delivery.city) errors.city = 'Enter your city or area';
     if (!delivery.state) errors.state = 'Choose your state';
     if (!items.length) errors.cart = 'Your cart is empty';
-    if (Object.keys(errors).length) return json(400, { error: 'Please check your details', field_errors: errors });
+    if (Object.keys(errors).length) { console.error('marketplace-v2 validation failed', Object.keys(errors)); return json(200, { ok: false, error: 'Please check your details', field_errors: errors }); }
 
     try {
       const quote = await quoteV2(items, state);
@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
       return json(200, { reference, checkout_link: link, amount: quote.amount });
     } catch (e) {
       console.error('marketplace-v2 create failed', e instanceof NombaError ? { status: e.status, code: e.code, description: e.description } : e);
-      return json(502, { error: 'Payment service is busy. Please try again in a moment.' });
+      return json(200, { ok: false, error: 'Payment service is busy. Please try again in a moment.' });
     }
   }
 
