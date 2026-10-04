@@ -132,8 +132,44 @@ export default function StorePage() {
         stock_quantity: item.stock_quantity,
       })) as unknown as Product[];
 
+      const { data: chinaDropshipData } = await supabase
+        .from('china_import_dropship_catalog')
+        .select('china_import_product_id, seller_price_ngn')
+        .eq('seller_store_id', storeData.id)
+        .eq('status', 'active');
+
+      const chinaIds = (chinaDropshipData ?? []).map((row: any) => row.china_import_product_id);
+      let mappedChinaImports: Product[] = [];
+      if (chinaIds.length) {
+        const { data: chinaProducts } = await supabase
+          .from('china_import_products')
+          .select('id,name,description,category,price_ngn,image_url,image_urls,is_active,has_variants,variants,air_shipping_customer_ngn')
+          .in('id', chinaIds)
+          .eq('is_active', true)
+          .not('air_shipping_customer_ngn', 'is', null)
+          .gt('air_shipping_customer_ngn', 0);
+
+        const priceById = new Map((chinaDropshipData ?? []).map((row: any) => [row.china_import_product_id, Number(row.seller_price_ngn)]));
+        mappedChinaImports = (chinaProducts ?? []).map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          category: item.category,
+          niche: null,
+          images: item.image_urls?.length ? item.image_urls : (item.image_url ? [item.image_url] : []),
+          selling_price: priceById.get(item.id) ?? Number(item.price_ngn),
+          is_imported: true,
+          is_active: true,
+          has_variants: item.has_variants,
+          variants: item.variants,
+          stock_quantity: 999999,
+          __sourceType: 'china_import',
+          __sourceId: item.id,
+        })) as unknown as Product[];
+      }
+
       const ownProducts = (productsData as Product[]).filter(p => p.is_active);
-      const allProducts = [...ownProducts, ...mappedImports];
+      const allProducts = [...ownProducts, ...mappedImports, ...mappedChinaImports];
       setProducts(allProducts);
       setFilteredProducts(allProducts);
     } catch (err) {
@@ -166,7 +202,10 @@ export default function StorePage() {
       setSelectedVariants({});
       setQuantity(1);
     } else {
-      addItem(product, store, 1, undefined, product.selling_price);
+      addItem(product, store, 1, undefined, product.selling_price, {
+      sourceType: (product as any).__sourceType ?? 'product',
+      sourceId: (product as any).__sourceId ?? product.id,
+    });
       toast.success(`${product.name} added to cart!`);
     }
   };
@@ -186,7 +225,10 @@ export default function StorePage() {
       toast.error(`Only ${matchingVariant.stock} items available`);
       return;
     }
-    addItem(selectedProduct, store, quantity, selectedVariants, selectedProduct.selling_price);
+    addItem(selectedProduct, store, quantity, selectedVariants, selectedProduct.selling_price, {
+      sourceType: (selectedProduct as any).__sourceType ?? 'product',
+      sourceId: (selectedProduct as any).__sourceId ?? selectedProduct.id,
+    });
     toast.success(`${selectedProduct.name} added to cart!`);
     setSelectedProduct(null);
     setSelectedVariants({});
