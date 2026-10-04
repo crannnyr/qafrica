@@ -53,8 +53,9 @@ begin
     select 1
     from public.china_import_products p
     where p.id = new.china_import_product_id
+      and p.is_active
   ) then
-    raise exception 'China Import product not found';
+    raise exception 'China Import product is not active or does not exist';
   end if;
 
   return new;
@@ -78,10 +79,7 @@ create policy "China dropship catalog owners can view their catalog"
 on public.china_import_dropship_catalog
 for select
 to authenticated
-using (
-  seller_owner_id = auth.uid()
-  or public.is_admin()
-);
+using (seller_owner_id = auth.uid() or public.is_admin());
 
 drop policy if exists "China dropship catalog owners can insert"
   on public.china_import_dropship_catalog;
@@ -93,8 +91,7 @@ with check (
   seller_owner_id = auth.uid()
   and exists (
     select 1 from public.stores s
-    where s.id = seller_store_id
-      and s.owner_id = auth.uid()
+    where s.id = seller_store_id and s.owner_id = auth.uid()
   )
 );
 
@@ -105,10 +102,7 @@ on public.china_import_dropship_catalog
 for update
 to authenticated
 using (seller_owner_id = auth.uid() or public.is_admin())
-with check (
-  seller_owner_id = auth.uid()
-  or public.is_admin()
-);
+with check (seller_owner_id = auth.uid() or public.is_admin());
 
 drop policy if exists "China dropship catalog owners can delete"
   on public.china_import_dropship_catalog;
@@ -130,6 +124,34 @@ where source_id is null;
 
 alter table public.order_items
   alter column product_id drop not null;
+
+create or replace function public.sync_order_item_source_identity()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.source_type = 'product' then
+    if new.product_id is null and new.source_id is not null then
+      new.product_id := new.source_id;
+    elsif new.source_id is null and new.product_id is not null then
+      new.source_id := new.product_id;
+    end if;
+  elsif new.source_type = 'china_import' then
+    new.product_id := null;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_sync_order_item_source_identity
+  on public.order_items;
+
+create trigger trg_sync_order_item_source_identity
+before insert or update of product_id, source_type, source_id
+on public.order_items
+for each row
+execute function public.sync_order_item_source_identity();
 
 alter table public.order_items
   drop constraint if exists order_items_source_identity_check;
@@ -181,11 +203,9 @@ for select
 to authenticated
 using (
   exists (
-    select 1
-    from public.orders o
+    select 1 from public.orders o
     join public.stores s on s.id = o.store_id
-    where o.id = seller_order_id
-      and s.owner_id = auth.uid()
+    where o.id = seller_order_id and s.owner_id = auth.uid()
   )
   or public.is_admin()
 );
