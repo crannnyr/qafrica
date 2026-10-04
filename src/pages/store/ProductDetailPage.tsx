@@ -212,26 +212,13 @@ export default function ProductDetailPage() {
         setProduct(productData as Product);
         setIsChinaDropship(false);
       } else {
-        const { data: catalogRow } = await supabase
-          .from('china_import_dropship_catalog')
-          .select('china_import_product_id,seller_price_ngn,status')
-          .eq('seller_store_id', storeData.id)
-          .eq('china_import_product_id', productId!)
-          .eq('status', 'active')
-          .maybeSingle();
+        const { data: chinaRows, error: chinaRpcError } = await supabase
+          .rpc('get_store_china_dropship_products', { p_store_id: storeData.id })
+          .eq('id', productId!);
 
-        if (!catalogRow) { toast.error('Product not found'); navigate(`/${slug}`); return; }
+        const chinaProduct = chinaRows?.[0];
 
-        const { data: chinaProduct } = await supabase
-          .from('china_import_products')
-          .select('id,name,description,category,image_url,image_urls,is_active,has_variants,variants,air_shipping_customer_ngn')
-          .eq('id', productId!)
-          .eq('is_active', true)
-          .not('air_shipping_customer_ngn', 'is', null)
-          .gt('air_shipping_customer_ngn', 0)
-          .maybeSingle();
-
-        if (!chinaProduct) { toast.error('Product not found'); navigate(`/${slug}`); return; }
+        if (chinaRpcError || !chinaProduct) { toast.error('Product not found'); navigate(`/${slug}`); return; }
 
         setProduct({
           id: chinaProduct.id,
@@ -240,7 +227,7 @@ export default function ProductDetailPage() {
           category: chinaProduct.category,
           niche: null,
           images: chinaProduct.image_urls?.length ? chinaProduct.image_urls : (chinaProduct.image_url ? [chinaProduct.image_url] : []),
-          selling_price: Number(catalogRow.seller_price_ngn),
+          selling_price: Number(chinaProduct.seller_price_ngn ?? chinaProduct.price_ngn ?? 0),
           is_active: true,
           has_variants: chinaProduct.has_variants,
           variants: chinaProduct.variants,
