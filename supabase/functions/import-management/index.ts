@@ -575,8 +575,6 @@ serve(async (req) => {
     if (linksError) return json({ error: linksError.message }, 500)
     const links = linkResults.flatMap((result) => result.data ?? [])
     const sellerOrderIds = Array.from(new Set(links.map((row: any) => row.seller_order_id).filter(Boolean)))
-    const sellerStoreIds = Array.from(new Set(links.map((row: any) => row.china_import_dropship_catalog_id).filter(Boolean)))
-
 
     const customerIds = Array.from(new Set(eligibleOrders.map((order: any) => order.user_id).filter(Boolean)))
     const batchIds = Array.from(new Set(eligibleOrders.map((order: any) => order.batch_id).filter(Boolean)))
