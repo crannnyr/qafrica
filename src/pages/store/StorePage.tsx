@@ -210,54 +210,85 @@ export default function StorePage() {
     }
   };
 
+  const isFormatAVariants = (variants: any[] | undefined) =>
+    Array.isArray(variants) &&
+    variants.length > 0 &&
+    typeof variants[0]?.name === 'string' &&
+    Array.isArray(variants[0]?.options);
+
+  const getVariantNames = (product: Product): string[] => {
+    const variants = product.variants as any[] | undefined;
+    if (!variants?.length) return [];
+    if (isFormatAVariants(variants)) {
+      return variants.map(v => String(v.name)).filter(Boolean);
+    }
+    return Object.keys(variants[0]?.options || {});
+  };
+
+  const getVariantOptions = (variantName: string) => {
+    if (!selectedProduct?.variants) return [];
+    const variants = selectedProduct.variants as any[];
+    if (isFormatAVariants(variants)) {
+      const group = variants.find(v => String(v.name) === variantName);
+      return Array.isArray(group?.options) ? group.options.map(String) : [];
+    }
+
+    const options = new Set<string>();
+    variants.forEach(v => {
+      if (v.options?.[variantName]) options.add(String(v.options[variantName]));
+    });
+    return Array.from(options);
+  };
+
   const handleConfirmVariantAdd = () => {
     if (!selectedProduct || !store) return;
-    const requiredOptions = Object.keys(selectedProduct.variants?.[0]?.options || {});
-    if (requiredOptions.length !== Object.keys(selectedVariants).length) {
+
+    const variants = selectedProduct.variants as any[] | undefined;
+    const requiredOptions = getVariantNames(selectedProduct);
+
+    if (requiredOptions.length !== Object.keys(selectedVariants).length ||
+        requiredOptions.some(name => !selectedVariants[name])) {
       toast.error('Please select all variant options');
       return;
     }
-    const matchingVariant = selectedProduct.variants?.find(v =>
-      Object.entries(selectedVariants).every(([key, value]) => v.options[key] === value)
-    );
-    if (!matchingVariant) { toast.error('Selected combination not available'); return; }
-    if (matchingVariant.stock < quantity) {
-      toast.error(`Only ${matchingVariant.stock} items available`);
-      return;
+
+    if (isFormatAVariants(variants)) {
+      if (selectedProduct.stock_quantity < quantity) {
+        toast.error(`Only ${selectedProduct.stock_quantity} items available`);
+        return;
+      }
+
+      addItem(selectedProduct, store, quantity, selectedVariants, selectedProduct.selling_price, {
+        sourceType: (selectedProduct as any).__sourceType ?? 'product',
+        sourceId: (selectedProduct as any).__sourceId ?? selectedProduct.id,
+      });
+    } else {
+      const matchingVariant = variants?.find(v =>
+        Object.entries(selectedVariants).every(([key, value]) => v.options?.[key] === value)
+      );
+      if (!matchingVariant) {
+        toast.error('Selected combination not available');
+        return;
+      }
+      if (Number(matchingVariant.stock ?? 0) < quantity) {
+        toast.error(`Only ${matchingVariant.stock} items available`);
+        return;
+      }
+
+      addItem(selectedProduct, store, quantity, selectedVariants,
+        Number(matchingVariant.price ?? selectedProduct.selling_price), {
+          sourceType: (selectedProduct as any).__sourceType ?? 'product',
+          sourceId: (selectedProduct as any).__sourceId ?? selectedProduct.id,
+        });
     }
-    addItem(selectedProduct, store, quantity, selectedVariants, selectedProduct.selling_price, {
-      sourceType: (selectedProduct as any).__sourceType ?? 'product',
-      sourceId: (selectedProduct as any).__sourceId ?? selectedProduct.id,
-    });
+
     toast.success(`${selectedProduct.name} added to cart!`);
     setSelectedProduct(null);
     setSelectedVariants({});
     setQuantity(1);
   };
 
-  const handleWishlistToggle = (e: React.MouseEvent, product: Product) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (!store) return;
-    if (isInWishlist(product.id)) {
-      removeFromWishlist(product.id, customer?.id);
-      toast.success('Removed from wishlist');
-    } else {
-      addToWishlist(product, store, customer?.id);
-      toast.success('Added to wishlist');
-    }
-  };
-
-  const getVariantOptions = (variantName: string) => {
-    if (!selectedProduct?.variants) return [];
-    const options = new Set<string>();
-    selectedProduct.variants.forEach(v => {
-      if (v.options[variantName]) options.add(v.options[variantName]);
-    });
-    return Array.from(options);
-  };
-
-  // Marketplace attribution: remember whether this visit came from /stores (?src=mkt) or the seller's own link
+  // Marketplace attribution  // Marketplace attribution: remember whether this visit came from /stores (?src=mkt) or the seller's own link
   useEffect(() => {
     if (store?.id) recordStoreTouch(store.id);
   }, [store?.id]);
@@ -308,7 +339,7 @@ export default function StorePage() {
                 {/* Variant options */}
                 {(selectedProduct.variants?.length ?? 0) > 0 && (
                   <div className="space-y-4 mb-6">
-                    {Object.keys(selectedProduct.variants![0].options).map(variantName => (
+                    {getVariantNames(selectedProduct).map(variantName => (
                       <div key={variantName}>
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{variantName}</p>
                         <div className="flex flex-wrap gap-2">
