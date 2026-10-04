@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, DollarSign, Loader2, Package, Plus, Search, Pause, Play } from 'lucide-react';
+import { Check, Loader2, Package, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services';
 import { toast } from 'sonner';
@@ -105,7 +105,12 @@ export default function ChinaImportCatalogSection() {
     [catalog]
   );
 
-  const filtered = products.filter(product => {
+  const availableProducts = products.filter(product => {
+    const row = catalogByProduct.get(product.id);
+    return !row || row.status === 'removed';
+  });
+
+  const filtered = availableProducts.filter(product => {
     const q = search.trim().toLowerCase();
     return !q ||
       product.name.toLowerCase().includes(q) ||
@@ -209,72 +214,74 @@ export default function ChinaImportCatalogSection() {
           <p className="font-medium text-gray-700 dark:text-gray-200">No China Import products found</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-6">
-          {filtered.map(product => {
-            const row = catalogByProduct.get(product.id);
-            const supplier = Math.max(Number(product.cost_ngn ?? product.price_ngn ?? 0), 0);
-            const shipping = Math.max(Number(product.air_shipping_customer_ngn ?? 0), 0);
-            const landed = row?.landed_cost_ngn ?? supplier + shipping;
-            const suggested = Math.ceil(landed * 1.2);
-            const margin = Math.max((row?.seller_price_ngn ?? suggested) - landed, 0);
+        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-700/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Landed Cost</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Suggested Price</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Your Price</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                {filtered.map(product => {
+                  const row = catalogByProduct.get(product.id);
+                  const supplier = Math.max(Number(product.cost_ngn ?? product.price_ngn ?? 0), 0);
+                  const shipping = Math.max(Number(product.air_shipping_customer_ngn ?? 0), 0);
+                  const landed = row?.landed_cost_ngn ?? supplier + shipping;
+                  const suggested = Math.ceil(landed * 1.2);
 
-            return (
-              <div key={product.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                <div className="aspect-square bg-gray-100 dark:bg-gray-700">
-                  {((product.image_urls?.[0]) || product.image_url) ? (
-                    <img src={(product.image_urls?.[0]) || product.image_url || ''} alt={product.name} className="w-full h-full object-cover" />
-                  ) : <div className="w-full h-full flex items-center justify-center"><Package className="w-12 h-12 text-gray-300" /></div>}
-                </div>
-
-                <div className="p-3 lg:p-4 space-y-3">
-                  <div>
-                    <h3 className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2">{product.name}</h3>
-                    {product.category && <p className="text-xs text-gray-500 mt-1">{product.category}</p>}
-                  </div>
-
-                  <div className="rounded-lg bg-gray-50 dark:bg-gray-700/60 p-3 space-y-1.5 text-sm">
-                    <div className="flex justify-between"><span className="text-gray-500">Landed cost</span><strong>{money(landed)}</strong></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Suggested price</span><strong>{money(suggested)}</strong></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Your margin</span><strong className="text-green-600">{money(margin)}</strong></div>
-                  </div>
-
-                  <input
-                    type="number"
-                    min={Math.ceil(landed)}
-                    value={prices[product.id] ?? (row ? String(row.seller_price_ngn) : String(suggested))}
-                    onChange={e => setPrices(prev => ({ ...prev, [product.id]: e.target.value }))}
-                    className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold outline-none focus:border-orange-500"
-                    aria-label={`Selling price for ${product.name}`}
-                  />
-
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => void addToStore(product)}
-                      disabled={busyId === product.id}
-                      className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
-                      size="sm"
-                    >
-                      {busyId === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : row?.status === 'active' ? <><Check className="w-4 h-4 mr-1" />Update</> : <><Plus className="w-4 h-4 mr-1" />Add to Store</>}
-                    </Button>
-
-                    {row && row.status !== 'removed' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void toggleStatus(row)}
-                        disabled={busyId === row.id}
-                        title={row.status === 'active' ? 'Pause product' : 'Activate product'}
-                      >
-                        {row.status === 'active' ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                  return (
+                    <tr key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-3 min-w-[240px]">
+                          <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden flex-shrink-0">
+                            {((product.image_urls?.[0]) || product.image_url) ? (
+                              <img src={(product.image_urls?.[0]) || product.image_url || ''} alt={product.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center"><Package className="w-5 h-5 text-gray-300" /></div>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2">{product.name}</div>
+                            <div className="text-[11px] text-orange-600 mt-1">China Import</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-4 text-sm text-gray-600 dark:text-gray-300">{product.category || '—'}</td>
+                      <td className="px-4 py-4 text-sm font-medium text-gray-900 dark:text-white">{money(landed)}</td>
+                      <td className="px-4 py-4 text-sm font-medium text-gray-900 dark:text-white">{money(suggested)}</td>
+                      <td className="px-4 py-4">
+                        <input
+                          type="number"
+                          min={Math.ceil(landed)}
+                          value={prices[product.id] ?? String(suggested)}
+                          onChange={e => setPrices(prev => ({ ...prev, [product.id]: e.target.value }))}
+                          className="w-32 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold outline-none focus:border-orange-500"
+                          aria-label={`Selling price for ${product.name}`}
+                        />
+                      </td>
+                      <td className="px-4 py-4">
+                        <Button
+                          onClick={() => void addToStore(product)}
+                          disabled={busyId === product.id}
+                          className="bg-orange-500 hover:bg-orange-600 text-white whitespace-nowrap"
+                          size="sm"
+                        >
+                          {busyId === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4 mr-1" />Add to Store</>}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>      )}
     </section>
   );
 }
