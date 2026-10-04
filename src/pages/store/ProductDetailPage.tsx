@@ -156,6 +156,7 @@ export default function ProductDetailPage() {
     original_owner_id: string | null;
   } | null>(null);
 
+  const [isChinaDropship, setIsChinaDropship] = useState(false);
   const [showBuyNowModal, setShowBuyNowModal] = useState(false);
   const [buyNowVariants, setBuyNowVariants] = useState<Record<string, string>>({});
   const [buyNowQty, setBuyNowQty] = useState(1);
@@ -207,8 +208,49 @@ export default function ProductDetailPage() {
       setStore(storeData as StoreType);
 
       const { data: productData } = await productService.getProduct(productId!);
-      if (!productData) { toast.error('Product not found'); navigate(`/${slug}`); return; }
-      setProduct(productData as Product);
+      if (productData) {
+        setProduct(productData as Product);
+        setIsChinaDropship(false);
+      } else {
+        const { data: catalogRow } = await supabase
+          .from('china_import_dropship_catalog')
+          .select('china_import_product_id,seller_price_ngn,status')
+          .eq('seller_store_id', storeData.id)
+          .eq('china_import_product_id', productId!)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (!catalogRow) { toast.error('Product not found'); navigate(`/${slug}`); return; }
+
+        const { data: chinaProduct } = await supabase
+          .from('china_import_products')
+          .select('id,name,description,category,image_url,image_urls,is_active,has_variants,variants,air_shipping_customer_ngn')
+          .eq('id', productId!)
+          .eq('is_active', true)
+          .not('air_shipping_customer_ngn', 'is', null)
+          .gt('air_shipping_customer_ngn', 0)
+          .maybeSingle();
+
+        if (!chinaProduct) { toast.error('Product not found'); navigate(`/${slug}`); return; }
+
+        setProduct({
+          id: chinaProduct.id,
+          name: chinaProduct.name,
+          description: chinaProduct.description,
+          category: chinaProduct.category,
+          niche: null,
+          images: chinaProduct.image_urls?.length ? chinaProduct.image_urls : (chinaProduct.image_url ? [chinaProduct.image_url] : []),
+          selling_price: Number(catalogRow.seller_price_ngn),
+          is_active: true,
+          has_variants: chinaProduct.has_variants,
+          variants: chinaProduct.variants,
+          stock_quantity: 999999,
+          is_imported: true,
+          __sourceType: 'china_import',
+          __sourceId: chinaProduct.id,
+        } as unknown as Product);
+        setIsChinaDropship(true);
+      }
 
       const { data: importData } = await supabase
         .from('import_catalog')
@@ -321,7 +363,10 @@ export default function ProductDetailPage() {
           toast.error(`Only ${getCurrentStock()} items available`); return false;
         }
         const resolvedPrice = getCurrentPrice();
-        addItem(product, store, qty, variants, resolvedPrice);
+        addItem(product, store, qty, variants, resolvedPrice, {
+          sourceType: isChinaDropship ? 'china_import' : 'product',
+          sourceId: product.id,
+        });
       } else {
         // Format B: find exact combination
         const match = v.find((variant: any) =>
@@ -329,7 +374,10 @@ export default function ProductDetailPage() {
         );
         if (!match) { toast.error('Variant combination not available'); return false; }
         if (match.stock < qty) { toast.error(`Only ${match.stock} items available`); return false; }
-        addItem(product, store, qty, variants, match.price);
+        addItem(product, store, qty, variants, match.price, {
+          sourceType: isChinaDropship ? 'china_import' : 'product',
+          sourceId: product.id,
+        });
       }
     } else {
       if (getCurrentStock() < qty) {
@@ -338,7 +386,10 @@ export default function ProductDetailPage() {
       const resolvedPrice = importRecord?.custom_selling_price
         ?? importRecord?.selling_price
         ?? Number(product.selling_price);
-      addItem(product, store, qty, undefined, resolvedPrice);
+      addItem(product, store, qty, undefined, resolvedPrice, {
+        sourceType: isChinaDropship ? 'china_import' : 'product',
+        sourceId: product.id,
+      });
     }
 
     toast.success(`${product.name} added to cart!`);
