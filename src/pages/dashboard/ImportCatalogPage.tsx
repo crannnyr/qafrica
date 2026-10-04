@@ -19,6 +19,8 @@ export default function ImportCatalogPage() {
   const [isImporting, setIsImporting] = useState<string | null>(null);
   const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [chinaImports, setChinaImports] = useState<any[]>([]);
+  const [isLoadingChinaImports, setIsLoadingChinaImports] = useState(false);
 
   // NEW: State for the Price Configuration Modal
   const [configuringProduct, setConfiguringProduct] = useState<any | null>(null);
@@ -33,8 +35,50 @@ export default function ImportCatalogPage() {
     if (currentStore?.id) {
       fetchStoreImports(currentStore.id);
       fetchProducts();
+      fetchChinaImports(currentStore.id);
     }
   }, [currentStore, filterType]);
+
+  const fetchChinaImports = async (storeId: string) => {
+    setIsLoadingChinaImports(true);
+    try {
+      const { data: catalogRows, error: catalogError } = await supabase
+        .from('china_import_dropship_catalog')
+        .select('id,china_import_product_id,seller_price_ngn,status,created_at')
+        .eq('seller_store_id', storeId)
+        .neq('status', 'removed')
+        .order('created_at', { ascending: false });
+
+      if (catalogError) throw catalogError;
+
+      const ids = (catalogRows || []).map(row => row.china_import_product_id);
+      if (ids.length === 0) {
+        setChinaImports([]);
+        return;
+      }
+
+      const { data: products, error: productError } = await supabase
+        .from('china_import_products')
+        .select('id,name,image_url,image_urls,category')
+        .in('id', ids);
+
+      if (productError) throw productError;
+
+      const byId = new Map((products || []).map(product => [product.id, product]));
+      setChinaImports(
+        (catalogRows || []).map(row => ({
+          ...row,
+          product: byId.get(row.china_import_product_id) || null,
+        }))
+      );
+    } catch (error: any) {
+      console.error('Error fetching China Import listings:', error);
+      toast.error(error?.message || 'Failed to load China Import imports');
+      setChinaImports([]);
+    } finally {
+      setIsLoadingChinaImports(false);
+    }
+  };
 
   const fetchProducts = async () => {
     if (!currentStore?.id) return;
@@ -168,6 +212,7 @@ export default function ImportCatalogPage() {
 
   // Build a set of already-imported product IDs for O(1) lookup
   const importedProductIds = new Set(imports.map(i => i.original_product_id));
+  const totalMyImports = imports.length + chinaImports.length;
 
   const getFilterLabel = (type: FilterType) => {
     switch (type) {
@@ -229,7 +274,7 @@ export default function ImportCatalogPage() {
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
           }`}
         >
-          My Imports ({imports.length})
+          My Imports ({totalMyImports})
         </button>
       </div>
 
@@ -419,14 +464,76 @@ export default function ImportCatalogPage() {
         </>
       ) : (
         /* Imported Products */
-        <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div className="space-y-6">
+          {isLoadingChinaImports ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+            </div>
+          ) : chinaImports.length > 0 ? (
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-orange-100 dark:border-orange-900/30 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900 dark:text-white">China Import</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Products you added from the China Import catalog</p>
+                </div>
+                <button
+                  onClick={() => setActiveTab('china')}
+                  className="text-sm font-medium text-orange-600 hover:text-orange-700"
+                >
+                  Manage China Imports
+                </button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 dark:bg-gray-700/50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Your Price</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {chinaImports.map((item) => {
+                      const product = item.product;
+                      const image = product?.image_urls?.[0] || product?.image_url;
+                      return (
+                        <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
+                                {image ? <img src={image} alt="" className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-gray-400" />}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="font-medium text-gray-900 dark:text-white line-clamp-1">{product?.name || 'China Import product'}</span>
+                                <span className="text-[11px] text-orange-600">China Import</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{product?.category || '—'}</td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">₦{Number(item.seller_price_ngn || 0).toLocaleString()}</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${item.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
+                              {item.status === 'active' ? 'Active' : 'Paused'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
           {imports.length === 0 ? (
             <div className="p-12 text-center">
               <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Package className="w-10 h-10 text-gray-400" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No imported products</h3>
-              <p className="text-gray-500 dark:text-gray-400 mb-4">Browse the catalog to import products to your store</p>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">{chinaImports.length > 0 ? 'No seller-to-seller imports' : 'No imported products'}</h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">{chinaImports.length > 0 ? 'Your China Import products are listed above. Browse the catalog to add products from other sellers.' : 'Browse the catalog to import products to your store'}</p>
               <Button
                 onClick={() => setActiveTab('browse')}
                 className="bg-orange-500 hover:bg-orange-600 text-white"
@@ -553,7 +660,7 @@ export default function ImportCatalogPage() {
               </table>
             </div>
           )}
-        </div>
+          </div>
       )}
 
       {/* NEW: Import Configuration Modal */}
