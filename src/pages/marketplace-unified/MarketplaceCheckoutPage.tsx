@@ -101,9 +101,18 @@ export default function MarketplaceCheckoutPage() {
 
   const handleCheckout = async () => {
     if (!quote?.amount) return;
-    if (!name.trim() || !email.trim() || !phone.trim() || !address.trim() || !city.trim() || !state.trim()) { toast.error('Please complete your delivery and contact details'); return; }
+    const checkoutAddress = address.trim();
+    const checkoutCity = city.trim();
+    const checkoutState = state.trim();
+    const checkoutName = name.trim();
+    const checkoutEmail = email.trim();
+    const checkoutPhone = phone.trim();
+    if (!checkoutName || !checkoutEmail || !checkoutPhone || !checkoutAddress || !checkoutCity || !checkoutState) {
+      toast.error('Please complete your delivery and contact details');
+      return;
+    }
     setProcessing(true);
-    const { data, error } = await invokeCheckout({ action: 'create', customer: { name: name.trim(), email: email.trim(), phone: phone.trim() }, delivery: { address: address.trim(), city: city.trim(), state: state.trim(), landmark: landmark.trim() }, items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
+    const { data, error } = await invokeCheckout({ action: 'create', customer: { name: checkoutName, email: checkoutEmail, phone: checkoutPhone }, delivery: { address: checkoutAddress, city: checkoutCity, state: checkoutState, landmark: landmark.trim() }, items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
     if (error || !data?.checkout_link) { setProcessing(false); toast.error(data?.error ?? error?.message ?? 'Could not start payment'); return; }
     window.location.assign(data.checkout_link);
   };
