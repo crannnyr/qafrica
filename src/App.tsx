@@ -115,6 +115,7 @@ const UnifiedProductPage = lazy(() => import('@/pages/marketplace-unified/Unifie
 const MarketplaceCheckoutPage = lazy(() => import('@/pages/marketplace-unified/MarketplaceCheckoutPage'));
 const MarketplaceCheckoutCompletePage = lazy(() => import('@/pages/marketplace-unified/MarketplaceCheckoutCompletePage'));
 const MarketplaceCategories = lazy(() => import('@/pages/marketplace/MarketplaceCategories'));
+const UnifiedMarketplaceCategories = lazy(() => import('@/pages/marketplace-unified/UnifiedMarketplaceCategories'));
 const CartPage = lazy(() => import('@/pages/shop/CartPage'));
 const ShopCheckoutPage = lazy(() => import('@/pages/shop/CheckoutPage'));
 const UnifiedCheckoutPage = lazy(() => import('@/pages/shop/UnifiedCheckoutPage'));
@@ -559,6 +560,7 @@ function App() {
           <Route path="/help-pay/leaderboard" element={<LeaderboardPage />} />
           <Route path="/help-pay/claim" element={<ClaimClearPage />} />
           <Route path="/stores-v2" element={<UnifiedMarketplaceHome />} />
+           <Route path="/stores-v2/categories" element={<UnifiedMarketplaceCategories />} />
           <Route path="/stores-v2/cart" element={<CartPage />} />
           <Route path="/stores-v2/cart/share" element={<ShareCartPage />} />
           <Route path="/stores-v2/checkout" element={<MarketplaceCheckoutPage />} />
