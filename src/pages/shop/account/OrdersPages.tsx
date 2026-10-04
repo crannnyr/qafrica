@@ -147,8 +147,26 @@ export function OrderPage() {
             {' '}<InfoButton title="Buyer protection"><EscrowExplainer /></InfoButton>
           </p>
           {o.tracking_number && <p className="mt-2 text-[12px]">Tracking: <span className="font-medium">{o.tracking_number}</span></p>}
-          {o.source_type === 'china_import' ? (
-            <p className="mt-3 text-[12px] font-semibold text-orange-700">China Import fulfillment is tracked from this same order page.</p>
+          {o.source_type === 'china_import' || o.china_code ? (
+            <div className="mt-3 rounded-lg bg-orange-50 border border-orange-100 px-3 py-2 text-[12px] text-orange-800">
+              <p className="font-semibold">China Import fulfillment</p>
+              <p className="mt-0.5">
+                {o.china_fulfillment_status === 'delivered' || o.china_received_at
+                  ? 'Your China Import item has been delivered.'
+                  : o.china_fulfillment_status === 'shipped'
+                    ? 'Your China Import item is on the way.'
+                    : o.china_fulfillment_status === 'received'
+                      ? 'Your China Import item has arrived at QAFRICA HQ and is being prepared for delivery.'
+                      : o.china_batch_id
+                        ? 'Your China Import item is assigned to a shipping batch.'
+                        : 'Your China Import item is being prepared for fulfillment.'}
+              </p>
+              {o.china_ordered_quantity ? (
+                <p className="mt-1 text-[11px] text-orange-700">
+                  {o.china_delivered_quantity ?? 0}/{o.china_ordered_quantity} delivered
+                </p>
+              ) : null}
+            </div>
           ) : (
             <Link to={`/track?order=${encodeURIComponent(o.order_number)}&email=${encodeURIComponent(o.customer_email ?? '')}`} className="mt-3 inline-block text-[12px] font-semibold underline underline-offset-2">See full timeline</Link>
           )}
