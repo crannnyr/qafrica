@@ -476,10 +476,7 @@ export default function ImportCatalogPage() {
                   <h3 className="font-semibold text-gray-900 dark:text-white">China Import</h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Products you added from the China Import catalog</p>
                 </div>
-                <button
-                  onClick={() => setActiveTab('china')}
-                  className="text-sm font-medium text-orange-600 hover:text-orange-700"
-                >
+                <button onClick={() => setActiveTab('china')} className="text-sm font-medium text-orange-600 hover:text-orange-700">
                   Manage China Imports
                 </button>
               </div>
@@ -498,7 +495,7 @@ export default function ImportCatalogPage() {
                       const product = item.product;
                       const image = product?.image_urls?.[0] || product?.image_url;
                       return (
-                        <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                        <tr key={item.id}>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
@@ -527,7 +524,25 @@ export default function ImportCatalogPage() {
           ) : null}
 
           <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-          {imports.length === 0 ? (
+            {imports.length === 0 ? (
+              <div className="p-12 text-center">
+                <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Package className="w-10 h-10 text-gray-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  {chinaImports.length > 0 ? 'No seller-to-seller imports' : 'No imported products'}
+                </h3>
+                <p className="text-gray-500 dark:text-gray-400 mb-4">
+                  {chinaImports.length > 0
+                    ? 'Your China Import products are listed above. Browse the catalog to add products from other sellers.'
+                    : 'Browse the catalog to import products to your store'}
+                </p>
+                <Button onClick={() => setActiveTab('browse')} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  Browse Catalog
+                </Button>
+              </div>
+            ) : (
+{imports.length === 0 ? (
             <div className="p-12 text-center">
               <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Package className="w-10 h-10 text-gray-400" />
@@ -663,6 +678,12 @@ export default function ImportCatalogPage() {
           </div>
       )}
 
+
+            )}
+          </div>
+        </div>
+      )}
+ 
       {/* NEW: Import Configuration Modal */}
       <AnimatePresence>
         {configuringProduct && (
