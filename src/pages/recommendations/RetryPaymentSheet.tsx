@@ -141,7 +141,7 @@ export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: 
             <h2 className="font-bold text-gray-900 text-lg">Complete payment</h2>
             <p className="text-[11px] text-gray-400 font-mono">{order.code}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
+          <button onClick={onClose} aria-label="Close" className="p-1.5 hover:bg-gray-100 rounded-xl">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>

@@ -50,7 +50,7 @@ export default function TrackOrderModal({ onClose }: { onClose: () => void }) {
       <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl max-h-[80vh] flex flex-col">
         <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100">
           <h2 className="font-bold text-gray-900 text-base">Track an order</h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
+          <button onClick={onClose} aria-label="Close" className="p-1.5 hover:bg-gray-100 rounded-xl">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>

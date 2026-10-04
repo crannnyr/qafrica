@@ -137,7 +137,7 @@ export default function ImportSettingsSheet({ onClose }: { onClose: () => void }
               {panel === 'addressForm' && (editingAddress ? 'Edit address' : 'Add address')}
             </h2>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
+          <button onClick={onClose} aria-label="Close" className="p-1.5 hover:bg-gray-100 rounded-xl">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>

@@ -48,6 +48,7 @@ function Description({ text }: { text: string }) {
       {isLong && (
         <button
           onClick={() => setExpanded(p => !p)}
+          aria-expanded={expanded}
           className="flex items-center gap-1 mt-1.5 text-[11px] font-semibold text-gray-400 hover:text-gray-700 transition-colors"
         >
           {expanded ? (
@@ -94,12 +95,13 @@ function VariantPicker({
               {group.name}
               {!selection[group.name] && <span className="text-red-400 font-normal"> · required</span>}
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div role="group" aria-label={`Choose ${group.name}`} className="flex flex-wrap gap-2">
               {visibleOptions.map(opt => {
                 const delta = group.price_deltas?.[opt];
                 return (
                   <button
                     key={opt}
+                    aria-pressed={selection[group.name] === opt}
                     onClick={() => onSelect(group.name, opt)}
                     className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
                       selection[group.name] === opt
@@ -119,6 +121,8 @@ function VariantPicker({
               {isLong && (
                 <button
                   onClick={() => toggleExpanded(group.id)}
+                  aria-expanded={isExpanded}
+                  aria-label={isExpanded ? `Show fewer ${group.name} options` : `Show ${group.options.length - VARIANT_TRUNCATE_THRESHOLD} more ${group.name} options`}
                   className="px-3.5 py-1.5 rounded-lg text-xs font-semibold border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors"
                 >
                   {isExpanded ? 'Show less' : `+${group.options.length - VARIANT_TRUNCATE_THRESHOLD} more`}
@@ -154,7 +158,7 @@ function ImageGallery({ images, name }: { images: string[]; name: string }) {
           <motion.img
             key={active}
             src={list[active]}
-            alt={name}
+            alt={list.length > 1 ? `${name} — photo ${active + 1} of ${list.length}` : name}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -171,11 +175,13 @@ function ImageGallery({ images, name }: { images: string[]; name: string }) {
             <button
               key={i}
               onClick={() => setActive(i)}
+              aria-label={`Show photo ${i + 1} of ${list.length}`}
+              aria-pressed={active === i}
               className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-colors ${
                 active === i ? 'border-gray-900' : 'border-transparent'
               }`}
             >
-              <img src={src} alt={`${name} ${i + 1}`} className="w-full h-full object-cover" />
+              <img src={src} alt="" className="w-full h-full object-cover" />
             </button>
           ))}
         </div>
@@ -408,8 +414,8 @@ export default function ProductDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="w-7 h-7 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
+      <div role="status" aria-label="Loading product" className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div aria-hidden="true" className="w-7 h-7 border-2 border-gray-900 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -476,7 +482,7 @@ export default function ProductDetailPage() {
             onClick={() => navigate(-1)}
             className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 font-medium"
           >
-            <ArrowLeft className="w-3.5 h-3.5" />
+            <ArrowLeft className="w-3.5 h-3.5" aria-hidden="true" />
             Back
           </button>
 
@@ -488,7 +494,8 @@ export default function ProductDetailPage() {
                 const result = await toggleSave(product.id);
                 if (result === 'needs-auth') setShowAuth(true);
               }}
-              aria-label="Save item"
+              aria-label={isSaved(product.id) ? `Remove ${product.name} from saved items` : `Save ${product.name}`}
+              aria-pressed={isSaved(product.id)}
               className={`flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${
                 isSaved(product.id)
                   ? 'bg-orange-50 border-orange-200 text-orange-500'
@@ -501,6 +508,7 @@ export default function ProductDetailPage() {
             {cartCount > 0 ? (
               <button
                 onClick={goToCart}
+                aria-label={`View order, ${cartCount} unit${cartCount !== 1 ? 's' : ''}`}
                 className="flex items-center gap-1 bg-gray-900 text-white px-2.5 py-1.5 rounded-lg text-[11px] font-bold"
               >
                 <ShoppingBag className="w-3 h-3" />
@@ -511,7 +519,7 @@ export default function ProductDetailPage() {
         </div>
       </header>
 
-      <div className="max-w-lg lg:max-w-6xl mx-auto pb-32 lg:pb-16 lg:px-6 lg:pt-8">
+      <div role="main" className="max-w-lg lg:max-w-6xl mx-auto pb-32 lg:pb-16 lg:px-6 lg:pt-8">
         <div className="lg:grid lg:grid-cols-2 lg:gap-12 lg:items-start">
           {/* Image gallery — sticky on desktop so it stays visible while scrolling info */}
           <div className="lg:sticky lg:top-20 lg:rounded-2xl lg:overflow-hidden lg:border lg:border-gray-100">
@@ -745,7 +753,7 @@ export default function ProductDetailPage() {
                   <div className="aspect-square bg-gray-50 overflow-hidden">
                     <img
                       src={p.image_url}
-                      alt={p.name}
+                      alt=""
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />

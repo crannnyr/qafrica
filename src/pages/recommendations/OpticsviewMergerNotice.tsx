@@ -38,7 +38,7 @@ export default function OpticsviewMergerNotice() {
           >
             <div className="flex items-center justify-between mb-4">
               <img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="w-9 h-9 rounded-xl object-cover" />
-              <button onClick={dismiss} className="p-1.5 hover:bg-gray-100 rounded-xl">
+              <button onClick={dismiss} aria-label="Dismiss notice" className="p-1.5 hover:bg-gray-100 rounded-xl">
                 <X className="w-4 h-4 text-gray-500" />
               </button>
             </div>
