@@ -32,8 +32,7 @@ AS $function$
     WHERE c.is_active
       AND c.flight_shipping_cost_ngn IS NOT NULL
       AND c.flight_shipping_cost_ngn > 0
-      AND COALESCE(array_length(c.images, 1), 0) > 0
-      AND c.price_ngn > 0
+            AND c.price_ngn > 0
       AND c.category IS NOT NULL
       AND trim(c.category) <> ''
   ),
