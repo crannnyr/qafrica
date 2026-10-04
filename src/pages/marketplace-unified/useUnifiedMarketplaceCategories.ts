@@ -7,7 +7,7 @@ type Data = { niches: MarketNiche[]; categories: MarketCategory[] };
 let cache: Data | null = null;
 
 export function useUnifiedMarketplaceCategories() {
-  const [data, setData] = useState<Data>(cache);
+  const [data, setData] = useState<Data | null>(() => cache);
 
   useEffect(() => {
     if (cache) return;
