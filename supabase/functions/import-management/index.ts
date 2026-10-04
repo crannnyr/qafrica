@@ -544,7 +544,7 @@ serve(async (req) => {
 
     const orderResults = await Promise.all(orderChunks.map((ids) =>
       supabase.from('china_import_orders')
-        .select('id, code, customer_name, customer_whatsapp, user_id, batch_id, status, shipping_method')
+        .select('id, code, customer_name, customer_whatsapp, user_id, batch_id, status, shipping_method, delivery_address')
         .in('id', ids)
     ))
     const ordersError = orderResults.find((result) => result.error)?.error
@@ -566,9 +566,42 @@ serve(async (req) => {
     const eligibleOrders = (orders ?? []).filter((order: any) => paidOrderIds.has(order.id))
     const eligibleOrderIds = new Set(eligibleOrders.map((order: any) => order.id))
 
+    const linkResults = await Promise.all(orderChunks.map((ids) =>
+      supabase.from('china_import_order_links')
+        .select('china_import_order_id, seller_order_id, seller_order_item_id, china_import_dropship_catalog_id')
+        .in('china_import_order_id', ids)
+    ))
+    const linksError = linkResults.find((result) => result.error)?.error
+    if (linksError) return json({ error: linksError.message }, 500)
+    const links = linkResults.flatMap((result) => result.data ?? [])
+    const sellerOrderIds = Array.from(new Set(links.map((row: any) => row.seller_order_id).filter(Boolean)))
+    const sellerStoreIds = Array.from(new Set(links.map((row: any) => row.china_import_dropship_catalog_id).filter(Boolean)))
+
+
     const customerIds = Array.from(new Set(eligibleOrders.map((order: any) => order.user_id).filter(Boolean)))
     const batchIds = Array.from(new Set(eligibleOrders.map((order: any) => order.batch_id).filter(Boolean)))
     const productIds = Array.from(new Set(rows.map((row: any) => row.product_id).filter(Boolean)))
+    const sellerOrderRefResults = await Promise.all(chunk(sellerOrderIds, 50).map((ids) =>
+      supabase.from('orders').select('id, order_number, customer_id').in('id', ids)
+    ))
+    const sellerOrderRefError = sellerOrderRefResults.find((result) => result.error)?.error
+    if (sellerOrderRefError) return json({ error: sellerOrderRefError.message }, 500)
+    const sellerOrders = sellerOrderRefResults.flatMap((result) => result.data ?? [])
+
+    const catalogIds = Array.from(new Set(links.map((row: any) => row.china_import_dropship_catalog_id).filter(Boolean)))
+    const catalogResults = await Promise.all(chunk(catalogIds, 50).map((ids) =>
+      supabase.from('china_import_dropship_catalog').select('id, seller_store_id, seller_owner_id').in('id', ids)
+    ))
+    const catalogError = catalogResults.find((result) => result.error)?.error
+    if (catalogError) return json({ error: catalogError.message }, 500)
+    const catalogs = catalogResults.flatMap((result) => result.data ?? [])
+    const storeIds = Array.from(new Set(catalogs.map((row: any) => row.seller_store_id).filter(Boolean)))
+    const storeResults = await Promise.all(chunk(storeIds, 50).map((ids) =>
+      supabase.from('stores').select('id, name, slug').in('id', ids)
+    ))
+    const storesError = storeResults.find((result) => result.error)?.error
+    if (storesError) return json({ error: storesError.message }, 500)
+    const stores = storeResults.flatMap((result) => result.data ?? [])
 
     const customerResults = await Promise.all(chunk(customerIds, 50).map((ids) =>
       supabase.from('customers').select('id, full_name, phone, email').in('id', ids)
@@ -599,15 +632,30 @@ serve(async (req) => {
     ]))
 
     const orderMap = new Map(eligibleOrders.map((order: any) => [order.id, order]))
+    const linkMap = new Map(links.map((row: any) => [row.china_import_order_id, row]))
+    const sellerOrderMap = new Map(sellerOrders.map((row: any) => [row.id, row]))
+    const catalogMap = new Map(catalogs.map((row: any) => [row.id, row]))
+    const storeMap = new Map(stores.map((row: any) => [row.id, row]))
     const items = rows
       .filter((row: any) => eligibleOrderIds.has(row.order_id))
       .map((row: any) => {
         const order = orderMap.get(row.order_id)
         const customer = order?.user_id ? customerMap.get(order.user_id) : null
         const batch = order?.batch_id ? batchMap.get(order.batch_id) : null
+        const link = linkMap.get(row.order_id)
+        const sellerOrder = link?.seller_order_id ? sellerOrderMap.get(link.seller_order_id) : null
+        const catalog = link?.china_import_dropship_catalog_id ? catalogMap.get(link.china_import_dropship_catalog_id) : null
+        const sellerStore = catalog?.seller_store_id ? storeMap.get(catalog.seller_store_id) : null
         return {
           ...row,
           order_code: order?.code ?? '—',
+          seller_order_id: sellerOrder?.id ?? null,
+          seller_order_number: sellerOrder?.order_number ?? null,
+          seller_store_id: sellerStore?.id ?? null,
+          seller_store_name: sellerStore?.name ?? null,
+          seller_store_slug: sellerStore?.slug ?? null,
+          seller_owner_id: catalog?.seller_owner_id ?? null,
+          delivery_address: order?.delivery_address ?? null,
           customer_name: customer?.full_name || order?.customer_name || 'Customer',
           customer_whatsapp: customer?.phone || order?.customer_whatsapp || null,
           customer_email: customer?.email || null,
