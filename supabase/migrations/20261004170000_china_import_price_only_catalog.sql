@@ -33,10 +33,6 @@ begin
     new.shipping_cost_ngn := 0;
   end if;
 
-  new.landed_cost_ngn := greatest(
-    coalesce(new.supplier_cost_ngn, 0) + coalesce(new.shipping_cost_ngn, 0),
-    0
-  );
 
   return new;
 end;
@@ -56,7 +52,7 @@ update public.china_import_dropship_catalog c
 set
   supplier_cost_ngn = greatest(coalesce(p.price_ngn, 0), 0),
   shipping_cost_ngn = 0,
-  landed_cost_ngn = greatest(coalesce(p.price_ngn, 0), 0),
+  -- landed_cost_ngn is a generated column (supplier + shipping)
   updated_at = now()
 from public.china_import_products p
 where p.id = c.china_import_product_id;
