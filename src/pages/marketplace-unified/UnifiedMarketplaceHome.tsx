@@ -4,10 +4,11 @@ import { PackageSearch, RefreshCw, ShieldCheck } from 'lucide-react';
 import MarketplaceLayout from '@/pages/marketplace/MarketplaceLayout';
 import { MARKETPLACE_STATE } from '@/lib/navigation';
 import { marketplaceLink } from '@/lib/marketplaceAttribution';
-import { nicheLabel, useMarketCategories } from '@/pages/marketplace/useMarketplace';
+import { nicheLabel } from '@/pages/marketplace/useMarketplace';
 import { useMarketplaceStores } from '@/pages/customer/StoreDiscovery/useMarketplaceStores';
 import UnifiedProductCard from './UnifiedProductCard';
 import { useUnifiedMarketplaceMixed } from './useUnifiedMarketplaceMixed';
+import { useUnifiedMarketplaceCategories } from './useUnifiedMarketplaceCategories';
 import type { UnifiedFeedTab } from './types';
 
 const TABS: { id: UnifiedFeedTab; label: string }[] = [
@@ -29,8 +30,11 @@ function UnifiedMarketplaceFeedPage() {
   const rawTab = params.get('tab') as UnifiedFeedTab | null;
   const tab = TABS.some((t) => t.id === rawTab) ? rawTab! : 'for_you';
   const browsing = !query && !niche && !category;
-  const cats = useMarketCategories();
+  const cats = useUnifiedMarketplaceCategories();
   const feed = useUnifiedMarketplaceMixed({ tab, niche, category, search: query || null });
+  const categoryPicks = cats
+    ? [...cats.categories].sort(() => Math.random() - 0.5).slice(0, 20)
+    : [];
   const setTab = (id: UnifiedFeedTab) => {
     const next = new URLSearchParams(params);
     if (id === 'for_you') next.delete('tab');
@@ -90,10 +94,16 @@ function UnifiedMarketplaceFeedPage() {
         </div>
       )}
 
-      {browsing && cats && cats.categories.length > 0 && (
+      {browsing && cats && categoryPicks.length > 0 && (
         <section aria-label="Shop by category" className="mt-3 bg-white py-3">
-          <div className="grid grid-rows-2 grid-flow-col auto-cols-[76px] gap-x-2 gap-y-3 overflow-x-auto scrollbar-hide px-3 sm:px-4">
-            {cats.categories.map((c) => (
+          <div className="flex items-center justify-between px-3 sm:px-4 mb-3">
+            <h2 className="text-base font-bold text-gray-900">Shop by category</h2>
+            <Link to="/stores-v2/categories" className="text-sm font-semibold text-gray-700 underline underline-offset-2">
+              View all
+            </Link>
+          </div>
+          <div className="grid grid-cols-5 gap-x-2 gap-y-3 px-3 sm:px-4">
+            {categoryPicks.map((c) => (
               <button
                 key={c.value}
                 type="button"
