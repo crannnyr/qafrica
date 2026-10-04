@@ -23,10 +23,10 @@ export default function MarketplaceCheckoutPage() {
   const navigate = useNavigate();
   const { customer, isAuthenticated, addresses, getDefaultAddress, fetchAddresses, fetchProfile } = useCustomerAuthStore();
   const allItems = useCartStore(s => s.items);
-  const [selectedIds, setSelectedIds] = useState<{ product_cart_ids: string[]; china_product_ids: string[] } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<{ product_cart_ids: string[]; china_cart_ids?: string[]; china_product_ids?: string[] } | null>(null);
   const items = useMemo(() => {
     if (!selectedIds) return allItems;
-    return allItems.filter(i => selectedIds.product_cart_ids.includes(i.id) || (i.sourceType === 'china_import' && i.sourceId && selectedIds.china_product_ids.includes(i.sourceId)));
+    return allItems.filter(i => selectedIds.product_cart_ids.includes(i.id) || (i.sourceType === 'china_import' && ((selectedIds.china_cart_ids ?? []).includes(i.id) || (!(selectedIds.china_cart_ids ?? []).length && (selectedIds.china_product_ids ?? []).includes(i.sourceId ?? '')))));
   }, [allItems, selectedIds]);
   const [name, setName] = useState(customer?.full_name ?? '');
   const [email, setEmail] = useState(customer?.email ?? '');
@@ -87,10 +87,10 @@ export default function MarketplaceCheckoutPage() {
       if (!chinaIds.length) { setChinaShippingTotal(0); return; }
       const { data: chinaProducts } = await supabase
         .from('china_import_products')
-        .select('id,flight_shipping_cost_ngn')
+        .select('id,air_shipping_customer_ngn,flight_shipping_cost_ngn')
         .in('id', chinaIds);
       if (cancelled) return;
-      const byId = new Map((chinaProducts ?? []).map((p: any) => [String(p.id), Number(p.flight_shipping_cost_ngn || 0)]));
+      const byId = new Map((chinaProducts ?? []).map((p: any) => [String(p.id), Number(p.air_shipping_customer_ngn ?? p.flight_shipping_cost_ngn ?? 0)]));
       setChinaShippingTotal(
         items
           .filter(i => i.sourceType === 'china_import')
