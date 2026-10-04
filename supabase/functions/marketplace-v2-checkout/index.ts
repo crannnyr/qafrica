@@ -129,7 +129,7 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
   const { data: chinaProducts, error: chinaProductError } = chinaIds.length
     ? await supabase
         .from('china_import_products')
-        .select('id,name,image_url,image_urls,price_ngn,flight_shipping_cost_ngn,cost_ngn,is_active,variants,moq')
+        .select('id,name,image_url,image_urls,price_ngn,flight_shipping_cost_ngn,air_shipping_customer_ngn,is_active,variants,moq')
         .in('id', chinaIds)
     : { data: [], error: null };
 
@@ -214,8 +214,8 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
       item.variant_options,
     );
     const sellerPrice = variantPrice.price;
-    const supplierCost = Number(catalog?.supplier_cost_ngn ?? p.cost_ngn ?? p.price_ngn ?? 0);
-    const shippingCost = Number(catalog?.shipping_cost_ngn ?? p.flight_shipping_cost_ngn ?? 0);
+    const supplierCost = Number(p.price_ngn ?? 0);
+    const shippingCost = Number(p.air_shipping_customer_ngn ?? p.flight_shipping_cost_ngn ?? 0);
 
     if (
       !catalog ||
@@ -224,7 +224,7 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
       sellerPrice <= 0 ||
       supplierCost < 0 ||
       shippingCost < 0 ||
-      sellerPrice < supplierCost + shippingCost
+      sellerPrice < supplierCost
     ) {
       errors.push({
         code: 'china_dropship_unavailable',
@@ -328,6 +328,7 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
     const group = chinaDropshipStores.get(storeId);
     group.items.push(item);
     group.subtotal += Number(item.total_price);
+    group.delivery_fee += Number(item.shipping_cost_ngn) * Number(item.quantity);
   }
 
   const sellerChinaStores = [...chinaDropshipStores.values()].map(store => ({
