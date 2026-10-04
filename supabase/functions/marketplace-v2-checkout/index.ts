@@ -38,6 +38,40 @@ function normalizeItems(raw: unknown) {
   })).filter(i => /^[0-9a-f-]{36}$/i.test(i.source_id));
 }
 
+function resolveChinaVariantPrice(
+  basePrice: number,
+  variants: unknown,
+  selected: Record<string, string> | null,
+) {
+  if (!selected) return { price: basePrice, valid: true };
+  if (!Array.isArray(variants) || variants.length === 0) {
+    return { price: basePrice, valid: Object.keys(selected).length === 0 };
+  }
+
+  const groups = new Map<string, any>();
+  for (const group of variants as any[]) {
+    if (!group || typeof group !== 'object' || typeof group.name !== 'string') continue;
+    groups.set(group.name, group);
+  }
+
+  for (const [name, value] of Object.entries(selected)) {
+    const group = groups.get(name);
+    if (!group || !Array.isArray(group.options) || !group.options.includes(value)) {
+      return { price: basePrice, valid: false };
+    }
+  }
+
+  let price = basePrice;
+  for (const group of groups.values()) {
+    const selectedValue = selected[group.name];
+    if (!selectedValue) continue;
+    const delta = Number(group?.price_deltas?.[selectedValue] ?? 0);
+    if (Number.isFinite(delta)) price += delta;
+  }
+
+  return { price: Math.round(price * 100) / 100, valid: price > 0 };
+}
+
 async function requireCustomer(req: Request) {
   const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
   if (!token) throw new Error('AUTH_REQUIRED');
@@ -134,9 +168,14 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
     const direct = !item.store_id || item.store_id === QAFRICA_STORE_ID;
 
     if (direct) {
-      const unit = Number(p.price_ngn);
+      const variantPrice = resolveChinaVariantPrice(
+        Number(p.price_ngn),
+        p.variants,
+        item.variant_options,
+      );
+      const unit = variantPrice.price;
       const shippingUnit = Number(p.flight_shipping_cost_ngn);
-      if (unit <= 0 || shippingUnit <= 0) {
+      if (!variantPrice.valid || unit <= 0 || shippingUnit <= 0) {
         errors.push({
           code: 'china_product_unavailable',
           product_id: item.source_id,
@@ -168,11 +207,24 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
     }
 
     const catalog = catalogByKey.get(item.store_id + ':' + item.source_id);
-    const sellerPrice = Number(catalog?.seller_price_ngn ?? 0);
+    const baseSellerPrice = Number(catalog?.seller_price_ngn ?? 0);
+    const variantPrice = resolveChinaVariantPrice(
+      baseSellerPrice,
+      p.variants,
+      item.variant_options,
+    );
+    const sellerPrice = variantPrice.price;
     const supplierCost = Number(catalog?.supplier_cost_ngn ?? p.cost_ngn ?? p.price_ngn ?? 0);
     const shippingCost = Number(catalog?.shipping_cost_ngn ?? p.flight_shipping_cost_ngn ?? 0);
 
-    if (!catalog || catalog.status !== 'active' || sellerPrice <= 0 || supplierCost < 0 || shippingCost < 0) {
+    if (
+      !catalog ||
+      catalog.status !== 'active' ||
+      !variantPrice.valid ||
+      sellerPrice <= 0 ||
+      supplierCost < 0 ||
+      shippingCost < 0
+    ) {
       errors.push({
         code: 'china_dropship_unavailable',
         product_id: item.source_id,
