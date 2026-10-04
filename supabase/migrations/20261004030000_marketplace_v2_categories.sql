@@ -26,7 +26,7 @@ AS $function$
     SELECT
       lower(trim(c.category)) AS value,
       initcap(regexp_replace(lower(trim(c.category)), '[-_]+', ' ', 'g')) AS name,
-      c.images[1] AS image,
+      COALESCE(c.image_url, c.image_urls[1]) AS image,
       NULL::text AS niche
     FROM public.china_import_products c
     WHERE c.is_active
