@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { PackageSearch, RefreshCw, ShieldCheck } from 'lucide-react';
 import MarketplaceLayout from '@/pages/marketplace/MarketplaceLayout';
@@ -32,9 +32,10 @@ function UnifiedMarketplaceFeedPage() {
   const browsing = !query && !niche && !category;
   const cats = useUnifiedMarketplaceCategories();
   const feed = useUnifiedMarketplaceMixed({ tab, niche, category, search: query || null });
-  const categoryPicks = cats
-    ? [...cats.categories].sort(() => Math.random() - 0.5).slice(0, 20)
-    : [];
+  const categoryPicks = useMemo(() => {
+    if (!cats) return [];
+    return [...cats.categories].sort(() => Math.random() - 0.5).slice(0, 20);
+  }, [cats]);
   const setTab = (id: UnifiedFeedTab) => {
     const next = new URLSearchParams(params);
     if (id === 'for_you') next.delete('tab');
