@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { supabase } from '@/services';
 import CONFIG from '@/lib/config';
 
-const IMPORT_PRODUCTS_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=products`;
+const IMPORT_PRODUCT_LOOKUP_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse?action=product`;
 
 // ── Types (mirrors RecommendationsPage's local types, kept here so both
 // RecommendationsPage and ProductDetailPage share one cart instead of each
@@ -138,7 +138,9 @@ export const useImportCartStore = create<ImportCartState>()(
       refreshPrices: async () => {
         if (get().cart.length === 0) return;
         try {
-          const res = await fetch(IMPORT_PRODUCTS_URL);
+          // Only the products actually in the cart — not the whole catalogue.
+          const ids = Array.from(new Set(get().cart.map(i => i.id))).slice(0, 100);
+          const res = await fetch(`${IMPORT_PRODUCT_LOOKUP_URL}&ids=${ids.join(',')}`);
           const data = await res.json().catch(() => ({}));
           const list: ImportProduct[] = Array.isArray(data?.products) ? data.products : [];
           if (!res.ok || list.length === 0) return;
