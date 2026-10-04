@@ -225,7 +225,7 @@ export default function StorePage() {
     return Object.keys(variants[0]?.options || {});
   };
 
-  const getVariantOptions = (variantName: string) => {
+  const getVariantOptions = (variantName: string): string[] => {
     if (!selectedProduct?.variants) return [];
     const variants = selectedProduct.variants as any[];
     if (isFormatAVariants(variants)) {
@@ -288,7 +288,20 @@ export default function StorePage() {
     setQuantity(1);
   };
 
-  // Marketplace attribution  // Marketplace attribution: remember whether this visit came from /stores (?src=mkt) or the seller's own link
+  const handleWishlistToggle = (e: React.MouseEvent, product: Product) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!store) return;
+    if (isInWishlist(product.id)) {
+      removeFromWishlist(product.id, customer?.id);
+      toast.success('Removed from wishlist');
+    } else {
+      addToWishlist(product, store, customer?.id);
+      toast.success('Added to wishlist');
+    }
+  };
+
+  // Marketplace attribution: remember whether this visit came from /stores (?src=mkt) or the seller's own link
   useEffect(() => {
     if (store?.id) recordStoreTouch(store.id);
   }, [store?.id]);
@@ -343,7 +356,7 @@ export default function StorePage() {
                       <div key={variantName}>
                         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{variantName}</p>
                         <div className="flex flex-wrap gap-2">
-                          {getVariantOptions(variantName).map(option => (
+                          {getVariantOptions(variantName).map((option: string) => (
                             <button
                               key={option}
                               onClick={() => setSelectedVariants(prev => ({ ...prev, [variantName]: option }))}
