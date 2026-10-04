@@ -40,7 +40,6 @@ export default function ChinaImportCatalogSection() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
-  const [allowedCategoryIds, setAllowedCategoryIds] = useState<string[]>([]);
 
   const load = async () => {
     if (!currentStore?.id) return;
@@ -48,7 +47,6 @@ export default function ChinaImportCatalogSection() {
 
     const storeNiches = currentStore.niches || [];
     if (storeNiches.length === 0) {
-      setAllowedCategoryIds([]);
       setProducts([]);
       setCatalog([]);
       setLoading(false);
@@ -75,8 +73,6 @@ export default function ChinaImportCatalogSection() {
     if (catalogError) toast.error(catalogError.message);
 
     const categoryIds = (categoryRows || []).map(row => row.id);
-    setAllowedCategoryIds(categoryIds);
-
     if (categoryIds.length === 0) {
       setProducts([]);
       setCatalog((catalogRows || []) as CatalogRow[]);
