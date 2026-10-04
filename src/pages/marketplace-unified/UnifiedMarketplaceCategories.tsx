@@ -1,15 +1,16 @@
 // /stores-v2/categories: unified marketplace category browser.
-// Uses the same category/departments source as /stores, but every link stays inside /stores-v2.
+// Every category is sourced from eligible normal products OR eligible China Import products.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import MarketplaceLayout from '@/pages/marketplace/MarketplaceLayout';
-import { nicheLabel, useMarketCategories } from '@/pages/marketplace/useMarketplace';
+import { nicheLabel } from '@/pages/marketplace/useMarketplace';
+import { useUnifiedMarketplaceCategories } from './useUnifiedMarketplaceCategories';
 
 export default function UnifiedMarketplaceCategories() {
-  const cats = useMarketCategories();
+  const cats = useUnifiedMarketplaceCategories();
   const [active, setActive] = useState<string>('');
 
-  const shown = (cats?.categories ?? []).filter((c) => !active || c.niches?.includes(active));
+  const shown = (cats?.categories ?? []).filter((c) => !active || c.niches?.includes(active) || c.niches?.length === 0);
   const departments = [
     { id: '', label: 'Just for You' },
     ...(cats?.niches ?? []).map((n) => ({ id: n.id, label: nicheLabel(n.id) })),
