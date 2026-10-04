@@ -58,6 +58,11 @@ begin
     raise exception 'China Import product is not active or does not exist';
   end if;
 
+  if v_product.air_shipping_customer_ngn is null
+     or v_product.air_shipping_customer_ngn <= 0 then
+    raise exception 'China Import product must have a valid air shipping customer cost';
+  end if;
+
   if auth.uid() is not null and not public.is_admin() then
     new.supplier_cost_ngn := greatest(coalesce(v_product.cost_ngn, v_product.price_ngn, 0), 0);
     new.shipping_cost_ngn := greatest(coalesce(v_product.air_shipping_customer_ngn, 0), 0);
