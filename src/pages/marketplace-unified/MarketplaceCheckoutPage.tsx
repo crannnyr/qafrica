@@ -112,7 +112,7 @@ export default function MarketplaceCheckoutPage() {
       return;
     }
     setProcessing(true);
-    const { data, error } = await invokeCheckout({ action: 'create', customer: { name: checkoutName, email: checkoutEmail, phone: checkoutPhone }, delivery: { address: checkoutAddress, city: checkoutCity, state: checkoutState, landmark: landmark.trim() }, items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
+    const { data, error } = await invokeCheckout({ action: 'create', customer: { name: checkoutName, email: checkoutEmail, phone: checkoutPhone }, delivery: { address: checkoutAddress, city: checkoutCity, state: checkoutState, landmark: landmark.trim() }, items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, store_id: i.storeId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
     if (error || !data?.checkout_link) { setProcessing(false); toast.error(data?.error ?? error?.message ?? 'Could not start payment'); return; }
     window.location.assign(data.checkout_link);
   };
