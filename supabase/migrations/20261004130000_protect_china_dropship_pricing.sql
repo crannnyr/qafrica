@@ -38,7 +38,7 @@ execute function public.protect_china_import_dropship_catalog_fields();
 
 -- Keep the snapshot cost authoritative when a catalog row is first created.
 -- Seller-created rows must match the current active China Import product's
--- procurement and flight-shipping values.
+-- procurement and air-shipping values.
 create or replace function public.set_china_import_dropship_catalog_cost_snapshot()
 returns trigger
 language plpgsql
@@ -60,7 +60,7 @@ begin
 
   if auth.uid() is not null and not public.is_admin() then
     new.supplier_cost_ngn := greatest(coalesce(v_product.cost_ngn, v_product.price_ngn, 0), 0);
-    new.shipping_cost_ngn := greatest(coalesce(v_product.flight_shipping_cost_ngn, 0), 0);
+    new.shipping_cost_ngn := greatest(coalesce(v_product.air_shipping_customer_ngn, 0), 0);
   end if;
 
   return new;
