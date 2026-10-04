@@ -89,7 +89,7 @@ export default function MarketplaceCheckoutPage() {
     const run = async () => {
       if (!items.length || !state.trim()) { setQuote(null); return; }
       setLoadingQuote(true); setQuoteError('');
-      const { data, error } = await invokeCheckout({ action: 'quote', state: state.trim(), items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
+      const { data, error } = await invokeCheckout({ action: 'quote', state: state.trim(), items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, store_id: i.storeId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
       if (cancelled) return; setLoadingQuote(false);
       if (error || !data?.ok) { setQuote(null); setQuoteError(data?.errors?.[0]?.message ?? error?.message ?? 'Could not calculate checkout total'); return; }
       setQuote({ stores: data.stores ?? [], amount: Number(data.amount ?? 0) });
