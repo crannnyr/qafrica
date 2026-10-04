@@ -40,20 +40,30 @@ export default function ChinaImportCatalogSection() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [allowedCategoryIds, setAllowedCategoryIds] = useState<string[]>([]);
 
   const load = async () => {
     if (!currentStore?.id) return;
     setLoading(true);
 
-    const [{ data: productRows, error: productError }, { data: catalogRows, error: catalogError }] =
+    const storeNiches = currentStore.niches || [];
+    if (storeNiches.length === 0) {
+      setAllowedCategoryIds([]);
+      setProducts([]);
+      setCatalog([]);
+      setLoading(false);
+      return;
+    }
+
+    // China Import categories are linked to a parent niche through
+    // niche_categories.niche_id. Only show products whose category belongs
+    // to one of the niches selected for this seller's store.
+    const [{ data: categoryRows, error: categoryError }, { data: catalogRows, error: catalogError }] =
       await Promise.all([
         supabase
-          .from('china_import_products')
-          .select('id,name,description,image_url,image_urls,price_ngn,cost_ngn,air_shipping_customer_ngn,category,has_variants,variants,is_active')
-           .eq('is_active', true)
-          .not('air_shipping_customer_ngn', 'is', null)
-          .gt('air_shipping_customer_ngn', 0)
-          .order('created_at', { ascending: false }),
+          .from('niche_categories')
+          .select('id')
+          .in('niche_id', storeNiches),
         supabase
           .from('china_import_dropship_catalog')
           .select('id,china_import_product_id,seller_price_ngn,supplier_cost_ngn,shipping_cost_ngn,landed_cost_ngn,status')
@@ -61,8 +71,29 @@ export default function ChinaImportCatalogSection() {
           .order('created_at', { ascending: false }),
       ]);
 
-    if (productError) toast.error(productError.message);
+    if (categoryError) toast.error(categoryError.message);
     if (catalogError) toast.error(catalogError.message);
+
+    const categoryIds = (categoryRows || []).map(row => row.id);
+    setAllowedCategoryIds(categoryIds);
+
+    if (categoryIds.length === 0) {
+      setProducts([]);
+      setCatalog((catalogRows || []) as CatalogRow[]);
+      setLoading(false);
+      return;
+    }
+
+    const { data: productRows, error: productError } = await supabase
+      .from('china_import_products')
+      .select('id,name,description,image_url,image_urls,price_ngn,cost_ngn,air_shipping_customer_ngn,category,has_variants,variants,is_active,category_id')
+      .eq('is_active', true)
+      .in('category_id', categoryIds)
+      .not('air_shipping_customer_ngn', 'is', null)
+      .gt('air_shipping_customer_ngn', 0)
+      .order('created_at', { ascending: false });
+
+    if (productError) toast.error(productError.message);
 
     setProducts((productRows || []) as ChinaProduct[]);
     setCatalog((catalogRows || []) as CatalogRow[]);
@@ -71,7 +102,7 @@ export default function ChinaImportCatalogSection() {
 
   useEffect(() => {
     void load();
-  }, [currentStore?.id]);
+  }, [currentStore?.id, currentStore?.niches?.join(',')]);
 
   const catalogByProduct = useMemo(
     () => new Map(catalog.map(row => [row.china_import_product_id, row])),
