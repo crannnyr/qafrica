@@ -184,6 +184,14 @@ const rotate = <T extends { category?: string | null }>(items: T[]) =>
 // then debounced live results from the server as the user types.
 const BROWSE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import-browse`;
 
+// Categories pinned to the front of the filter row, in this order (right after
+// "All"). Anything not listed follows in the order the server returns it.
+const PINNED_CATEGORIES = ["Women's Clothing", "Men's Clothing", 'Computers & Laptops', 'Mobile Phones'];
+function orderCategories<T extends { parent: string }>(tree: T[]): T[] {
+  const rank = (c: T) => { const i = PINNED_CATEGORIES.indexOf(c.parent); return i === -1 ? PINNED_CATEGORIES.length : i; };
+  return tree.map((c, i) => ({ c, i })).sort((x, y) => rank(x.c) - rank(y.c) || x.i - y.i).map(x => x.c);
+}
+
 function SearchSheet({
   isOpen, onClose, navigate,
 }: {
@@ -196,6 +204,9 @@ function SearchSheet({
   const [results, setResults] = useState<ImportProduct[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
 
+  // A failed search is shown as an error with a retry, not as "No products found".
+  const [searchFailed, setSearchFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   useEffect(() => { if (!isOpen) setText(''); }, [isOpen]);
 
   // Load the "popular" (oldest-listed, otherwise rarely surfaced) rail once
@@ -215,13 +226,13 @@ function SearchSheet({
     setIsSearching(true);
     const timer = setTimeout(() => {
       fetch(`${BROWSE_URL}?action=browse-products&search=${encodeURIComponent(q)}&limit=40`)
-        .then(r => r.json())
-        .then(d => setResults(d.products ?? []))
-        .catch(() => setResults([]))
+        .then(r => { if (!r.ok) throw new Error(`Search failed (${r.status})`); return r.json(); })
+        .then(d => { setResults(d.products ?? []); setSearchFailed(false); })
+        .catch(() => { setResults(null); setSearchFailed(true); })
         .finally(() => setIsSearching(false));
     }, 350);
     return () => clearTimeout(timer);
-  }, [text]);
+  }, [text, retryKey]);
 
   const goToProduct = (p: ImportProduct) => {
     onClose();
@@ -237,11 +248,14 @@ function SearchSheet({
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
+            aria-hidden="true"
             className="fixed inset-0 bg-black/40 z-40"
           />
           <motion.div
             initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
             transition={{ type: 'tween', duration: 0.25 }}
+            role="dialog" aria-modal="true" aria-label="Search products"
+            onKeyDown={e => { if (e.key === 'Escape') onClose(); }}
             className="fixed top-0 left-0 bottom-0 w-[78%] max-w-xs bg-white z-50 flex flex-col shadow-2xl"
           >
             <div className="flex items-center gap-2 px-3 py-3 border-b border-gray-100">
@@ -249,21 +263,27 @@ function SearchSheet({
                 <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   autoFocus
-                  type="text" value={text} onChange={e => setText(e.target.value)}
+                  type="search" value={text} onChange={e => setText(e.target.value)}
+                  aria-label="Search products"
                   placeholder="Search products…"
                   className="w-full pl-8 pr-3 py-2 rounded-lg border border-gray-200 text-xs focus:border-gray-400 focus:ring-2 focus:ring-gray-100 outline-none"
                 />
               </div>
-              <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 flex-shrink-0">
-                <X className="w-4 h-4" />
+              <button onClick={onClose} aria-label="Close search" className="p-1.5 text-gray-400 hover:text-gray-600 flex-shrink-0">
+                <X className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto px-3 py-2">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 py-2">
-                {isSearching ? 'Searching…' : results ? `Results (${results.length})` : 'Popular searches'}
+              <p role="status" aria-live="polite" className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1 py-2">
+                {isSearching ? 'Searching…' : searchFailed ? 'Search unavailable' : results ? `Results (${results.length})` : 'Popular searches'}
               </p>
-              {list.length === 0 ? (
+              {searchFailed && !isSearching ? (
+                <div role="alert" className="px-1 py-6 text-center">
+                  <p className="text-xs text-gray-500">We couldn't run that search. Check your connection.</p>
+                  <button onClick={() => setRetryKey(k => k + 1)} className="mt-3 px-3 py-1.5 rounded-lg bg-gray-900 text-white text-[11px] font-bold">Try again</button>
+                </div>
+              ) : list.length === 0 ? (
                 <p className="text-xs text-gray-300 px-1 py-6 text-center">No products found.</p>
               ) : (
                 <div className="space-y-1">
@@ -273,7 +293,7 @@ function SearchSheet({
                       onClick={() => goToProduct(p)}
                       className="w-full flex items-center gap-2.5 px-1 py-1.5 rounded-lg hover:bg-gray-50 text-left"
                     >
-                      <img src={p.image_url} alt={p.name} className="w-8 h-8 rounded-md object-cover flex-shrink-0 border border-gray-100" />
+                      <img src={p.image_url} alt="" className="w-8 h-8 rounded-md object-cover flex-shrink-0 border border-gray-100" />
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] text-gray-700 truncate leading-tight">{p.name}</p>
                         <p className="text-[10px] text-orange-500 font-bold leading-tight">{fmt(p.price_ngn)}</p>
@@ -302,19 +322,22 @@ function ProductCard({
   const hasVariants = !!product.has_variants && (product.variants?.length ?? 0) > 0;
   const priceRange = variantPriceRange(product);
   return (
-    <div className="relative bg-white rounded-2xl overflow-hidden border border-gray-100 flex flex-col hover:shadow-md transition-shadow">
-      <button onClick={onClick} className="aspect-square bg-gray-50 overflow-hidden w-full relative">
-        <img src={product.image_url} alt={product.name} className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" loading="lazy" />
+    <article aria-label={product.name} className="relative bg-white rounded-2xl overflow-hidden border border-gray-100 flex flex-col hover:shadow-md transition-shadow">
+      {/* The photo is a second click target for the same link as the title below,
+          so it is hidden from screen readers and skipped by the Tab key. */}
+      <button onClick={onClick} tabIndex={-1} aria-hidden="true" className="aspect-square bg-gray-50 overflow-hidden w-full relative">
+        <img src={product.image_url} alt="" className="w-full h-full object-cover hover:scale-105 transition-transform duration-300" loading="lazy" />
       </button>
 
       <button
         onClick={e => { e.stopPropagation(); onToggleSave(); }}
-        aria-label="Save item"
+        aria-label={isSaved ? `Remove ${product.name} from saved items` : `Save ${product.name}`}
+        aria-pressed={isSaved}
         className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center backdrop-blur transition-colors ${
           isSaved ? 'bg-orange-500 text-white' : 'bg-white/80 text-gray-400 hover:text-gray-600'
         }`}
       >
-        <Heart className="w-3.5 h-3.5" fill={isSaved ? 'currentColor' : 'none'} />
+        <Heart className="w-3.5 h-3.5" aria-hidden="true" fill={isSaved ? 'currentColor' : 'none'} />
       </button>
 
       <div className="p-2.5 lg:p-3.5 flex flex-col flex-1">
@@ -343,12 +366,12 @@ function ProductCard({
 
         {hasVariants ? (
           // Variant products require picking options on the detail page — no quick-add here.
-          <button onClick={onClick} className="w-full py-1.5 lg:py-2 bg-gray-900 hover:bg-gray-700 text-white text-[11px] lg:text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1">
+          <button onClick={onClick} aria-label={cartQty > 0 ? `${product.name}: ${cartQty} in order, edit` : `Select options for ${product.name}`} className="w-full py-1.5 lg:py-2 bg-gray-900 hover:bg-gray-700 text-white text-[11px] lg:text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1">
             {cartQty > 0 ? `${cartQty} in order · Edit` : 'Select options'}
           </button>
         ) : cartQty === 0 ? (
-          <button onClick={onAdd} className="w-full py-1.5 lg:py-2 bg-gray-900 hover:bg-gray-700 text-white text-[11px] lg:text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1">
-            <Plus className="w-2.5 h-2.5" /> Add
+          <button onClick={onAdd} aria-label={`Add ${product.name} to order`} className="w-full py-1.5 lg:py-2 bg-gray-900 hover:bg-gray-700 text-white text-[11px] lg:text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1">
+            <Plus className="w-2.5 h-2.5" aria-hidden="true" /> Add
           </button>
         ) : (
           <div className="flex items-center justify-center bg-gray-50 rounded-lg px-1 py-1">
@@ -362,7 +385,7 @@ function ProductCard({
           </div>
         )}
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -471,7 +494,7 @@ export default function RecommendationsPage() {
   useEffect(() => {
     fetch(`${BROWSE_URL}?action=categories`)
       .then(r => r.json())
-      .then(d => setCategoryTree(d.categories ?? []))
+      .then(d => setCategoryTree(orderCategories(d.categories ?? [])))
       .catch(() => setCategoryTree([]));
   }, []);
 
@@ -608,8 +631,8 @@ export default function RecommendationsPage() {
                   to="/importations/dashboard"
                   className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-900 font-medium px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-gray-50 border border-gray-200 sm:border-transparent"
                 >
-                  <LayoutDashboard className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">My Dashboard</span>
+                  <LayoutDashboard className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="sr-only sm:not-sr-only">My Dashboard</span>
                 </Link>
                 <button
                   onClick={() => logout()}
@@ -627,15 +650,16 @@ export default function RecommendationsPage() {
               </button>
             )}
             {cartCount > 0 ? (
-              <button onClick={handleCheckoutClick} className="flex items-center gap-1 bg-gray-900 text-white px-2.5 py-1.5 rounded-lg text-[11px] lg:text-xs font-bold">
-                <ShoppingBag className="w-3 h-3" /> {cartCount}
+              <button onClick={handleCheckoutClick} aria-label={`View order, ${cartCount} unit${cartCount !== 1 ? 's' : ''}`} className="flex items-center gap-1 bg-gray-900 text-white px-2.5 py-1.5 rounded-lg text-[11px] lg:text-xs font-bold">
+                <ShoppingBag className="w-3 h-3" aria-hidden="true" /> {cartCount}
               </button>
             ) : null}
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 pt-5 pb-28 lg:pb-16">
+      <div role="main" className="max-w-7xl mx-auto px-4 pt-5 pb-28 lg:pb-16">
+        <h1 className="sr-only">{seoCategory ? `${seoCategory} from China` : 'Shop products from China'}</h1>
         <AnnouncementBanner />
         {/* Custom order — for items not in the catalog. Sits right before
             search since it's the natural next step if a search comes up empty. */}
@@ -663,7 +687,7 @@ export default function RecommendationsPage() {
               onClick={() => navigate('/recommendations/search')}
               className="w-full relative flex items-center pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs text-gray-400 text-left hover:border-gray-300 transition-colors"
             >
-              <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
               Search products…
             </button>
           </div>
@@ -677,10 +701,11 @@ export default function RecommendationsPage() {
 
         {/* Category filters — parent groupings (Fashion, Electronics, etc). */}
         {categoryTree.length > 1 && (
-          <div className="flex gap-1.5 overflow-x-auto pb-3 mb-1 -mx-4 px-4">
+          <div role="group" aria-label="Filter by category" className="flex gap-1.5 overflow-x-auto pb-3 mb-1 -mx-4 px-4">
             {['All', ...categoryTree.map(c => c.parent)].map(cat => (
               <button
                 key={cat}
+                aria-pressed={activeParent === cat}
                 onClick={() => { setActiveParent(cat); setActiveSubcategory(null); }}
                 className={`px-3 py-1 rounded-full text-[11px] lg:text-xs font-bold whitespace-nowrap transition-colors flex-shrink-0 ${
                   activeParent === cat ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-500'
@@ -696,10 +721,11 @@ export default function RecommendationsPage() {
           const subs = categoryTree.find(c => c.parent === activeParent)?.subcategories ?? [];
           if (subs.length < 2) return null;
           return (
-            <div className="flex gap-1.5 overflow-x-auto pb-3 mb-3 -mx-4 px-4">
+            <div role="group" aria-label={`Filter ${activeParent} by subcategory`} className="flex gap-1.5 overflow-x-auto pb-3 mb-3 -mx-4 px-4">
               {['All', ...subs].map(sub => (
                 <button
                   key={sub}
+                  aria-pressed={sub === 'All' ? !activeSubcategory : activeSubcategory === sub}
                   onClick={() => setActiveSubcategory(sub === 'All' ? null : sub)}
                   className={`px-2.5 py-1 rounded-full text-[10px] lg:text-[11px] font-semibold whitespace-nowrap transition-colors flex-shrink-0 border ${
                     (sub === 'All' ? !activeSubcategory : activeSubcategory === sub)
@@ -715,7 +741,7 @@ export default function RecommendationsPage() {
 
         {activeParent === 'All' && trending && trending.length > 0 && (
           <div className="mb-5">
-            <p className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">Trending today</p>
+            <h2 className="text-[10px] lg:text-xs font-bold text-orange-500 uppercase tracking-widest mb-2">Trending today</h2>
             <div className="flex gap-2.5 lg:gap-3 overflow-x-auto pb-1 -mx-4 px-4 snap-x snap-mandatory scroll-smooth">
               {trending.map(p => (
                 <button
@@ -724,7 +750,7 @@ export default function RecommendationsPage() {
                   className="flex-shrink-0 w-28 lg:w-36 bg-white rounded-xl border border-gray-100 overflow-hidden text-left hover:shadow-sm transition-shadow snap-start"
                 >
                   <div className="aspect-square bg-gray-50">
-                    <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                    <img src={p.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
                   </div>
                   <div className="p-1.5 lg:p-2">
                     <p className="text-[10px] lg:text-xs font-medium text-gray-700 line-clamp-1">{p.name}</p>
@@ -748,7 +774,7 @@ export default function RecommendationsPage() {
                   className="flex-shrink-0 w-28 lg:w-36 bg-white rounded-xl border border-gray-100 overflow-hidden text-left hover:shadow-sm transition-shadow snap-start relative"
                 >
                   <div className="aspect-square bg-gray-50 relative">
-                    <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                    <img src={p.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
                     <span className="absolute top-1.5 left-1.5 bg-gray-900 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">
                       New
                     </span>
@@ -765,7 +791,7 @@ export default function RecommendationsPage() {
 
         {/* Grid — 2 cols on phones, up to 5 on large desktop */}
         {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4">
+          <div role="status" aria-label="Loading products" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4">
             {Array.from({ length: 10 }).map((_, i) => (
               <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
                 <div className="aspect-square bg-gray-100" />

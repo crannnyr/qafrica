@@ -687,7 +687,7 @@ if (promoQuote?.pending_order?.id) {
     >
       <div className="flex items-center justify-between px-4 py-4 border-b border-gray-100">
         <h2 className="font-bold text-gray-900 text-sm">Checkout</h2>
-        <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
+        <button onClick={onClose} aria-label="Close" className="p-1.5 hover:bg-gray-100 rounded-xl">
           <X className="w-4 h-4 text-gray-500" />
         </button>
       </div>

@@ -61,7 +61,7 @@ export default function SavedItemsSheet({ onClose }: { onClose: () => void }) {
             <Heart className="w-4 h-4 text-orange-500" fill="currentColor" />
             Saved Items
           </h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-xl">
+          <button onClick={onClose} aria-label="Close" className="p-1.5 hover:bg-gray-100 rounded-xl">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
