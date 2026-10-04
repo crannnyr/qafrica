@@ -15,6 +15,18 @@ export default defineConfig({
     }),
     sitemap({
       hostname: 'https://qafrica.store',
+      // Product pages are listed in a second, always-current sitemap served by
+      // netlify/edge-functions/import-sitemap.ts; this adds it to robots.txt.
+      externalSitemaps: ['https://qafrica.store/sitemap-products.xml'],
+      // robots.txt is generated from here on every build (the old robots.txt in
+      // the repo root was never deployed), so this is the single source of truth.
+      robots: [
+        {
+          userAgent: '*',
+          allow: ['/', '/blog', '/marketplace', '/recommendations', '/stores', '/pricing'],
+          disallow: ['/dashboard', '/admin', '/developer/dashboard', '/payment', '/customer/dashboard'],
+        },
+      ],
       dynamicRoutes: [
         '/',
         '/stores',
@@ -22,7 +34,7 @@ export default defineConfig({
         '/signup',
         '/pricing',
         '/marketplaces',
-        '/importations',
+        '/recommendations',
         '/blog',
         '/blog/what-sells-best-on-jumia-2026',
         '/blog/how-to-sell-on-jumia-without-getting-banned',

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { fmt, buildCartKey, computeVariantPriceNgn, variantPriceRange } from './RecommendationsPage';
 import type { ImportProduct, VariantGroup } from './RecommendationsPage';
+import SEO, { ProductSchema } from '@/components/SEO';
 import { useImportCartStore } from '@/stores/importCartStore';
 import ImportQtyControl from '@/components/ImportQtyControl';
 import { useCustomerAuthStore } from '@/stores';
@@ -197,6 +198,8 @@ export default function ProductDetailPage() {
     location.state?.product ?? null
   );
   const [isLoading, setIsLoading] = useState(!product);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [usdRate, setUsdRate]     = useState(0);
   const [showAskQuestion, setShowAskQuestion] = useState(false);
 
@@ -280,29 +283,33 @@ export default function ProductDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, location.state]);
 
-  // Always fetch the full product list on mount/id-change so "also like" is
-  // never empty, and so we can resolve the product when we navigated here
-  // without usable state (e.g. direct link, browser back/forward, refresh).
+  // Load just this product when we arrived without it (direct/shared link,
+  // refresh, back/forward). Previously this downloaded the entire catalogue.
   useEffect(() => {
-    fetch(`${EDGE_URL}?action=products`)
-      .then(r => r.json())
-      .then(d => {
-        const list: ImportProduct[] = d.products ?? [];
-        setAllProducts(list);
-        setProduct(prev => {
-          if (prev && prev.id === id) return prev;
-          const found = list.find(p => p.id === id);
-          return found ?? prev;
-        });
-      })
-      .catch(() => {})
-      .finally(() => setIsLoading(false));
+    if (!id) return;
+    if (location.state?.product?.id === id) { setLoadError(false); setIsLoading(false); }
+    else {
+      let cancelled = false;
+      setLoadError(false);
+      fetch(`${BROWSE_URL}?action=product&id=${encodeURIComponent(id)}`)
+        .then(async r => {
+          if (r.status === 404 || r.status === 400) return null; // genuinely not found
+          if (!r.ok) throw new Error(`Product request failed (${r.status})`);
+          return (await r.json()).product as ImportProduct | null;
+        })
+        .then(found => { if (!cancelled) setProduct(prev => (prev && prev.id === id ? prev : found)); })
+        .catch(() => { if (!cancelled) setLoadError(true); })
+        .finally(() => { if (!cancelled) setIsLoading(false); });
+      return () => { cancelled = true; };
+    }
+  }, [id, location.state, reloadKey]);
 
+  useEffect(() => {
     fetch(`${EDGE_URL}?action=rates`)
       .then(r => r.json())
       .then(d => setUsdRate(d.rates?.usdToNgn ?? 0))
       .catch(() => {});
-  }, [id]);
+  }, []);
 
   useEffect(() => { setQty(moq); }, [id, moq]);
 
@@ -411,7 +418,18 @@ export default function ProductDetailPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
         <Package className="w-8 h-8 text-gray-200 mb-3" />
-        <p className="text-gray-400 text-sm">Product not found.</p>
+        {loadError ? (
+          <div className="text-center" role="alert">
+            <p className="text-gray-700 text-sm font-bold">We couldn't load this product</p>
+            <p className="text-gray-400 text-xs mt-1">Check your connection and try again.</p>
+            <button onClick={() => { setIsLoading(true); setReloadKey(k => k + 1); }}
+              className="mt-4 px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold transition-colors">
+              Try again
+            </button>
+          </div>
+        ) : (
+          <p className="text-gray-400 text-sm">Product not found.</p>
+        )}
         <Link to="/recommendations" className="mt-4 text-orange-500 text-xs font-semibold">
           ← Back to catalog
         </Link>
@@ -421,8 +439,36 @@ export default function ProductDetailPage() {
 
   const usdPrice = fmtUsd(product.price_ngn, usdRate);
 
+  // Share/search tags for this product. The same values are written server-side
+  // by netlify/edge-functions/import-meta.ts for crawlers that don't run JS.
+  const seoUrl = `${window.location.origin}/recommendations/${product.id}`;
+  const seoPrice = `₦${Math.round(product.price_ngn).toLocaleString('en-NG')}`;
+  const seoTrail = [(product as any).parent_category, product.category].filter(Boolean).join(' › ');
+  const seoText = (product.description ?? '').replace(/\s+/g, ' ').trim();
+  const seoDescription = `${[seoPrice, seoTrail, 'Shipped from China to Nigeria'].filter(Boolean).join(' · ')}. ${seoText}`.slice(0, 200);
+  const seoImage = images[0];
+
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEO
+        title={`${product.name} — ${seoPrice}`}
+        description={seoDescription}
+        image={seoImage}
+        url={seoUrl}
+        type="product"
+        keywords={[product.name, product.category, 'buy from China', 'China import Nigeria', 'QAFRICA'].filter(Boolean)}
+      />
+      {seoImage && (
+        <ProductSchema
+          name={product.name}
+          description={seoText || product.name}
+          image={seoImage}
+          price={product.price_ngn}
+          brand="QAFRICA"
+          sku={product.id}
+          url={seoUrl}
+        />
+      )}
       {/* Nav */}
       <header className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 py-3">
         <div className="max-w-lg lg:max-w-6xl mx-auto flex items-center justify-between">

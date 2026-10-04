@@ -7,6 +7,7 @@ import {
   ChevronRight, Search, X, User, LogOut, LayoutDashboard, Heart, Sparkles,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
+import SEO from '@/components/SEO';
 import { formatSoldCount } from '@/lib/utils';
 import { useCustomerAuthStore } from '@/stores';
 import { useImportCartStore, buildImportCartKey } from '@/stores/importCartStore';
@@ -413,6 +414,9 @@ export default function RecommendationsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  // A failed request is not the same as an empty category: show it and offer a retry.
+  const [loadError, setLoadError] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
   const [offset, setOffset] = useState(0);
   const PAGE_SIZE = 20;
 
@@ -511,12 +515,17 @@ export default function RecommendationsPage() {
     if (activeSubcategory) params.set('subcategory', activeSubcategory);
     replace ? setIsLoading(true) : setIsLoadingMore(true);
     fetch(`${BROWSE_URL}?${params.toString()}`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(`Catalogue request failed (${r.status})`); return r.json(); })
       .then(d => {
         setProducts(prev => replace ? (d.products ?? []) : [...prev, ...(d.products ?? [])]);
         setHasMore(!!d.hasMore);
+        setLoadError(false);
+        setLoadMoreError(false);
       })
-      .catch(() => { if (replace) setProducts([]); })
+      .catch(() => {
+        if (replace) { setProducts([]); setLoadError(true); }
+        else setLoadMoreError(true);
+      })
       .finally(() => { setIsLoading(false); setIsLoadingMore(false); });
   }, [activeParent, activeSubcategory, rotationSeed]);
 
@@ -564,8 +573,23 @@ export default function RecommendationsPage() {
 
   const displayItems = products;
 
+  // Title/description follow the category being browsed.
+  const seoCategory = activeSubcategory ?? (activeParent !== 'All' ? activeParent : null);
+  const seoTitle = seoCategory
+    ? `${seoCategory} from China — Factory Prices, Delivered to Nigeria`
+    : 'Shop from China at Factory Prices — Delivered to Nigeria';
+  const seoDescription = seoCategory
+    ? `Shop ${seoCategory.toLowerCase()} sourced direct from China. Pay in naira, track your order, and get it delivered anywhere in Nigeria.`
+    : 'Fashion, phones, electronics, beauty and home goods sourced direct from China. Pay in naira, track every order, and get it delivered anywhere in Nigeria.';
+
   return (
     <div className="min-h-screen bg-gray-50">
+      <SEO
+        title={seoTitle}
+        description={seoDescription}
+        url={`${window.location.origin}/recommendations`}
+        keywords={['buy from China', 'China import Nigeria', 'factory prices', 'QAFRICA', ...(seoCategory ? [seoCategory] : [])]}
+      />
       {isAuthenticated && <DailyPromoModal customerId={customer?.id} />}
       <OpticsviewMergerNotice />
 
@@ -636,7 +660,7 @@ export default function RecommendationsPage() {
                 mobile and desktop now, rather than a separate, more
                 limited inline input on desktop with no results dropdown. */}
             <button
-              onClick={() => navigate('/recommendations/sreach')}
+              onClick={() => navigate('/recommendations/search')}
               className="w-full relative flex items-center pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs text-gray-400 text-left hover:border-gray-300 transition-colors"
             >
               <Search className="w-3.5 h-3.5 text-gray-300 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -753,6 +777,16 @@ export default function RecommendationsPage() {
               </div>
             ))}
           </div>
+        ) : loadError ? (
+          <div className="text-center py-20" role="alert">
+            <Package className="w-8 h-8 text-gray-200 mx-auto mb-3" />
+            <p className="text-gray-700 text-sm font-bold mb-1">We couldn't load products</p>
+            <p className="text-gray-400 text-xs mb-4">Check your connection and try again.</p>
+            <button onClick={() => { setOffset(0); fetchPage(0, true); }}
+              className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold transition-colors">
+              Try again
+            </button>
+          </div>
         ) : displayItems.length === 0 ? (
           <div className="text-center py-20">
             <Package className="w-8 h-8 text-gray-200 mx-auto mb-3" />
@@ -794,7 +828,16 @@ export default function RecommendationsPage() {
                 </div>
               ));
             })()}
-            {hasMore && (
+            {loadMoreError && (
+              <div className="text-center py-8" role="alert">
+                <p className="text-gray-400 text-xs mb-3">We couldn't load more products.</p>
+                <button onClick={() => { setLoadMoreError(false); fetchPage(offset, false); }}
+                  className="px-4 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors">
+                  Try again
+                </button>
+              </div>
+            )}
+            {hasMore && !loadMoreError && (
               <div ref={sentinelRef} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 lg:gap-4 mt-2.5 lg:mt-4">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
