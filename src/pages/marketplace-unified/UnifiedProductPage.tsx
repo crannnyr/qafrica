@@ -202,7 +202,7 @@ export default function UnifiedProductPage() {
       setError(null);
 
       // Normal marketplace products keep the original seller/store presentation.
-      if (resolvedProduct.source_type === 'product' && resolvedProduct.seller_id) {
+      if (resolvedProduct.seller_id) {
         const { data: storeData } = await supabase
           .from('stores')
           .select('id, name, slug, logo_url, primary_color, delivery_window_days, is_verified')
