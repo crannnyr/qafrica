@@ -174,7 +174,7 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
         item.variant_options,
       );
       const unit = variantPrice.price;
-      const shippingUnit = Number(p.flight_shipping_cost_ngn);
+      const shippingUnit = Number(p.air_shipping_customer_ngn ?? p.flight_shipping_cost_ngn ?? 0);
       if (!variantPrice.valid || unit <= 0 || shippingUnit <= 0) {
         errors.push({
           code: 'china_product_unavailable',
@@ -200,7 +200,7 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
         is_imported: true,
         flight_shipping_cost_ngn: shippingUnit,
         dropship_catalog_id: null,
-        supplier_cost_ngn: Number(p.cost_ngn ?? p.price_ngn ?? 0),
+        supplier_cost_ngn: Number(p.price_ngn ?? 0),
         shipping_cost_ngn: shippingUnit,
       });
       continue;
