@@ -7,7 +7,7 @@ export default function BottomNav() {
   const location = useLocation();
   const unified = location.pathname.startsWith('/stores-v2');
   const shopHref = unified ? '/stores-v2' : '/stores';
-  const categoryHref = unified ? '/stores-v2' : '/stores/categories';
+  const categoryHref = unified ? '/stores-v2/categories' : '/stores/categories';
   const cartHref = unified ? '/stores-v2/cart' : '/cart';
   const cartCount = useCartStore((s) => s.getTotalItems());
   const { isAuthenticated } = useCustomerAuthStore();
@@ -20,7 +20,7 @@ export default function BottomNav() {
         <NavLink to={shopHref} end className={cls}>
           {({ isActive }) => (<><Home className="w-[22px] h-[22px]" strokeWidth={isActive ? 2.25 : 1.6} fill={isActive ? 'currentColor' : 'none'} />Shop</>)}
         </NavLink>
-        <NavLink to={categoryHref} className={cls}>
+        <NavLink to={categoryHref} end className={cls}>
           {({ isActive }) => (<><LayoutGrid className="w-[22px] h-[22px]" strokeWidth={isActive ? 2.25 : 1.6} />Category</>)}
         </NavLink>
         <NavLink to="/help-pay" className={cls}>
