@@ -78,6 +78,25 @@ export default function ImportCatalogPage() {
     }
   };
 
+
+  const removeChinaImport = async (catalogId: string) => {
+    setIsDeletingImport(catalogId);
+    const { error } = await supabase
+      .from('china_import_dropship_catalog')
+      .update({ status: 'removed' })
+      .eq('id', catalogId)
+      .eq('seller_store_id', currentStore?.id || '');
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('China Import product removed from your store');
+      if (currentStore?.id) {
+        await fetchChinaImports(currentStore.id);
+      }
+    }
+    setIsDeletingImport(null);
+  };
   const fetchProducts = async () => {
     if (!currentStore?.id) return;
     
@@ -480,6 +499,7 @@ export default function ImportCatalogPage() {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Your Price</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
@@ -505,6 +525,17 @@ export default function ImportCatalogPage() {
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${item.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
                               {item.status === 'active' ? 'Active' : 'Paused'}
                             </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => void removeChinaImport(item.id)}
+                              disabled={isDeletingImport === item.id}
+                              className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 font-medium px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                              title="Remove from your store"
+                            >
+                              {isDeletingImport === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                              Remove
+                            </button>
                           </td>
                         </tr>
                       );
