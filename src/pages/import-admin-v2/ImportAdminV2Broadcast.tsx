@@ -2,7 +2,7 @@ import { Megaphone, ShieldCheck } from 'lucide-react';
 import BroadcastEmailManager from '@/pages/import-admin/BroadcastEmailManager';
 import { getManagementToken } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
-
+ 
 export default function ImportAdminV2Broadcast() {
   const token = getManagementToken();
   const { hasPermission, loading } = useImportAdminPermissions(token);
