@@ -430,6 +430,9 @@ export default function RecommendationsPage() {
   const storeSetQuantity = useImportCartStore(s => s.setQuantity);
   const syncImportCart = useImportCartStore(s => s.syncWithServer);
   const saveImportCart = useImportCartStore(s => s.saveToServer);
+  const refreshImportCartPrices = useImportCartStore(s => s.refreshPrices);
+  // Guests never hit syncWithServer, so re-price their locally stored cart once on load.
+  useEffect(() => { void refreshImportCartPrices(); }, [refreshImportCartPrices]);
   const [cartSyncedCustomerId, setCartSyncedCustomerId] = useState<string | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
