@@ -6,13 +6,14 @@ import { useStoreStore, useImportStore, useAuthStore } from '@/stores';
 import { toast } from 'sonner';
 import { importCatalogService } from '@/services';
 import type { StoreOwner } from '@/types';
+import ChinaImportCatalogSection from './ChinaImportCatalogSection';
 type FilterType = 'all' | 'my_niches' | 'other';
 
 export default function ImportCatalogPage() {
   const { currentStore } = useStoreStore();
   const { user } = useAuthStore();
   const { imports, fetchStoreImports, importProduct, updateImport, deleteImport } = useImportStore();
-  const [activeTab, setActiveTab] = useState<'browse' | 'imported'>('browse');
+  const [activeTab, setActiveTab] = useState<'browse' | 'imported' | 'china'>('browse');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('my_niches');
   const [isImporting, setIsImporting] = useState<string | null>(null);
@@ -211,6 +212,16 @@ export default function ImportCatalogPage() {
           Browse Products
         </button>
         <button
+          onClick={() => setActiveTab('china')}
+          className={`px-4 py-3 font-medium border-b-2 transition-colors ${
+            activeTab === 'china'
+              ? 'border-orange-500 text-orange-600 dark:text-orange-400'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+          }`}
+        >
+          China Import
+        </button>
+        <button
           onClick={() => setActiveTab('imported')}
           className={`px-4 py-3 font-medium border-b-2 transition-colors ${
             activeTab === 'imported'
@@ -222,7 +233,9 @@ export default function ImportCatalogPage() {
         </button>
       </div>
 
-      {activeTab === 'browse' ? (
+      {activeTab === 'china' ? (
+        <ChinaImportCatalogSection />
+      ) : activeTab === 'browse' ? (
         <>
           {/* Search and Filter */}
           <div className="flex flex-col sm:flex-row gap-4">
