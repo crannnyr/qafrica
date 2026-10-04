@@ -479,10 +479,14 @@ begin
 
         -- Record the seller-facing China Import earnings separately from
         -- legacy product_earnings because this source is not a products row.
-        perform public.record_china_import_dropship_earning(
-          v_order_id,
-          v_china_fulfillment_id
-        );
+        -- Normal seller-to-seller product lines continue through the legacy
+        -- product earnings path and must not call the China ledger.
+        if v_source_type = 'china_import' then
+          perform public.record_china_import_dropship_earning(
+            v_order_id,
+            v_china_fulfillment_id
+          );
+        end if;
 
         -- For China lines the placeholder link above is intentionally not
         -- inserted. The actual China order and fulfillment row are created
