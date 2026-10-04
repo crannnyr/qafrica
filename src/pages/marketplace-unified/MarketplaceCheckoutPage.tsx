@@ -21,12 +21,12 @@ async function invokeCheckout(body: Record<string, unknown>) {
 
 export default function MarketplaceCheckoutPage() {
   const navigate = useNavigate();
-  const { customer, isAuthenticated, addresses, getDefaultAddress, fetchAddresses } = useCustomerAuthStore();
+  const { customer, isAuthenticated, addresses, getDefaultAddress, fetchAddresses, fetchProfile } = useCustomerAuthStore();
   const allItems = useCartStore(s => s.items);
-  const [selectedIds, setSelectedIds] = useState<{ product_cart_ids: string[]; china_product_ids: string[] } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<{ product_cart_ids: string[]; china_cart_ids?: string[]; china_product_ids?: string[] } | null>(null);
   const items = useMemo(() => {
     if (!selectedIds) return allItems;
-    return allItems.filter(i => selectedIds.product_cart_ids.includes(i.id) || (i.sourceType === 'china_import' && i.sourceId && selectedIds.china_product_ids.includes(i.sourceId)));
+    return allItems.filter(i => selectedIds.product_cart_ids.includes(i.id) || (i.sourceType === 'china_import' && ((selectedIds.china_cart_ids ?? []).includes(i.id) || (!(selectedIds.china_cart_ids ?? []).length && (selectedIds.china_product_ids ?? []).includes(i.sourceId ?? '')))));
   }, [allItems, selectedIds]);
   const [name, setName] = useState(customer?.full_name ?? '');
   const [email, setEmail] = useState(customer?.email ?? '');
@@ -36,6 +36,7 @@ export default function MarketplaceCheckoutPage() {
   const [state, setState] = useState('');
   const [landmark, setLandmark] = useState('');
   const [quote, setQuote] = useState<{ stores: QuoteStore[]; amount: number } | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [loadingQuote, setLoadingQuote] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [quoteError, setQuoteError] = useState('');
@@ -52,10 +53,26 @@ export default function MarketplaceCheckoutPage() {
   const totalItems = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
 
   useEffect(() => {
-    if (!isAuthenticated) { navigate('/customer/login?return=/stores-v2/checkout', { replace: true }); return; }
-    if (customer) { setName(customer.full_name ?? ''); setEmail(customer.email ?? ''); setPhone(customer.phone ?? ''); }
+    let cancelled = false;
+    void (async () => {
+      setAuthChecked(false);
+      await fetchProfile();
+      if (!cancelled) setAuthChecked(true);
+    })();
+    return () => { cancelled = true; };
+  }, [fetchProfile]);
+
+  useEffect(() => {
+    if (!authChecked) return;
+    if (!isAuthenticated || !customer) {
+      navigate('/customer/login?return=/stores-v2/checkout', { replace: true });
+      return;
+    }
+    setName(customer.full_name ?? '');
+    setEmail(customer.email ?? '');
+    setPhone(customer.phone ?? '');
     void fetchAddresses();
-  }, [isAuthenticated, customer?.id]);
+  }, [authChecked, isAuthenticated, customer?.id, fetchAddresses]);
 
   useEffect(() => {
     const saved = getDefaultAddress(); if (!saved) return;
@@ -70,10 +87,10 @@ export default function MarketplaceCheckoutPage() {
       if (!chinaIds.length) { setChinaShippingTotal(0); return; }
       const { data: chinaProducts } = await supabase
         .from('china_import_products')
-        .select('id,flight_shipping_cost_ngn')
+        .select('id,air_shipping_customer_ngn,flight_shipping_cost_ngn')
         .in('id', chinaIds);
       if (cancelled) return;
-      const byId = new Map((chinaProducts ?? []).map((p: any) => [String(p.id), Number(p.flight_shipping_cost_ngn || 0)]));
+      const byId = new Map((chinaProducts ?? []).map((p: any) => [String(p.id), Number(p.air_shipping_customer_ngn ?? p.flight_shipping_cost_ngn ?? 0)]));
       setChinaShippingTotal(
         items
           .filter(i => i.sourceType === 'china_import')
@@ -87,15 +104,15 @@ export default function MarketplaceCheckoutPage() {
   useEffect(() => {
     let cancelled = false;
     const run = async () => {
-      if (!items.length || !state.trim()) { setQuote(null); return; }
+      if (!authChecked || !isAuthenticated || !customer?.id || !items.length || !state.trim()) { setQuote(null); return; }
       setLoadingQuote(true); setQuoteError('');
-      const { data, error } = await invokeCheckout({ action: 'quote', state: state.trim(), items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
+      const { data, error } = await invokeCheckout({ action: 'quote', state: state.trim(), items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, store_id: i.storeId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
       if (cancelled) return; setLoadingQuote(false);
       if (error || !data?.ok) { setQuote(null); setQuoteError(data?.errors?.[0]?.message ?? error?.message ?? 'Could not calculate checkout total'); return; }
       setQuote({ stores: data.stores ?? [], amount: Number(data.amount ?? 0) });
     };
     const timer = window.setTimeout(run, 250); return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [items, state]);
+  }, [authChecked, isAuthenticated, customer?.id, items, state]);
 
   const handleUseAddress = (id: string) => { const selected = addresses.find(a => a.id === id); if (!selected) return; setName(selected.name || name); setPhone(selected.phone || phone); setAddress(selected.address_line1 || ''); setCity(selected.city || ''); setState(selected.state || ''); setLandmark(''); };
 
@@ -112,12 +129,12 @@ export default function MarketplaceCheckoutPage() {
       return;
     }
     setProcessing(true);
-    const { data, error } = await invokeCheckout({ action: 'create', customer: { name: checkoutName, email: checkoutEmail, phone: checkoutPhone }, delivery: { address: checkoutAddress, city: checkoutCity, state: checkoutState, landmark: landmark.trim() }, items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
+    const { data, error } = await invokeCheckout({ action: 'create', customer: { name: checkoutName, email: checkoutEmail, phone: checkoutPhone }, delivery: { address: checkoutAddress, city: checkoutCity, state: checkoutState, landmark: landmark.trim() }, items: items.map(i => ({ source_type: i.sourceType ?? 'product', source_id: i.sourceId ?? i.productId, store_id: i.storeId, quantity: i.quantity, variant_options: i.variantOptions, attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own' })) });
     if (error || !data?.checkout_link) { setProcessing(false); toast.error(data?.error ?? error?.message ?? 'Could not start payment'); return; }
     window.location.assign(data.checkout_link);
   };
 
-  if (!isAuthenticated) return null;
+  if (!authChecked || !isAuthenticated || !customer) return null;
   if (!items.length) return <div className="min-h-screen bg-[#fafafa] flex items-center justify-center px-6"><div className="text-center"><ShoppingBag className="mx-auto h-12 w-12 text-gray-300" /><h1 className="mt-4 text-xl font-bold text-gray-900">Your cart is empty</h1><Link to="/stores-v2" className="mt-5 inline-flex text-sm font-semibold text-orange-600">Back to marketplace</Link></div></div>;
 
   return <div className="min-h-screen bg-[#fafafa] pb-12">

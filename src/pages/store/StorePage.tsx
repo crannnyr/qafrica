@@ -132,8 +132,28 @@ export default function StorePage() {
         stock_quantity: item.stock_quantity,
       })) as unknown as Product[];
 
+      const { data: chinaProducts } = await supabase
+        .rpc('get_store_china_dropship_products', { p_store_id: storeData.id });
+
+      const mappedChinaImports: Product[] = (chinaProducts ?? []).map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        category: item.category,
+        niche: null,
+        images: item.image_urls?.length ? item.image_urls : (item.image_url ? [item.image_url] : []),
+        selling_price: Number(item.seller_price_ngn ?? item.price_ngn ?? 0),
+        is_imported: true,
+        is_active: true,
+        has_variants: item.has_variants,
+        variants: item.variants,
+        stock_quantity: 999999,
+        __sourceType: 'china_import',
+        __sourceId: item.id,
+      })) as unknown as Product[];
+
       const ownProducts = (productsData as Product[]).filter(p => p.is_active);
-      const allProducts = [...ownProducts, ...mappedImports];
+      const allProducts = [...ownProducts, ...mappedImports, ...mappedChinaImports];
       setProducts(allProducts);
       setFilteredProducts(allProducts);
     } catch (err) {
@@ -166,27 +186,86 @@ export default function StorePage() {
       setSelectedVariants({});
       setQuantity(1);
     } else {
-      addItem(product, store, 1, undefined, product.selling_price);
+      addItem(product, store, 1, undefined, product.selling_price, {
+      sourceType: (product as any).__sourceType ?? 'product',
+      sourceId: (product as any).__sourceId ?? product.id,
+    });
       toast.success(`${product.name} added to cart!`);
     }
   };
 
+  const isFormatAVariants = (variants: any[] | undefined) =>
+    Array.isArray(variants) &&
+    variants.length > 0 &&
+    typeof variants[0]?.name === 'string' &&
+    Array.isArray(variants[0]?.options);
+
+  const getVariantNames = (product: Product): string[] => {
+    const variants = product.variants as any[] | undefined;
+    if (!variants?.length) return [];
+    if (isFormatAVariants(variants)) {
+      return variants.map(v => String(v.name)).filter(Boolean);
+    }
+    return Object.keys(variants[0]?.options || {});
+  };
+
+  const getVariantOptions = (variantName: string): string[] => {
+    if (!selectedProduct?.variants) return [];
+    const variants = selectedProduct.variants as any[];
+    if (isFormatAVariants(variants)) {
+      const group = variants.find(v => String(v.name) === variantName);
+      return Array.isArray(group?.options) ? group.options.map(String) : [];
+    }
+
+    const options = new Set<string>();
+    variants.forEach(v => {
+      if (v.options?.[variantName]) options.add(String(v.options[variantName]));
+    });
+    return Array.from(options);
+  };
+
   const handleConfirmVariantAdd = () => {
     if (!selectedProduct || !store) return;
-    const requiredOptions = Object.keys(selectedProduct.variants?.[0]?.options || {});
-    if (requiredOptions.length !== Object.keys(selectedVariants).length) {
+
+    const variants = selectedProduct.variants as any[] | undefined;
+    const requiredOptions = getVariantNames(selectedProduct);
+
+    if (requiredOptions.length !== Object.keys(selectedVariants).length ||
+        requiredOptions.some(name => !selectedVariants[name])) {
       toast.error('Please select all variant options');
       return;
     }
-    const matchingVariant = selectedProduct.variants?.find(v =>
-      Object.entries(selectedVariants).every(([key, value]) => v.options[key] === value)
-    );
-    if (!matchingVariant) { toast.error('Selected combination not available'); return; }
-    if (matchingVariant.stock < quantity) {
-      toast.error(`Only ${matchingVariant.stock} items available`);
-      return;
+
+    if (isFormatAVariants(variants)) {
+      if (selectedProduct.stock_quantity < quantity) {
+        toast.error(`Only ${selectedProduct.stock_quantity} items available`);
+        return;
+      }
+
+      addItem(selectedProduct, store, quantity, selectedVariants, selectedProduct.selling_price, {
+        sourceType: (selectedProduct as any).__sourceType ?? 'product',
+        sourceId: (selectedProduct as any).__sourceId ?? selectedProduct.id,
+      });
+    } else {
+      const matchingVariant = variants?.find(v =>
+        Object.entries(selectedVariants).every(([key, value]) => v.options?.[key] === value)
+      );
+      if (!matchingVariant) {
+        toast.error('Selected combination not available');
+        return;
+      }
+      if (Number(matchingVariant.stock ?? 0) < quantity) {
+        toast.error(`Only ${matchingVariant.stock} items available`);
+        return;
+      }
+
+      addItem(selectedProduct, store, quantity, selectedVariants,
+        Number(matchingVariant.price ?? selectedProduct.selling_price), {
+          sourceType: (selectedProduct as any).__sourceType ?? 'product',
+          sourceId: (selectedProduct as any).__sourceId ?? selectedProduct.id,
+        });
     }
-    addItem(selectedProduct, store, quantity, selectedVariants, selectedProduct.selling_price);
+
     toast.success(`${selectedProduct.name} added to cart!`);
     setSelectedProduct(null);
     setSelectedVariants({});
@@ -204,15 +283,6 @@ export default function StorePage() {
       addToWishlist(product, store, customer?.id);
       toast.success('Added to wishlist');
     }
-  };
-
-  const getVariantOptions = (variantName: string) => {
-    if (!selectedProduct?.variants) return [];
-    const options = new Set<string>();
-    selectedProduct.variants.forEach(v => {
-      if (v.options[variantName]) options.add(v.options[variantName]);
-    });
-    return Array.from(options);
   };
 
   // Marketplace attribution: remember whether this visit came from /stores (?src=mkt) or the seller's own link
@@ -266,11 +336,13 @@ export default function StorePage() {
                 {/* Variant options */}
                 {(selectedProduct.variants?.length ?? 0) > 0 && (
                   <div className="space-y-4 mb-6">
-                    {Object.keys(selectedProduct.variants![0].options).map(variantName => (
+                    {getVariantNames(selectedProduct).map(variantName => (
                       <div key={variantName}>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{variantName}</p>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                          {variantName.toLowerCase() === 'type' ? 'Size' : variantName}
+                        </p>
                         <div className="flex flex-wrap gap-2">
-                          {getVariantOptions(variantName).map(option => (
+                          {getVariantOptions(variantName).map((option: string) => (
                             <button
                               key={option}
                               onClick={() => setSelectedVariants(prev => ({ ...prev, [variantName]: option }))}

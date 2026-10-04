@@ -36,10 +36,10 @@ export default function CartPage() {
     const ids = items.filter(i => i.sourceType === 'china_import' && i.sourceId).map(i => i.sourceId!).filter(Boolean);
     if (!ids.length) { setChinaShippingById({}); return; }
     let alive = true;
-    void supabase.from('china_import_products').select('id,flight_shipping_cost_ngn').in('id', ids).then(({ data }) => {
+    void supabase.from('china_import_products').select('id,air_shipping_customer_ngn,flight_shipping_cost_ngn').in('id', ids).then(({ data }) => {
       if (!alive) return;
       const next: Record<string, number> = {};
-      for (const row of data ?? []) next[String(row.id)] = Number(row.flight_shipping_cost_ngn || 0);
+      for (const row of data ?? []) next[String(row.id)] = Number(row.air_shipping_customer_ngn ?? row.flight_shipping_cost_ngn ?? 0);
       setChinaShippingById(next);
     });
     return () => { alive = false; };
@@ -128,10 +128,8 @@ export default function CartPage() {
         MARKETPLACE_CHECKOUT_SELECTION_KEY,
         JSON.stringify({
           product_cart_ids: selected.map(i => i.id),
-          china_product_ids: [
-            ...selectedImportItems.map(i => i.id),
-            ...selectedChinaCartItems.map(i => i.sourceId).filter((id): id is string => Boolean(id)),
-          ],
+          china_cart_ids: selectedChinaCartItems.map(i => i.id),
+          china_product_ids: selectedImportItems.map(i => i.id),
         })
       );
     } catch { /* ignore */ }

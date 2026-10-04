@@ -29,6 +29,13 @@ type FulfillmentItem = {
   batch_opened_at: string | null;
   order_status: string;
   shipping_method: string | null;
+  seller_order_id: string | null;
+  seller_order_number: string | null;
+  seller_store_id: string | null;
+  seller_store_name: string | null;
+  seller_store_slug: string | null;
+  seller_owner_id: string | null;
+  delivery_address: unknown;
 };
 
 type BatchGroup = {
@@ -51,6 +58,11 @@ function batchLabel(batch: BatchGroup) {
   if (!batch.openedAt) return 'Batch';
   const date = new Date(batch.openedAt);
   return `Batch opened ${date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })} · ${date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
+}
+
+function sellerLabel(item: FulfillmentItem) {
+  if (!item.seller_store_name) return null;
+  return item.seller_store_slug ? `${item.seller_store_name} (/${item.seller_store_slug})` : item.seller_store_name;
 }
 
 export default function ChinaImportFulfillmentManager({ token, canReceive }: { token: string; canReceive: boolean }) {
@@ -419,7 +431,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
           <PackageCheck className="w-5 h-5 text-orange-500" />
           <h2 className="text-lg font-black text-gray-900">China Import Fulfillment</h2>
         </div>
-        <p className="text-xs text-gray-500 mt-1">Receive paid shipping order items from registered HQ inventory. The Receive button automatically consumes the available stock for that product.</p>
+        <p className="text-xs text-gray-500 mt-1">Receive paid shipping order items from registered HQ inventory. Seller-originated China dropship orders retain their seller store and order reference for operations.</p>
       </div>
 
       <div className="flex rounded-xl bg-gray-100 p-1 gap-1">
@@ -678,6 +690,12 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                     <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
                                     {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
                                     <p className="text-[10px] text-gray-400 mt-1">{item.customer_name}{item.customer_whatsapp ? ' · ' + item.customer_whatsapp : ''} · Ordered {item.ordered_quantity}</p>
+                                    {(sellerLabel(item) || item.seller_order_number) && (
+                                      <p className="text-[10px] text-gray-500 mt-1">
+                                        {sellerLabel(item) ? `Seller store: ${sellerLabel(item)}` : ''}
+                                        {item.seller_order_number ? `${sellerLabel(item) ? ' · ' : ''}Seller order: ${item.seller_order_number}` : ''}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
 

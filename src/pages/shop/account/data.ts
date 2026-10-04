@@ -34,15 +34,20 @@ export type MyOrder = {
   china_shipping_method?: string | null;
   china_batch_id?: string | null;
   china_received_at?: string | null;
+  china_fulfillment_status?: string | null;
+  china_ordered_quantity?: number;
+  china_received_quantity?: number;
+  china_shipped_quantity?: number;
+  china_delivered_quantity?: number;
 };
 
 export type Bucket = 'all' | 'to_ship' | 'on_the_way' | 'delivered' | 'problems';
 
 export const bucketOf = (o: MyOrder): Exclude<Bucket, 'all'> | 'other' => {
   if (o.buyer_reported_issue || o.dispute_status) return 'problems';
-  if (o.status === 'delivered' || o.china_received_at) return 'delivered';
-  if (['shipped', 'out_for_delivery', 'in_transit'].includes(o.status)) return 'on_the_way';
-  if (o.payment_status === 'paid' && ['pending', 'confirmed', 'processing', 'staged', 'received'].includes(o.status)) return 'to_ship';
+  if (o.status === 'delivered' || o.china_received_at || o.china_fulfillment_status === 'delivered') return 'delivered';
+  if (['shipped', 'out_for_delivery', 'in_transit'].includes(o.status) || ['shipped'].includes(o.china_fulfillment_status ?? '')) return 'on_the_way';
+  if (o.payment_status === 'paid' && (['pending', 'confirmed', 'processing', 'staged', 'received'].includes(o.status) || ['awaiting_arrival', 'received'].includes(o.china_fulfillment_status ?? ''))) return 'to_ship';
   return 'other';
 };
 
@@ -117,6 +122,24 @@ const normalizeChina = (o: ChinaRow): MyOrder => ({
   china_received_at: o.received_at,
 });
 
+async function attachChinaDropshipTracking(order: MyOrder): Promise<MyOrder> {
+  const { data } = await supabase.rpc('get_customer_china_dropship_tracking', { p_order_id: order.id });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return order;
+  return {
+    ...order,
+    china_code: row.china_code ?? null,
+    china_shipping_method: row.shipping_method ?? null,
+    china_batch_id: row.batch_id ?? null,
+    china_received_at: row.received_at ?? null,
+    china_fulfillment_status: row.fulfillment_status ?? null,
+    china_ordered_quantity: Number(row.ordered_quantity ?? 0),
+    china_received_quantity: Number(row.received_quantity ?? 0),
+    china_shipped_quantity: Number(row.shipped_quantity ?? 0),
+    china_delivered_quantity: Number(row.delivered_quantity ?? 0),
+  };
+}
+
 async function fetchUnifiedOrders(customerId: string): Promise<MyOrder[]> {
   const [storeResult, chinaResult] = await Promise.all([
     supabase.from('orders').select(SELECT).eq('customer_id', customerId).order('created_at', { ascending: false }).limit(200),
@@ -124,9 +147,10 @@ async function fetchUnifiedOrders(customerId: string): Promise<MyOrder[]> {
   ]);
 
   const storeOrders = ((storeResult.data ?? []) as unknown as MyOrder[]).map((o) => ({ ...o, source_type: 'store' as const }));
+  const trackedStoreOrders = await Promise.all(storeOrders.map(attachChinaDropshipTracking));
   const chinaOrders = ((chinaResult.data ?? []) as unknown as ChinaRow[]).map(normalizeChina);
 
-  return [...storeOrders, ...chinaOrders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return [...trackedStoreOrders, ...chinaOrders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 export function useMyOrders() {

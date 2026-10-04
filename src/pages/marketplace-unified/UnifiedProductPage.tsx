@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart, ArrowLeft, Heart, Store as StoreIcon, ChevronRight,
   Minus, Plus, Check, AlertCircle, Clock, ChevronDown, ChevronUp,
@@ -93,7 +93,9 @@ function RelatedProductCard({ item }: { item: UnifiedMarketplaceProduct }) {
 
   return (
     <Link
-      to={`/stores-v2/product/${item.source_type}/${item.source_id}`}
+      to={item.source_type === 'china_import' && item.seller_id
+        ? `/stores-v2/product/${item.source_type}/${item.source_id}?store=${encodeURIComponent(item.seller_id)}`
+        : `/stores-v2/product/${item.source_type}/${item.source_id}`}
       className="group"
     >
       <div className="relative aspect-square bg-gray-50 rounded-xl overflow-hidden mb-3">
@@ -133,6 +135,8 @@ function RelatedProductCard({ item }: { item: UnifiedMarketplaceProduct }) {
 
 export default function UnifiedProductPage() {
   const { sourceType, sourceId } = useParams<{ sourceType: string; sourceId: string }>();
+  const [searchParams] = useSearchParams();
+  const sellerStoreId = searchParams.get('store');
   const [product, setProduct] = useState<UnifiedMarketplaceProduct | null>(null);
   const [store, setStore] = useState<StoreMeta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -167,10 +171,13 @@ export default function UnifiedProductPage() {
 
       setLoading(true);
 
-      const { data, error: rpcError } = await supabase.rpc('marketplace_unified_product', {
-        p_source_type: sourceType,
-        p_source_id: sourceId,
-      });
+      const rpcName = sourceType === 'china_import' && sellerStoreId
+        ? 'marketplace_unified_product'
+        : 'marketplace_unified_product';
+      const rpcArgs = sourceType === 'china_import' && sellerStoreId
+        ? { p_source_type: sourceType, p_source_id: sourceId, p_store_id: sellerStoreId }
+        : { p_source_type: sourceType, p_source_id: sourceId };
+      const { data, error: rpcError } = await supabase.rpc(rpcName, rpcArgs);
 
       if (!active) return;
 
@@ -195,7 +202,7 @@ export default function UnifiedProductPage() {
       setError(null);
 
       // Normal marketplace products keep the original seller/store presentation.
-      if (resolvedProduct.source_type === 'product' && resolvedProduct.seller_id) {
+      if (resolvedProduct.seller_id) {
         const { data: storeData } = await supabase
           .from('stores')
           .select('id, name, slug, logo_url, primary_color, delivery_window_days, is_verified')
@@ -265,7 +272,7 @@ export default function UnifiedProductPage() {
 
     void load();
     return () => { active = false; };
-  }, [sourceType, sourceId]);
+  }, [sourceType, sourceId, sellerStoreId]);
 
   const variantNames = useMemo(
     () => getVariantNames(product?.variants),
@@ -310,6 +317,30 @@ export default function UnifiedProductPage() {
     }
     if (variantNames.length > 0 && !selectedAll) {
       toast.error('Please select all options');
+      return;
+    }
+
+    if (china && product.seller_id) {
+      const sellerStore = store;
+      if (!sellerStore) {
+        toast.error('Store information is unavailable');
+        return;
+      }
+      const cartProduct = {
+        id: product.source_id,
+        name: product.name,
+        images: product.images || [],
+        selling_price: price,
+      } as Product;
+      addItem(
+        cartProduct,
+        sellerStore as unknown as Store,
+        quantity,
+        Object.keys(selectedVariants).length ? selectedVariants : undefined,
+        price,
+        { sourceType: 'china_import', sourceId: product.source_id }
+      );
+      toast.success(product.name + ' added to cart');
       return;
     }
 

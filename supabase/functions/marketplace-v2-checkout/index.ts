@@ -31,10 +31,45 @@ function normalizeItems(raw: unknown) {
   return raw.slice(0, 60).map((item: any) => ({
     source_type: item?.source_type === 'china_import' ? 'china_import' : 'product',
     source_id: String(item?.source_id ?? item?.product_id ?? ''),
+    store_id: String(item?.store_id ?? ''),
     quantity: Math.min(Math.max(Number(item?.quantity ?? 1), 1), 99),
     variant_options: item?.variant_options && typeof item.variant_options === 'object' ? item.variant_options : null,
     attribution: item?.attribution === 'marketplace' ? 'marketplace' : 'own',
   })).filter(i => /^[0-9a-f-]{36}$/i.test(i.source_id));
+}
+
+function resolveChinaVariantPrice(
+  basePrice: number,
+  variants: unknown,
+  selected: Record<string, string> | null,
+) {
+  if (!selected) return { price: basePrice, valid: true };
+  if (!Array.isArray(variants) || variants.length === 0) {
+    return { price: basePrice, valid: Object.keys(selected).length === 0 };
+  }
+
+  const groups = new Map<string, any>();
+  for (const group of variants as any[]) {
+    if (!group || typeof group !== 'object' || typeof group.name !== 'string') continue;
+    groups.set(group.name, group);
+  }
+
+  for (const [name, value] of Object.entries(selected)) {
+    const group = groups.get(name);
+    if (!group || !Array.isArray(group.options) || !group.options.includes(value)) {
+      return { price: basePrice, valid: false };
+    }
+  }
+
+  let price = basePrice;
+  for (const group of groups.values()) {
+    const selectedValue = selected[group.name];
+    if (!selectedValue) continue;
+    const delta = Number(group?.price_deltas?.[selectedValue] ?? 0);
+    if (Number.isFinite(delta)) price += delta;
+  }
+
+  return { price: Math.round(price * 100) / 100, valid: price > 0 };
 }
 
 async function requireCustomer(req: Request) {
@@ -57,55 +92,260 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
     if (rows.error) throw new Error(rows.error.message);
     const storeByProduct = new Map((rows.data ?? []).map((p: any) => [p.id, p.store_id]));
     const missing = normal.filter(i => !storeByProduct.get(i.source_id));
-    if (missing.length) return { ok: false, stores: [], amount: 0, errors: missing.map(i => ({ code: 'product_unavailable', product_id: i.source_id, message: 'This item is no longer available' })) };
-    const payload = normal.map(i => ({ product_id: i.source_id, store_id: storeByProduct.get(i.source_id), quantity: i.quantity, variant_options: i.variant_options, attribution: i.attribution }));
-    const { data, error } = await supabase.rpc('checkout_quote', { p_items: payload, p_state: state, p_coupons: {} });
+    if (missing.length) {
+      return {
+        ok: false,
+        stores: [],
+        amount: 0,
+        errors: missing.map(i => ({
+          code: 'product_unavailable',
+          product_id: i.source_id,
+          message: 'This item is no longer available',
+        })),
+      };
+    }
+    const payload = normal.map(i => ({
+      product_id: i.source_id,
+      store_id: storeByProduct.get(i.source_id),
+      quantity: i.quantity,
+      variant_options: i.variant_options,
+      attribution: i.attribution,
+    }));
+    const { data, error } = await supabase.rpc('checkout_quote', {
+      p_items: payload,
+      p_state: state,
+      p_coupons: {},
+    });
     if (error) throw new Error(error.message);
     normalQuote = data ?? normalQuote;
   }
 
   const errors: any[] = [];
   const chinaItems: any[] = [];
-  if (china.length) {
-    const { data: products, error } = await supabase
-      .from('china_import_products')
-      .select('id,name,image_url,image_urls,price_ngn,flight_shipping_cost_ngn,is_active,variants')
-      .in('id', china.map(i => i.source_id));
-    if (error) throw new Error(error.message);
-    const byId = new Map((products ?? []).map((p: any) => [p.id, p]));
+  const chinaDropshipStores = new Map<string, any>();
+  const chinaIds = china.map(i => i.source_id);
+  const sellerStoreIds = [...new Set(china.map(i => i.store_id).filter(id => id && id !== QAFRICA_STORE_ID))];
 
-    for (const item of china) {
-      const p = byId.get(item.source_id);
-      if (!p || !p.is_active || Number(p.price_ngn ?? 0) <= 0 || Number(p.flight_shipping_cost_ngn ?? 0) <= 0) {
-        errors.push({ code: 'china_product_unavailable', product_id: item.source_id, message: 'This China Import item is no longer available for marketplace purchase' });
+  const { data: chinaProducts, error: chinaProductError } = chinaIds.length
+    ? await supabase
+        .from('china_import_products')
+        .select('id,name,image_url,image_urls,price_ngn,flight_shipping_cost_ngn,air_shipping_customer_ngn,is_active,variants,moq')
+        .in('id', chinaIds)
+    : { data: [], error: null };
+
+  if (chinaProductError) throw new Error(chinaProductError.message);
+  const byId = new Map((chinaProducts ?? []).map((p: any) => [p.id, p]));
+
+  const { data: catalogRows, error: catalogError } = sellerStoreIds.length && chinaIds.length
+    ? await supabase
+        .from('china_import_dropship_catalog')
+        .select('id,seller_store_id,china_import_product_id,seller_price_ngn,supplier_cost_ngn,shipping_cost_ngn,status')
+        .in('seller_store_id', sellerStoreIds)
+        .in('china_import_product_id', chinaIds)
+    : { data: [], error: null };
+
+  if (catalogError) throw new Error(catalogError.message);
+
+  const catalogByKey = new Map(
+    (catalogRows ?? []).map((row: any) => [
+      row.seller_store_id + ':' + row.china_import_product_id,
+      row,
+    ])
+  );
+
+  for (const item of china) {
+    const p = byId.get(item.source_id);
+    if (!p || !p.is_active) {
+      errors.push({
+        code: 'china_product_unavailable',
+        product_id: item.source_id,
+        message: 'This China Import item is no longer available',
+      });
+      continue;
+    }
+
+    const image = Array.isArray(p.image_urls) && p.image_urls.length ? p.image_urls[0] : p.image_url;
+    const direct = !item.store_id || item.store_id === QAFRICA_STORE_ID;
+
+    if (direct) {
+      const variantPrice = resolveChinaVariantPrice(
+        Number(p.price_ngn),
+        p.variants,
+        item.variant_options,
+      );
+      const unit = variantPrice.price;
+      const shippingUnit = Number(p.air_shipping_customer_ngn ?? p.flight_shipping_cost_ngn ?? 0);
+      if (!variantPrice.valid || unit <= 0 || shippingUnit <= 0) {
+        errors.push({
+          code: 'china_product_unavailable',
+          product_id: item.source_id,
+          message: 'This China Import item is no longer available for marketplace purchase',
+        });
         continue;
       }
-      const image = Array.isArray(p.image_urls) && p.image_urls.length ? p.image_urls[0] : p.image_url;
-      const unit = Number(p.price_ngn);
-      const shippingUnit = Number(p.flight_shipping_cost_ngn);
+
       chinaItems.push({
-        product_id: p.id, source_id: p.id, source_type: 'china_import', store_id: QAFRICA_STORE_ID,
-        name: p.name, image, image_url: image, quantity: item.quantity,
-        unit_price: unit, total_price: unit * item.quantity, variant_options: item.variant_options,
-        attribution: 'own', is_imported: true, flight_shipping_cost_ngn: shippingUnit,
+        product_id: p.id,
+        source_id: p.id,
+        source_type: 'china_import',
+        store_id: QAFRICA_STORE_ID,
+        name: p.name,
+        image,
+        image_url: image,
+        quantity: item.quantity,
+        unit_price: unit,
+        total_price: unit * item.quantity,
+        variant_options: item.variant_options,
+        attribution: 'own',
+        is_imported: true,
+        flight_shipping_cost_ngn: shippingUnit,
+        dropship_catalog_id: null,
+        supplier_cost_ngn: Number(p.price_ngn ?? 0),
+        shipping_cost_ngn: shippingUnit,
       });
+      continue;
     }
+
+    const catalog = catalogByKey.get(item.store_id + ':' + item.source_id);
+    const baseSellerPrice = Number(catalog?.seller_price_ngn ?? 0);
+    const variantPrice = resolveChinaVariantPrice(
+      baseSellerPrice,
+      p.variants,
+      item.variant_options,
+    );
+    const sellerPrice = variantPrice.price;
+    const supplierCost = Number(p.price_ngn ?? 0);
+    const shippingCost = Number(p.air_shipping_customer_ngn ?? p.flight_shipping_cost_ngn ?? 0);
+
+    if (
+      !catalog ||
+      catalog.status !== 'active' ||
+      !variantPrice.valid ||
+      sellerPrice <= 0 ||
+      supplierCost < 0 ||
+      shippingCost < 0 ||
+      sellerPrice < supplierCost
+    ) {
+      errors.push({
+        code: 'china_dropship_unavailable',
+        product_id: item.source_id,
+        store_id: item.store_id,
+        message: 'This China Import dropship product is no longer available in this store',
+      });
+      continue;
+    }
+
+    chinaItems.push({
+      product_id: null,
+      source_id: p.id,
+      source_type: 'china_import',
+      store_id: item.store_id,
+      name: p.name,
+      image,
+      image_url: image,
+      quantity: item.quantity,
+      unit_price: sellerPrice,
+      total_price: sellerPrice * item.quantity,
+      variant_options: item.variant_options,
+      attribution: 'marketplace',
+      is_imported: true,
+      flight_shipping_cost_ngn: shippingCost,
+      dropship_catalog_id: catalog.id,
+      supplier_cost_ngn: supplierCost,
+      shipping_cost_ngn: shippingCost,
+    });
   }
 
-  const productTotal = chinaItems.reduce((sum, l) => sum + Number(l.total_price), 0);
-  const flightShippingTotal = chinaItems.reduce((sum, l) => sum + Number(l.flight_shipping_cost_ngn) * Number(l.quantity), 0);
-  const landedTotal = productTotal + flightShippingTotal;
-  const chinaStore = chinaItems.length ? [{
-    store_id: QAFRICA_STORE_ID, store_name: 'QAFRICA', store_slug: 'qafrica',
-    logo_url: '/qafrica-bag-logo.svg', items: chinaItems,
-    subtotal: productTotal, delivery_fee: flightShippingTotal,
-    coupon_code: null, coupon_discount: 0, coupon_message: null,
-    total: landedTotal, shipping_included: true, flight_shipping_total: flightShippingTotal,
+  const directChinaItems = chinaItems.filter(i => i.store_id === QAFRICA_STORE_ID);
+  const sellerChinaItems = chinaItems.filter(i => i.store_id !== QAFRICA_STORE_ID);
+
+  const directProductTotal = directChinaItems.reduce((sum, l) => sum + Number(l.total_price), 0);
+  const directShippingTotal = directChinaItems.reduce(
+    (sum, l) => sum + Number(l.flight_shipping_cost_ngn) * Number(l.quantity),
+    0
+  );
+
+  const chinaStore = directChinaItems.length ? [{
+    store_id: QAFRICA_STORE_ID,
+    store_name: 'QAFRICA',
+    store_slug: 'qafrica',
+    logo_url: '/qafrica-bag-logo.svg',
+    items: directChinaItems,
+    subtotal: directProductTotal,
+    delivery_fee: directShippingTotal,
+    coupon_code: null,
+    coupon_discount: 0,
+    coupon_message: null,
+    total: directProductTotal + directShippingTotal,
+    shipping_included: true,
+    flight_shipping_total: directShippingTotal,
   }] : [];
 
-  const stores = [...(normalQuote.stores ?? []), ...chinaStore];
+  for (const item of sellerChinaItems) {
+    const storeId = item.store_id;
+    if (!chinaDropshipStores.has(storeId)) {
+      const { data: store, error: storeError } = await supabase
+        .from('stores')
+        .select('id,name,slug')
+        .eq('id', storeId)
+        .maybeSingle();
+      if (storeError) throw new Error(storeError.message);
+      if (!store) {
+        errors.push({
+          code: 'store_unavailable',
+          store_id: storeId,
+          message: 'The seller store is no longer available',
+        });
+        continue;
+      }
+
+      const { data: zone, error: zoneError } = await supabase
+        .from('delivery_zones')
+        .select('price')
+        .eq('store_id', storeId)
+        .eq('state', state)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      if (zoneError) throw new Error(zoneError.message);
+
+      chinaDropshipStores.set(storeId, {
+        store_id: storeId,
+        store_name: store.name,
+        store_slug: store.slug,
+        logo_url: null,
+        items: [],
+        subtotal: 0,
+        delivery_fee: Number(zone?.price ?? 0),
+        coupon_code: null,
+        coupon_discount: 0,
+        coupon_message: null,
+        shipping_included: false,
+        flight_shipping_total: 0,
+      });
+    }
+
+    const group = chinaDropshipStores.get(storeId);
+    group.items.push(item);
+    group.subtotal += Number(item.total_price);
+    group.delivery_fee += Number(item.shipping_cost_ngn) * Number(item.quantity);
+  }
+
+  const sellerChinaStores = [...chinaDropshipStores.values()].map(store => ({
+    ...store,
+    total: Number(store.subtotal) + Number(store.delivery_fee),
+  }));
+
+  const stores = [...(normalQuote.stores ?? []), ...sellerChinaStores, ...chinaStore];
   const amount = stores.reduce((sum: number, s: any) => sum + Number(s.total ?? 0), 0);
-  return { ok: errors.length === 0 && stores.length > 0 && !!state, state, stores, amount, errors };
+
+  return {
+    ok: errors.length === 0 && stores.length > 0 && !!state,
+    state,
+    stores,
+    amount,
+    errors,
+  };
 }
 
 Deno.serve(async (req) => {

@@ -139,7 +139,9 @@ export const useCartStore = create<CartStore>()(
         set((state) => {
           // Check if same product already in cart from same store (and same variants)
           const existingItemIndex = state.items.findIndex(
-            item => item.productId === product.id && 
+            item => item.productId === product.id &&
+                   item.sourceType === (source?.sourceType ?? 'product') &&
+                   item.sourceId === (source?.sourceId ?? product.id) &&
                    item.storeId === store.id &&
                    JSON.stringify(item.variantOptions) === JSON.stringify(variantOptions)
           );

@@ -4,20 +4,23 @@ import { Package, Search, Plus, Store, Filter, X, Check, AlertCircle, DollarSign
 import { Button } from '@/components/ui/button';
 import { useStoreStore, useImportStore, useAuthStore } from '@/stores';
 import { toast } from 'sonner';
-import { importCatalogService } from '@/services';
+import { importCatalogService, supabase } from '@/services';
 import type { StoreOwner } from '@/types';
+import ChinaImportCatalogSection from './ChinaImportCatalogSection';
 type FilterType = 'all' | 'my_niches' | 'other';
 
 export default function ImportCatalogPage() {
   const { currentStore } = useStoreStore();
   const { user } = useAuthStore();
   const { imports, fetchStoreImports, importProduct, updateImport, deleteImport } = useImportStore();
-  const [activeTab, setActiveTab] = useState<'browse' | 'imported'>('browse');
+  const [activeTab, setActiveTab] = useState<'browse' | 'imported' | 'china'>('browse');
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<FilterType>('my_niches');
   const [isImporting, setIsImporting] = useState<string | null>(null);
   const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [chinaImports, setChinaImports] = useState<any[]>([]);
+  const [isLoadingChinaImports, setIsLoadingChinaImports] = useState(false);
 
   // NEW: State for the Price Configuration Modal
   const [configuringProduct, setConfiguringProduct] = useState<any | null>(null);
@@ -32,9 +35,68 @@ export default function ImportCatalogPage() {
     if (currentStore?.id) {
       fetchStoreImports(currentStore.id);
       fetchProducts();
+      fetchChinaImports(currentStore.id);
     }
   }, [currentStore, filterType]);
 
+  const fetchChinaImports = async (storeId: string) => {
+    setIsLoadingChinaImports(true);
+    try {
+      const { data: catalogRows, error: catalogError } = await supabase
+        .from('china_import_dropship_catalog')
+        .select('id,china_import_product_id,seller_price_ngn,status,created_at')
+        .eq('seller_store_id', storeId)
+        .neq('status', 'removed')
+        .order('created_at', { ascending: false });
+
+      if (catalogError) throw catalogError;
+
+      const ids = (catalogRows || []).map(row => row.china_import_product_id);
+      if (ids.length === 0) {
+        setChinaImports([]);
+        return;
+      }
+
+      const { data: products, error: productError } = await supabase
+        .from('china_import_products')
+        .select('id,name,image_url,image_urls,category')
+        .in('id', ids);
+
+      if (productError) throw productError;
+
+      const byId = new Map((products || []).map(product => [product.id, product]));
+      setChinaImports((catalogRows || []).map(row => ({
+        ...row,
+        product: byId.get(row.china_import_product_id) || null,
+      })));
+    } catch (error: any) {
+      console.error('Error fetching China Import listings:', error);
+      toast.error(error?.message || 'Failed to load China Import imports');
+      setChinaImports([]);
+    } finally {
+      setIsLoadingChinaImports(false);
+    }
+  };
+
+
+  const removeChinaImport = async (catalogId: string) => {
+    setIsDeletingImport(catalogId);
+    const { error } = await supabase
+      .from('china_import_dropship_catalog')
+      .update({ status: 'removed' })
+      .eq('id', catalogId)
+      .eq('seller_store_id', currentStore?.id || '');
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('China Import product removed from your store');
+      if (currentStore?.id) {
+        await fetchChinaImports(currentStore.id);
+      }
+    }
+    setIsDeletingImport(null);
+  };
   const fetchProducts = async () => {
     if (!currentStore?.id) return;
     
@@ -167,6 +229,7 @@ export default function ImportCatalogPage() {
 
   // Build a set of already-imported product IDs for O(1) lookup
   const importedProductIds = new Set(imports.map(i => i.original_product_id));
+  const totalMyImports = imports.length + chinaImports.length;
 
   const getFilterLabel = (type: FilterType) => {
     switch (type) {
@@ -211,6 +274,16 @@ export default function ImportCatalogPage() {
           Browse Products
         </button>
         <button
+          onClick={() => setActiveTab('china')}
+          className={`px-4 py-3 font-medium border-b-2 transition-colors ${
+            activeTab === 'china'
+              ? 'border-orange-500 text-orange-600 dark:text-orange-400'
+              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+          }`}
+        >
+          China Import
+        </button>
+        <button
           onClick={() => setActiveTab('imported')}
           className={`px-4 py-3 font-medium border-b-2 transition-colors ${
             activeTab === 'imported'
@@ -218,11 +291,13 @@ export default function ImportCatalogPage() {
               : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
           }`}
         >
-          My Imports ({imports.length})
+          My Imports ({totalMyImports})
         </button>
       </div>
 
-      {activeTab === 'browse' ? (
+      {activeTab === 'china' ? (
+        <ChinaImportCatalogSection />
+      ) : activeTab === 'browse' ? (
         <>
           {/* Search and Filter */}
           <div className="flex flex-col sm:flex-row gap-4">
@@ -405,19 +480,19 @@ export default function ImportCatalogPage() {
           )}
         </>
       ) : (
-        /* Imported Products */
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-          {imports.length === 0 ? (
+          {isLoadingChinaImports ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-orange-500" />
+            </div>
+          ) : imports.length === 0 && chinaImports.length === 0 ? (
             <div className="p-12 text-center">
               <div className="w-20 h-20 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Package className="w-10 h-10 text-gray-400" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No imported products</h3>
               <p className="text-gray-500 dark:text-gray-400 mb-4">Browse the catalog to import products to your store</p>
-              <Button
-                onClick={() => setActiveTab('browse')}
-                className="bg-orange-500 hover:bg-orange-600 text-white"
-              >
+              <Button onClick={() => setActiveTab('browse')} className="bg-orange-500 hover:bg-orange-600 text-white">
                 Browse Catalog
               </Button>
             </div>
@@ -427,7 +502,7 @@ export default function ImportCatalogPage() {
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Product</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Niche</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Niche / Category</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Your Price</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Sales</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
@@ -435,36 +510,71 @@ export default function ImportCatalogPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {imports.map((item) => {
-                    const isEditing = editingImportId === item.id;
-                    const dropshipCost = item.dropship_price || 0;
-
-                    return (
-                      <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                        {/* Product */}
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-                              {item.images?.[0] ? (
-                                <img src={item.images[0]} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                <Package className="w-5 h-5 text-gray-400" />
-                              )}
+                  {[
+                    ...chinaImports.map(item => ({ kind: 'china' as const, item })),
+                    ...imports.map(item => ({ kind: 'seller' as const, item })),
+                  ].map(({ kind, item }) => {
+                    if (kind === 'china') {
+                      const product = item.product;
+                      const image = product?.image_urls?.[0] || product?.image_url;
+                      return (
+                        <tr key={`china-${item.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3 min-w-[220px]">
+                              <div className="w-10 h-10 rounded-lg bg-gray-100 dark:bg-gray-700 overflow-hidden flex items-center justify-center flex-shrink-0">
+                                {image ? <img src={image} alt="" className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-gray-400" />}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-medium text-gray-900 dark:text-white line-clamp-2">{product?.name || 'China Import product'}</div>
+                                <div className="text-[11px] text-orange-600">China Import</div>
+                              </div>
                             </div>
-                            <span className="font-medium text-gray-900 dark:text-white line-clamp-1">{item.name}</span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{product?.category || '—'}</td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">₦{Number(item.seller_price_ngn || 0).toLocaleString()}</td>
+                          <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">—</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${item.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'}`}>
+                              {item.status === 'active' ? 'Active' : 'Paused'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <button
+                              onClick={() => void removeChinaImport(item.id)}
+                              disabled={isDeletingImport === item.id}
+                              className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 font-medium px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                              title="Remove from your store"
+                            >
+                              {isDeletingImport === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const itemIsEditing = editingImportId === item.id;
+                    const dropshipCost = item.dropship_price || 0;
+                    return (
+                      <tr key={`seller-${item.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3 min-w-[220px]">
+                            <div className="w-10 h-10 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                              {item.images?.[0] ? <img src={item.images[0]} alt="" className="w-full h-full object-cover" /> : <Package className="w-5 h-5 text-gray-400" />}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-medium text-gray-900 dark:text-white line-clamp-2">{item.name}</div>
+                              <div className="text-[11px] text-gray-500">Seller Import</div>
+                            </div>
                           </div>
                         </td>
-
-                        {/* Niche */}
                         <td className="px-6 py-4">
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300">
                             {item.niche}
                           </span>
                         </td>
-
-                        {/* Price — inline edit */}
                         <td className="px-6 py-4">
-                          {isEditing ? (
+                          {itemIsEditing ? (
                             <div className="flex items-center gap-2">
                               <div className="relative">
                                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₦</span>
@@ -476,18 +586,10 @@ export default function ImportCatalogPage() {
                                   autoFocus
                                 />
                               </div>
-                              <button
-                                onClick={() => handleSavePrice(item.id, dropshipCost)}
-                                className="p-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
-                                title="Save price"
-                              >
+                              <button onClick={() => handleSavePrice(item.id, dropshipCost)} className="p-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg" title="Save price">
                                 <Check className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                onClick={() => setEditingImportId(null)}
-                                className="p-1.5 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-600 dark:text-gray-200 rounded-lg transition-colors"
-                                title="Cancel"
-                              >
+                              <button onClick={() => setEditingImportId(null)} className="p-1.5 bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-200 rounded-lg" title="Cancel">
                                 <X className="w-3.5 h-3.5" />
                               </button>
                             </div>
@@ -497,39 +599,28 @@ export default function ImportCatalogPage() {
                                 setEditingImportId(item.id);
                                 setEditingPrice(String(item.custom_selling_price || item.selling_price));
                               }}
-                              className="group flex items-center gap-1.5 text-sm font-medium text-gray-900 dark:text-white hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                              className="group flex items-center gap-1.5 text-sm font-medium text-gray-900 dark:text-white hover:text-orange-600 transition-colors"
                               title="Click to edit price"
                             >
                               ₦{(item.custom_selling_price || item.selling_price).toLocaleString()}
-                              <DollarSign className="w-3.5 h-3.5 text-gray-300 group-hover:text-orange-400 transition-colors" />
+                              <DollarSign className="w-3.5 h-3.5 text-gray-300 group-hover:text-orange-400" />
                             </button>
                           )}
                         </td>
-
-                        {/* Sales */}
                         <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{item.total_sales || 0}</td>
-
-                        {/* Status */}
                         <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            item.is_active ? 'bg-green-100 dark:bg-green-500/10 text-green-800 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
-                          }`}>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${item.is_active ? 'bg-green-100 dark:bg-green-500/10 text-green-800 dark:text-green-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'}`}>
                             {item.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-
-                        {/* Actions */}
                         <td className="px-6 py-4">
                           <button
                             onClick={() => handleDeleteImport(item.id)}
                             disabled={isDeletingImport === item.id}
-                            className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 font-medium px-2.5 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 font-medium px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
                             title="Remove from your store"
                           >
-                            {isDeletingImport === item.id
-                              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              : <X className="w-3.5 h-3.5" />
-                            }
+                            {isDeletingImport === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
                             Remove
                           </button>
                         </td>
@@ -542,7 +633,6 @@ export default function ImportCatalogPage() {
           )}
         </div>
       )}
-
       {/* NEW: Import Configuration Modal */}
       <AnimatePresence>
         {configuringProduct && (
