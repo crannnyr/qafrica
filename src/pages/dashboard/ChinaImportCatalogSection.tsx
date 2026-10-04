@@ -122,9 +122,7 @@ export default function ChinaImportCatalogSection() {
     if (!currentStore?.id || !currentStore.owner_id) return;
 
     const existing = catalogByProduct.get(product.id);
-    const supplierCost = Math.max(Number(product.cost_ngn ?? product.price_ngn ?? 0), 0);
-    const shipping = Math.max(Number(product.air_shipping_customer_ngn ?? 0), 0);
-    const landed = supplierCost + shipping;
+    const landed = Math.max(Number(product.price_ngn ?? 0), 0);
     const entered = Number(prices[product.id]);
     const sellerPrice = Number.isFinite(entered) && entered > 0
       ? entered
@@ -217,9 +215,7 @@ export default function ChinaImportCatalogSection() {
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-6">
           {filtered.map(product => {
             const row = catalogByProduct.get(product.id);
-            const supplier = Math.max(Number(product.cost_ngn ?? product.price_ngn ?? 0), 0);
-            const shipping = Math.max(Number(product.air_shipping_customer_ngn ?? 0), 0);
-            const landed = row?.landed_cost_ngn ?? supplier + shipping;
+            const landed = row?.landed_cost_ngn ?? Math.max(Number(product.price_ngn ?? 0), 0);
             const suggested = Math.ceil(landed * 1.2);
             const margin = Math.max((row?.seller_price_ngn ?? suggested) - landed, 0);
 
