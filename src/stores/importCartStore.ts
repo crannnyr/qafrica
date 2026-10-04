@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { supabase } from '@/services';
+import CONFIG from '@/lib/config';
+
+const IMPORT_PRODUCTS_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import?action=products`;
 
 // ── Types (mirrors RecommendationsPage's local types, kept here so both
 // RecommendationsPage and ProductDetailPage share one cart instead of each
@@ -62,6 +65,10 @@ interface ImportCartState {
   setQuantity: (cartKey: string, quantity: number, moq: number) => void;
   removeItem: (cartKey: string) => void;
   clearCart: () => void;
+  /** Re-prices every cart line from the live catalogue. The cart stores a
+   *  snapshot of each product, so without this a price change in admin left
+   *  the cart showing the old price while checkout charged the new one. */
+  refreshPrices: () => Promise<void>;
   syncWithServer: (customerId: string) => Promise<void>;
   saveToServer: (customerId: string) => Promise<void>;
 }
@@ -128,6 +135,47 @@ export const useImportCartStore = create<ImportCartState>()(
 
       clearCart: () => set({ cart: [] }),
 
+      refreshPrices: async () => {
+        if (get().cart.length === 0) return;
+        try {
+          const res = await fetch(IMPORT_PRODUCTS_URL);
+          const data = await res.json().catch(() => ({}));
+          const list: ImportProduct[] = Array.isArray(data?.products) ? data.products : [];
+          if (!res.ok || list.length === 0) return;
+          const live = new Map(list.map(p => [p.id, p]));
+          set(state => {
+            let changed = false;
+            const cart = state.cart.map(item => {
+              const p = live.get(item.id);
+              if (!p || !Number.isFinite(Number(p.price_ngn))) return item;
+              let price = Number(p.price_ngn);
+              for (const group of p.variants ?? []) {
+                const selected = item.variant_selection?.[group.name];
+                const delta = selected == null ? undefined : group.price_deltas?.[selected];
+                if (typeof delta === 'number') price += delta;
+              }
+              if (price === Number(item.price_ngn) && p.ship_only === item.ship_only) return item;
+              changed = true;
+              return {
+                ...item,
+                price_ngn: price,
+                price_cny: p.price_cny,
+                price_usd: p.price_usd,
+                category: p.category,
+                variants: p.variants,
+                has_variants: p.has_variants,
+                ship_only: p.ship_only,
+                sea_shipping_cost_ngn: p.sea_shipping_cost_ngn,
+                flight_shipping_cost_ngn: p.flight_shipping_cost_ngn,
+              };
+            });
+            return changed ? { cart } : state;
+          });
+        } catch (err) {
+          console.error('Failed to refresh import cart prices:', err);
+        }
+      },
+
       syncWithServer: async (customerId) => {
         try {
           const { data, error } = await supabase
@@ -141,6 +189,7 @@ export const useImportCartStore = create<ImportCartState>()(
         } catch (err) {
           console.error('Failed to sync import cart:', err);
         }
+        await get().refreshPrices();
       },
 
       saveToServer: async (customerId) => {
