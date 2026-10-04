@@ -99,17 +99,17 @@ function UnifiedMarketplaceFeedPage() {
         <section aria-label="Shop by category" className="mt-3 bg-white py-3">
           <div className="flex items-center justify-between px-3 sm:px-4 mb-3">
             <h2 className="text-base font-bold text-gray-900">Shop by category</h2>
-            <Link to="/stores-v2/categories" className="text-sm font-semibold text-gray-700 underline underline-offset-2">
+            <Link to="/stores-v2/categories" className="text-sm font-semibold text-[#E8590C]">
               View all
             </Link>
           </div>
-          <div className="grid grid-cols-5 gap-x-2 gap-y-3 px-3 sm:px-4">
+          <div className="grid grid-flow-col grid-rows-2 auto-cols-[76px] gap-x-3 gap-y-4 px-3 sm:px-4 overflow-x-auto scrollbar-hide snap-x snap-mandatory">
             {categoryPicks.map((c) => (
               <button
                 key={c.value}
                 type="button"
                 onClick={() => setParam('category', c.value)}
-                className="flex flex-col items-center gap-1 focus-visible:outline-none group"
+                className="flex flex-col items-center gap-1 focus-visible:outline-none group snap-start"
               >
                 <span className="w-[66px] h-[66px] rounded-full bg-gray-100 overflow-hidden ring-offset-2 group-focus-visible:ring-2 ring-orange-500">
                   <img src={c.image} alt="" loading="lazy" className="w-full h-full object-cover" />
