@@ -140,9 +140,10 @@ export default function ChinaImportCatalogSection() {
       seller_owner_id: currentStore.owner_id,
       china_import_product_id: product.id,
       seller_price_ngn: sellerPrice,
-      // These are overwritten by the database trigger with authoritative snapshots.
-      supplier_cost_ngn: supplierCost,
-      shipping_cost_ngn: shipping,
+      // The database trigger snapshots these authoritatively.
+      // China Import catalog cost is price_ngn only; shipping is added at checkout.
+      supplier_cost_ngn: landed,
+      shipping_cost_ngn: 0,
       status: 'active',
     };
 
