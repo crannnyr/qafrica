@@ -223,7 +223,8 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
       !variantPrice.valid ||
       sellerPrice <= 0 ||
       supplierCost < 0 ||
-      shippingCost < 0
+      shippingCost < 0 ||
+      sellerPrice < supplierCost + shippingCost
     ) {
       errors.push({
         code: 'china_dropship_unavailable',
