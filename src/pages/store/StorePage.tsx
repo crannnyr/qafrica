@@ -354,7 +354,9 @@ export default function StorePage() {
                   <div className="space-y-4 mb-6">
                     {getVariantNames(selectedProduct).map(variantName => (
                       <div key={variantName}>
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{variantName}</p>
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                          {variantName.toLowerCase() === 'type' ? 'Size' : variantName}
+                        </p>
                         <div className="flex flex-wrap gap-2">
                           {getVariantOptions(variantName).map((option: string) => (
                             <button
