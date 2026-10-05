@@ -2063,6 +2063,8 @@ serve(async (req: Request) => {
       if (!(await requireAdmin(supabase, manager_token, 'import.settings.update'))) return json({ error: 'Unauthorized' }, 401)
 
       const updates: Record<string, unknown> = {}
+      if (typeof charge_shipping_at_checkout === 'boolean') updates.charge_shipping_at_checkout = charge_shipping_at_checkout
+      const nonNegative = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0
       if (typeof home_delivery_enabled === 'boolean') updates.home_delivery_enabled = home_delivery_enabled;
       if (typeof pickup_station_delivery_enabled === 'boolean') updates.pickup_station_delivery_enabled = pickup_station_delivery_enabled;
       if (home_delivery_enabled === false && pickup_station_delivery_enabled === false) return json({ error: 'At least one delivery option must remain enabled.' }, 400);
@@ -2070,9 +2072,6 @@ serve(async (req: Request) => {
         if (!nonNegative(air_shipping_suggestion_threshold_ngn)) return json({ error: 'Air shipping suggestion threshold must be a non-negative number.' }, 400);
         updates.air_shipping_suggestion_threshold_ngn = Number(air_shipping_suggestion_threshold_ngn);
       }
-
-      if (typeof charge_shipping_at_checkout === 'boolean') updates.charge_shipping_at_checkout = charge_shipping_at_checkout
-      const nonNegative = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0
       const positiveInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v > 0
       const percent = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100
 
