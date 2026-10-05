@@ -22,6 +22,9 @@ type AdminSettings = {
   bulk_discount_tier2_percent: number
   charge_shipping_at_checkout: boolean
   paystack_manual_threshold_ngn: number
+  home_delivery_enabled: boolean
+  pickup_station_delivery_enabled: boolean
+  air_shipping_suggestion_threshold_ngn: number
 }
 
 const DEFAULTS: AdminSettings = {
@@ -40,6 +43,9 @@ const DEFAULTS: AdminSettings = {
   bulk_discount_tier2_percent: 5,
   charge_shipping_at_checkout: true,
   paystack_manual_threshold_ngn: 100000,
+  home_delivery_enabled: false,
+  pickup_station_delivery_enabled: true,
+  air_shipping_suggestion_threshold_ngn: 500000,
 }
 
 export default function ManagementSettings() {
@@ -149,6 +155,34 @@ export default function ManagementSettings() {
           <span className="text-xs font-semibold text-gray-700 block mb-1.5">Paystack / Manual threshold (₦)</span>
           <input type="number" min={0} value={settings.paystack_manual_threshold_ngn} onChange={e => setField('paystack_manual_threshold_ngn', Number(e.target.value))} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-orange-500 outline-none" />
           <p className="text-[11px] text-gray-400 mt-1">Orders below this amount use Paystack. Orders at or above it must use manual bank transfer.</p>
+        </label>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+        <p className="font-semibold text-gray-800 text-sm">Delivery options</p>
+        <label className="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Home address delivery</p>
+            <p className="text-[11px] text-gray-400">Allow customers to choose delivery to their saved or new home address.</p>
+          </div>
+          <input type="checkbox" checked={settings.home_delivery_enabled} onChange={e => setField('home_delivery_enabled', e.target.checked)} className="w-4 h-4 accent-orange-500" />
+        </label>
+        <label className="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200">
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Jumia pickup station</p>
+            <p className="text-[11px] text-gray-400">Allow customers to select an active Jumia pickup station at checkout.</p>
+          </div>
+          <input type="checkbox" checked={settings.pickup_station_delivery_enabled} onChange={e => setField('pickup_station_delivery_enabled', e.target.checked)} className="w-4 h-4 accent-orange-500" />
+        </label>
+        <p className="text-[11px] text-gray-400">Keep at least one delivery option enabled.</p>
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
+        <p className="font-semibold text-gray-800 text-sm">Air shipping recommendation</p>
+        <label>
+          <span className="text-xs font-semibold text-gray-700 block mb-1.5">Recommend Air from order value (₦)</span>
+          <input type="number" min={0} value={settings.air_shipping_suggestion_threshold_ngn} onChange={e => setField('air_shipping_suggestion_threshold_ngn', Number(e.target.value))} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-orange-500 outline-none" />
+          <p className="text-[11px] text-gray-400 mt-1">Air remains the default for eligible products. At or above this order value, checkout highlights Air as the recommended faster option.</p>
         </label>
       </section>
 
