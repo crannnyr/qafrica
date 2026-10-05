@@ -94,6 +94,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   // beforeunload warning, rather than just the normal button spinner.
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState('');
+  const [shippingWarning, setShippingWarning] = useState('');
   const [promoCode, setPromoCode] = useState('');
   const [promoQuote, setPromoQuote] = useState<ChinaImportPromotionQuote | null>(null);
   const [result, setResult] = useState<{ code: string; bank?: any; order_id?: string } | null>(null);
@@ -257,6 +258,23 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   
   const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
   const seaShippingSuggested = subtotal >= shippingSettings.seaShippingSuggestionThresholdNgn && !seaOnlyItems.length;
+  const seaShippingLocked = subtotal < shippingSettings.seaShippingSuggestionThresholdNgn && !forcedSeaFreight;
+
+  useEffect(() => {
+    if (!seaShippingLocked) return;
+    if (shippingMethod === 'sea_freight') setShippingMethod('flight');
+    setItemShipping(prev => {
+      const next = { ...prev };
+      let changed = false;
+      cart.forEach(item => {
+        if (!item.ship_only && next[item.cart_key] === 'sea_freight') {
+          next[item.cart_key] = 'flight';
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [seaShippingLocked, shippingMethod, cart]);
   const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
   const promoDiscount = Math.max(0, Math.min(Number(promoQuote?.discount_amount_ngn ?? 0), totalBeforePromo));
   const total = Math.max(0, totalBeforePromo - promoDiscount);
@@ -778,10 +796,21 @@ if (promoQuote?.pending_order?.id) {
                     </div>
                   )}
                 </button>
-                <button onClick={() => setShippingMethod('sea_freight')}
-                  className={`text-left p-3 rounded-xl border-2 transition-colors ${shippingMethod === 'sea_freight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
-                  <Ship className="w-4 h-4 text-gray-700 mb-1.5" />
-                  <p className="font-semibold text-gray-900 text-xs">Sea freight</p>
+                <button
+                  onClick={() => {
+                    if (seaShippingLocked) {
+                      setShippingWarning(`Sea freight is available for orders of ${fmt(shippingSettings.seaShippingSuggestionThresholdNgn)} or more. Air remains the default for smaller orders.`);
+                      return;
+                    }
+                    setShippingWarning('');
+                    setShippingMethod('sea_freight');
+                  }}
+                  aria-disabled={seaShippingLocked}
+                  title={seaShippingLocked ? `Sea freight is available from ${fmt(shippingSettings.seaShippingSuggestionThresholdNgn)}` : undefined}
+                  className={`text-left p-3 rounded-xl border-2 transition-colors ${seaShippingLocked ? 'border-gray-100 bg-gray-50 opacity-45 cursor-not-allowed' : shippingMethod === 'sea_freight' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}
+                >
+                  <Ship className={`w-4 h-4 mb-1.5 ${seaShippingLocked ? 'text-gray-300' : 'text-gray-700'}`} />
+                  <p className={`font-semibold text-xs ${seaShippingLocked ? 'text-gray-400' : 'text-gray-900'}`}>Sea freight</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">Sea 60–90 days</p>
                   {cart[0]?.volume_cbm != null && (
                     <p className="text-[9px] text-gray-400 mt-0.5">Volume: {cart[0].volume_cbm}</p>
@@ -804,12 +833,18 @@ if (promoQuote?.pending_order?.id) {
                 </button>
               </div>
               {seaShippingSuggested && (
-                <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 mb-2">
+                <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 mb-2">
                   <Ship className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[11px] font-bold text-blue-800">Sea freight suggestion</p>
                     <p className="text-[10px] text-blue-700 mt-0.5 leading-relaxed">This order is ₦{subtotal.toLocaleString()} or more. Sea freight may be more economical. Air remains selected by default.</p>
                   </div>
+                </div>
+              )}
+              {shippingWarning && (
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mb-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-[10px] font-semibold text-amber-800 leading-relaxed">{shippingWarning}</p>
                 </div>
               )}
               {forcedSeaFreight && (
@@ -825,7 +860,7 @@ if (promoQuote?.pending_order?.id) {
           ) : (
             <div className="space-y-2">
               {seaShippingSuggested && (
-                <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+                <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
                   <Ship className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[11px] font-bold text-blue-800">Sea freight suggestion</p>
@@ -875,9 +910,18 @@ if (promoQuote?.pending_order?.id) {
                         <span className={`text-[8px] font-bold leading-none ${chosen === 'flight' ? 'text-gray-900' : 'text-gray-500'}`}>Air{chosen === 'flight' ? ' ✓' : ''}</span>
                       </button>
                       <button
-                        onClick={() => setItemShippingMethod(item.cart_key, 'sea_freight')}
+                        onClick={() => {
+                          if (seaShippingLocked && !item.ship_only) {
+                            setShippingWarning(`Sea freight is available for orders of ${fmt(shippingSettings.seaShippingSuggestionThresholdNgn)} or more. Air remains the default for smaller orders.`);
+                            return;
+                          }
+                          setShippingWarning('');
+                          setItemShippingMethod(item.cart_key, 'sea_freight');
+                        }},
+                        aria-disabled={seaShippingLocked && !item.ship_only},
+                        title={seaShippingLocked && !item.ship_only ? `Sea freight is available from ${fmt(shippingSettings.seaShippingSuggestionThresholdNgn)}` : undefined},
                         aria-pressed={chosen === 'sea_freight'}
-                        className={`flex flex-col items-center justify-center gap-0.5 w-10 h-10 rounded-lg border-2 transition-colors ${chosen === 'sea_freight' ? 'border-gray-900 bg-gray-100 ring-1 ring-gray-900' : 'border-gray-100 bg-white'}`}
+                        className={`flex flex-col items-center justify-center gap-0.5 w-10 h-10 rounded-lg border-2 transition-colors ${seaShippingLocked && !item.ship_only ? 'border-gray-100 bg-gray-50 opacity-40 cursor-not-allowed' : chosen === 'sea_freight' ? 'border-gray-900 bg-gray-100 ring-1 ring-gray-900' : 'border-gray-100 bg-white'}`}
                       >
                         <Ship className="w-3 h-3 text-gray-700" />
                         <span className={`text-[8px] font-bold leading-none ${chosen === 'sea_freight' ? 'text-gray-900' : 'text-gray-500'}`}>Sea{chosen === 'sea_freight' ? ' ✓' : ''}</span>
