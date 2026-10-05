@@ -20,6 +20,8 @@ type ChinaProduct = {
   is_active: boolean;
 };
 
+type FilterType = 'my_niches' | 'other' | 'all';
+
 type CatalogRow = {
   id: string;
   china_import_product_id: string;
@@ -37,6 +39,7 @@ export default function ChinaImportCatalogSection() {
   const [products, setProducts] = useState<ChinaProduct[]>([]);
   const [catalog, setCatalog] = useState<CatalogRow[]>([]);
   const [search, setSearch] = useState('');
+  const [filterType, setFilterType] = useState<FilterType>('my_niches');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
@@ -46,22 +49,12 @@ export default function ChinaImportCatalogSection() {
     setLoading(true);
 
     const storeNiches = currentStore.niches || [];
-    if (storeNiches.length === 0) {
-      setProducts([]);
-      setCatalog([]);
-      setLoading(false);
-      return;
-    }
 
-    // China Import categories are linked to a parent niche through
-    // niche_categories.niche_id. Only show products whose category belongs
-    // to one of the niches selected for this seller's store.
     const [{ data: categoryRows, error: categoryError }, { data: catalogRows, error: catalogError }] =
       await Promise.all([
         supabase
           .from('niche_categories')
-          .select('id')
-          .in('niche_id', storeNiches),
+          .select('id,niche_id'),
         supabase
           .from('china_import_dropship_catalog')
           .select('id,china_import_product_id,seller_price_ngn,supplier_cost_ngn,shipping_cost_ngn,landed_cost_ngn,status')
@@ -72,7 +65,15 @@ export default function ChinaImportCatalogSection() {
     if (categoryError) toast.error(categoryError.message);
     if (catalogError) toast.error(catalogError.message);
 
-    const categoryIds = (categoryRows || []).map(row => row.id);
+    const categories = categoryRows || [];
+    const categoryIds = categories
+      .filter(row => {
+        if (filterType === 'all') return true;
+        const isMyNiche = storeNiches.includes(row.niche_id);
+        return filterType === 'my_niches' ? isMyNiche : !isMyNiche;
+      })
+      .map(row => row.id);
+
     if (categoryIds.length === 0) {
       setProducts([]);
       setCatalog((catalogRows || []) as CatalogRow[]);
@@ -95,10 +96,9 @@ export default function ChinaImportCatalogSection() {
     setCatalog((catalogRows || []) as CatalogRow[]);
     setLoading(false);
   };
-
   useEffect(() => {
     void load();
-  }, [currentStore?.id, currentStore?.niches?.join(',')]);
+  }, [currentStore?.id, currentStore?.niches?.join(','), filterType]);
 
   const catalogByProduct = useMemo(
     () => new Map(catalog.map(row => [row.china_import_product_id, row])),
@@ -193,16 +193,44 @@ export default function ChinaImportCatalogSection() {
         </p>
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search China Import products..."
-          className="w-full pl-12 pr-4 py-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:border-orange-500"
-        />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search China Import products..."
+            className="w-full pl-12 pr-4 py-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:border-orange-500"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto">
+          {([
+            ['my_niches', 'My Niche'],
+            ['other', 'Other Niche'],
+            ['all', 'All Products'],
+          ] as const).map(([type, label]) => (
+            <button
+              key={type}
+              onClick={() => setFilterType(type)}
+              className={`whitespace-nowrap px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                filterType === type
+                  ? 'bg-orange-500 text-white border-orange-500'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-200 dark:border-gray-600 hover:border-orange-300'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
+      {!loading && filterType === 'other' && (
+        <div className="rounded-xl border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-500/10 p-4 text-sm text-yellow-800 dark:text-yellow-300">
+          You can browse China Import products from other niches, but your store can only add products from its selected niches.
+        </div>
+      )}
+
+      {loading ? (
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>
       ) : filtered.length === 0 ? (
