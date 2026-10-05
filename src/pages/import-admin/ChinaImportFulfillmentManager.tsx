@@ -122,6 +122,8 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       carrier_name: shipment.carrier_name,
       tracking_number: shipment.tracking_number,
       delivery_mode: shipment.delivery_mode,
+      pickup_station_name: shipment.pickup_station_name ?? null,
+      pickup_station_address: shipment.pickup_station_address ?? null,
       notes: shipment.notes,
       order_code: customer?.order_code ?? '—',
       customer_name: shipment.customer_name ?? customer?.customer_name ?? 'Customer',
