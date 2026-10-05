@@ -116,4 +116,4 @@ where jsonb_typeof(o.items) = 'array'
       and anchor.staged_at = o.staged_at
       and anchor.user_id = o.user_id
   )
-on conflict (order_id, order_item_index) do nothing;
+on conflict (order_id, order_item_index) do nothing;\nrevoke all on function public.sync_china_import_fulfillment_for_paid_bill() from public;\n
