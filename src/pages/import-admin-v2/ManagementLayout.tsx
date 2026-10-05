@@ -125,6 +125,10 @@ export default function ManagementLayout() {
   const isActive = (path: string) => {
     const [pathname, search] = path.split('?');
     if (search) return location.pathname === pathname && location.search === `?${search}`;
+    // The dashboard is the parent route of every management page, so it must
+    // only match exactly. Otherwise /orders, /products, etc. incorrectly
+    // resolve to the dashboard item and require import.analytics.view.
+    if (pathname === '/import-admin-v2') return location.pathname === pathname;
     if (pathname === '/import-admin-v2/support') return location.pathname === pathname && location.search !== '?view=tickets';
     if (pathname === '/import-admin-v2/pricing-shipping') return location.pathname === pathname && location.search !== '?view=promotions';
     return location.pathname === pathname || location.pathname.startsWith(pathname + '/');
