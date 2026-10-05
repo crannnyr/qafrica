@@ -120,6 +120,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   //     .catch(() => {});
   // }, []);
 
+  // Delivery mode is declared before the settings effect because the settings load can set it.
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('pickup_station');
   const [shippingSettings, setShippingSettings] = useState({
     chargeShippingAtCheckout: false,
     shippingDiscountPercent: 0,
@@ -324,7 +326,6 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   // ── Delivery mode: home address vs Jumia pickup station ─────────────────
   // Defaults to Jumia pickup — fastest/cheapest — unless the customer has
   // saved a different preference in Settings, which always wins once loaded.
-  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('pickup_station');
   const [stations, setStations] = useState<PickupStation[]>([]);
   const [stationsLoading, setStationsLoading] = useState(false);
   const [stationSearch, setStationSearch] = useState('');
