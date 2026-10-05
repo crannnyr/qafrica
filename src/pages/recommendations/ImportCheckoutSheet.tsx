@@ -131,7 +131,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     paystackManualThresholdNgn: 100_000,
     homeDeliveryEnabled: false,
     pickupStationDeliveryEnabled: true,
-    airShippingSuggestionThresholdNgn: 500_000,
+    seaShippingSuggestionThresholdNgn: 500_000,
   });
   
   useEffect(() => {
@@ -157,7 +157,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           paystackManualThresholdNgn: Number(data.settings.paystack_manual_threshold_ngn ?? 100_000),
           homeDeliveryEnabled: data.settings.home_delivery_enabled === true,
           pickupStationDeliveryEnabled: data.settings.pickup_station_delivery_enabled !== false,
-          airShippingSuggestionThresholdNgn: Number(data.settings.air_shipping_suggestion_threshold_ngn ?? 500_000),
+          seaShippingSuggestionThresholdNgn: Number(data.settings.sea_shipping_suggestion_threshold_ngn ?? 500_000),
         });
         if (data.settings.home_delivery_enabled !== true && data.settings.pickup_station_delivery_enabled !== false) setDeliveryMode('pickup_station');
       })
@@ -254,7 +254,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     : rawShippingTotal;
   
   const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
-  const airShippingSuggested = subtotal >= shippingSettings.airShippingSuggestionThresholdNgn && !seaOnlyItems.length;
+  const airShippingSuggested = subtotal >= shippingSettings.seaShippingSuggestionThresholdNgn && !seaOnlyItems.length;
   const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
   const promoDiscount = Math.max(0, Math.min(Number(promoQuote?.discount_amount_ngn ?? 0), totalBeforePromo));
   const total = Math.max(0, totalBeforePromo - promoDiscount);
@@ -385,7 +385,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
   const shareLocation = () => {
     if (!navigator.geolocation) {
-      setLocationError('Location isn\'t supported on this device/browser.');
+      setLocationError('Location isnconst seaShippingSuggested = subtotal >= shippingSettings.seaShippingSuggestionThresholdNgn && cart.some(i => !i.ship_only);'t supported on this device/browser.');
       return;
     }
     // Geolocation is blocked outright on non-HTTPS origins (except localhost)
@@ -802,7 +802,7 @@ if (promoQuote?.pending_order?.id) {
                   )}
                 </button>
               </div>
-              {forcedSeaFreight && (
+              {seaShippingSuggested && (\n          <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 mb-2">\n            <Ship className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />\n            <div>\n              <p className="text-[11px] font-bold text-blue-800">Sea freight suggestion</p>\n              <p className="text-[10px] text-blue-700 mt-0.5 leading-relaxed">This order is ₦{subtotal.toLocaleString()} or more. Sea freight may be more economical. Air remains selected by default.</p>\n            </div>\n          </div>\n        )}\n        {forcedSeaFreight && (
                 <p className="text-[11px] text-gray-500 mt-2 flex items-start gap-1.5">
                   <Ship className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-px" />
                   <span>
