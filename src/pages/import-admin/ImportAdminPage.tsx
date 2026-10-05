@@ -54,8 +54,12 @@ interface ImportOrder {
   }>;
   delivery_type: 'to_qafrica' | 'to_me';
   shipping_method?: 'flight' | 'sea_freight' | null;
+  delivery_mode?: 'home' | 'pickup_station' | string | null;
+  pickup_station_id?: string | null;
+  pickup_station_name?: string | null;
+  pickup_station_address?: string | null;
   delivery_address?: {
-    name: string; phone: string; address_line1: string; address_line2: string;
+    name: string; phone: string; email?: string; address_line1: string; address_line2: string;
     city: string; state: string; landmark: string;
   } | null;
   delivery_latitude?: number | null;
@@ -1597,7 +1601,10 @@ export function OrdersList({ token }: { token: string }) {
     ...selectedOrder,
     customer_email: selectedOrder.customer_email ?? null,
     shipped_at: null,
-    delivery_mode: 'home',
+    delivery_mode: selectedOrder.delivery_mode ?? 'home',
+    pickup_station_id: selectedOrder.pickup_station_id ?? null,
+    pickup_station_name: selectedOrder.pickup_station_name ?? null,
+    pickup_station_address: selectedOrder.pickup_station_address ?? null,
     delivery_address: selectedOrder.delivery_address
       ? {
           ...selectedOrder.delivery_address,
