@@ -917,7 +917,7 @@ if (promoQuote?.pending_order?.id) {
                           }
                           setShippingWarning('');
                           setItemShippingMethod(item.cart_key, 'sea_freight');
-                        }},
+                        }}
                         aria-disabled={seaShippingLocked && !item.ship_only},
                         title={seaShippingLocked && !item.ship_only ? `Sea freight is available from ${fmt(shippingSettings.seaShippingSuggestionThresholdNgn)}` : undefined},
                         aria-pressed={chosen === 'sea_freight'}
