@@ -10,33 +10,12 @@ import CONFIG from '@/lib/config';
 import { CustomerDetail } from './ImportAdminCustomers';
 import ClosedBatchDetail from './ClosedBatchDetail';
 import { toast } from 'sonner';
-import { OrderDetails } from '@/pages/management/ManagementOrders';
+import { OrderDetails, type OrderRow } from '@/pages/import-admin-v2/ManagementOrdersLegacy';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const BATCH_VIEW_STORAGE_KEY = 'qafrica-import-admin-v2-batch-view';
 const BATCH_SELECTION_STORAGE_KEY = 'qafrica-import-admin-v2-selected-batch';
 
-interface OrderItem {
-  id: string;
-  name: string;
-  image_url: string;
-  quantity: number;
-  variant_options?: Record<string, string>;
-}
-interface OrderRow {
-  id: string;
-  code: string;
-  user_id: string | null;
-  customer_name: string;
-  customer_whatsapp: string;
-  items: OrderItem[];
-  payment_status: string;
-  staged_at: string | null;
-  created_at: string;
-  status?: string;
-  shipped_at?: string | null;
-  shipping_method?: 'flight' | 'sea_freight' | null;
-}
 interface Group {
   key: string;
   productId: string;
