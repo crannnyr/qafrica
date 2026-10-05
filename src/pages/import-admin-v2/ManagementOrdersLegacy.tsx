@@ -1,11 +1,12 @@
 import { Fragment, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { Loader, Package, Users, Archive, CheckCircle2, FileDown, Eye, X, MapPin, Pencil, Save, User, CreditCard, Trash2 } from 'lucide-react';
+import { Loader, Package, Users, Archive, CheckCircle2, FileDown, Eye, X, MapPin, Pencil, Save, User, CreditCard, Trash2, Store } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { CustomerDetail } from '@/pages/import-admin/ImportAdminCustomers';
 import ClosedBatchDetail from './ClosedBatchDetail';
 import { toast } from 'sonner';
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
+const STATIONS_REST_URL = `${CONFIG.SUPABASE_URL}/rest/v1/pickup_stations`;
 
 interface OrderItem {
   id: string;
@@ -49,6 +50,7 @@ export interface OrderRow {
   delivery_type?: string;
   delivery_mode?: string | null;
   delivery_address?: DeliveryAddress | null;
+  pickup_station_id?: string | null;
   pickup_station_name?: string | null;
   pickup_station_address?: string | null;
   subtotal_ngn?: number;
@@ -163,6 +165,9 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     };
   });
   const [savingAddress, setSavingAddress] = useState(false);
+  const [pickupStations, setPickupStations] = useState<Array<{ id: string; name: string; address: string; state: string }>>([]);
+  const [pickupStationsLoading, setPickupStationsLoading] = useState(false);
+  const [selectedPickupStationId, setSelectedPickupStationId] = useState<string | null>(order.pickup_station_id ?? null);
   const [editingItem, setEditingItem] = useState<number | null>(null);
   const [variantDraft, setVariantDraft] = useState<Record<string, string>>({});
   const [variantGroups, setVariantGroups] = useState<Record<string, VariantGroup[]>>({});
@@ -190,6 +195,27 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     setEditingItem(null);
     setVariantDraft({});
   }, [order.id, order.delivery_address, order.customer_name, order.customer_whatsapp, order.customer_email]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPickupStations = async () => {
+      if (order.delivery_mode !== 'pickup_station') return;
+      setPickupStationsLoading(true);
+      try {
+        const res = await fetch(STATIONS_REST_URL + '?select=id,name,address,state,is_active&is_active=eq.true&order=state.asc,name.asc', {
+          headers: { apikey: CONFIG.SUPABASE_ANON_KEY, Authorization: 'Bearer ' + CONFIG.SUPABASE_ANON_KEY },
+        });
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data)) setPickupStations(data);
+      } catch {
+        if (!cancelled) setPickupStations([]);
+      } finally {
+        if (!cancelled) setPickupStationsLoading(false);
+      }
+    };
+    void loadPickupStations();
+    return () => { cancelled = true; };
+  }, [order.id, order.delivery_mode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -243,7 +269,15 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     try {
       const res = await fetch(EDGE_URL + '?action=admin-update-order-address', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, order_id: order.id, delivery_address: address, delivery_mode: order.delivery_mode ?? 'home', pickup_station_name: order.pickup_station_name, pickup_station_address: order.pickup_station_address }),
+        body: JSON.stringify({
+          manager_token: token,
+          order_id: order.id,
+          delivery_address: address,
+          delivery_mode: order.delivery_mode ?? 'home',
+          pickup_station_id: order.delivery_mode === 'pickup_station' ? selectedPickupStationId : null,
+          pickup_station_name: order.delivery_mode === 'pickup_station' ? pickupStations.find(s => s.id === selectedPickupStationId)?.name : null,
+          pickup_station_address: order.delivery_mode === 'pickup_station' ? pickupStations.find(s => s.id === selectedPickupStationId)?.address : null,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.error) throw new Error(data.error ?? 'Could not update address');
@@ -335,7 +369,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
 
           <section className="rounded-2xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-3"><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Delivery address</p>{canEditAddress && <button onClick={() => setAddressEditing(v => !v)} className="text-[10px] font-bold text-orange-600 flex items-center gap-1"><Pencil className="w-3 h-3"/> {addressEditing ? 'Close edit' : 'Edit address'}</button>}</div>
-            {!addressEditing ? <div className="text-xs text-gray-600 space-y-1"><div className="flex gap-2"><MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5"/><div><p className="font-semibold text-gray-800">{order.delivery_address?.name ?? order.customer_name} · {order.delivery_address?.phone ?? order.customer_whatsapp}</p>{(order.delivery_address?.email || order.customer_email) && <p className="text-gray-500">{order.delivery_address?.email ?? order.customer_email}</p>}<p>{order.delivery_address?.address_line1 || 'No street address saved'}</p>{order.delivery_address?.address_line2 && <p>{order.delivery_address.address_line2}</p>}<p>{[order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ')}</p>{order.delivery_address?.landmark && <p>Landmark: {order.delivery_address.landmark}</p>}{order.pickup_station_name && <p className="mt-1 text-gray-500">Pickup: {order.pickup_station_name}{order.pickup_station_address ? ' — ' + order.pickup_station_address : ''}</p>}</div></div></div> : <div className="grid grid-cols-2 gap-2">{(['name','phone','email','address_line1','address_line2','city','state','landmark'] as const).map(k => <div key={k} className={k === 'address_line1' || k === 'address_line2' || k === 'landmark' ? 'col-span-2' : ''}><label className="text-[9px] font-bold text-gray-400 uppercase">{k.replaceAll('_',' ')}</label><input type={k === 'email' ? 'email' : 'text'} value={address[k] ?? ''} onChange={e => setAddress(a => ({...a,[k]:e.target.value}))} className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-gray-400" /></div>)}<div className="col-span-2 flex justify-end gap-2 mt-1"><button onClick={() => setAddressEditing(false)} className="px-3 py-1.5 text-xs text-gray-500">Cancel</button><button disabled={savingAddress} onClick={() => void saveAddress()} className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold flex items-center gap-1">{savingAddress ? <Loader className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>} Save address</button></div></div>}
+             {!addressEditing ? <div className="text-xs text-gray-600 space-y-1"><div className="flex gap-2"><MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5"/><div><p className="font-semibold text-gray-800">{order.delivery_address?.name ?? order.customer_name} · {order.delivery_address?.phone ?? order.customer_whatsapp}</p>{(order.delivery_address?.email || order.customer_email) && <p className="text-gray-500">{order.delivery_address?.email ?? order.customer_email}</p>}{order.delivery_mode === 'pickup_station' ? <><p className="font-semibold text-gray-800 mt-1">Jumia pickup station</p><p>{order.pickup_station_name ?? 'No pickup station selected'}</p>{order.pickup_station_address && <p>{order.pickup_station_address}</p>}</> : <><p>{order.delivery_address?.address_line1 || 'No street address saved'}</p>{order.delivery_address?.address_line2 && <p>{order.delivery_address.address_line2}</p>}<p>{[order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ')}</p>{order.delivery_address?.landmark && <p>Landmark: {order.delivery_address.landmark}</p>}</>}</div></div></div> : <div className="space-y-3">{order.delivery_mode === 'pickup_station' && <div><label className="text-[9px] font-bold text-gray-400 uppercase">Jumia pickup station</label><div className="flex items-center gap-2 mt-1"><Store className="w-4 h-4 text-gray-400 flex-shrink-0"/><select value={selectedPickupStationId ?? ''} onChange={e => setSelectedPickupStationId(e.target.value || null)} disabled={pickupStationsLoading} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs bg-white outline-none focus:border-gray-400"><option value="">{pickupStationsLoading ? 'Loading stations…' : 'Select pickup station'}</option>{pickupStations.map(s => <option key={s.id} value={s.id}>{s.name} — {s.state}</option>)}</select></div>{selectedPickupStationId && pickupStations.find(s => s.id === selectedPickupStationId) && <p className="text-[10px] text-gray-400 ml-6">{pickupStations.find(s => s.id === selectedPickupStationId)?.address}</p>}</div>}{(['name','phone','email'] as const).map(k => <div key={k}><label className="text-[9px] font-bold text-gray-400 uppercase">{k}</label><input type={k === 'email' ? 'email' : 'text'} value={address[k] ?? ''} onChange={e => setAddress(a => ({...a,[k]:e.target.value}))} className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-gray-400" /></div>)}{order.delivery_mode !== 'pickup_station' && <div className="grid grid-cols-2 gap-2">{(['address_line1','address_line2','city','state','landmark'] as const).map(k => <div key={k} className={k === 'address_line1' || k === 'address_line2' || k === 'landmark' ? 'col-span-2' : ''}><label className="text-[9px] font-bold text-gray-400 uppercase">{k.replaceAll('_',' ')}</label><input type="text" value={address[k] ?? ''} onChange={e => setAddress(a => ({...a,[k]:e.target.value}))} className="mt-1 w-full border border-gray-200 rounded-lg px-2.5 py-2 text-xs outline-none focus:border-gray-400" /></div>)}</div>}<div className="flex justify-end gap-2 mt-1"><button onClick={() => setAddressEditing(false)} className="px-3 py-1.5 text-xs text-gray-500">Cancel</button><button disabled={savingAddress || (order.delivery_mode === 'pickup_station' && !selectedPickupStationId)} onClick={() => void saveAddress()} className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold flex items-center gap-1">{savingAddress ? <Loader className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>} Save {order.delivery_mode === 'pickup_station' ? 'pickup station' : 'address'}</button></div></div>}
           </section>
 
           <section className="rounded-2xl border border-gray-100 p-4"><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Payment & total</p><div className="space-y-2 text-xs"><div className="flex justify-between"><span className="text-gray-400">Subtotal</span><span className="font-semibold">{money(order.subtotal_ngn)}</span></div><div className="flex justify-between"><span className="text-gray-400">Jumia / delivery fee</span><span>{money(order.jumia_fee_ngn)}</span></div><div className="flex justify-between"><span className="text-gray-400">Shipping</span><span>{money(order.shipping_ngn)}</span></div><div className="border-t border-gray-100 pt-2 flex justify-between"><span className="font-bold text-gray-700">Total</span><span className="font-black text-gray-900">{money(order.total_ngn)}</span></div><div className="pt-1 text-[10px] text-gray-400 flex items-center gap-1"><CreditCard className="w-3 h-3"/>{order.payment_method ?? '—'}{order.payment_reference ? ' · ' + order.payment_reference : ''}</div></div></section>
