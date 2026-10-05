@@ -940,8 +940,25 @@ serve(async (req: Request) => {
       // compatibility with older clients that still send a single top-level
       // shipping_method, that value is used as the default for any item
       // missing one.
-      const resolvedDeliveryMode: 'home' | 'pickup_station' =
+      const { data: deliverySettings } = await supabase
+        .from('import_admin_credentials')
+        .select('home_delivery_enabled, pickup_station_delivery_enabled')
+        .eq('id', 1).single()
+      const homeDeliveryEnabled = deliverySettings?.home_delivery_enabled === true
+      const pickupStationDeliveryEnabled = deliverySettings?.pickup_station_delivery_enabled !== false
+      if (!homeDeliveryEnabled && !pickupStationDeliveryEnabled) {
+        return json({ error: 'Delivery is temporarily unavailable. Please try again later.' }, 409)
+      }
+
+      const requestedDeliveryMode: 'home' | 'pickup_station' =
         delivery_mode === 'pickup_station' ? 'pickup_station' : 'home'
+      if (requestedDeliveryMode === 'home' && !homeDeliveryEnabled) {
+        return json({ error: 'Home address delivery is currently unavailable. Please select Jumia pickup station.' }, 409)
+      }
+      if (requestedDeliveryMode === 'pickup_station' && !pickupStationDeliveryEnabled) {
+        return json({ error: 'Jumia pickup station delivery is currently unavailable. Please select Home address.' }, 409)
+      }
+      const resolvedDeliveryMode = requestedDeliveryMode
 
       const itemMethods: string[] = (items as any[]).map((i: any) => i.shipping_method ?? shipping_method)
       if (itemMethods.some(m => !['flight', 'sea_freight'].includes(m))) {
@@ -2018,7 +2035,7 @@ serve(async (req: Request) => {
     if (req.method === 'GET' && action === 'admin-settings') {
       const { data, error } = await supabase
         .from('import_admin_credentials')
-        .select('paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name, charge_shipping_at_checkout, shipping_discount_percent, shipping_discount_min_ngn, bulk_discount_tier1_qty, bulk_discount_tier1_percent, bulk_discount_tier2_qty, bulk_discount_tier2_percent, paystack_manual_threshold_ngn')
+        .select('paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name, charge_shipping_at_checkout, shipping_discount_percent, shipping_discount_min_ngn, bulk_discount_tier1_qty, bulk_discount_tier1_percent, bulk_discount_tier2_qty, bulk_discount_tier2_percent, paystack_manual_threshold_ngn, home_delivery_enabled, pickup_station_delivery_enabled, air_shipping_suggestion_threshold_ngn')
         .eq('id', 1).single()
       if (error) return json({ error: error.message }, 500)
       return json({ settings: data })
@@ -2039,10 +2056,21 @@ serve(async (req: Request) => {
         bank_account_number,
         bank_account_name,
         bank_name,
+        home_delivery_enabled,
+        pickup_station_delivery_enabled,
+        air_shipping_suggestion_threshold_ngn,
       } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.settings.update'))) return json({ error: 'Unauthorized' }, 401)
 
       const updates: Record<string, unknown> = {}
+      if (typeof home_delivery_enabled === 'boolean') updates.home_delivery_enabled = home_delivery_enabled;
+      if (typeof pickup_station_delivery_enabled === 'boolean') updates.pickup_station_delivery_enabled = pickup_station_delivery_enabled;
+      if (home_delivery_enabled === false && pickup_station_delivery_enabled === false) return json({ error: 'At least one delivery option must remain enabled.' }, 400);
+      if (air_shipping_suggestion_threshold_ngn !== undefined) {
+        if (!nonNegative(air_shipping_suggestion_threshold_ngn)) return json({ error: 'Air shipping suggestion threshold must be a non-negative number.' }, 400);
+        updates.air_shipping_suggestion_threshold_ngn = Number(air_shipping_suggestion_threshold_ngn);
+      }
+
       if (typeof charge_shipping_at_checkout === 'boolean') updates.charge_shipping_at_checkout = charge_shipping_at_checkout
       const nonNegative = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0
       const positiveInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v > 0
@@ -3562,7 +3590,18 @@ serve(async (req: Request) => {
         .from('china_import_orders').select('*').eq('id', order_id).eq('user_id', customer_id).maybeSingle()
       if (findErr || !order) return json({ error: 'Order not found' }, 404)
 
-      const resolvedDeliveryMode: 'home' | 'pickup_station' = delivery_mode === 'pickup_station' ? 'pickup_station' : 'home'
+      const { data: deliverySettings } = await supabase
+        .from('import_admin_credentials')
+        .select('home_delivery_enabled, pickup_station_delivery_enabled')
+        .eq('id', 1).single()
+      const homeDeliveryEnabled = deliverySettings?.home_delivery_enabled === true
+      const pickupStationDeliveryEnabled = deliverySettings?.pickup_station_delivery_enabled !== false
+      if (!homeDeliveryEnabled && !pickupStationDeliveryEnabled) return json({ error: 'Delivery is temporarily unavailable.' }, 409)
+
+      const requestedDeliveryMode: 'home' | 'pickup_station' = delivery_mode === 'pickup_station' ? 'pickup_station' : 'home'
+      if (requestedDeliveryMode === 'home' && !homeDeliveryEnabled) return json({ error: 'Home address delivery is currently unavailable.' }, 409)
+      if (requestedDeliveryMode === 'pickup_station' && !pickupStationDeliveryEnabled) return json({ error: 'Jumia pickup station delivery is currently unavailable.' }, 409)
+      const resolvedDeliveryMode = requestedDeliveryMode
       let cleanAddress: Record<string, string> | null = null
       let resolvedAddressId: string | null = null
       let pickupStationSnapshot: { id: string; name: string; address: string } | null = null
