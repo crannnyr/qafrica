@@ -315,6 +315,9 @@ serve(async (req) => {
             customer_whatsapp: customer?.phone ?? null,
             customer_email: customer?.email ?? null,
             delivery_mode: shipment.delivery_mode ?? order?.delivery_mode ?? null,
+            pickup_station_id: order?.pickup_station_id ?? null,
+            pickup_station_name: order?.pickup_station_name ?? null,
+            pickup_station_address: order?.pickup_station_address ?? null,
             delivery_address: shipment.delivery_address ?? order?.delivery_address ?? (
               order?.delivery_mode === 'pickup_station' && order?.pickup_station_name
                 ? { name: order.pickup_station_name, address: order.pickup_station_address ?? '' }
