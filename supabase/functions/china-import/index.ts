@@ -2035,7 +2035,7 @@ serve(async (req: Request) => {
     if (req.method === 'GET' && action === 'admin-settings') {
       const { data, error } = await supabase
         .from('import_admin_credentials')
-        .select('paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name, charge_shipping_at_checkout, shipping_discount_percent, shipping_discount_min_ngn, bulk_discount_tier1_qty, bulk_discount_tier1_percent, bulk_discount_tier2_qty, bulk_discount_tier2_percent, paystack_manual_threshold_ngn, home_delivery_enabled, pickup_station_delivery_enabled, air_shipping_suggestion_threshold_ngn')
+        .select('paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name, charge_shipping_at_checkout, shipping_discount_percent, shipping_discount_min_ngn, bulk_discount_tier1_qty, bulk_discount_tier1_percent, bulk_discount_tier2_qty, bulk_discount_tier2_percent, paystack_manual_threshold_ngn, home_delivery_enabled, pickup_station_delivery_enabled, sea_shipping_suggestion_threshold_ngn')
         .eq('id', 1).single()
       if (error) return json({ error: error.message }, 500)
       return json({ settings: data })
@@ -2058,7 +2058,7 @@ serve(async (req: Request) => {
         bank_name,
         home_delivery_enabled,
         pickup_station_delivery_enabled,
-        air_shipping_suggestion_threshold_ngn,
+        sea_shipping_suggestion_threshold_ngn,
       } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.settings.update'))) return json({ error: 'Unauthorized' }, 401)
 
@@ -2068,9 +2068,9 @@ serve(async (req: Request) => {
       if (typeof home_delivery_enabled === 'boolean') updates.home_delivery_enabled = home_delivery_enabled;
       if (typeof pickup_station_delivery_enabled === 'boolean') updates.pickup_station_delivery_enabled = pickup_station_delivery_enabled;
       if (home_delivery_enabled === false && pickup_station_delivery_enabled === false) return json({ error: 'At least one delivery option must remain enabled.' }, 400);
-      if (air_shipping_suggestion_threshold_ngn !== undefined) {
-        if (!nonNegative(air_shipping_suggestion_threshold_ngn)) return json({ error: 'Air shipping suggestion threshold must be a non-negative number.' }, 400);
-        updates.air_shipping_suggestion_threshold_ngn = Number(air_shipping_suggestion_threshold_ngn);
+      if (sea_shipping_suggestion_threshold_ngn !== undefined) {
+        if (!nonNegative(sea_shipping_suggestion_threshold_ngn)) return json({ error: 'Air shipping suggestion threshold must be a non-negative number.' }, 400);
+        updates.sea_shipping_suggestion_threshold_ngn = Number(sea_shipping_suggestion_threshold_ngn);
       }
       const positiveInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v > 0
       const percent = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100
