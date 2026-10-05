@@ -3,7 +3,7 @@ import { Check, Loader2, Package, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services';
 import { toast } from 'sonner';
-import { useStoreStore } from '@/stores';
+import { useStoreStore, useAuthStore } from '@/stores';
 
 type ChinaProduct = {
   id: string;
@@ -18,6 +18,7 @@ type ChinaProduct = {
   has_variants: boolean | null;
   variants: unknown;
   is_active: boolean;
+  category_id: string | null;
 };
 
 type FilterType = 'my_niches' | 'other' | 'all';
@@ -36,6 +37,7 @@ const money = (value: number) => `₦${Math.round(value).toLocaleString()}`;
 
 export default function ChinaImportCatalogSection() {
   const { currentStore } = useStoreStore();
+  const { user } = useAuthStore();
   const [products, setProducts] = useState<ChinaProduct[]>([]);
   const [catalog, setCatalog] = useState<CatalogRow[]>([]);
   const [search, setSearch] = useState('');
@@ -44,6 +46,7 @@ export default function ChinaImportCatalogSection() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [myCategoryIds, setMyCategoryIds] = useState<Set<string>>(new Set());
+  const isUnlimited = (user as any)?.subscription_tier === 'unlimited';
 
   const load = async () => {
     if (!currentStore?.id) return;
@@ -124,7 +127,7 @@ export default function ChinaImportCatalogSection() {
   const addToStore = async (product: ChinaProduct) => {
     if (!currentStore?.id || !currentStore.owner_id) return;
 
-    if (!myCategoryIds.has((product as any).category_id)) {
+    if (!isUnlimited && !myCategoryIds.has(product.category_id || '')) {
       toast.error('This product is outside your store niches. Select My Niche to add eligible products.');
       return;
     }
@@ -289,7 +292,7 @@ export default function ChinaImportCatalogSection() {
                   <div className="flex gap-2">
                     <Button
                       onClick={() => void addToStore(product)}
-                      disabled={busyId === product.id}
+                      disabled={busyId === product.id || (!isUnlimited && !myCategoryIds.has(product.category_id || ''))}
                       className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
                       size="sm"
                     >
