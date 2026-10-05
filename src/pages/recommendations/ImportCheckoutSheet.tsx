@@ -814,6 +814,15 @@ if (promoQuote?.pending_order?.id) {
             </>
           ) : (
             <div className="space-y-2">
+              {seaShippingSuggested && (
+                <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+                  <Ship className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[11px] font-bold text-blue-800">Sea freight suggestion</p>
+                    <p className="text-[10px] text-blue-700 mt-0.5 leading-relaxed">This order is ₦{subtotal.toLocaleString()} or more. Sea freight may be more economical. Air remains selected by default.</p>
+                  </div>
+                </div>
+              )}
               {missingShippingItems.length > 0 && (
                 <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
                   <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
