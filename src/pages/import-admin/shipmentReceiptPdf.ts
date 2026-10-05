@@ -131,6 +131,9 @@ async function addReceiptPage(
     ? [address.address_line1, address.address_line2].filter(Boolean).join(', ')
     : '';
   const cityState = address ? [address.city, address.state].filter(Boolean).join(', ') : '';
+  const pickupStationText = shipment.pickup_station_name
+    ? [shipment.pickup_station_name, shipment.pickup_station_address].filter(Boolean).join(' - ')
+    : '';
 
   drawWatermark(doc);
 
