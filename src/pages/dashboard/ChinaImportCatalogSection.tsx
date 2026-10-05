@@ -43,6 +43,7 @@ export default function ChinaImportCatalogSection() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [myCategoryIds, setMyCategoryIds] = useState<Set<string>>(new Set());
 
   const load = async () => {
     if (!currentStore?.id) return;
@@ -66,6 +67,8 @@ export default function ChinaImportCatalogSection() {
     if (catalogError) toast.error(catalogError.message);
 
     const categories = categoryRows || [];
+    const myCategorySet = new Set(categories.filter(row => storeNiches.includes(row.niche_id)).map(row => row.id));
+    setMyCategoryIds(myCategorySet);
     const categoryIds = categories
       .filter(row => {
         if (filterType === 'all') return true;
@@ -120,6 +123,11 @@ export default function ChinaImportCatalogSection() {
 
   const addToStore = async (product: ChinaProduct) => {
     if (!currentStore?.id || !currentStore.owner_id) return;
+
+    if (!myCategoryIds.has((product as any).category_id)) {
+      toast.error('This product is outside your store niches. Select My Niche to add eligible products.');
+      return;
+    }
 
     const existing = catalogByProduct.get(product.id);
     const landed = Math.max(Number(product.price_ngn ?? 0), 0);
@@ -230,7 +238,6 @@ export default function ChinaImportCatalogSection() {
         </div>
       )}
 
-      {loading ? (
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-orange-500" /></div>
       ) : filtered.length === 0 ? (
