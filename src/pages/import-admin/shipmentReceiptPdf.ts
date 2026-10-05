@@ -17,6 +17,8 @@ export type ReceiptShipment = {
   carrier_name?: string | null;
   tracking_number?: string | null;
   delivery_mode?: string | null;
+  pickup_station_name?: string | null;
+  pickup_station_address?: string | null;
   notes?: string | null;
   delivery_address?: {
     name: string;
@@ -186,10 +188,10 @@ async function addReceiptPage(
 
   y += 13;
 
-  // Delivery address card.
-  if (address) {
+  // Delivery destination card.
+  if (address || pickupStationText) {
     const addressCardY = y - 2;
-    const addressCardH = 25;
+    const addressCardH = shipment.delivery_mode === 'pickup_station' && pickupStationText ? 30 : 25;
     doc.setDrawColor(235, 238, 242);
     doc.setFillColor(255, 255, 255);
     doc.roundedRect(INNER_X, addressCardY, INNER_W, addressCardH, 4, 4, 'FD');
