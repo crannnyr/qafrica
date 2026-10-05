@@ -2386,7 +2386,7 @@ serve(async (req: Request) => {
 
       const { data: order, error: orderErr } = await supabase
         .from('china_import_orders')
-        .select('id, status, shipped_at, delivery_type')
+         .select('id, status, shipped_at, delivery_type, delivery_mode, pickup_station_id, pickup_station_name, pickup_station_address')
         .eq('id', order_id)
         .single()
       if (orderErr || !order) return json({ error: 'Order not found' }, 404)
@@ -2395,6 +2395,66 @@ serve(async (req: Request) => {
       }
 
       const address = {
+        name: typeof delivery_address.name === 'string' ? delivery_address.name.trim() : '',
+        phone: typeof delivery_address.phone === 'string' ? delivery_address.phone.trim() : '',
+        email: typeof delivery_address.email === 'string' ? delivery_address.email.trim() : '',
+        address_line1: typeof delivery_address.address_line1 === 'string' ? delivery_address.address_line1.trim() : '',
+        address_line2: typeof delivery_address.address_line2 === 'string' ? delivery_address.address_line2.trim() : '',
+        city: typeof delivery_address.city === 'string' ? delivery_address.city.trim() : '',
+        state: typeof delivery_address.state === 'string' ? delivery_address.state.trim() : '',
+        landmark: typeof delivery_address.landmark === 'string' ? delivery_address.landmark.trim() : '',
+      }
+
+      const resolvedDeliveryMode = delivery_mode === 'pickup_station'
+        ? 'pickup_station'
+        : delivery_mode === 'home'
+          ? 'home'
+          : order.delivery_mode ?? 'home'
+
+      if (resolvedDeliveryMode === 'pickup_station') {
+        if (!address.name || !address.phone) {
+          return json({ error: 'Name and phone are required for pickup-station delivery.' }, 400)
+        }
+        if (typeof pickup_station_id !== 'string' || !pickup_station_id) {
+          return json({ error: 'Please select a pickup station.' }, 400)
+        }
+        const { data: station } = await supabase
+          .from('pickup_stations')
+          .select('id, name, address, is_active')
+          .eq('id', pickup_station_id)
+          .maybeSingle()
+        if (!station || !station.is_active) {
+          return json({ error: 'That pickup station is no longer available. Please select another.' }, 400)
+        }
+        const pickupAddress = { name: address.name, phone: address.phone, email: address.email }
+        const updates: Record<string, unknown> = {
+          delivery_address: pickupAddress,
+          delivery_mode: 'pickup_station',
+          pickup_station_id: station.id,
+          pickup_station_name: station.name,
+          pickup_station_address: station.address,
+          address_id: null,
+          updated_at: new Date().toISOString(),
+        }
+        const { data: updated, error: updateErr } = await supabase
+          .from('china_import_orders').update(updates).eq('id', order_id).select().single()
+        if (updateErr) return json({ error: updateErr.message }, 500)
+        return json({ order: updated })
+      }
+
+      if (!address.name || !address.phone || !address.address_line1 || !address.city || !address.state) {
+        return json({ error: 'Name, phone, address, city and state are required.' }, 400)
+      }
+
+      const updates: Record<string, unknown> = {
+        delivery_address: address,
+        delivery_mode: 'home',
+        updated_at: new Date().toISOString(),
+        pickup_station_id: null,
+        pickup_station_name: null,
+        pickup_station_address: null,
+      }
+
         name: typeof delivery_address.name === 'string' ? delivery_address.name.trim() : '',
         phone: typeof delivery_address.phone === 'string' ? delivery_address.phone.trim() : '',
         email: typeof delivery_address.email === 'string' ? delivery_address.email.trim() : '',
