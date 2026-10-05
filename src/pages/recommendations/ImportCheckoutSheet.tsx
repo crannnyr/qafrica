@@ -129,6 +129,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     bulkDiscountTier2Qty: 20,
     bulkDiscountTier2Percent: 5,
     paystackManualThresholdNgn: 100_000,
+    homeDeliveryEnabled: false,
+    pickupStationDeliveryEnabled: true,
+    airShippingSuggestionThresholdNgn: 500_000,
   });
   
   useEffect(() => {
@@ -152,7 +155,11 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           bulkDiscountTier2Qty: Number(data.settings.bulk_discount_tier2_qty ?? 20),
           bulkDiscountTier2Percent: Number(data.settings.bulk_discount_tier2_percent ?? 5),
           paystackManualThresholdNgn: Number(data.settings.paystack_manual_threshold_ngn ?? 100_000),
+          homeDeliveryEnabled: data.settings.home_delivery_enabled === true,
+          pickupStationDeliveryEnabled: data.settings.pickup_station_delivery_enabled !== false,
+          airShippingSuggestionThresholdNgn: Number(data.settings.air_shipping_suggestion_threshold_ngn ?? 500_000),
         });
+        if (data.settings.home_delivery_enabled !== true && data.settings.pickup_station_delivery_enabled !== false) setDeliveryMode('pickup_station');
       })
       .catch(() => {});
   }, []);
@@ -207,6 +214,11 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     return `${fmtDate(minDate)} – ${fmtDate(maxDate)}`;
   };
 
+  useEffect(() => {
+    if (!shippingSettings.homeDeliveryEnabled && deliveryMode === 'home' && shippingSettings.pickupStationDeliveryEnabled) setDeliveryMode('pickup_station');
+    if (!shippingSettings.pickupStationDeliveryEnabled && deliveryMode === 'pickup_station' && shippingSettings.homeDeliveryEnabled) setDeliveryMode('home');
+  }, [shippingSettings.homeDeliveryEnabled, shippingSettings.pickupStationDeliveryEnabled, deliveryMode]);
+
   const selectedDeliveryMethods = Array.from(
     new Set(cart.map(item => shippingMethodFor(item)).filter(Boolean))
   ) as Array<'flight' | 'sea_freight'>;
@@ -242,6 +254,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     : rawShippingTotal;
   
   const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
+  const airShippingSuggested = subtotal >= shippingSettings.airShippingSuggestionThresholdNgn && !seaOnlyItems.length;
   const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
   const promoDiscount = Math.max(0, Math.min(Number(promoQuote?.discount_amount_ngn ?? 0), totalBeforePromo));
   const total = Math.max(0, totalBeforePromo - promoDiscount);
@@ -889,18 +902,22 @@ if (promoQuote?.pending_order?.id) {
           <div>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Delivery</p>
 
-            {/* Home address vs Jumia pickup station */}
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              <button onClick={() => setDeliveryMode('home')}
-                className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors ${deliveryMode === 'home' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
-                <Home className="w-4 h-4 text-gray-700 flex-shrink-0" />
-                <p className="font-semibold text-gray-900 text-xs">Home address</p>
-              </button>
-              <button onClick={() => setDeliveryMode('pickup_station')}
-                className={`flex items-center gap-2 p-3 rounded-xl border-2 transition-colors ${deliveryMode === 'pickup_station' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
-                <Store className="w-4 h-4 text-gray-700 flex-shrink-0" />
-                <p className="font-semibold text-gray-900 text-xs">Jumia pickup station</p>
-              </button>
+            {/* Delivery options are controlled from Import V2 Settings. */}
+            <div className={shippingSettings.homeDeliveryEnabled && shippingSettings.pickupStationDeliveryEnabled ? 'grid grid-cols-2 gap-2 mb-3' : 'mb-3'}>
+              {shippingSettings.homeDeliveryEnabled && (
+                <button onClick={() => setDeliveryMode('home')}
+                  className={`w-full flex items-center gap-2 p-3 rounded-xl border-2 transition-colors ${deliveryMode === 'home' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
+                  <Home className="w-4 h-4 text-gray-700 flex-shrink-0" />
+                  <p className="font-semibold text-gray-900 text-xs">Home address</p>
+                </button>
+              )}
+              {shippingSettings.pickupStationDeliveryEnabled && (
+                <button onClick={() => setDeliveryMode('pickup_station')}
+                  className={`w-full flex items-center gap-2 p-3 rounded-xl border-2 transition-colors ${deliveryMode === 'pickup_station' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}>
+                  <Store className="w-4 h-4 text-gray-700 flex-shrink-0" />
+                  <p className="font-semibold text-gray-900 text-xs">Jumia pickup station</p>
+                </button>
+              )}
             </div>
 
             {deliveryMode === 'pickup_station' && (
