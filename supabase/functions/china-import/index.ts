@@ -2069,7 +2069,7 @@ serve(async (req: Request) => {
       if (typeof pickup_station_delivery_enabled === 'boolean') updates.pickup_station_delivery_enabled = pickup_station_delivery_enabled;
       if (home_delivery_enabled === false && pickup_station_delivery_enabled === false) return json({ error: 'At least one delivery option must remain enabled.' }, 400);
       if (sea_shipping_suggestion_threshold_ngn !== undefined) {
-        if (!nonNegative(sea_shipping_suggestion_threshold_ngn)) return json({ error: 'Air shipping suggestion threshold must be a non-negative number.' }, 400);
+        if (!nonNegative(sea_shipping_suggestion_threshold_ngn)) return json({ error: 'Sea shipping suggestion threshold must be a non-negative number.' }, 400);
         updates.sea_shipping_suggestion_threshold_ngn = Number(sea_shipping_suggestion_threshold_ngn);
       }
       const positiveInt = (v: unknown) => typeof v === 'number' && Number.isInteger(v) && v > 0
