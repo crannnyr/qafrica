@@ -254,7 +254,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     : rawShippingTotal;
   
   const subtotal = cart.reduce((s, i) => s + i.price_ngn * i.quantity, 0);
-  const airShippingSuggested = subtotal >= shippingSettings.seaShippingSuggestionThresholdNgn && !seaOnlyItems.length;
+  const seaShippingSuggested = subtotal >= shippingSettings.seaShippingSuggestionThresholdNgn && !seaOnlyItems.length;
   const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
   const promoDiscount = Math.max(0, Math.min(Number(promoQuote?.discount_amount_ngn ?? 0), totalBeforePromo));
   const total = Math.max(0, totalBeforePromo - promoDiscount);
