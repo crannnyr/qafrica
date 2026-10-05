@@ -24,7 +24,7 @@ type AdminSettings = {
   paystack_manual_threshold_ngn: number
   home_delivery_enabled: boolean
   pickup_station_delivery_enabled: boolean
-  air_shipping_suggestion_threshold_ngn: number
+  sea_shipping_suggestion_threshold_ngn: number
 }
 
 const DEFAULTS: AdminSettings = {
@@ -45,7 +45,7 @@ const DEFAULTS: AdminSettings = {
   paystack_manual_threshold_ngn: 100000,
   home_delivery_enabled: false,
   pickup_station_delivery_enabled: true,
-  air_shipping_suggestion_threshold_ngn: 500000,
+  sea_shipping_suggestion_threshold_ngn: 500000,
 }
 
 export default function ManagementSettings() {
@@ -178,10 +178,10 @@ export default function ManagementSettings() {
       </section>
 
       <section className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
-        <p className="font-semibold text-gray-800 text-sm">Air shipping recommendation</p>
+        <p className="font-semibold text-gray-800 text-sm">Sea shipping recommendation</p>
         <label>
-          <span className="text-xs font-semibold text-gray-700 block mb-1.5">Recommend Air from order value (₦)</span>
-          <input type="number" min={0} value={settings.air_shipping_suggestion_threshold_ngn} onChange={e => setField('air_shipping_suggestion_threshold_ngn', Number(e.target.value))} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-orange-500 outline-none" />
+          <span className="text-xs font-semibold text-gray-700 block mb-1.5">Suggest Sea from order value (₦)</span>
+          <input type="number" min={0} value={settings.sea_shipping_suggestion_threshold_ngn} onChange={e => setField('sea_shipping_suggestion_threshold_ngn', Number(e.target.value))} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-orange-500 outline-none" />
           <p className="text-[11px] text-gray-400 mt-1">Air remains the default for eligible products. At or above this order value, checkout highlights Air as the recommended faster option.</p>
         </label>
       </section>
