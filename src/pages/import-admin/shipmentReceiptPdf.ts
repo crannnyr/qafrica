@@ -207,13 +207,13 @@ async function addReceiptPage(
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(31, 41, 55);
-    const recipient = [address.name, address.phone].filter(Boolean).join(' · ');
+    const recipient = [address?.name, address?.phone].filter(Boolean).join(' · ');
     doc.text(clean(recipient), INNER_X + 4, addressCardY + 14);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.2);
     doc.setTextColor(75, 85, 99);
-    doc.text(doc.splitTextToSize(clean(addressText), INNER_W - 8).slice(0, 1), INNER_X + 4, addressCardY + 19);
+    doc.text(doc.splitTextToSize(clean(addressText || pickupStationText), INNER_W - 8).slice(0, 1), INNER_X + 4, addressCardY + 19);
     doc.text(clean(cityState), INNER_X + 4, addressCardY + 23);
 
     y = addressCardY + addressCardH + 7;
