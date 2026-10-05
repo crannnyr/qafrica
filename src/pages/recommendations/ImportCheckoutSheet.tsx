@@ -385,7 +385,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
   const shareLocation = () => {
     if (!navigator.geolocation) {
-      setLocationError('Location isnconst seaShippingSuggested = subtotal >= shippingSettings.seaShippingSuggestionThresholdNgn && cart.some(i => !i.ship_only);'t supported on this device/browser.');
+      setLocationError('Location isn\'t supported on this device/browser.');
       return;
     }
     // Geolocation is blocked outright on non-HTTPS origins (except localhost)
