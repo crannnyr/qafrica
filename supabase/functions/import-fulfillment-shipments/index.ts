@@ -277,7 +277,7 @@ serve(async (req) => {
       if (error) return json({ error: error.message }, 500)
       const orderIds = Array.from(new Set((shipments ?? []).map((s: any) => s.order_id).filter(Boolean)))
       const { data: orders, error: ordersError } = orderIds.length
-        ? await db.from('china_import_orders').select('id,user_id,delivery_mode,delivery_address,pickup_station_name,pickup_station_address').in('id', orderIds)
+        ? await db.from('china_import_orders').select('id,user_id,delivery_mode,delivery_address,pickup_station_id,pickup_station_name,pickup_station_address').in('id', orderIds)
         : { data: [], error: null }
       if (ordersError) return json({ error: ordersError.message }, 500)
       const orderById = new Map((orders ?? []).map((o: any) => [o.id, o]))
