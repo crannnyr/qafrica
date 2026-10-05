@@ -2455,39 +2455,12 @@ serve(async (req: Request) => {
         pickup_station_address: null,
       }
 
-        name: typeof delivery_address.name === 'string' ? delivery_address.name.trim() : '',
-        phone: typeof delivery_address.phone === 'string' ? delivery_address.phone.trim() : '',
-        email: typeof delivery_address.email === 'string' ? delivery_address.email.trim() : '',
-        address_line1: typeof delivery_address.address_line1 === 'string' ? delivery_address.address_line1.trim() : '',
-        address_line2: typeof delivery_address.address_line2 === 'string' ? delivery_address.address_line2.trim() : '',
-        city: typeof delivery_address.city === 'string' ? delivery_address.city.trim() : '',
-        state: typeof delivery_address.state === 'string' ? delivery_address.state.trim() : '',
-        landmark: typeof delivery_address.landmark === 'string' ? delivery_address.landmark.trim() : '',
-      }
-      if (!address.name || !address.phone || !address.address_line1 || !address.city || !address.state) {
-        return json({ error: 'Name, phone, address, city and state are required.' }, 400)
-      }
-
-      const updates: Record<string, unknown> = {
-        delivery_address: address,
-        updated_at: new Date().toISOString(),
-      }
-      if (delivery_mode === 'home' || delivery_mode === 'pickup_station') updates.delivery_mode = delivery_mode
-      if (delivery_mode === 'pickup_station') {
-        if (typeof pickup_station_id === 'string' && pickup_station_id) updates.pickup_station_id = pickup_station_id
-        if (typeof pickup_station_name === 'string') updates.pickup_station_name = pickup_station_name.trim()
-        if (typeof pickup_station_address === 'string') updates.pickup_station_address = pickup_station_address.trim()
-      } else if (delivery_mode === 'home') {
-        updates.pickup_station_id = null
-        updates.pickup_station_name = null
-        updates.pickup_station_address = null
-      }
-
       const { data: updated, error: updateErr } = await supabase
         .from('china_import_orders').update(updates).eq('id', order_id).select().single()
       if (updateErr) return json({ error: updateErr.message }, 500)
       return json({ order: updated })
     }
+
 
     if (req.method === 'POST' && action === 'update-order') {
       const { manager_token, id, status, shipping_ngn, admin_note, payment_status } = await req.json()
