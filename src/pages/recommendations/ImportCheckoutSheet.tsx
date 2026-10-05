@@ -802,7 +802,16 @@ if (promoQuote?.pending_order?.id) {
                   )}
                 </button>
               </div>
-              {seaShippingSuggested && (\n          <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 mb-2">\n            <Ship className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />\n            <div>\n              <p className="text-[11px] font-bold text-blue-800">Sea freight suggestion</p>\n              <p className="text-[10px] text-blue-700 mt-0.5 leading-relaxed">This order is ₦{subtotal.toLocaleString()} or more. Sea freight may be more economical. Air remains selected by default.</p>\n            </div>\n          </div>\n        )}\n        {forcedSeaFreight && (
+              {seaShippingSuggested && (
+                <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5 mb-2">
+                  <Ship className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[11px] font-bold text-blue-800">Sea freight suggestion</p>
+                    <p className="text-[10px] text-blue-700 mt-0.5 leading-relaxed">This order is ₦{subtotal.toLocaleString()} or more. Sea freight may be more economical. Air remains selected by default.</p>
+                  </div>
+                </div>
+              )}
+              {forcedSeaFreight && (
                 <p className="text-[11px] text-gray-500 mt-2 flex items-start gap-1.5">
                   <Ship className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-px" />
                   <span>
