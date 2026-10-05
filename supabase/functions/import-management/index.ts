@@ -551,9 +551,13 @@ serve(async (req) => {
     if (ordersError) return json({ error: ordersError.message }, 500)
     const orders = orderResults.flatMap((result) => result.data ?? [])
 
+    // A consolidation bill is one bill per customer for the whole batch.
+    // Its order_id is only the first order used as the bill anchor. Resolve the
+    // paid anchor back to that customer's batch so every order billed together
+    // is eligible for fulfillment.
     const billResults = await Promise.all(orderChunks.map((ids) =>
       supabase.from('china_import_consolidation_bills')
-        .select('order_id')
+        .select('order_id, user_id')
         .in('order_id', ids)
         .eq('kind', 'consolidation_shipping')
         .eq('status', 'paid')
@@ -562,8 +566,18 @@ serve(async (req) => {
     if (billsError) return json({ error: billsError.message }, 500)
     const paidBills = billResults.flatMap((result) => result.data ?? [])
 
-    const paidOrderIds = new Set((paidBills ?? []).map((row: any) => row.order_id))
-    const eligibleOrders = (orders ?? []).filter((order: any) => paidOrderIds.has(order.id))
+    const paidAnchorIds = new Set((paidBills ?? []).map((row: any) => row.order_id))
+    const paidCustomerIds = new Set((paidBills ?? []).map((row: any) => row.user_id).filter(Boolean))
+    const paidAnchorOrders = (orders ?? []).filter((order: any) => paidAnchorIds.has(order.id))
+    const paidCustomerBatchKeys = new Set(
+      paidAnchorOrders
+        .filter((order: any) => order.user_id && paidCustomerIds.has(order.user_id))
+        .map((order: any) => `${order.user_id}:${order.batch_id ?? 'no-batch'}`)
+    )
+    const eligibleOrders = (orders ?? []).filter((order: any) => {
+      if (!order.user_id) return false
+      return paidCustomerBatchKeys.has(`${order.user_id}:${order.batch_id ?? 'no-batch'}`)
+    })
     const eligibleOrderIds = new Set(eligibleOrders.map((order: any) => order.id))
 
     const linkResults = await Promise.all(orderChunks.map((ids) =>
