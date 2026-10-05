@@ -918,8 +918,8 @@ if (promoQuote?.pending_order?.id) {
                           setShippingWarning('');
                           setItemShippingMethod(item.cart_key, 'sea_freight');
                         }}
-                        aria-disabled={seaShippingLocked && !item.ship_only},
-                        title={seaShippingLocked && !item.ship_only ? `Sea freight is available from ${fmt(shippingSettings.seaShippingSuggestionThresholdNgn)}` : undefined},
+                        aria-disabled={seaShippingLocked && !item.ship_only}
+                        title={seaShippingLocked && !item.ship_only ? `Sea freight is available from ${fmt(shippingSettings.seaShippingSuggestionThresholdNgn)}` : undefined}
                         aria-pressed={chosen === 'sea_freight'}
                         className={`flex flex-col items-center justify-center gap-0.5 w-10 h-10 rounded-lg border-2 transition-colors ${seaShippingLocked && !item.ship_only ? 'border-gray-100 bg-gray-50 opacity-40 cursor-not-allowed' : chosen === 'sea_freight' ? 'border-gray-900 bg-gray-100 ring-1 ring-gray-900' : 'border-gray-100 bg-white'}`}
                       >
