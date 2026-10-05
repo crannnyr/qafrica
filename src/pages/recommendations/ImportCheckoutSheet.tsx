@@ -833,7 +833,7 @@ if (promoQuote?.pending_order?.id) {
                 </button>
               </div>
               {seaShippingSuggested && (
-                <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 mb-2">
+                <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 mt-2 mb-2">
                   <Ship className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-[11px] font-bold text-blue-800">Sea freight suggestion</p>
@@ -842,7 +842,7 @@ if (promoQuote?.pending_order?.id) {
                 </div>
               )}
               {shippingWarning && (
-                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mb-2">
+                <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 mt-2 mb-2">
                   <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                   <p className="text-[10px] font-semibold text-amber-800 leading-relaxed">{shippingWarning}</p>
                 </div>
