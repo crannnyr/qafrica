@@ -19,6 +19,7 @@ type ChinaProduct = {
   variants: unknown;
   is_active: boolean;
   category_id: string | null;
+  niche_name?: string | null;
 };
 
 type FilterType = 'my_niches' | 'other' | 'all';
@@ -70,6 +71,13 @@ export default function ChinaImportCatalogSection() {
     if (catalogError) toast.error(catalogError.message);
 
     const categories = categoryRows || [];
+    const nicheIds = [...new Set(categories.map(row => row.niche_id).filter(Boolean))];
+    const { data: nicheRows, error: nicheError } = nicheIds.length
+      ? await supabase.from('niches').select('id,name').in('id', nicheIds)
+      : { data: [], error: null };
+    if (nicheError) toast.error(nicheError.message);
+    const nicheNameById = new Map((nicheRows || []).map(row => [row.id, row.name]));
+    const nicheNameByCategoryId = new Map(categories.map(row => [row.id, nicheNameById.get(row.niche_id) || null]));
     const myCategorySet = new Set(categories.filter(row => storeNiches.includes(row.niche_id)).map(row => row.id));
     setMyCategoryIds(myCategorySet);
     const categoryIds = categories
@@ -98,7 +106,10 @@ export default function ChinaImportCatalogSection() {
 
     if (productError) toast.error(productError.message);
 
-    setProducts((productRows || []) as ChinaProduct[]);
+    setProducts((productRows || []).map(product => ({
+      ...(product as ChinaProduct),
+      niche_name: nicheNameByCategoryId.get(product.category_id) || null,
+    })));
     setCatalog((catalogRows || []) as CatalogRow[]);
     setLoading(false);
   };
@@ -255,15 +266,28 @@ export default function ChinaImportCatalogSection() {
             const landed = row?.landed_cost_ngn ?? Math.max(Number(product.price_ngn ?? 0), 0);
             const suggested = Math.ceil(landed * 1.2);
             const margin = Math.max((row?.seller_price_ngn ?? suggested) - landed, 0);
+            const canImport = isUnlimited || myCategoryIds.has(product.category_id || '');
 
             return (
-              <div key={product.id} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                <div className="aspect-square bg-gray-100 dark:bg-gray-700">
+              <div key={product.id} className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-shadow hover:shadow-lg ${canImport ? 'border-gray-100 dark:border-gray-700' : 'border-gray-200 dark:border-gray-600 opacity-75'}`}>
+                <div className="aspect-square bg-gray-100 dark:bg-gray-700 relative overflow-hidden">
                   {((product.image_urls?.[0]) || product.image_url) ? (
                     <img src={(product.image_urls?.[0]) || product.image_url || ''} alt={product.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <Package className="w-12 h-12 text-gray-300" />
+                    </div>
+                  )}
+                  <div className="absolute top-3 left-3">
+                    <span className="px-2 py-1 bg-gray-900/70 text-white text-xs rounded backdrop-blur-sm">
+                      {product.niche_name || product.category || 'China Import'}
+                    </span>
+                  </div>
+                  {!canImport && (
+                    <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center">
+                      <span className="px-3 py-1 bg-gray-900 text-white text-xs rounded-full">
+                        Upgrade to Import
+                      </span>
                     </div>
                   )}
                 </div>
@@ -292,14 +316,16 @@ export default function ChinaImportCatalogSection() {
                   <div className="flex gap-2">
                     <Button
                       onClick={() => void addToStore(product)}
-                      disabled={busyId === product.id || (!isUnlimited && !myCategoryIds.has(product.category_id || ''))}
-                      className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+                      disabled={busyId === product.id || !canImport}
+                      className={`flex-1 ${canImport ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'}`}
                       size="sm"
                     >
                       {busyId === product.id ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        <><Plus className="w-4 h-4 mr-1" />Add to Store</>
+                        canImport
+                          ? <><Plus className="w-4 h-4 mr-1" />Add to Store</>
+                          : 'Upgrade to Import'
                       )}
                     </Button>
                   </div>
