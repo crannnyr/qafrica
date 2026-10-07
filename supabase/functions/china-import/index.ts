@@ -3183,7 +3183,7 @@ serve(async (req: Request) => {
       const { data: orders, error: ordersError } = await supabase
         .from('china_import_orders')
         .select('id, user_id, status, delivery_type, delivery_mode')
-        .eq('delivery_type', 'to_me')
+        .or('delivery_type.eq.to_me,delivery_mode.eq.home')
         .or('delivery_mode.is.null,delivery_mode.eq.home')
         .in('status', ['pending', 'confirmed', 'ordered', 'ordered_and_closed'])
         .order('created_at', { ascending: true })
