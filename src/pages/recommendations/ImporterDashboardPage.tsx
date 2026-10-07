@@ -627,6 +627,20 @@ export default function ImporterDashboardPage() {
                         </div>
                         <span className="font-semibold text-gray-800 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
                       </button>
+                      <div className="px-5 pb-3 flex justify-end">
+                        {canSwitchToPickup(order) ? (
+                          <button
+                            onClick={() => openPickupPicker(order)}
+                            className="flex items-center gap-1 text-[10px] font-bold text-gray-700 hover:text-orange-600"
+                          >
+                            <Store className="w-3 h-3" /> Switch to pickup
+                          </button>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold text-gray-300" title="Pickup switching becomes available after payment">
+                            <Store className="w-3 h-3" /> Pickup available after payment
+                          </span>
+                        )}
+                      </div>
                       <OrderItemsDropdown
                         order={order}
                         isExpanded={expandedOrderIds.has(order.id)}
@@ -700,15 +714,20 @@ export default function ImporterDashboardPage() {
               <EmptyState icon={Receipt} text="No bills right now." />
             ) : (
               <div className="space-y-3">
-                {bills.map(bill => (
-                  <BillCard
-                    key={bill.id}
-                    bill={bill}
-                    onInfo={() => setInfoBillKind(bill.kind)}
-                    onPay={() => payBillWithPaystack(bill)}
-                    disabled={isPayingBill}
-                  />
-                ))}
+                {bills.map(bill => {
+                  const billOrder = bill.order_id ? orders.find(o => o.id === bill.order_id) : undefined;
+                  return (
+                    <BillCard
+                      key={bill.id}
+                      bill={bill}
+                      order={billOrder}
+                      onInfo={() => setInfoBillKind(bill.kind)}
+                      onPay={() => payBillWithPaystack(bill)}
+                      onPickup={billOrder ? () => openPickupPicker(billOrder) : undefined}
+                      disabled={isPayingBill}
+                    />
+                  );
+                })}
               </div>
             )}
           </section>
@@ -1243,10 +1262,12 @@ function OrderItemsDropdown({ order, isExpanded, onToggle, compact = false }: {
   );
 }
 
-function BillCard({ bill, onInfo, onPay, disabled }: {
+function BillCard({ bill, order, onInfo, onPay, onPickup, disabled }: {
   bill: ConsolidationBill;
+  order?: DashboardOrder;
   onInfo: () => void;
   onPay: () => void;
+  onPickup?: () => void;
   disabled?: boolean;
 }) {
   const [showItems, setShowItems] = useState(false);
@@ -1289,15 +1310,27 @@ function BillCard({ bill, onInfo, onPay, disabled }: {
         </div>
       )}
 
-      {bill.status === 'pending' && (
-        <button
-          onClick={onPay}
-          disabled={disabled}
-          className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg disabled:opacity-40"
-        >
-          Pay with Paystack
-        </button>
-      )}
+      <div className="flex items-center justify-between gap-2 mt-3">
+        <div>
+          {bill.status === 'pending' && (
+            <button
+              onClick={onPay}
+              disabled={disabled}
+              className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg disabled:opacity-40"
+            >
+              Pay with Paystack
+            </button>
+          )}
+        </div>
+        {order && canSwitchToPickup(order) && onPickup && (
+          <button
+            onClick={onPickup}
+            className="flex items-center gap-1 text-[10px] font-bold text-gray-700 hover:text-orange-600"
+          >
+            <Store className="w-3 h-3" /> Switch to pickup
+          </button>
+        )}
+      </div>
     </div>
   );
 }
