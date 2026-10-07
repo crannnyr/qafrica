@@ -4,7 +4,7 @@ insert into public.import_message_templates
 values (
   'pickup_station_recommendation',
   'Jumia pickup station recommendation',
-  'Sent to customers with a paid, non-pickup China Import order that has not shipped yet, explaining how to switch the order to a nearby Jumia pickup station.',
+  'Sent to customers with a paid, active, home-delivery China Import order, including orders that have already shipped, explaining how to switch the order to a nearby Jumia pickup station.',
   'You can still switch your QAFRICA order to a Jumia pickup station 📦',
   '<h2 style="color:#111827;margin:0 0 8px;">A simpler way to receive your order</h2>
 <p style="color:#6B7280;margin:0 0 16px;line-height:1.6;">Hi {{customer_name}}, if you have an eligible QAFRICA order that was set for home delivery, you can still switch it to a Jumia pickup station near you.</p>
@@ -16,7 +16,7 @@ values (
 <li>Choose a Jumia pickup station near your city or state.</li>
 <li>Tap the station you want. Your order amount and items stay the same; only the delivery destination changes.</li>
 </ol>
-<div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 10px 10px 0;padding:14px 16px;margin-bottom:20px;"><p style="margin:0;color:#374151;font-size:13px;line-height:1.6;">Choose a station that is convenient for you to reach. If your order has already shipped, its delivery destination can no longer be changed from the dashboard.</p></div>
+<div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 10px 10px 0;padding:14px 16px;margin-bottom:20px;"><p style="margin:0;color:#374151;font-size:13px;line-height:1.6;">Choose a station that is convenient for you to reach. Even if your order has already shipped, you can still switch it to a Jumia pickup station as long as the order is still active. Completed, delivered, cancelled, or closed orders cannot be changed.</p></div>
 <a href="https://qafrica.store/importations/dashboard" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">Open my order dashboard →</a>',
   array['customer_name']
 )
