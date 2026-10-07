@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
   Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
-  ShoppingBag, Ship, ExternalLink, ChevronDown, Heart,
+  ShoppingBag, Ship, Store, ExternalLink, ChevronDown, Heart,
   FileText, ShieldCheck, Navigation, MailWarning, Sparkles, Plus,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
@@ -33,6 +33,7 @@ const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 const REMINDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/order-reminders`;
 const REFUNDS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/refunds`;
 const CUSTOM_ORDERS_EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/custom-orders`;
+const STATIONS_REST_URL = `${CONFIG.SUPABASE_URL}/rest/v1/pickup_stations`;
 
 interface FailedOrder {
   id: string;
@@ -74,6 +75,20 @@ interface DashboardOrder {
   delivery_type: 'to_qafrica' | 'to_me';
   items: Array<{ id: string; name: string; price_ngn: number; quantity: number; image_url: string; variant_options?: Record<string, string> }>;
   created_at: string;
+  shipped_at?: string | null;
+  delivery_mode?: 'home' | 'pickup_station' | null;
+  pickup_station_id?: string | null;
+  pickup_station_name?: string | null;
+  pickup_station_address?: string | null;
+  delivery_address?: { name?: string; phone?: string; city?: string; state?: string; [key: string]: unknown } | null;
+}
+
+interface PickupStation {
+  id: string;
+  name: string;
+  state: string;
+  address: string;
+  landmark?: string | null;
 }
 
 interface ConsolidationBill {
@@ -162,6 +177,65 @@ export default function ImporterDashboardPage() {
   const [isSubmittingBank, setIsSubmittingBank] = useState(false);
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
   const [receiptOrder, setReceiptOrder] = useState<DashboardOrder | null>(null);
+  const [pickupOrder, setPickupOrder] = useState<DashboardOrder | null>(null);
+  const [pickupStations, setPickupStations] = useState<PickupStation[]>([]);
+  const [pickupStationSearch, setPickupStationSearch] = useState('');
+  const [pickupStationsLoading, setPickupStationsLoading] = useState(false);
+  const [pickupSaving, setPickupSaving] = useState(false);
+  const [pickupError, setPickupError] = useState('');
+  const [pickupSuccess, setPickupSuccess] = useState('');
+
+  const canSwitchToPickup = (order: DashboardOrder) =>
+    order.payment_status === 'paid' &&
+    order.delivery_type === 'to_me' &&
+    order.delivery_mode !== 'pickup_station' &&
+    !order.shipped_at &&
+    ['confirmed', 'ordered', 'ordered_and_closed'].includes(order.status);
+
+  const eligiblePickupOrders = orders.filter(canSwitchToPickup);
+
+  const openPickupPicker = async (order: DashboardOrder) => {
+    setPickupOrder(order);
+    setPickupError('');
+    setPickupSuccess('');
+    setPickupStationSearch('');
+    if (pickupStations.length > 0) return;
+    setPickupStationsLoading(true);
+    try {
+      const res = await fetch(`${STATIONS_REST_URL}?select=id,name,state,address,landmark&is_active=eq.true&order=state.asc`, {
+        headers: { apikey: CONFIG.SUPABASE_ANON_KEY, Authorization: `Bearer ${CONFIG.SUPABASE_ANON_KEY}` },
+      });
+      const data = await res.json();
+      setPickupStations(Array.isArray(data) ? data : []);
+    } catch {
+      setPickupError('Could not load Jumia pickup stations. Please try again.');
+    } finally {
+      setPickupStationsLoading(false);
+    }
+  };
+
+  const savePickupStation = async (station: PickupStation) => {
+    if (!pickupOrder || !customer?.id || pickupSaving) return;
+    setPickupSaving(true);
+    setPickupError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=switch-order-to-pickup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customer.id, order_id: pickupOrder.id, pickup_station_id: station.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Could not update the order.');
+      setOrders(prev => prev.map(o => o.id === pickupOrder.id ? data.order : o));
+      setPickupSuccess(`${pickupOrder.code} is now set to ${station.name}.`);
+      setPickupOrder(null);
+      setPickupStationSearch('');
+    } catch (e: any) {
+      setPickupError(e?.message ?? 'Could not update the order. Please try again.');
+    } finally {
+      setPickupSaving(false);
+    }
+  };
 
   const toggleExpanded = (id: string) => {
     setExpandedOrderIds(prev => {
@@ -481,6 +555,44 @@ export default function ImporterDashboardPage() {
           </div>
         </div>
 
+        {eligiblePickupOrders.length > 0 && (
+          <section className="bg-orange-50 border border-orange-100 rounded-2xl p-4 mb-6">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center flex-shrink-0">
+                <Store className="w-4 h-4 text-white" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-bold text-gray-900">Make your delivery easier with Jumia pickup</p>
+                <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+                  You can still change eligible orders to a Jumia pickup station near you. Choose the station that is most convenient for you.
+                </p>
+                <div className="mt-3 space-y-2">
+                  {eligiblePickupOrders.map(order => (
+                    <div key={order.id} className="bg-white/80 border border-orange-100 rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[11px] font-bold text-gray-800">{order.code}</p>
+                        <p className="text-[10px] text-gray-400">{order.status === 'ordered_and_closed' ? 'At consolidation warehouse' : 'Order in progress'}</p>
+                      </div>
+                      <button
+                        onClick={() => openPickupPicker(order)}
+                        className="flex-shrink-0 text-[10px] font-bold bg-gray-900 text-white rounded-lg px-3 py-2 hover:bg-gray-700"
+                      >
+                        Switch to pickup
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {pickupSuccess && (
+          <div className="mb-6 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl px-4 py-3 text-xs font-semibold">
+            {pickupSuccess}
+          </div>
+        )}
+
         {/* ── Active tab content ────────────────────────────────────────── */}
         {activeTab === 'to_pay' && (
           <section>
@@ -557,6 +669,14 @@ export default function ImporterDashboardPage() {
                         >
                           <Receipt className="w-3 h-3" /> Receipt
                         </button>
+                        {canSwitchToPickup(order) && (
+                          <button
+                            onClick={() => openPickupPicker(order)}
+                            className="flex items-center gap-1 text-[10px] font-bold text-gray-700 hover:text-orange-600"
+                          >
+                            <Store className="w-3 h-3" /> Pickup station
+                          </button>
+                        )}
                       </div>
                     </div>
                     <OrderItemsDropdown
@@ -926,6 +1046,71 @@ export default function ImporterDashboardPage() {
       )}
 
       {/* Refund bank details form */}
+      {pickupOrder && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={() => !pickupSaving && setPickupOrder(null)}>
+          <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl p-5 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-start justify-between gap-3 mb-3">
+              <div>
+                <p className="text-[10px] font-bold text-orange-500 uppercase tracking-widest">Delivery update</p>
+                <h3 className="font-black text-gray-900 text-lg mt-1">Choose a Jumia pickup station</h3>
+                <p className="text-[11px] text-gray-500 mt-1">Order {pickupOrder.code}</p>
+              </div>
+              <button disabled={pickupSaving} onClick={() => setPickupOrder(null)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400"><X className="w-4 h-4" /></button>
+            </div>
+            <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 mb-4">
+              <p className="text-[11px] text-orange-800 leading-relaxed">
+                Pick a convenient Jumia station. Your order amount and items stay unchanged; only the delivery destination is updated.
+              </p>
+            </div>
+            <input
+              value={pickupStationSearch}
+              onChange={e => setPickupStationSearch(e.target.value)}
+              placeholder={`Search stations${pickupOrder.delivery_address?.city ? ` near ${pickupOrder.delivery_address.city}` : ''}`}
+              className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-orange-400 mb-3"
+            />
+            {pickupError && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl p-3 mb-3">{pickupError}</p>}
+            {pickupStationsLoading ? (
+              <div className="py-8 text-center text-xs text-gray-400">Loading pickup stations…</div>
+            ) : (() => {
+              const q = pickupStationSearch.trim().toLowerCase();
+              const city = String(pickupOrder.delivery_address?.city ?? '').trim().toLowerCase();
+              const state = String(pickupOrder.delivery_address?.state ?? '').trim().toLowerCase();
+              const matches = pickupStations
+                .filter(s => {
+                  const hay = `${s.name} ${s.address} ${s.landmark ?? ''} ${s.state}`.toLowerCase();
+                  if (q) return hay.includes(q);
+                  if (city && (hay.includes(city) || s.state.toLowerCase() === state)) return true;
+                  return !city && (!state || s.state.toLowerCase() === state);
+                })
+                .slice(0, 20);
+              return matches.length === 0 ? (
+                <div className="py-8 text-center text-xs text-gray-400">No matching stations found. Try searching by city or state.</div>
+              ) : (
+                <div className="space-y-2">
+                  {matches.map(station => (
+                    <button
+                      key={station.id}
+                      disabled={pickupSaving}
+                      onClick={() => savePickupStation(station)}
+                      className="w-full text-left border border-gray-100 hover:border-orange-200 hover:bg-orange-50 rounded-xl p-3 transition-colors disabled:opacity-50"
+                    >
+                      <div className="flex items-start gap-2">
+                        <MapPin className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-gray-800">{station.name}</p>
+                          <p className="text-[10px] text-gray-500 mt-0.5 leading-relaxed">{station.address}</p>
+                          {station.landmark && <p className="text-[10px] text-gray-400 mt-0.5">{station.landmark}</p>}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {refundBankForm && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center" onClick={() => !isSubmittingBank && setRefundBankForm(null)}>
           <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-2xl p-6">
