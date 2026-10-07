@@ -72,6 +72,12 @@ interface DashboardOrder {
   jumia_fee_ngn?: number;           
   prepaid_shipping_ngn?: number | null; 
   delivery_type: 'to_qafrica' | 'to_me';
+  delivery_mode?: 'home' | 'pickup_station' | null;
+  pickup_station_id?: string | null;
+  pickup_station_name?: string | null;
+  pickup_station_address?: string | null;
+  delivery_address?: { name?: string; phone?: string; address_line1?: string; address_line2?: string; city?: string; state?: string; landmark?: string } | null;
+  shipping_method?: 'flight' | 'sea_freight' | 'mixed' | null;
   items: Array<{ id: string; name: string; price_ngn: number; quantity: number; image_url: string; variant_options?: Record<string, string> }>;
   created_at: string;
 }
@@ -162,6 +168,7 @@ export default function ImporterDashboardPage() {
   const [isSubmittingBank, setIsSubmittingBank] = useState(false);
   const [expandedOrderIds, setExpandedOrderIds] = useState<Set<string>>(new Set());
   const [receiptOrder, setReceiptOrder] = useState<DashboardOrder | null>(null);
+  const [deliveryOrder, setDeliveryOrder] = useState<DashboardOrder | null>(null);
 
   const toggleExpanded = (id: string) => {
     setExpandedOrderIds(prev => {
@@ -966,6 +973,32 @@ export default function ImporterDashboardPage() {
                             </button>
                           </div>
 
+                          {order.delivery_type === 'to_me' && (
+                            <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5">
+                              <div className="flex items-start gap-2">
+                                <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
+                                    {order.delivery_mode === 'pickup_station' ? 'Jumia pickup station' : 'Home delivery'}
+                                  </p>
+                                  <p className="text-[11px] text-gray-600 truncate">
+                                    {order.delivery_mode === 'pickup_station'
+                                      ? (order.pickup_station_name || order.pickup_station_address || 'Pickup station selected')
+                                      : [order.delivery_address?.address_line1, order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ') || 'Home address'}
+                                  </p>
+                                </div>
+                                {order.delivery_mode !== 'pickup_station' && !['shipped_and_closed', 'clearance_and_closed', 'received'].includes(order.status) && (
+                                  <button
+                                    onClick={() => setDeliveryOrder(order)}
+                                    className="text-[10px] font-bold text-orange-500 hover:text-orange-600 shrink-0"
+                                  >
+                                    Change to pickup
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
                           {expandedOrderIds.has(order.id) && (
                             <OrderItemsDropdown order={order} isExpanded={true} onToggle={() => toggleExpanded(order.id)} compact />
                           )}
@@ -1027,6 +1060,15 @@ export default function ImporterDashboardPage() {
         <OrderReceiptSheet
           order={{ ...receiptOrder, customer_name: customer.full_name }}
           onClose={() => setReceiptOrder(null)}
+        />
+      )}
+
+      {deliveryOrder && customer && (
+        <OrderDeliverySheet
+          order={deliveryOrder}
+          customer={{ id: customer.id, full_name: customer.full_name, phone: customer.phone }}
+          onClose={() => setDeliveryOrder(null)}
+          onSaved={() => { setDeliveryOrder(null); load(); }}
         />
       )}
 
@@ -1230,6 +1272,153 @@ function BillCard({ bill, onInfo, onPay, disabled }: {
           Pay with Paystack
         </button>
       )}
+    </div>
+  );
+}
+
+
+interface OrderDeliverySheetProps {
+  order: DashboardOrder;
+  customer: { id: string; full_name: string; phone?: string };
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+interface OrderPickupStation {
+  id: string;
+  name: string;
+  state: string;
+  address: string;
+  landmark: string | null;
+}
+
+function OrderDeliverySheet({ order, customer, onClose, onSaved }: OrderDeliverySheetProps) {
+  const [stations, setStations] = useState<OrderPickupStation[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${CONFIG.SUPABASE_URL}/rest/v1/pickup_stations?select=id,name,state,address,landmark&is_active=eq.true&order=state.asc,name.asc`, {
+      headers: { apikey: CONFIG.SUPABASE_ANON_KEY, Authorization: `Bearer ${CONFIG.SUPABASE_ANON_KEY}` },
+    })
+      .then(res => res.json())
+      .then(data => { if (!cancelled) setStations(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setError('Could not load pickup stations. Please try again.'); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const city = order.delivery_address?.city?.trim().toLowerCase() ?? '';
+  const state = order.delivery_address?.state?.trim().toLowerCase() ?? '';
+  const q = search.trim().toLowerCase();
+  const matchingStations = stations.filter(s => {
+    const haystack = `${s.name} ${s.address} ${s.landmark ?? ''} ${s.state}`.toLowerCase();
+    if (q) return haystack.includes(q);
+    if (city) return haystack.includes(city) || s.state.toLowerCase() === state;
+    if (state) return s.state.toLowerCase() === state;
+    return true;
+  }).slice(0, 25);
+
+  const save = async () => {
+    if (!selectedId) return;
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=change-order-delivery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customer.id, order_id: order.id, pickup_station_id: selectedId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.success) throw new Error(data?.error || 'Could not change delivery destination.');
+      onSaved();
+    } catch (e: any) {
+      setError(e?.message ?? 'Could not change delivery destination.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-end sm:items-center justify-center" onClick={() => !saving && onClose()}>
+      <div onClick={e => e.stopPropagation()} className="bg-white w-full sm:max-w-md max-h-[88vh] rounded-t-3xl sm:rounded-2xl overflow-hidden flex flex-col">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div>
+            <h3 className="font-bold text-gray-900">Change delivery</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Choose a Jumia pickup station near your delivery address.</p>
+          </div>
+          <button onClick={onClose} disabled={saving} className="p-1.5 hover:bg-gray-100 rounded-lg">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="p-5 overflow-y-auto">
+          <div className="rounded-xl bg-orange-50 border border-orange-100 px-3 py-2.5 mb-4 flex items-start gap-2">
+            <Store className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-[11px] font-bold text-orange-800">Jumia pickup station</p>
+              <p className="text-[10px] text-orange-700">Your order will be collected from the station you select.</p>
+            </div>
+          </div>
+
+          <div className="relative mb-3">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={city ? `Search stations near ${order.delivery_address?.city}` : 'Search by station, city or state'}
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-orange-400"
+            />
+          </div>
+
+          {city && !search && (
+            <p className="text-[10px] text-gray-400 mb-2">Showing stations near {order.delivery_address?.city}{state ? ` / ${order.delivery_address?.state}` : ''} first.</p>
+          )}
+
+          {loading ? (
+            <div className="py-10 text-center"><Loader className="w-5 h-5 animate-spin text-gray-300 mx-auto" /></div>
+          ) : matchingStations.length === 0 ? (
+            <div className="py-8 text-center">
+              <MapPin className="w-6 h-6 text-gray-200 mx-auto mb-2" />
+              <p className="text-xs text-gray-400">No matching pickup stations found.</p>
+            </div>
+          ) : (
+            <div className="border border-gray-100 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+              {matchingStations.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedId(s.id)}
+                  className={`w-full text-left px-3 py-3 border-b border-gray-50 last:border-b-0 flex items-start gap-2.5 transition-colors ${selectedId === s.id ? 'bg-orange-50' : 'hover:bg-gray-50'}`}
+                >
+                  <MapPin className={`w-4 h-4 mt-0.5 shrink-0 ${selectedId === s.id ? 'text-orange-500' : 'text-gray-300'}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-bold text-gray-700">{s.name}</p>
+                    <p className="text-[10px] text-gray-400 leading-relaxed">{s.address}</p>
+                  </div>
+                  {selectedId === s.id && <CheckCircle2 className="w-4 h-4 text-orange-500 shrink-0" />}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {error && <p className="text-[11px] text-red-500 mt-3">{error}</p>}
+        </div>
+
+        <div className="p-4 border-t border-gray-100 bg-white">
+          <button
+            onClick={save}
+            disabled={saving || !selectedId || loading}
+            className="w-full flex items-center justify-center gap-2 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-sm font-bold py-3 rounded-xl"
+          >
+            {saving && <Loader className="w-4 h-4 animate-spin" />}
+            {saving ? 'Changing delivery…' : 'Change to pickup station'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
