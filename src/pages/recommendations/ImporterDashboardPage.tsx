@@ -155,6 +155,41 @@ function canSwitchToPickup(order: DashboardOrder) {
   );
 }
 
+function PickupOrdersPanel({ orders, onSelect }: { orders: DashboardOrder[]; onSelect: (order: DashboardOrder) => void }) {
+  if (orders.length === 0) return null;
+  return (
+    <div className="bg-orange-50 border-2 border-orange-200 rounded-2xl p-4 mb-4">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center flex-shrink-0">
+          <Store className="w-4 h-4 text-white" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-gray-900">Please switch this order to Jumia pickup</p>
+          <p className="text-[11px] text-gray-600 mt-1 leading-relaxed">
+            We need you to switch your home-delivery order to a Jumia pickup station. This is still available even if your order has shipped, as long as it is active.
+          </p>
+          <div className="mt-3 space-y-2">
+            {orders.map(order => (
+              <div key={order.id} className="bg-white border border-orange-200 rounded-xl px-3 py-2.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-mono text-[11px] font-bold text-gray-800">{order.code}</p>
+                  <p className="text-[10px] text-gray-500">Home delivery · please switch to pickup</p>
+                </div>
+                <button
+                  onClick={() => onSelect(order)}
+                  className="flex-shrink-0 text-[10px] font-black bg-orange-500 text-white rounded-lg px-3 py-2 hover:bg-orange-600"
+                >
+                  Switch to pickup
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Which pipeline tab a bank icon-grid tile is
 type PipelineTab = 'to_pay' | 'confirmed' | 'billed' | 'shipped' | 'to_receive' | 'refund' | 'custom';
 
@@ -660,6 +695,7 @@ export default function ImporterDashboardPage() {
         {activeTab === 'confirmed' && (
           <section>
             <h2 className="font-bold text-gray-800 text-sm mb-3">Confirmed</h2>
+            <PickupOrdersPanel orders={eligiblePickupOrders.filter(o => o.status === 'confirmed' || o.status === 'ordered')} onSelect={openPickupPicker} />
             {isLoading ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
             ) : confirmedOrders.length === 0 ? (
@@ -710,6 +746,7 @@ export default function ImporterDashboardPage() {
         {activeTab === 'billed' && (
           <section>
             <h2 className="font-bold text-gray-800 text-sm mb-3">Billed</h2>
+            <PickupOrdersPanel orders={eligiblePickupOrders} onSelect={openPickupPicker} />
             {billPayError && <p className="text-red-500 text-xs mb-3">{billPayError}</p>}
             {isLoading ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-24" />
@@ -739,6 +776,7 @@ export default function ImporterDashboardPage() {
         {activeTab === 'shipped' && (
           <section>
             <h2 className="font-bold text-gray-800 text-sm mb-3">Shipped</h2>
+            <PickupOrdersPanel orders={eligiblePickupOrders.filter(o => o.status === 'shipped_and_closed' || o.status === 'clearance_and_closed')} onSelect={openPickupPicker} />
             {isLoading ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-5 animate-pulse h-16" />
             ) : shippedOrders.length === 0 ? (
