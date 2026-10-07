@@ -3093,8 +3093,8 @@ serve(async (req: Request) => {
       if (order.payment_status !== 'paid') return json({ error: 'Only paid orders can be updated.' }, 409)
       if (order.delivery_type !== 'to_me') return json({ error: 'This order is not using customer delivery.' }, 409)
       if (order.delivery_mode === 'pickup_station') return json({ success: true, already_updated: true, order })
-      if (order.shipped_at || !['confirmed', 'ordered', 'ordered_and_closed'].includes(order.status)) {
-        return json({ error: 'This order can no longer change its delivery destination because fulfilment has already progressed.' }, 409)
+      if (['received', 'delivered', 'cancelled', 'canceled', 'closed'].includes(String(order.status).toLowerCase())) {
+        return json({ error: 'This order is no longer active and cannot change its delivery destination.' }, 409)
       }
 
       const { data: station, error: stationErr } = await supabase
@@ -3154,8 +3154,7 @@ serve(async (req: Request) => {
         .eq('payment_status', 'paid')
         .eq('delivery_type', 'to_me')
         .or('delivery_mode.is.null,delivery_mode.neq.pickup_station')
-        .in('status', ['confirmed', 'ordered', 'ordered_and_closed'])
-        .is('shipped_at', null)
+        .not('status', 'in', '(received,delivered,cancelled,canceled,closed)')
       if (orderError) throw orderError
 
       const userIds = Array.from(new Set((eligibleOrders ?? []).map((o: any) => o.user_id).filter(Boolean)))
