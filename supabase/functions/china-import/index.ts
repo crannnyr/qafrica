@@ -3186,7 +3186,7 @@ serve(async (req: Request) => {
         .eq('delivery_mode', 'home')
         .in('status', ['pending', 'confirmed', 'ordered', 'ordered_and_closed'])
         .order('created_at', { ascending: true })
-        .limit(100)
+        .limit(500)
       if (ordersError) return json({ error: ordersError.message }, 500)
       if (!orders?.length) return json({ success: true, queued: 0 })
 
