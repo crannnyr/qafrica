@@ -752,6 +752,14 @@ export default function ImporterDashboardPage() {
                           >
                             <Receipt className="w-3 h-3" /> Receipt
                           </button>
+                          {canSwitchToPickup(order) && (
+                            <button
+                              onClick={() => openPickupPicker(order)}
+                              className="flex items-center gap-1 text-[10px] font-bold text-gray-700 hover:text-orange-600"
+                            >
+                              <Store className="w-3 h-3" /> Switch to pickup
+                            </button>
+                          )}
                         </div>
                       </div>
                       {held && (
