@@ -146,6 +146,15 @@ function timeAgo(d: string) {
   return `${days}d ago`;
 }
 
+function canSwitchToPickup(order: DashboardOrder) {
+  return (
+    order.payment_status === 'paid' &&
+    order.delivery_type === 'to_me' &&
+    order.delivery_mode !== 'pickup_station' &&
+    !['received', 'delivered', 'cancelled', 'canceled', 'closed'].includes(String(order.status).toLowerCase())
+  );
+}
+
 // Which pipeline tab a bank icon-grid tile is
 type PipelineTab = 'to_pay' | 'confirmed' | 'billed' | 'shipped' | 'to_receive' | 'refund' | 'custom';
 
@@ -184,12 +193,6 @@ export default function ImporterDashboardPage() {
   const [pickupSaving, setPickupSaving] = useState(false);
   const [pickupError, setPickupError] = useState('');
   const [pickupSuccess, setPickupSuccess] = useState('');
-
-  const canSwitchToPickup = (order: DashboardOrder) =>
-    order.payment_status === 'paid' &&
-    order.delivery_type === 'to_me' &&
-    order.delivery_mode !== 'pickup_station' &&
-    !['received', 'delivered', 'cancelled', 'canceled', 'closed'].includes(String(order.status).toLowerCase());
 
   const eligiblePickupOrders = orders.filter(canSwitchToPickup);
 
