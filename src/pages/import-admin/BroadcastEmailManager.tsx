@@ -109,7 +109,7 @@ const TEMPLATES: Template[] = [
 </ol>
 <div style="background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 10px 10px 0;padding:14px 16px;margin-bottom:20px;">
   <p style="margin:0;color:#374151;font-size:13px;line-height:1.6;">
-    We recommend choosing a station that is convenient for you to reach. If your order has already shipped, the delivery destination can no longer be changed from the dashboard.
+    Choose a station that is convenient for you to reach. Even if your order has already shipped, you can still switch it to a Jumia pickup station as long as the order is still active. Completed, delivered, cancelled, or closed orders cannot be changed.
   </p>
 </div>
 <a href="https://qafrica.store/importations/dashboard" style="display:inline-block;background:#111827;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;font-size:14px;font-weight:700;">
