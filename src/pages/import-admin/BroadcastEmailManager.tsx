@@ -235,7 +235,7 @@ export default function BroadcastEmailManager({ token }: { token: string }) {
         </div>
         <p className="text-[11px] text-gray-400 mt-2">
           {audience === 'pickup_recommendation'
-            ? 'Only customers with a paid, non-pickup order that has not shipped yet.'
+            ? 'Only customers with a paid, active, non-pickup order.'
             : 'Every import customer with an email on file.'}
         </p>
       </div>
