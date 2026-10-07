@@ -8,7 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
   Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
-  ShoppingBag, Ship, ExternalLink, ChevronDown, Heart,
+  ShoppingBag, Ship, ExternalLink, ChevronDown, Heart, Search,
   FileText, ShieldCheck, Navigation, MailWarning, Sparkles, Plus, History,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
