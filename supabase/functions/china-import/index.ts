@@ -3074,125 +3074,33 @@ serve(async (req: Request) => {
       return json({ success: true, queued, recipients: userIds.length, skipped_unpaid: skippedUnpaid })
     }
 
-    // Customer switches an eligible paid order from home delivery to a Jumia pickup station.
-    // Only orders that have not shipped can be changed; this prevents changing the
-    // destination after fulfilment has already been handed to a carrier.
-    if (req.method === 'POST' && action === 'switch-order-to-pickup') {
-      const { customer_id, order_id, pickup_station_id } = await req.json()
-      if (!customer_id || !order_id || !pickup_station_id) {
-        return json({ error: 'Missing customer_id, order_id, or pickup_station_id' }, 400)
-      }
-
-      const { data: order, error: orderErr } = await supabase
-        .from('china_import_orders')
-        .select('id, user_id, code, status, payment_status, delivery_type, delivery_mode, delivery_address, shipped_at')
-        .eq('id', order_id)
-        .eq('user_id', customer_id)
-        .maybeSingle()
-      if (orderErr || !order) return json({ error: 'Order not found' }, 404)
-      if (order.payment_status !== 'paid') return json({ error: 'Only paid orders can be updated.' }, 409)
-      if (order.delivery_type !== 'to_me') return json({ error: 'This order is not using customer delivery.' }, 409)
-      if (order.delivery_mode === 'pickup_station') return json({ success: true, already_updated: true, order })
-      if (['received', 'delivered', 'cancelled', 'canceled', 'closed'].includes(String(order.status).toLowerCase())) {
-        return json({ error: 'This order is no longer active and cannot change its delivery destination.' }, 409)
-      }
-
-      const { data: station, error: stationErr } = await supabase
-        .from('pickup_stations')
-        .select('id, name, address, is_active')
-        .eq('id', pickup_station_id)
-        .maybeSingle()
-      if (stationErr || !station || !station.is_active) {
-        return json({ error: 'That Jumia pickup station is no longer available. Please choose another station.' }, 409)
-      }
-
-      let deliveryAddress = order.delivery_address && typeof order.delivery_address === 'object'
-        ? { ...(order.delivery_address as Record<string, unknown>) }
-        : {}
-      if (!String(deliveryAddress.name ?? '').trim() || !String(deliveryAddress.phone ?? '').trim()) {
-        const { data: customer } = await supabase.from('customers').select('full_name, phone').eq('id', customer_id).maybeSingle()
-        if (!String(deliveryAddress.name ?? '').trim() && customer?.full_name) deliveryAddress.name = customer.full_name
-        if (!String(deliveryAddress.phone ?? '').trim() && customer?.phone) deliveryAddress.phone = customer.phone
-      }
-      if (!String(deliveryAddress.name ?? '').trim() || !String(deliveryAddress.phone ?? '').trim()) {
-        return json({ error: 'Please update your name and phone number before switching this order to pickup.' }, 400)
-      }
-
-      const { data: updated, error: updateErr } = await supabase
-        .from('china_import_orders')
-        .update({
-          delivery_mode: 'pickup_station',
-          pickup_station_id: station.id,
-          pickup_station_name: station.name,
-          pickup_station_address: station.address,
-          address_id: null,
-          delivery_address: deliveryAddress,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', order_id)
-        .eq('user_id', customer_id)
-        .select('id, code, status, payment_status, payment_method, total_ngn, subtotal_ngn, jumia_fee_ngn, prepaid_shipping_ngn, delivery_type, items, created_at, delivery_mode, pickup_station_id, pickup_station_name, pickup_station_address, shipping_method, delivery_address, restored_at')
-        .single()
-      if (updateErr) return json({ error: updateErr.message }, 500)
-      return json({ success: true, order: updated })
-    }
-
-    async function getBroadcastRecipients(audience: string) {
-      if (audience !== 'pickup_recommendation') {
-        const { data, error } = await supabase
-          .from('customers')
-          .select('id, email, full_name')
-          .eq('signup_source', 'importation')
-          .not('email', 'is', null)
-        if (error) throw error
-        return (data ?? []).filter((c: any) => !!c.email)
-      }
-
-      const { data: eligibleOrders, error: orderError } = await supabase
-        .from('china_import_orders')
-        .select('user_id')
-        .eq('payment_status', 'paid')
-        .eq('delivery_type', 'to_me')
-        .or('delivery_mode.is.null,delivery_mode.neq.pickup_station')
-        .not('status', 'in', '(received,delivered,cancelled,canceled,closed)')
-      if (orderError) throw orderError
-
-      const userIds = Array.from(new Set((eligibleOrders ?? []).map((o: any) => o.user_id).filter(Boolean)))
-      if (userIds.length === 0) return []
-
-      const { data: customers, error: customerError } = await supabase
-        .from('customers')
-        .select('id, email, full_name')
-        .in('id', userIds)
-        .not('email', 'is', null)
-      if (customerError) throw customerError
-      return (customers ?? []).filter((c: any) => !!c.email)
-    }
-
     if (req.method === 'POST' && action === 'admin-broadcast-audience-count') {
-      const { manager_token, audience = 'all_import' } = await req.json()
+      const { manager_token } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.broadcast.view'))) return json({ error: 'Unauthorized' }, 401)
-      try {
-        const recipients = await getBroadcastRecipients(audience)
-        return json({ count: recipients.length })
-      } catch (error: any) {
-        return json({ error: error?.message ?? 'Could not load audience' }, 500)
-      }
+
+      const { count, error } = await supabase
+        .from('customers')
+        .select('id', { count: 'exact', head: true })
+        .eq('signup_source', 'importation')
+        .not('email', 'is', null)
+      if (error) return json({ error: error.message }, 500)
+      return json({ count: count ?? 0 })
     }
 
     if (req.method === 'POST' && action === 'admin-send-broadcast') {
-      const { manager_token, subject, html, audience = 'all_import' } = await req.json()
+      const { manager_token, subject, html } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.broadcast.send'))) return json({ error: 'Unauthorized' }, 401)
       if (!subject || typeof subject !== 'string' || !subject.trim()) return json({ error: 'Missing subject' }, 400)
       if (!html || typeof html !== 'string' || !html.trim()) return json({ error: 'Missing html body' }, 400)
 
-      let recipients: any[]
-      try {
-        recipients = await getBroadcastRecipients(audience)
-      } catch (error: any) {
-        return json({ error: error?.message ?? 'Could not load audience' }, 500)
-      }
+      const { data: customers, error } = await supabase
+        .from('customers')
+        .select('id, email, full_name')
+        .eq('signup_source', 'importation')
+        .not('email', 'is', null)
+      if (error) return json({ error: error.message }, 500)
 
+      const recipients = (customers ?? []).filter((c: any) => !!c.email)
       let queued = 0
       for (const c of recipients) {
         const personalizedHtml = emailShell(personalizeBroadcast(html, c.full_name ?? 'there'))
