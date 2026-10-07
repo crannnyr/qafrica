@@ -3250,7 +3250,7 @@ serve(async (req: Request) => {
         .select('*')
         .eq('status', 'pending')
         .order('created_at', { ascending: true })
-        .limit(25)
+        .limit(500)
       if (error) return json({ error: error.message }, 500)
       if (!pending || pending.length === 0) return json({ processed: 0 })
 
