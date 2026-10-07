@@ -9,7 +9,7 @@ import {
   ChevronLeft, RefreshCw, Settings, Clock, CreditCard, CheckCircle2,
   Receipt, PackageCheck, RotateCcw, MapPin, Headset, Info, X, Loader,
   ShoppingBag, Ship, ExternalLink, ChevronDown, Heart,
-  FileText, ShieldCheck, Navigation, MailWarning, Sparkles, Plus,
+  FileText, ShieldCheck, Navigation, MailWarning, Sparkles, Plus, History,
 } from 'lucide-react';
 import CONFIG from '@/lib/config';
 import { useCustomerAuthStore } from '@/stores';
@@ -132,7 +132,7 @@ function timeAgo(d: string) {
 }
 
 // Which pipeline tab a bank icon-grid tile is
-type PipelineTab = 'to_pay' | 'confirmed' | 'billed' | 'shipped' | 'to_receive' | 'refund' | 'custom';
+type PipelineTab = 'to_pay' | 'confirmed' | 'billed' | 'shipped' | 'to_receive' | 'refund' | 'custom' | 'history';
 
 export default function ImporterDashboardPage() {
   useImportPwaManifest();
@@ -331,6 +331,7 @@ export default function ImporterDashboardPage() {
     { key: 'to_receive', label: 'To Receive', icon: PackageCheck, count: toReceiveOrders.length },
     { key: 'refund', label: 'Refund', icon: RotateCcw, count: pendingRefundsCount },
     { key: 'custom', label: 'Custom', icon: Sparkles, count: customOrderRequests.filter(r => r.status === 'ready').length },
+    { key: 'history', label: 'Order History', icon: History, count: 0 },
   ];
 
   const avatarBg = fallbackAvatarColor(customer?.id ?? 'x');
@@ -853,6 +854,95 @@ export default function ImporterDashboardPage() {
             )}
           </section>
         )}
+
+        {activeTab === 'history' && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-bold text-gray-800 text-sm">Order History</h2>
+              <span className="text-[10px] text-gray-400">
+                {orders.length} order{orders.length === 1 ? '' : 's'}
+              </span>
+            </div>
+
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse h-24" />
+                ))}
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
+                <History className="w-7 h-7 text-gray-200 mx-auto mb-2" />
+                <p className="text-xs text-gray-400">You don't have any orders yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {orders.map(order => {
+                  const statusLabel =
+                    order.status === 'pending' ? 'Pending' :
+                    order.status === 'confirmed' ? 'Confirmed' :
+                    order.status === 'ordered' ? 'Ordered' :
+                    order.status === 'ordered_and_closed' ? 'Ordered' :
+                    order.status === 'shipped_and_closed' ? 'Shipped' :
+                    order.status === 'clearance_and_closed' ? 'Clearance' :
+                    order.status === 'received' ? 'Received' :
+                    order.status;
+
+                  const statusClass =
+                    order.status === 'received' ? 'bg-emerald-50 text-emerald-700' :
+                    order.status === 'shipped_and_closed' || order.status === 'clearance_and_closed' ? 'bg-blue-50 text-blue-700' :
+                    order.status === 'confirmed' || order.status === 'ordered' || order.status === 'ordered_and_closed' ? 'bg-amber-50 text-amber-700' :
+                    'bg-gray-100 text-gray-500';
+
+                  return (
+                    <div key={order.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                      <div className="p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-bold text-gray-800 font-mono text-xs tracking-wider">{order.code}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusClass}`}>
+                                {statusLabel}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-gray-400">
+                              {new Date(order.created_at).toLocaleDateString()} · {order.items?.length ?? 0} item{(order.items?.length ?? 0) === 1 ? '' : 's'}
+                            </p>
+                          </div>
+                          <span className="font-black text-gray-900 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                        </div>
+
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-gray-400">
+                            {order.payment_status === 'paid' ? 'Paid' :
+                             order.payment_status === 'awaiting_confirmation' ? 'Payment confirming' :
+                             order.payment_status === 'failed' ? 'Payment failed' : 'Payment pending'}
+                          </span>
+                          <button
+                            onClick={() => toggleExpanded(order.id)}
+                            className="text-[10px] font-bold text-orange-500 hover:text-orange-600"
+                          >
+                            {expandedOrderIds.has(order.id) ? 'Hide items' : 'View items'}
+                          </button>
+                        </div>
+
+                        {expandedOrderIds.has(order.id) && (
+                          <OrderItemsDropdown
+                            order={order}
+                            isExpanded={true}
+                            onToggle={() => toggleExpanded(order.id)}
+                            compact
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
 
         {/* ── Failed orders — expired unpaid orders, kept for reference ──── */}
         {failedOrders.length > 0 && activeTab === 'to_pay' && (
