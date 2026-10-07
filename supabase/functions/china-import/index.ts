@@ -3607,6 +3607,79 @@ serve(async (req: Request) => {
       return json({ order: restored })
     }
 
+    // Customer changes an existing home-delivery order to a Jumia pickup station.
+    // The order remains owned by the authenticated customer; this only changes
+    // the delivery destination and never changes price, payment, items, or shipping method.
+    if (req.method === 'POST' && action === 'change-order-delivery') {
+      const { customer_id, order_id, pickup_station_id } = await req.json()
+      if (!customer_id || !order_id || !pickup_station_id) return json({ error: 'Missing customer_id, order_id, or pickup_station_id' }, 400)
+
+      const { data: order, error: findErr } = await supabase
+        .from('china_import_orders')
+        .select('id, user_id, status, delivery_type, delivery_mode, delivery_address, shipping_method')
+        .eq('id', order_id)
+        .eq('user_id', customer_id)
+        .maybeSingle()
+      if (findErr || !order) return json({ error: 'Order not found' }, 404)
+      if (order.delivery_type !== 'to_me') return json({ error: 'This order does not use customer delivery.' }, 409)
+      if (['shipped_and_closed', 'clearance_and_closed', 'received'].includes(order.status)) {
+        return json({ error: 'This order can no longer change its delivery destination.' }, 409)
+      }
+
+      const { data: deliverySettings } = await supabase
+        .from('import_admin_credentials')
+        .select('pickup_station_delivery_enabled')
+        .eq('id', 1)
+        .single()
+      if (deliverySettings?.pickup_station_delivery_enabled === false) {
+        return json({ error: 'Jumia pickup station delivery is currently unavailable.' }, 409)
+      }
+
+      const { data: station, error: stationErr } = await supabase
+        .from('pickup_stations')
+        .select('id, name, address, is_active')
+        .eq('id', pickup_station_id)
+        .maybeSingle()
+      if (stationErr || !station || !station.is_active) {
+        return json({ error: 'That pickup station is no longer available. Please pick another.' }, 400)
+      }
+
+      let deliveryAddress = order.delivery_address as Record<string, unknown> | null
+      if (!deliveryAddress?.name || !deliveryAddress?.phone) {
+        const { data: customer } = await supabase.from('customers').select('full_name, phone').eq('id', customer_id).maybeSingle()
+        deliveryAddress = {
+          ...(deliveryAddress ?? {}),
+          name: deliveryAddress?.name || customer?.full_name || '',
+          phone: deliveryAddress?.phone || customer?.phone || '',
+        }
+      }
+      if (!String(deliveryAddress?.name ?? '').trim() || !String(deliveryAddress?.phone ?? '').trim()) {
+        return json({ error: 'Your order is missing a name or phone number. Please update your delivery details first.' }, 400)
+      }
+
+      const { data: updated, error: updateErr } = await supabase
+        .from('china_import_orders')
+        .update({
+          delivery_mode: 'pickup_station',
+          pickup_station_id: station.id,
+          pickup_station_name: station.name,
+          pickup_station_address: station.address,
+          delivery_address: {
+            name: String(deliveryAddress.name).trim(),
+            phone: String(deliveryAddress.phone).trim(),
+          },
+          address_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', order_id)
+        .eq('user_id', customer_id)
+        .select('id, code, status, payment_status, payment_method, total_ngn, subtotal_ngn, delivery_type, items, created_at, delivery_mode, pickup_station_id, pickup_station_name, pickup_station_address, shipping_method, delivery_address, restored_at')
+        .single()
+      if (updateErr) return json({ error: updateErr.message }, 500)
+
+      return json({ success: true, order: updated })
+    }
+
     // Customer sets shipping method (+ delivery address or pickup station)
     // on an order that's missing it — the only route into this today is a
     // restored order, but it's written generically against "any order
