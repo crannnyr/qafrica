@@ -67,6 +67,12 @@ async function requireManager(db: any, token: unknown, permissionKey: string) {
 
 const PRODUCT_SELECT = 'id, name, description, image_url, image_urls, price_cny, price_cny_original, price_ngn, price_usd, cost_ngn, price_input_currency, price_input_amount, category, parent_category, category_id, subcategory_id, markup_percent, markup_amount_ngn, original_price_usd, usd_to_ngn_rate, sea_shipping_allocation_ngn, sea_shipping_customer_ngn, air_shipping_customer_ngn, volume_cbm, weight_grams, sea_shipping_cost_ngn, flight_shipping_cost_ngn, is_active, moq, has_variants, variants, delivery_time, source_url, ship_only, express_air_cargo, sort_order, units_sold, is_trending, trending_order, trending_source, created_at, updated_at'
 
+function canonicalVariantKey(value: Record<string, unknown> | null | undefined) {
+  return JSON.stringify(
+    Object.entries(value ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
 function cleanText(value: unknown, fallback = '') {
   return typeof value === 'string' ? value.trim() : fallback
 }
@@ -244,7 +250,7 @@ serve(async (req) => {
     if (inventoryError) return json({ error: inventoryError.message }, 500)
 
     const stockMap = new Map((inventory ?? []).map((row: any) => [
-      JSON.stringify(row.variant_options ?? {}),
+      canonicalVariantKey(row.variant_options),
       row,
     ]))
 
@@ -266,7 +272,7 @@ serve(async (req) => {
       mode: 'product',
       product,
       variants: combinations.map((variant_options: Record<string, string>) => {
-        const stock = stockMap.get(JSON.stringify(variant_options))
+        const stock = stockMap.get(canonicalVariantKey(variant_options))
         return {
           variant_options,
           variant_label: Object.keys(variant_options).length
@@ -405,7 +411,7 @@ serve(async (req) => {
     }))
 
     const stockMap = new Map((inventory ?? []).map((row: any) => [
-      row.product_id + '|' + JSON.stringify(row.variant_options ?? {}),
+      row.product_id + '|' + canonicalVariantKey(row.variant_options),
       row,
     ]))
 
@@ -423,7 +429,7 @@ serve(async (req) => {
         : [{}]
 
       return combinations.map((variant_options: Record<string, string>) => {
-        const stock = stockMap.get(product.id + '|' + JSON.stringify(variant_options))
+        const stock = stockMap.get(product.id + '|' + canonicalVariantKey(variant_options))
         return {
           ...product,
           variant_options,
@@ -639,7 +645,7 @@ serve(async (req) => {
     const customerMap = new Map((customers ?? []).map((row: any) => [row.id, row]))
     const batchMap = new Map((batches ?? []).map((row: any) => [row.id, row]))
     const inventoryMap = new Map((inventory ?? []).map((row: any) => [
-      row.product_id + '|' + JSON.stringify(row.variant_options ?? {}),
+      row.product_id + '|' + canonicalVariantKey(row.variant_options),
       Number(row.quantity ?? 0),
     ]))
 
@@ -675,7 +681,7 @@ serve(async (req) => {
           batch_opened_at: batch?.opened_at ?? null,
           order_status: order?.status ?? null,
           shipping_method: order?.shipping_method ?? null,
-          stock_quantity: Number(inventoryMap.get(row.product_id + '|' + JSON.stringify(row.variant_options ?? {})) ?? 0),
+          stock_quantity: Number(inventoryMap.get(row.product_id + '|' + canonicalVariantKey(row.variant_options)) ?? 0),
         }
       })
 
