@@ -74,7 +74,13 @@ type ReceiptReceiveResult = {
 
 type ReceivingResult = ProductReceiveResult | ReceiptReceiveResult;
 
-const variantKey = (row: InventoryRow) => row.id + '|' + JSON.stringify(row.variant_options ?? {});
+function canonicalVariantKey(value: Record<string, unknown> | null | undefined) {
+  return JSON.stringify(
+    Object.entries(value ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
+const variantKey = (row: InventoryRow) => row.id + '|' + canonicalVariantKey(row.variant_options);
 
 export default function ImportAdminV2Inventory() {
   const [rows, setRows] = useState<InventoryRow[]>([]);
@@ -150,7 +156,7 @@ export default function ImportAdminV2Inventory() {
         setReceivingResult(product);
         setReceiptQuantity('');
         const initialDrafts = Object.fromEntries(product.variants.map((variant, index) => [
-          JSON.stringify(variant.variant_options ?? {}) + '|' + index,
+          canonicalVariantKey(variant.variant_options) + '|' + index,
           '',
         ]));
         setProductReceiveDrafts(initialDrafts);
@@ -186,7 +192,7 @@ export default function ImportAdminV2Inventory() {
     }
     const lines = receivingResult.variants.map((variant, index) => ({
       variant_options: variant.variant_options ?? {},
-      quantity: Number(productReceiveDrafts[JSON.stringify(variant.variant_options ?? {}) + '|' + index] || 0),
+      quantity: Number(productReceiveDrafts[canonicalVariantKey(variant.variant_options) + '|' + index] || 0),
     })).filter(line => Number.isInteger(line.quantity) && line.quantity > 0);
 
     if (!lines.length) {
