@@ -3160,6 +3160,91 @@ serve(async (req: Request) => {
       return json({ template: data })
     }
 
+    if (req.method === 'POST' && action === 'scan-pickup-recommendations') {
+      // Automatically recommend Jumia pickup for active home-delivery orders.
+      // The notification log makes this idempotent: each order is recommended once.
+      const { data: pickupSettings } = await supabase
+        .from('import_admin_credentials')
+        .select('pickup_station_delivery_enabled')
+        .eq('id', 1)
+        .single()
+      if (!pickupSettings?.pickup_station_delivery_enabled) {
+        return json({ success: true, queued: 0, reason: 'pickup_station_delivery_disabled' })
+      }
+
+      const { count: stationCount } = await supabase
+        .from('pickup_stations')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true)
+      if (!stationCount) {
+        return json({ success: true, queued: 0, reason: 'no_active_pickup_stations' })
+      }
+
+      const { data: orders, error: ordersError } = await supabase
+        .from('china_import_orders')
+        .select('id, user_id, status, delivery_type, delivery_mode')
+        .eq('delivery_type', 'to_me')
+        .or('delivery_mode.is.null,delivery_mode.eq.home')
+        .in('status', ['pending', 'confirmed', 'ordered', 'ordered_and_closed'])
+        .order('created_at', { ascending: true })
+        .limit(100)
+      if (ordersError) return json({ error: ordersError.message }, 500)
+      if (!orders?.length) return json({ success: true, queued: 0 })
+
+      const userIds = [...new Set(orders.map((o: any) => o.user_id).filter(Boolean))]
+      const { data: customers, error: customersError } = await supabase
+        .from('customers')
+        .select('id, email, full_name')
+        .in('id', userIds)
+      if (customersError) return json({ error: customersError.message }, 500)
+
+      const customerById = new Map((customers ?? []).map((c: any) => [c.id, c]))
+      let queued = 0
+      let skipped = 0
+
+      for (const order of orders) {
+        const customer = customerById.get(order.user_id)
+        if (!customer?.email) {
+          skipped++
+          continue
+        }
+
+        const { error: logError } = await supabase
+          .from('china_import_customer_notification_log')
+          .insert({
+            notification_key: 'pickup_station_recommendation',
+            order_id: order.id,
+            notification_type: 'pickup_station_recommendation',
+          })
+        if (logError) {
+          if (logError.code === '23505') {
+            skipped++
+            continue
+          }
+          skipped++
+          continue
+        }
+
+        const ok = await queueTemplatedEmail(supabase, 'pickup_station_recommendation', customer.email, {
+          customer_name: customer.full_name ?? 'there',
+        })
+
+        if (!ok) {
+          await supabase
+            .from('china_import_customer_notification_log')
+            .delete()
+            .eq('order_id', order.id)
+            .eq('notification_key', 'pickup_station_recommendation')
+          skipped++
+          continue
+        }
+
+        queued++
+      }
+
+      return json({ success: true, queued, skipped, scanned: orders.length })
+    }
+
     if (req.method === 'POST' && action === 'process-notification-queue') {
       const { data: pending, error } = await supabase
         .from('import_notification_queue')
