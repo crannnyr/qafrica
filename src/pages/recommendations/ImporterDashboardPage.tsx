@@ -189,8 +189,7 @@ export default function ImporterDashboardPage() {
     order.payment_status === 'paid' &&
     order.delivery_type === 'to_me' &&
     order.delivery_mode !== 'pickup_station' &&
-    !order.shipped_at &&
-    ['confirmed', 'ordered', 'ordered_and_closed'].includes(order.status);
+    !['received', 'delivered', 'cancelled', 'canceled', 'closed'].includes(String(order.status).toLowerCase());
 
   const eligiblePickupOrders = orders.filter(canSwitchToPickup);
 
