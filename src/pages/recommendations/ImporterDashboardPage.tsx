@@ -860,7 +860,7 @@ export default function ImporterDashboardPage() {
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-bold text-gray-800 text-sm">Order History</h2>
               <span className="text-[10px] text-gray-400">
-                {orders.length} order{orders.length === 1 ? '' : 's'}
+                {orders.length + failedOrders.length} order{orders.length + failedOrders.length === 1 ? '' : 's'}
               </span>
             </div>
 
@@ -870,79 +870,113 @@ export default function ImporterDashboardPage() {
                   <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse h-24" />
                 ))}
               </div>
-            ) : orders.length === 0 ? (
+            ) : orders.length === 0 && failedOrders.length === 0 ? (
               <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center">
                 <History className="w-7 h-7 text-gray-200 mx-auto mb-2" />
                 <p className="text-xs text-gray-400">You don't have any orders yet.</p>
               </div>
             ) : (
               <div className="space-y-3">
-                {orders.map(order => {
-                  const statusLabel =
-                    order.status === 'pending' ? 'Pending' :
-                    order.status === 'confirmed' ? 'Confirmed' :
-                    order.status === 'ordered' ? 'Ordered' :
-                    order.status === 'ordered_and_closed' ? 'Ordered' :
-                    order.status === 'shipped_and_closed' ? 'Shipped' :
-                    order.status === 'clearance_and_closed' ? 'Clearance' :
-                    order.status === 'received' ? 'Received' :
-                    order.status;
-
-                  const statusClass =
-                    order.status === 'received' ? 'bg-emerald-50 text-emerald-700' :
-                    order.status === 'shipped_and_closed' || order.status === 'clearance_and_closed' ? 'bg-blue-50 text-blue-700' :
-                    order.status === 'confirmed' || order.status === 'ordered' || order.status === 'ordered_and_closed' ? 'bg-amber-50 text-amber-700' :
-                    'bg-gray-100 text-gray-500';
-
-                  return (
-                    <div key={order.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                      <div className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-bold text-gray-800 font-mono text-xs tracking-wider">{order.code}</span>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusClass}`}>
-                                {statusLabel}
-                              </span>
+                {[...orders.map(order => ({ type: 'order' as const, order })), ...failedOrders.map(failed => ({ type: 'failed' as const, failed }))]
+                  .sort((a, b) => new Date(a.type === 'order' ? a.order.created_at : a.failed.order_created_at).getTime() - new Date(b.type === 'order' ? b.order.created_at : b.failed.order_created_at).getTime())
+                  .reverse()
+                  .map(entry => {
+                    if (entry.type === 'failed') {
+                      const failed = entry.failed;
+                      return (
+                        <div key={failed.id} className="bg-white rounded-2xl border border-red-100 overflow-hidden">
+                          <div className="p-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-bold text-gray-500 font-mono text-xs tracking-wider">{failed.code}</span>
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-50 text-red-600">Expired / Failed</span>
+                                </div>
+                                <p className="text-[11px] text-gray-400">
+                                  {new Date(failed.order_created_at).toLocaleDateString()} · {failed.items?.length ?? 0} item{(failed.items?.length ?? 0) === 1 ? '' : 's'}
+                                </p>
+                              </div>
+                              <span className="font-black text-gray-700 text-sm flex-shrink-0">{fmt(failed.total_ngn)}</span>
                             </div>
-                            <p className="text-[11px] text-gray-400">
-                              {new Date(order.created_at).toLocaleDateString()} · {order.items?.length ?? 0} item{(order.items?.length ?? 0) === 1 ? '' : 's'}
-                            </p>
+                            <div className="mt-3 flex items-center justify-between gap-2">
+                              <span className="text-[10px] text-red-400">Payment was not confirmed before the order expired.</span>
+                              <button onClick={() => toggleExpanded(failed.id)} className="text-[10px] font-bold text-orange-500 hover:text-orange-600 flex-shrink-0">
+                                {expandedOrderIds.has(failed.id) ? 'Hide items' : 'View items'}
+                              </button>
+                            </div>
+                            {expandedOrderIds.has(failed.id) && (
+                              <div className="border-t border-gray-100 mt-3 pt-3 space-y-2">
+                                {(failed.items ?? []).map((item, i) => (
+                                  <div key={`${item.id}-${i}`} className="flex items-center gap-2.5 bg-gray-50 rounded-xl p-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[11px] font-medium text-gray-700 truncate">{item.name}</p>
+                                      <p className="text-[10px] text-gray-400">×{item.quantity}</p>
+                                    </div>
+                                    <p className="text-[11px] font-semibold text-gray-700">{fmt(item.price_ngn * item.quantity)}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <span className="font-black text-gray-900 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
                         </div>
+                      );
+                    }
 
-                        <div className="mt-3 flex items-center justify-between gap-2">
-                          <span className="text-[10px] text-gray-400">
-                            {order.payment_status === 'paid' ? 'Paid' :
-                             order.payment_status === 'awaiting_confirmation' ? 'Payment confirming' :
-                             order.payment_status === 'failed' ? 'Payment failed' : 'Payment pending'}
-                          </span>
-                          <button
-                            onClick={() => toggleExpanded(order.id)}
-                            className="text-[10px] font-bold text-orange-500 hover:text-orange-600"
-                          >
-                            {expandedOrderIds.has(order.id) ? 'Hide items' : 'View items'}
-                          </button>
+                    const order = entry.order;
+                    const statusLabel =
+                      order.status === 'pending' ? 'Pending' :
+                      order.status === 'confirmed' ? 'Confirmed' :
+                      order.status === 'ordered' ? 'Ordered' :
+                      order.status === 'ordered_and_closed' ? 'Ordered' :
+                      order.status === 'shipped_and_closed' ? 'Shipped' :
+                      order.status === 'clearance_and_closed' ? 'Clearance' :
+                      order.status === 'received' ? 'Received' :
+                      order.status;
+
+                    const statusClass =
+                      order.status === 'received' ? 'bg-emerald-50 text-emerald-700' :
+                      order.status === 'shipped_and_closed' || order.status === 'clearance_and_closed' ? 'bg-blue-50 text-blue-700' :
+                      order.status === 'confirmed' || order.status === 'ordered' || order.status === 'ordered_and_closed' ? 'bg-amber-50 text-amber-700' :
+                      'bg-gray-100 text-gray-500';
+
+                    return (
+                      <div key={order.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                        <div className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-gray-800 font-mono text-xs tracking-wider">{order.code}</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusClass}`}>{statusLabel}</span>
+                              </div>
+                              <p className="text-[11px] text-gray-400">
+                                {new Date(order.created_at).toLocaleDateString()} · {order.items?.length ?? 0} item{(order.items?.length ?? 0) === 1 ? '' : 's'}
+                              </p>
+                            </div>
+                            <span className="font-black text-gray-900 text-sm flex-shrink-0">{fmt(order.total_ngn)}</span>
+                          </div>
+
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <span className="text-[10px] text-gray-400">
+                              {order.payment_status === 'paid' ? 'Paid' :
+                               order.payment_status === 'awaiting_confirmation' ? 'Payment confirming' :
+                               order.payment_status === 'failed' ? 'Payment failed' : 'Payment pending'}
+                            </span>
+                            <button onClick={() => toggleExpanded(order.id)} className="text-[10px] font-bold text-orange-500 hover:text-orange-600">
+                              {expandedOrderIds.has(order.id) ? 'Hide items' : 'View items'}
+                            </button>
+                          </div>
+
+                          {expandedOrderIds.has(order.id) && (
+                            <OrderItemsDropdown order={order} isExpanded={true} onToggle={() => toggleExpanded(order.id)} compact />
+                          )}
                         </div>
-
-                        {expandedOrderIds.has(order.id) && (
-                          <OrderItemsDropdown
-                            order={order}
-                            isExpanded={true}
-                            onToggle={() => toggleExpanded(order.id)}
-                            compact
-                          />
-                        )}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             )}
           </section>
         )}
-
 
         {/* ── Failed orders — expired unpaid orders, kept for reference ──── */}
         {failedOrders.length > 0 && activeTab === 'to_pay' && (
