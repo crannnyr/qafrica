@@ -49,8 +49,6 @@ type OrderGroup = {
   items: FulfillmentItem[];
 };
 
-};
-
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-management`;
 
 function variantLabel(options: Record<string, unknown> | null) {
