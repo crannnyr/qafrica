@@ -510,7 +510,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
 
       {error && <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-3 text-xs">{error}</div>}
 
-      {fulfillmentTab === 'received' ? (
+      {fulfillmentTab === 'received' && (
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-white rounded-xl border border-gray-100 p-3">
@@ -612,7 +612,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           )}
         </div>
-      ) : fulfillmentTab === 'shipments' ? (
+            )}
+
+      {fulfillmentTab === 'shipments' && (
         <div className="space-y-3">
           <div>
             <div className="flex items-center justify-between gap-3">
@@ -692,7 +694,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               <p className="text-sm font-bold text-gray-700">{allShipments.length === 0 ? 'No shipments yet' : 'No matching shipments'}</p>
               <p className="text-xs text-gray-400 mt-1">{allShipments.length === 0 ? 'Create a shipment from Receiving after items arrive at QAfrica HQ.' : 'Try a different search or status filter.'}</p>
             </div>
-          ) : (
+          )}
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[860px] text-left">
