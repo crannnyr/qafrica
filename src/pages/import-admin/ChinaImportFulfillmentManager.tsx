@@ -59,12 +59,6 @@ function variantLabel(options: Record<string, unknown> | null) {
     .join(' · ');
 }
 
-function batchLabel(batch: BatchGroup) {
-  if (!batch.openedAt) return 'Batch';
-  const date = new Date(batch.openedAt);
-  return `Batch opened ${date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })} · ${date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
-}
-
 function sellerLabel(item: FulfillmentItem) {
   if (!item.seller_store_name) return null;
   return item.seller_store_slug ? `${item.seller_store_name} (/${item.seller_store_slug})` : item.seller_store_name;
@@ -305,18 +299,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       return bd - ad;
     });
   }, [filtered]);
-
-  const receivedOrders = useMemo(() => orders.filter(order => {
-    const ordered = order.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
-    const received = order.items.reduce((sum, item) => sum + item.received_quantity, 0);
-    return received > 0 && received < ordered;
-  }), [orders]);
-
-  const fullyReceivedOrders = useMemo(() => orders.filter(order => {
-    const ordered = order.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
-    const received = order.items.reduce((sum, item) => sum + item.received_quantity, 0);
-    return ordered > 0 && received >= ordered;
-  }), [orders]);
 
   const receive = async (item: FulfillmentItem) => {
     if (!item.product_id) {
