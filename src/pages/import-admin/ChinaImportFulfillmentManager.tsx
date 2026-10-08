@@ -694,7 +694,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               <p className="text-sm font-bold text-gray-700">{allShipments.length === 0 ? 'No shipments yet' : 'No matching shipments'}</p>
               <p className="text-xs text-gray-400 mt-1">{allShipments.length === 0 ? 'Create a shipment from Receiving after items arrive at QAfrica HQ.' : 'Try a different search or status filter.'}</p>
             </div>
-          )}
+          ) : (
             <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[860px] text-left">
