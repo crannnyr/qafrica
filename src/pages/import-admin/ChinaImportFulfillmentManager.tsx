@@ -768,7 +768,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           )}
         </div>
-      ) : (
+      )}
+
+      {fulfillmentTab === 'receiving' && (
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-2">
             <div className="bg-white rounded-xl border border-gray-100 p-3"><p className="text-[10px] text-gray-400 uppercase font-bold">Awaiting</p><p className="text-xl font-black text-gray-900">{awaitingCount}</p></div>
