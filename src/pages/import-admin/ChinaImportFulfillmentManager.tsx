@@ -816,7 +816,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                           <span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + statusClass}>{statusLabel}</span>
                         </div>
                         <p className="text-[10px] text-gray-500 mt-0.5 truncate">{order.customerName}{order.customerWhatsapp ? ' · ' + order.customerWhatsapp : ''}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{order.items.length} item line{order.items.length === 1 ? '' : 's'} · {summary.received}/{summary.ordered} units received · {summary.remaining} remaining</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{order.items.length} item line{order.items.length === 1 ? '' : 's'} · {order.received}/{order.ordered} units received · {order.remaining} remaining</p>
                       </div>
                       {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
                     </button>
@@ -874,7 +874,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                         <div className="border-t border-gray-50 p-3 flex items-center justify-between gap-3">
                           <div>
                             <p className="text-[10px] text-gray-400">Order summary</p>
-                            <p className="text-xs font-bold text-gray-700">{summary.received} / {summary.ordered} units received</p>
+                            <p className="text-xs font-bold text-gray-700">{order.received} / {order.ordered} units received</p>
                           </div>
                           {available > 0 && (
                             <button
