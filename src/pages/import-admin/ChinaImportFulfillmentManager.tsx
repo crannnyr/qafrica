@@ -612,7 +612,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           )}
         </div>
-
+      )}
       {fulfillmentTab === 'shipments' && (
         <div className="space-y-3">
           <div>
