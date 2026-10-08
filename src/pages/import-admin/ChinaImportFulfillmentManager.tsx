@@ -85,7 +85,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [trackingDraft, setTrackingDraft] = useState({ carrier_name: '', tracking_number: '', tracking_url: '', waybill_url: '', delivery_mode: '', note: '' });
   const [shipmentUpdating, setShipmentUpdating] = useState(false);
   const [receiptShipment, setReceiptShipment] = useState<ShipmentReceiptData | null>(null);
-  const [fulfillmentTab, setFulfillmentTab] = useState<'receiving' | 'shipments'>('receiving');
+  const [fulfillmentTab, setFulfillmentTab] = useState<'receiving' | 'received' | 'shipments'>('receiving');
   const [allShipments, setAllShipments] = useState<any[]>([]);
   const [shipmentsLoading, setShipmentsLoading] = useState(false);
   const [shipmentQuery, setShipmentQuery] = useState('');
@@ -493,6 +493,14 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
 
         <button
           type="button"
+          onClick={() => setFulfillmentTab('received')}
+          className={fulfillmentTab === 'received' ? 'flex-1 py-2.5 rounded-lg text-sm font-bold bg-white text-gray-900 shadow-sm' : 'flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-500'}
+        >
+          Received
+        </button>
+
+        <button
+          type="button"
           onClick={() => setFulfillmentTab('shipments')}
           className={fulfillmentTab === 'shipments' ? 'flex-1 py-2.5 rounded-lg text-sm font-bold bg-white text-gray-900 shadow-sm' : 'flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-500'}
         >
@@ -502,7 +510,109 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
 
       {error && <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-3 text-xs">{error}</div>}
 
-      {fulfillmentTab === 'shipments' ? (
+      {fulfillmentTab === 'received' ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white rounded-xl border border-gray-100 p-3">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Received orders</p>
+              <p className="text-xl font-black text-gray-900">{orderSummaries.filter(order => order.received > 0).length}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Fully received</p>
+              <p className="text-xl font-black text-emerald-600">{orderSummaries.filter(order => order.status === 'fully_received').length}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Available to ship</p>
+              <p className="text-xl font-black text-orange-600">{orderSummaries.filter(order => order.items.some(item => item.received_quantity > item.allocated_quantity)).length}</p>
+            </div>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search received order, customer or item…"
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-orange-300 bg-white"
+            />
+          </div>
+
+          {orderSummaries.filter(order => order.received > 0).length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+              <PackageCheck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <p className="text-sm font-bold text-gray-700">No received orders yet</p>
+              <p className="text-xs text-gray-400 mt-1">Orders will appear here when inventory has been received for their fulfillment items.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {orderSummaries.filter(order => order.received > 0).map(order => {
+                const isOpen = openOrders.has(order.id);
+                const available = order.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+                const fullyReceived = order.status === 'fully_received';
+
+                return (
+                  <div key={order.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <div className="w-full p-4 flex items-center justify-between gap-3 text-left">
+                      <button
+                        type="button"
+                        onClick={() => setOpenOrders(current => {
+                          const next = new Set(current);
+                          if (next.has(order.id)) next.delete(order.id); else next.add(order.id);
+                          return next;
+                        })}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-xs font-black text-gray-900">{order.orderCode}</p>
+                          <span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + (fullyReceived ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+                            {fullyReceived ? 'Fully received' : 'Partially received'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-0.5 truncate">{order.customerName}{order.customerWhatsapp ? ' · ' + order.customerWhatsapp : ''}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{order.received}/{order.ordered} units received · {available} available to ship</p>
+                      </button>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {available > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => void openShipment(order.id)}
+                            className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold flex items-center gap-1.5"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            Create shipment
+                          </button>
+                        )}
+                        {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      </div>
+                    </div>
+
+                    {isOpen && (
+                      <div className="border-t border-gray-100 divide-y divide-gray-100">
+                        {order.items.map(item => {
+                          const availableItem = Math.max(0, item.received_quantity - item.allocated_quantity);
+                          return (
+                            <div key={item.id} className="p-4">
+                              <div className="flex gap-3">
+                                {item.image_url ? <img src={item.image_url} alt="" className="w-12 h-12 rounded-xl object-cover bg-gray-50 flex-shrink-0" /> : <div className="w-12 h-12 rounded-xl bg-gray-100 flex-shrink-0" />}
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-gray-900">{item.product_name}</p>
+                                  {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
+                                  <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {item.received_quantity} · Allocated {item.allocated_quantity} · Available {availableItem}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
         <div className="space-y-3">
           <div>
             <div className="flex items-center justify-between gap-3">
