@@ -49,6 +49,12 @@ type OrderGroup = {
   items: FulfillmentItem[];
 };
 
+type BatchGroup = {
+  id: string;
+  openedAt: string | null;
+  orders: ReturnType<typeof Object>;
+};
+
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-management`;
 
 function variantLabel(options: Record<string, unknown> | null) {
@@ -72,6 +78,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'awaiting_arrival' | 'partially_received' | 'fully_received'>('all');
   const [openOrders, setOpenOrders] = useState<Set<string>>(new Set());
+  const [openBatches, setOpenBatches] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [shipmentOrderId, setShipmentOrderId] = useState<string | null>(null);
@@ -443,6 +450,28 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     });
   }, [orders]);
 
+  const batchGroups = useMemo(() => {
+    const map = new Map<string, { id: string; openedAt: string | null; orders: typeof orderSummaries }>();
+    for (const order of orderSummaries) {
+      const batchKey = order.batchId ?? 'unassigned';
+      const existing = map.get(batchKey);
+      if (existing) {
+        existing.orders.push(order);
+      } else {
+        map.set(batchKey, {
+          id: batchKey,
+          openedAt: order.batchOpenedAt,
+          orders: [order],
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      const ad = new Date(a.openedAt ?? 0).getTime();
+      const bd = new Date(b.openedAt ?? 0).getTime();
+      return bd - ad;
+    });
+  }, [orderSummaries]);
+
   const awaitingCount = orderSummaries.filter(order => order.status === 'awaiting_arrival').length;
   const partialCount = orderSummaries.filter(order => order.status === 'partially_received').length;
   const fullyReceivedCount = orderSummaries.filter(order => order.status === 'fully_received').length;
@@ -781,113 +810,155 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               <p className="text-xs text-gray-400 mt-1">Only paid consolidation-shipping orders are included.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {orderSummaries
-                .filter(order => statusFilter === 'all' || order.status === statusFilter)
-                .map(order => {
-                const orderKey = order.id;
-                const isOpen = openOrders.has(orderKey);
-                const statusLabel = order.status === 'fully_received'
-                  ? 'Fully received'
-                  : order.status === 'partially_received'
-                    ? 'Partially received'
-                    : 'Awaiting arrival';
-                const statusClass = order.status === 'fully_received'
-                  ? 'bg-emerald-50 text-emerald-700'
-                  : order.status === 'partially_received'
-                    ? 'bg-amber-50 text-amber-700'
-                    : 'bg-gray-100 text-gray-500';
-                const available = order.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+            <div className="space-y-4">
+              {batchGroups.map(batch => {
+                const batchOpen = openBatches.has(batch.id);
+                const visibleOrders = batch.orders.filter(order => statusFilter === 'all' || order.status === statusFilter);
+                if (visibleOrders.length === 0) return null;
+                const batchOrdered = visibleOrders.reduce((sum, order) => sum + order.ordered, 0);
+                const batchReceived = visibleOrders.reduce((sum, order) => sum + order.received, 0);
+                const batchRemaining = visibleOrders.reduce((sum, order) => sum + order.remaining, 0);
+                const batchLabel = batch.id === 'unassigned' ? 'Unassigned batch' : `Batch ${batch.id}`;
 
                 return (
-                  <div key={orderKey} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                  <div key={batch.id} className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
                     <button
                       type="button"
-                      onClick={() => setOpenOrders(current => {
+                      onClick={() => setOpenBatches(current => {
                         const next = new Set(current);
-                        if (next.has(orderKey)) next.delete(orderKey); else next.add(orderKey);
+                        if (next.has(batch.id)) next.delete(batch.id); else next.add(batch.id);
                         return next;
                       })}
-                      className="w-full p-4 flex items-center justify-between gap-3 text-left"
+                      className="w-full p-4 flex items-center justify-between gap-3 text-left bg-white"
                     >
                       <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <p className="text-xs font-black text-gray-900">{order.orderCode}</p>
-                          <span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + statusClass}>{statusLabel}</span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-black text-gray-900">{batchLabel}</p>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700">
+                            {visibleOrders.length} order{visibleOrders.length === 1 ? '' : 's'}
+                          </span>
                         </div>
-                        <p className="text-[10px] text-gray-500 mt-0.5 truncate">{order.customerName}{order.customerWhatsapp ? ' · ' + order.customerWhatsapp : ''}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{order.items.length} item line{order.items.length === 1 ? '' : 's'} · {order.received}/{order.ordered} units received · {order.remaining} remaining</p>
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          {batch.openedAt ? `Opened ${new Date(batch.openedAt).toLocaleString()}` : 'Batch date unavailable'}
+                        </p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {batchReceived}/{batchOrdered} units received · {batchRemaining} remaining
+                        </p>
                       </div>
-                      {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                      {batchOpen ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
                     </button>
 
-                    {isOpen && (
-                      <>
-                        <div className="border-t border-gray-50 divide-y divide-gray-50">
-                          {order.items.map(item => {
-                            const currentReceived = item.received_quantity;
-                            const complete = currentReceived >= item.ordered_quantity;
-                            return (
-                              <div key={item.id} className="p-4">
-                                <div className="flex gap-3">
-                                  {item.image_url ? <img src={item.image_url} alt="" className="w-14 h-14 rounded-xl object-cover bg-gray-50 flex-shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-gray-100 flex-shrink-0" />}
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      <span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + (complete ? 'bg-emerald-50 text-emerald-600' : currentReceived > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500')}>
-                                        {complete ? 'Received' : currentReceived > 0 ? 'Partially received' : 'Awaiting arrival'}
-                                      </span>
+                    {batchOpen && (
+                      <div className="p-3 space-y-3">
+                        {visibleOrders.map(order => {
+                          const orderKey = order.id;
+                          const isOpen = openOrders.has(orderKey);
+                          const statusLabel = order.status === 'fully_received'
+                            ? 'Fully received'
+                            : order.status === 'partially_received'
+                              ? 'Partially received'
+                              : 'Awaiting arrival';
+                          const statusClass = order.status === 'fully_received'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : order.status === 'partially_received'
+                              ? 'bg-amber-50 text-amber-700'
+                              : 'bg-gray-100 text-gray-500';
+                          const available = order.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+
+                          return (
+                            <div key={orderKey} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => setOpenOrders(current => {
+                                  const next = new Set(current);
+                                  if (next.has(orderKey)) next.delete(orderKey); else next.add(orderKey);
+                                  return next;
+                                })}
+                                className="w-full p-4 flex items-center justify-between gap-3 text-left"
+                              >
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="text-xs font-black text-gray-900">{order.orderCode}</p>
+                                    <span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + statusClass}>{statusLabel}</span>
+                                  </div>
+                                  <p className="text-[10px] text-gray-500 mt-0.5 truncate">{order.customerName}{order.customerWhatsapp ? ' · ' + order.customerWhatsapp : ''}</p>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">{order.items.length} item line{order.items.length === 1 ? '' : 's'} · {order.received}/{order.ordered} units received · {order.remaining} remaining</p>
+                                </div>
+                                {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                              </button>
+
+                              {isOpen && (
+                                <>
+                                  <div className="border-t border-gray-50 divide-y divide-gray-50">
+                                    {order.items.map(item => {
+                                      const currentReceived = item.received_quantity;
+                                      const complete = currentReceived >= item.ordered_quantity;
+                                      return (
+                                        <div key={item.id} className="p-4">
+                                          <div className="flex gap-3">
+                                            {item.image_url ? <img src={item.image_url} alt="" className="w-14 h-14 rounded-xl object-cover bg-gray-50 flex-shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-gray-100 flex-shrink-0" />}
+                                            <div className="min-w-0 flex-1">
+                                              <div className="flex flex-wrap items-center gap-1.5">
+                                                <span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + (complete ? 'bg-emerald-50 text-emerald-600' : currentReceived > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500')}>
+                                                  {complete ? 'Received' : currentReceived > 0 ? 'Partially received' : 'Awaiting arrival'}
+                                                </span>
+                                              </div>
+                                              <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
+                                              {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
+                                              <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {currentReceived} · Remaining {Math.max(0, item.ordered_quantity - currentReceived)}</p>
+                                              {(sellerLabel(item) || item.seller_order_number) && (
+                                                <p className="text-[10px] text-gray-500 mt-1">
+                                                  {sellerLabel(item) ? `Seller store: ${sellerLabel(item)}` : ''}
+                                                  {item.seller_order_number ? `${sellerLabel(item) ? ' · ' : ''}Seller order: ${item.seller_order_number}` : ''}
+                                                </p>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {canReceive && !complete && (
+                                            <div className="mt-3 bg-gray-50 rounded-xl p-3">
+                                              <div className="flex items-center justify-between gap-3">
+                                                <div>
+                                                  <p className="text-[10px] font-bold text-gray-500 uppercase">Available inventory</p>
+                                                  <p className={"text-xs mt-0.5 font-bold " + (item.stock_quantity > 0 ? 'text-emerald-700' : 'text-red-500')}>{item.stock_quantity} unit{item.stock_quantity === 1 ? '' : 's'}</p>
+                                                </div>
+                                                <button onClick={() => void receive(item)} disabled={acting === item.id || item.stock_quantity <= 0} className="flex-1 max-w-[240px] py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40">
+                                                  {acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                                                  {item.stock_quantity > 0 ? 'Receive from inventory' : 'No stock available'}
+                                                </button>
+                                              </div>
+                                              <textarea value={notes[item.id] ?? ''} onChange={e => setNotes(current => ({ ...current, [item.id]: e.target.value }))} rows={2} placeholder="Optional internal note…" className="w-full mt-2 px-2.5 py-2 rounded-lg border border-gray-200 text-xs resize-none" />
+                                            </div>
+                                          )}
+                                          {!canReceive && !complete && <p className="text-[10px] text-gray-400 mt-3">You can view fulfillment, but your account cannot record receiving.</p>}
+                                          {item.received_at && <p className="text-[10px] text-gray-400 mt-2">Last received: {new Date(item.received_at).toLocaleString()}</p>}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <div className="border-t border-gray-50 p-3 flex items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-[10px] text-gray-400">Order summary</p>
+                                      <p className="text-xs font-bold text-gray-700">{order.received} / {order.ordered} units received</p>
                                     </div>
-                                    <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
-                                    {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
-                                    <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {currentReceived} · Remaining {Math.max(0, item.ordered_quantity - currentReceived)}</p>
-                                    {(sellerLabel(item) || item.seller_order_number) && (
-                                      <p className="text-[10px] text-gray-500 mt-1">
-                                        {sellerLabel(item) ? `Seller store: ${sellerLabel(item)}` : ''}
-                                        {item.seller_order_number ? `${sellerLabel(item) ? ' · ' : ''}Seller order: ${item.seller_order_number}` : ''}
-                                      </p>
+                                    {available > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void openShipment(order.id)}
+                                        className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"
+                                      >
+                                        <Truck className="w-3.5 h-3.5" />
+                                        Create shipment · {available} available
+                                      </button>
                                     )}
                                   </div>
-                                </div>
-
-                                {canReceive && !complete && (
-                                  <div className="mt-3 bg-gray-50 rounded-xl p-3">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div>
-                                        <p className="text-[10px] font-bold text-gray-500 uppercase">Available inventory</p>
-                                        <p className={"text-xs mt-0.5 font-bold " + (item.stock_quantity > 0 ? 'text-emerald-700' : 'text-red-500')}>{item.stock_quantity} unit{item.stock_quantity === 1 ? '' : 's'}</p>
-                                      </div>
-                                      <button onClick={() => void receive(item)} disabled={acting === item.id || item.stock_quantity <= 0} className="flex-1 max-w-[240px] py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40">
-                                        {acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                                        {item.stock_quantity > 0 ? 'Receive from inventory' : 'No stock available'}
-                                      </button>
-                                    </div>
-                                    <textarea value={notes[item.id] ?? ''} onChange={e => setNotes(current => ({ ...current, [item.id]: e.target.value }))} rows={2} placeholder="Optional internal note…" className="w-full mt-2 px-2.5 py-2 rounded-lg border border-gray-200 text-xs resize-none" />
-                                  </div>
-                                )}
-                                {!canReceive && !complete && <p className="text-[10px] text-gray-400 mt-3">You can view fulfillment, but your account cannot record receiving.</p>}
-                                {item.received_at && <p className="text-[10px] text-gray-400 mt-2">Last received: {new Date(item.received_at).toLocaleString()}</p>}
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <div className="border-t border-gray-50 p-3 flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] text-gray-400">Order summary</p>
-                            <p className="text-xs font-bold text-gray-700">{order.received} / {order.ordered} units received</p>
-                          </div>
-                          {available > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => void openShipment(order.id)}
-                              className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"
-                            >
-                              <Truck className="w-3.5 h-3.5" />
-                              Create shipment · {available} available
-                            </button>
-                          )}
-                        </div>
-                      </>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
                   </div>
                 );
