@@ -987,7 +987,7 @@ export default function ImporterDashboardPage() {
                                       : [order.delivery_address?.address_line1, order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ') || 'Home address'}
                                   </p>
                                 </div>
-                                {order.delivery_mode !== 'pickup_station' && !['shipped_and_closed', 'clearance_and_closed', 'received'].includes(order.status) && (
+                                {order.delivery_mode === 'home' && (
                                   <button
                                     onClick={() => setDeliveryOrder(order)}
                                     className="text-[10px] font-bold text-orange-500 hover:text-orange-600 shrink-0"
