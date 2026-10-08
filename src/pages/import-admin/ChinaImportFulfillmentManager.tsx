@@ -70,7 +70,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'awaiting_arrival' | 'at_qafrica_hq'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'awaiting_arrival' | 'partially_received' | 'fully_received'>('all');
   const [openOrders, setOpenOrders] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -267,7 +267,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return items.filter(item => {
-      if (statusFilter !== 'all' && item.status !== statusFilter) return false;
       if (!needle) return true;
       return [item.order_code, item.customer_name, item.product_name, variantLabel(item.variant_options)]
         .join(' ').toLowerCase().includes(needle);
@@ -763,7 +762,8 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)} className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white">
               <option value="all">All fulfillment</option>
               <option value="awaiting_arrival">Awaiting arrival</option>
-              <option value="at_qafrica_hq">At QAfrica HQ</option>
+              <option value="partially_received">Partially received</option>
+              <option value="fully_received">Fully received</option>
             </select>
             <button type="button" onClick={() => void load(true)} disabled={refreshing} className="px-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
               <RefreshCw className={refreshing ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
@@ -782,8 +782,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           ) : (
             <div className="space-y-3">
-              {orders.map(order => {
-                const summary = orderSummaries.find(row => row.id === order.id)!;
+              {orderSummaries
+                .filter(order => statusFilter === 'all' || order.status === statusFilter)
+                .map(order => {
                 const orderKey = order.id;
                 const isOpen = openOrders.has(orderKey);
                 const statusLabel = summary.status === 'fully_received'
