@@ -545,7 +545,17 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           ) : (
             <div className="space-y-3">
-              {orderSummaries.filter(order => order.received > 0).map(order => {
+              {[...orderSummaries]
+                .filter(order => order.received > 0)
+                .sort((a, b) => {
+                  const aAvailable = a.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+                  const bAvailable = b.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+                  const aGroup = aAvailable > 0 ? (a.status === 'fully_received' ? 0 : 1) : 2;
+                  const bGroup = bAvailable > 0 ? (b.status === 'fully_received' ? 0 : 1) : 2;
+                  if (aGroup !== bGroup) return aGroup - bGroup;
+                  return b.received - a.received;
+                })
+                .map(order => {
                 const isOpen = openOrders.has(order.id);
                 const available = order.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
                 const fullyReceived = order.status === 'fully_received';
@@ -795,9 +805,15 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
           ) : (
             <div className="space-y-3">
               {batchGroups.map(batch => {
-                const visibleOrders = batch.orders.filter(order =>
-                  statusFilter === 'all' || order.items.some(item => statusFilter === 'awaiting_arrival' ? item.received_quantity <= 0 : item.received_quantity > 0)
-                );
+                const visibleOrders = batch.orders
+                  .map(order => ({
+                    ...order,
+                    items: order.items.filter(item => item.received_quantity < item.ordered_quantity),
+                  }))
+                  .filter(order =>
+                    order.items.length > 0 &&
+                    (statusFilter === 'all' || order.items.some(item => statusFilter === 'awaiting_arrival' ? item.received_quantity <= 0 : item.received_quantity > 0))
+                  );
                 if (!visibleOrders.length) return null;
                 const batchItems = visibleOrders.flatMap(order => order.items);
                 const isOpen = openBatches.has(batch.id);
