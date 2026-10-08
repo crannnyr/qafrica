@@ -774,7 +774,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center">
               <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
             </div>
-          ) : batches.length === 0 ? (
+          ) : orderSummaries.length === 0 ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
               <PackageCheck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
               <p className="text-sm font-bold text-gray-700">No fulfillment items found</p>
@@ -787,14 +787,14 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                 .map(order => {
                 const orderKey = order.id;
                 const isOpen = openOrders.has(orderKey);
-                const statusLabel = summary.status === 'fully_received'
+                const statusLabel = order.status === 'fully_received'
                   ? 'Fully received'
-                  : summary.status === 'partially_received'
+                  : order.status === 'partially_received'
                     ? 'Partially received'
                     : 'Awaiting arrival';
-                const statusClass = summary.status === 'fully_received'
+                const statusClass = order.status === 'fully_received'
                   ? 'bg-emerald-50 text-emerald-700'
-                  : summary.status === 'partially_received'
+                  : order.status === 'partially_received'
                     ? 'bg-amber-50 text-amber-700'
                     : 'bg-gray-100 text-gray-500';
                 const available = order.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
