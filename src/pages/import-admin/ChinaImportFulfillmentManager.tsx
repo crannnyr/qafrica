@@ -38,9 +38,14 @@ type FulfillmentItem = {
   delivery_address: unknown;
 };
 
-type BatchGroup = {
+type OrderGroup = {
   id: string;
-  openedAt: string | null;
+  orderCode: string;
+  customerName: string;
+  customerWhatsapp: string | null;
+  customerEmail: string | null;
+  batchId: string | null;
+  batchOpenedAt: string | null;
   items: FulfillmentItem[];
 };
 
@@ -52,12 +57,6 @@ function variantLabel(options: Record<string, unknown> | null) {
     .filter(([, value]) => value !== null && value !== undefined && String(value).trim())
     .map(([key, value]) => `${key}: ${String(value)}`)
     .join(' · ');
-}
-
-function batchLabel(batch: BatchGroup) {
-  if (!batch.openedAt) return 'Batch';
-  const date = new Date(batch.openedAt);
-  return `Batch opened ${date.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })} · ${date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 function sellerLabel(item: FulfillmentItem) {
@@ -72,6 +71,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'awaiting_arrival' | 'at_qafrica_hq'>('all');
+  const [openOrders, setOpenOrders] = useState<Set<string>>(new Set());
   const [openBatches, setOpenBatches] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
@@ -85,7 +85,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [trackingDraft, setTrackingDraft] = useState({ carrier_name: '', tracking_number: '', tracking_url: '', waybill_url: '', delivery_mode: '', note: '' });
   const [shipmentUpdating, setShipmentUpdating] = useState(false);
   const [receiptShipment, setReceiptShipment] = useState<ShipmentReceiptData | null>(null);
-  const [fulfillmentTab, setFulfillmentTab] = useState<'receiving' | 'shipments'>('receiving');
+  const [fulfillmentTab, setFulfillmentTab] = useState<'receiving' | 'received' | 'shipments'>('receiving');
   const [allShipments, setAllShipments] = useState<any[]>([]);
   const [shipmentsLoading, setShipmentsLoading] = useState(false);
   const [shipmentQuery, setShipmentQuery] = useState('');
@@ -248,9 +248,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       if (!res.ok) throw new Error(data.error ?? 'Could not load fulfillment items');
       const next = Array.isArray(data.items) ? data.items as FulfillmentItem[] : [];
       setItems(next);
-      setOpenBatches(current => {
+      setOpenOrders(current => {
         if (current.size > 0) return current;
-        return new Set(next.slice(0, 1).map(item => item.batch_id ?? 'unbatched'));
+        return new Set(next.slice(0, 1).map(item => item.order_id));
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load fulfillment items');
@@ -268,24 +268,34 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return items.filter(item => {
-      if (statusFilter !== 'all' && item.status !== statusFilter) return false;
       if (!needle) return true;
       return [item.order_code, item.customer_name, item.product_name, variantLabel(item.variant_options)]
         .join(' ').toLowerCase().includes(needle);
     });
   }, [items, query, statusFilter]);
 
-  const batches = useMemo<BatchGroup[]>(() => {
-    const map = new Map<string, BatchGroup>();
+  const orders = useMemo<OrderGroup[]>(() => {
+    const map = new Map<string, OrderGroup>();
     for (const item of filtered) {
-      const id = item.batch_id ?? 'unbatched';
-      const existing = map.get(id);
-      if (existing) existing.items.push(item);
-      else map.set(id, { id, openedAt: item.batch_opened_at, items: [item] });
+      const existing = map.get(item.order_id);
+      if (existing) {
+        existing.items.push(item);
+      } else {
+        map.set(item.order_id, {
+          id: item.order_id,
+          orderCode: item.order_code,
+          customerName: item.customer_name,
+          customerWhatsapp: item.customer_whatsapp,
+          customerEmail: item.customer_email,
+          batchId: item.batch_id,
+          batchOpenedAt: item.batch_opened_at,
+          items: [item],
+        });
+      }
     }
     return Array.from(map.values()).sort((a, b) => {
-      const ad = a.openedAt ? new Date(a.openedAt).getTime() : 0;
-      const bd = b.openedAt ? new Date(b.openedAt).getTime() : 0;
+      const ad = Math.max(...a.items.map(item => new Date(item.received_at ?? item.batch_opened_at ?? 0).getTime()));
+      const bd = Math.max(...b.items.map(item => new Date(item.received_at ?? item.batch_opened_at ?? 0).getTime()));
       return bd - ad;
     });
   }, [filtered]);
@@ -420,8 +430,44 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     }
   };
 
-  const awaitingCount = items.filter(item => item.status === 'awaiting_arrival').length;
-  const hqCount = items.filter(item => item.status === 'at_qafrica_hq' || item.status === 'partially_allocated' || item.status === 'fully_allocated').length;
+  const orderSummaries = useMemo(() => {
+    return orders.map(order => {
+      const ordered = order.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
+      const received = order.items.reduce((sum, item) => sum + item.received_quantity, 0);
+      return {
+        ...order,
+        ordered,
+        received,
+        remaining: Math.max(0, ordered - received),
+        status: received >= ordered ? 'fully_received' : received > 0 ? 'partially_received' : 'awaiting_arrival',
+      };
+    });
+  }, [orders]);
+
+  const batchGroups = useMemo(() => {
+    const map = new Map<string, { id: string; openedAt: string | null; orders: typeof orderSummaries }>();
+    for (const order of orderSummaries) {
+      const batchKey = order.batchId ?? 'unassigned';
+      const existing = map.get(batchKey);
+      if (existing) {
+        existing.orders.push(order);
+      } else {
+        map.set(batchKey, {
+          id: batchKey,
+          openedAt: order.batchOpenedAt,
+          orders: [order],
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      const ad = new Date(a.openedAt ?? 0).getTime();
+      const bd = new Date(b.openedAt ?? 0).getTime();
+      return bd - ad;
+    });
+  }, [orderSummaries]);
+
+  const awaitingCount = items.filter(item => item.received_quantity <= 0).length;
+  const hqCount = items.filter(item => item.received_quantity > 0).length;
   const orderedUnits = items.reduce((sum, item) => sum + item.ordered_quantity, 0);
   const receivedUnits = items.reduce((sum, item) => sum + item.received_quantity, 0);
 
@@ -444,6 +490,15 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
         >
           Receiving
         </button>
+
+        <button
+          type="button"
+          onClick={() => setFulfillmentTab('received')}
+          className={fulfillmentTab === 'received' ? 'flex-1 py-2.5 rounded-lg text-sm font-bold bg-white text-gray-900 shadow-sm' : 'flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-500'}
+        >
+          Received
+        </button>
+
         <button
           type="button"
           onClick={() => setFulfillmentTab('shipments')}
@@ -455,7 +510,120 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
 
       {error && <div className="bg-red-50 border border-red-100 text-red-700 rounded-xl p-3 text-xs">{error}</div>}
 
-      {fulfillmentTab === 'shipments' ? (
+      {fulfillmentTab === 'received' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white rounded-xl border border-gray-100 p-3">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Received orders</p>
+              <p className="text-xl font-black text-gray-900">{orderSummaries.filter(order => order.received > 0).length}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Fully received</p>
+              <p className="text-xl font-black text-emerald-600">{orderSummaries.filter(order => order.status === 'fully_received').length}</p>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3">
+              <p className="text-[10px] text-gray-400 uppercase font-bold">Available to ship</p>
+              <p className="text-xl font-black text-orange-600">{orderSummaries.filter(order => order.items.some(item => item.received_quantity > item.allocated_quantity)).length}</p>
+            </div>
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+            <input
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search received order, customer or item…"
+              className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-orange-300 bg-white"
+            />
+          </div>
+
+          {orderSummaries.filter(order => order.received > 0).length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
+              <PackageCheck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+              <p className="text-sm font-bold text-gray-700">No received orders yet</p>
+              <p className="text-xs text-gray-400 mt-1">Orders will appear here when inventory has been received for their fulfillment items.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {[...orderSummaries]
+                .filter(order => order.received > 0)
+                .sort((a, b) => {
+                  const aAvailable = a.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+                  const bAvailable = b.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+                  const aGroup = aAvailable > 0 ? (a.status === 'fully_received' ? 0 : 1) : 2;
+                  const bGroup = bAvailable > 0 ? (b.status === 'fully_received' ? 0 : 1) : 2;
+                  if (aGroup !== bGroup) return aGroup - bGroup;
+                  return b.received - a.received;
+                })
+                .map(order => {
+                const isOpen = openOrders.has(order.id);
+                const available = order.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+                const fullyReceived = order.status === 'fully_received';
+
+                return (
+                  <div key={order.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <div className="w-full p-4 flex items-center justify-between gap-3 text-left">
+                      <button
+                        type="button"
+                        onClick={() => setOpenOrders(current => {
+                          const next = new Set(current);
+                          if (next.has(order.id)) next.delete(order.id); else next.add(order.id);
+                          return next;
+                        })}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <p className="text-xs font-black text-gray-900">{order.orderCode}</p>
+                          <span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + (fullyReceived ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
+                            {fullyReceived ? 'Fully received' : 'Partially received'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-gray-500 mt-0.5 truncate">{order.customerName}{order.customerWhatsapp ? ' · ' + order.customerWhatsapp : ''}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{order.received}/{order.ordered} units received · {available} available to ship</p>
+                      </button>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {available > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => void openShipment(order.id)}
+                            className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold flex items-center gap-1.5"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            Create shipment
+                          </button>
+                        )}
+                        {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      </div>
+                    </div>
+
+                    {isOpen && (
+                      <div className="border-t border-gray-100 divide-y divide-gray-100">
+                        {order.items.map(item => {
+                          const availableItem = Math.max(0, item.received_quantity - item.allocated_quantity);
+                          return (
+                            <div key={item.id} className="p-4">
+                              <div className="flex gap-3">
+                                {item.image_url ? <img src={item.image_url} alt="" className="w-12 h-12 rounded-xl object-cover bg-gray-50 flex-shrink-0" /> : <div className="w-12 h-12 rounded-xl bg-gray-100 flex-shrink-0" />}
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-bold text-gray-900">{item.product_name}</p>
+                                  {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
+                                  <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {item.received_quantity} · Allocated {item.allocated_quantity} · Available {availableItem}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      {fulfillmentTab === 'shipments' && (
         <div className="space-y-3">
           <div>
             <div className="flex items-center justify-between gap-3">
@@ -609,21 +777,14 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           )}
         </div>
-      ) : (
+      )}
+
+      {fulfillmentTab === 'receiving' && (
         <div className="space-y-4">
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-white rounded-xl border border-gray-100 p-3">
-              <p className="text-[10px] text-gray-400 uppercase font-bold">Awaiting</p>
-              <p className="text-xl font-black text-gray-900">{awaitingCount}</p>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-100 p-3">
-              <p className="text-[10px] text-gray-400 uppercase font-bold">At HQ</p>
-              <p className="text-xl font-black text-emerald-600">{hqCount}</p>
-            </div>
-            <div className="bg-white rounded-xl border border-gray-100 p-3">
-              <p className="text-[10px] text-gray-400 uppercase font-bold">Units received</p>
-              <p className="text-xl font-black text-gray-900">{receivedUnits.toLocaleString()}<span className="text-xs text-gray-400">/{orderedUnits.toLocaleString()}</span></p>
-            </div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3"><p className="text-[10px] text-gray-400 uppercase font-bold">Awaiting</p><p className="text-xl font-black text-gray-900">{awaitingCount}</p></div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3"><p className="text-[10px] text-gray-400 uppercase font-bold">At HQ</p><p className="text-xl font-black text-emerald-600">{hqCount}</p></div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3"><p className="text-[10px] text-gray-400 uppercase font-bold">Units received</p><p className="text-xl font-black text-gray-900">{receivedUnits.toLocaleString()}<span className="text-xs text-gray-400">/{orderedUnits.toLocaleString()}</span></p></div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2">
@@ -632,126 +793,103 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search order, customer or item…" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-orange-300 bg-white" />
             </div>
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)} className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white">
-              <option value="all">All fulfillment</option>
-              <option value="awaiting_arrival">Awaiting arrival</option>
-              <option value="at_qafrica_hq">At QAfrica HQ</option>
+              <option value="all">All fulfillment</option><option value="awaiting_arrival">Awaiting arrival</option><option value="at_qafrica_hq">At QAfrica HQ</option>
             </select>
-            <button type="button" onClick={() => void load(true)} disabled={refreshing} className="px-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50">
-              <RefreshCw className={refreshing ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh
-            </button>
+            <button type="button" onClick={() => void load(true)} disabled={refreshing} className="px-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><RefreshCw className={refreshing ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh</button>
           </div>
 
           {loading ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center">
-              <Loader2 className="w-5 h-5 animate-spin text-orange-500" />
-            </div>
-          ) : batches.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center">
-              <PackageCheck className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-              <p className="text-sm font-bold text-gray-700">No fulfillment items found</p>
-              <p className="text-xs text-gray-400 mt-1">Only paid consolidation-shipping orders are included.</p>
-            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+          ) : batchGroups.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center"><PackageCheck className="w-8 h-8 text-gray-200 mx-auto mb-2" /><p className="text-sm font-bold text-gray-700">No fulfillment items found</p><p className="text-xs text-gray-400 mt-1">Only paid consolidation-shipping orders are included.</p></div>
           ) : (
             <div className="space-y-3">
-              {batches.map(batch => {
-                const batchKey = batch.id;
-                const isOpen = openBatches.has(batchKey);
-                const batchOrdered = batch.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
-                const batchReceived = batch.items.reduce((sum, item) => sum + item.received_quantity, 0);
+              {batchGroups.map(batch => {
+                const visibleOrders = batch.orders
+                  .map(order => ({
+                    ...order,
+                    items: order.items.filter(item => item.received_quantity < item.ordered_quantity),
+                  }))
+                  .filter(order =>
+                    order.items.length > 0 &&
+                    (statusFilter === 'all' || order.items.some(item => statusFilter === 'awaiting_arrival' ? item.received_quantity <= 0 : item.received_quantity > 0))
+                  );
+                if (!visibleOrders.length) return null;
+                const batchItems = visibleOrders.flatMap(order => order.items);
+                const isOpen = openBatches.has(batch.id);
+                const batchOrdered = batchItems.reduce((sum, item) => sum + item.ordered_quantity, 0);
+                const batchReceived = batchItems.reduce((sum, item) => sum + item.received_quantity, 0);
+
                 return (
-                  <div key={batchKey} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                    <button onClick={() => setOpenBatches(current => {
-                      const next = new Set(current);
-                      if (next.has(batchKey)) next.delete(batchKey); else next.add(batchKey);
-                      return next;
-                    })} className="w-full p-4 flex items-center justify-between gap-3 text-left">
-                      <div>
-                        <p className="text-xs font-black text-gray-900">{batch.id === 'unbatched' ? 'Unbatched' : batchLabel(batch)}</p>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{batch.items.length} item line{batch.items.length === 1 ? '' : 's'} · {batchReceived}/{batchOrdered} units received</p>
+                  <div key={batch.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <button type="button" onClick={() => setOpenBatches(current => { const next = new Set(current); if (next.has(batch.id)) next.delete(batch.id); else next.add(batch.id); return next; })} className="w-full p-4 flex items-center justify-between gap-3 text-left">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-gray-900">{batch.openedAt ? `Batch opened ${new Date(batch.openedAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })} · ${new Date(batch.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Unassigned batch'}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{batchItems.length} item line{batchItems.length === 1 ? '' : 's'} · {batchReceived}/{batchOrdered} units received</p>
                       </div>
-                      {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
                     </button>
 
                     {isOpen && (
-                      <>
-                        <div className="border-t border-gray-50 divide-y divide-gray-50">
-                          {batch.items.map(item => {
-                            const currentReceived = item.received_quantity;
-                            const complete = currentReceived >= item.ordered_quantity;
-                            return (
-                              <div key={item.id} className="p-4">
-                                <div className="flex gap-3">
-                                  {item.image_url ? <img src={item.image_url} alt="" className="w-14 h-14 rounded-xl object-cover bg-gray-50 flex-shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-gray-100 flex-shrink-0" />}
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      <span className="text-[10px] font-mono font-bold text-orange-600">{item.order_code}</span>
-                                      <span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + (complete ? 'bg-emerald-50 text-emerald-600' : currentReceived > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500')}>
-                                        {complete ? 'At HQ' : currentReceived > 0 ? 'Partially received' : 'Awaiting arrival'}
-                                      </span>
-                                    </div>
-                                    <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
-                                    {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
-                                    <p className="text-[10px] text-gray-400 mt-1">{item.customer_name}{item.customer_whatsapp ? ' · ' + item.customer_whatsapp : ''} · Ordered {item.ordered_quantity}</p>
-                                    {(sellerLabel(item) || item.seller_order_number) && (
-                                      <p className="text-[10px] text-gray-500 mt-1">
-                                        {sellerLabel(item) ? `Seller store: ${sellerLabel(item)}` : ''}
-                                        {item.seller_order_number ? `${sellerLabel(item) ? ' · ' : ''}Seller order: ${item.seller_order_number}` : ''}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="mt-3 bg-gray-50 rounded-xl p-3">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <div>
-                                      <p className="text-[10px] font-bold text-gray-500 uppercase">Received at HQ</p>
-                                      <p className="text-xs text-gray-700 mt-0.5">{currentReceived} of {item.ordered_quantity} unit{item.ordered_quantity !== 1 ? 's' : ''}</p>
-                                    </div>
-                                    {complete && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
-                                  </div>
-                                  {canReceive && !complete && (
-                                    <>
-                                      <div className="flex items-center justify-between gap-3 mt-2">
-                                        <div>
-                                          <p className="text-[10px] font-bold text-gray-500 uppercase">Available inventory</p>
-                                          <p className={"text-xs mt-0.5 font-bold " + (item.stock_quantity > 0 ? 'text-emerald-700' : 'text-red-500')}>{item.stock_quantity} unit{item.stock_quantity === 1 ? '' : 's'}</p>
-                                        </div>
-                                        <button onClick={() => void receive(item)} disabled={acting === item.id || item.stock_quantity <= 0} className="flex-1 max-w-[240px] py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40">
-                                          {acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                                          {item.stock_quantity > 0 ? 'Receive from inventory' : 'No stock available'}
-                                        </button>
-                                      </div>
-                                      <p className="text-[10px] text-gray-400 mt-1">One tap receives up to the remaining order quantity and automatically deducts the same units from inventory.</p>
-                                      <textarea value={notes[item.id] ?? ''} onChange={e => setNotes(current => ({ ...current, [item.id]: e.target.value }))} rows={2} placeholder="Optional internal note…" className="w-full mt-2 px-2.5 py-2 rounded-lg border border-gray-200 text-xs resize-none" />
-                                    </>
-                                  )}
-                                  {!canReceive && !complete && <p className="text-[10px] text-gray-400 mt-2">You can view fulfillment, but your account cannot record receiving.</p>}
-                                  {item.received_at && <p className="text-[10px] text-gray-400 mt-2">Last received: {new Date(item.received_at).toLocaleString()}</p>}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {canReceive && Array.from(new Set(batch.items.map(item => item.order_id))).map(orderId => {
-                          const orderItem = batch.items.find(item => item.order_id === orderId);
-                          const available = batch.items
-                            .filter(item => item.order_id === orderId)
-                            .reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
-                          if (!orderItem || available <= 0) return null;
+                      <div className="border-t border-gray-50 p-3 space-y-3">
+                        {visibleOrders.map(order => {
+                          const isOrderOpen = openOrders.has(order.id);
+                          const orderReceived = order.items.reduce((sum, item) => sum + item.received_quantity, 0);
+                          const orderOrdered = order.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
+                          const available = order.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
                           return (
-                            <div key={orderId} className="border-t border-gray-50 p-3">
-                              <button
-                                onClick={() => void openShipment(orderId)}
-                                className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"
-                              >
-                                <Truck className="w-3.5 h-3.5" />
-                                Create shipment · {orderItem.order_code} · {available} available
+                            <div key={order.id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                              <button type="button" onClick={() => setOpenOrders(current => { const next = new Set(current); if (next.has(order.id)) next.delete(order.id); else next.add(order.id); return next; })} className="w-full p-3 flex items-center justify-between gap-3 text-left">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-1.5"><p className="text-xs font-black text-gray-900">{order.orderCode}</p><span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white text-gray-500">{order.items.length} line{order.items.length === 1 ? '' : 's'}</span></div>
+                                  <p className="text-[10px] text-gray-500 mt-0.5 truncate">{order.customerName}{order.customerWhatsapp ? ' · ' + order.customerWhatsapp : ''}</p>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">{orderReceived}/{orderOrdered} units received</p>
+                                </div>
+                                {isOrderOpen ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
                               </button>
+
+                              {isOrderOpen && (
+                                <>
+                                  <div className="border-t border-gray-100 divide-y divide-gray-100 bg-white">
+                                    {order.items.map(item => {
+                                      const complete = item.received_quantity >= item.ordered_quantity;
+                                      return (
+                                        <div key={item.id} className="p-4">
+                                          <div className="flex gap-3">
+                                            {item.image_url ? <img src={item.image_url} alt="" className="w-14 h-14 rounded-xl object-cover bg-gray-50 flex-shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-gray-100 flex-shrink-0" />}
+                                            <div className="min-w-0 flex-1">
+                                              <div className="flex flex-wrap items-center gap-1.5"><span className="text-[10px] font-mono font-bold text-orange-600">{item.order_code}</span><span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + (complete ? 'bg-emerald-50 text-emerald-600' : item.received_quantity > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500')}>{complete ? 'At HQ' : item.received_quantity > 0 ? 'Partially received' : 'Awaiting arrival'}</span></div>
+                                              <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
+                                              {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
+                                              <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {item.received_quantity} · Remaining {Math.max(0, item.ordered_quantity - item.received_quantity)}</p>
+                                              {(sellerLabel(item) || item.seller_order_number) && <p className="text-[10px] text-gray-500 mt-1">{sellerLabel(item) ? `Seller store: ${sellerLabel(item)}` : ''}{item.seller_order_number ? `${sellerLabel(item) ? ' · ' : ''}Seller order: ${item.seller_order_number}` : ''}</p>}
+                                            </div>
+                                          </div>
+                                          {canReceive && !complete && (
+                                            <div className="mt-3 bg-gray-50 rounded-xl p-3">
+                                              <div className="flex items-center justify-between gap-3">
+                                                <div><p className="text-[10px] font-bold text-gray-500 uppercase">Available inventory</p><p className={"text-xs mt-0.5 font-bold " + (item.stock_quantity > 0 ? 'text-emerald-700' : 'text-red-500')}>{item.stock_quantity} unit{item.stock_quantity === 1 ? '' : 's'}</p></div>
+                                                <button onClick={() => void receive(item)} disabled={acting === item.id || item.stock_quantity <= 0} className="flex-1 max-w-[240px] py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40">{acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}{item.stock_quantity > 0 ? 'Receive from inventory' : 'No stock available'}</button>
+                                              </div>
+                                              <textarea value={notes[item.id] ?? ''} onChange={e => setNotes(current => ({ ...current, [item.id]: e.target.value }))} rows={2} placeholder="Optional internal note…" className="w-full mt-2 px-2.5 py-2 rounded-lg border border-gray-200 text-xs resize-none" />
+                                            </div>
+                                          )}
+                                          {!canReceive && !complete && <p className="text-[10px] text-gray-400 mt-3">You can view fulfillment, but your account cannot record receiving.</p>}
+                                          {item.received_at && <p className="text-[10px] text-gray-400 mt-2">Last received: {new Date(item.received_at).toLocaleString()}</p>}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="border-t border-gray-100 p-3 flex items-center justify-between gap-3 bg-white">
+                                    <p className="text-[10px] text-gray-400">{available} unit{available === 1 ? '' : 's'} available to allocate</p>
+                                    {available > 0 && <button type="button" onClick={() => void openShipment(order.id)} className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" /> Create shipment</button>}
+                                  </div>
+                                </>
+                              )}
                             </div>
                           );
                         })}
-                      </>
+                      </div>
                     )}
                   </div>
                 );
@@ -760,7 +898,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
           )}
         </div>
       )}
-
     </div>
 
       {shipmentOrderId && (
