@@ -3706,9 +3706,7 @@ serve(async (req: Request) => {
         .maybeSingle()
       if (findErr || !order) return json({ error: 'Order not found' }, 404)
       if (order.delivery_type !== 'to_me') return json({ error: 'This order does not use customer delivery.' }, 409)
-      if (['shipped_and_closed', 'clearance_and_closed', 'received'].includes(order.status)) {
-        return json({ error: 'This order can no longer change its delivery destination.' }, 409)
-      }
+      if (order.delivery_mode !== 'home') return json({ error: 'This order is not currently set for home delivery.' }, 409)
 
       const { data: deliverySettings } = await supabase
         .from('import_admin_credentials')
