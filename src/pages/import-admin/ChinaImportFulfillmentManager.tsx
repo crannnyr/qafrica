@@ -612,7 +612,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           )}
         </div>
-      ) : (
+      ) : fulfillmentTab === 'shipments' ? (
         <div className="space-y-3">
           <div>
             <div className="flex items-center justify-between gap-3">
@@ -878,6 +878,120 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           )}
         </div>
+      ) : (
+      ) : (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-white rounded-xl border border-gray-100 p-3"><p className="text-[10px] text-gray-400 uppercase font-bold">Awaiting</p><p className="text-xl font-black text-gray-900">{awaitingCount}</p></div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3"><p className="text-[10px] text-gray-400 uppercase font-bold">At HQ</p><p className="text-xl font-black text-emerald-600">{hqCount}</p></div>
+            <div className="bg-white rounded-xl border border-gray-100 p-3"><p className="text-[10px] text-gray-400 uppercase font-bold">Units received</p><p className="text-xl font-black text-gray-900">{receivedUnits.toLocaleString()}<span className="text-xs text-gray-400">/{orderedUnits.toLocaleString()}</span></p></div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+              <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search order, customer or item…" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-gray-200 text-xs outline-none focus:border-orange-300 bg-white" />
+            </div>
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)} className="px-3 py-2.5 rounded-xl border border-gray-200 text-xs bg-white">
+              <option value="all">All fulfillment</option><option value="awaiting_arrival">Awaiting arrival</option><option value="at_qafrica_hq">At QAfrica HQ</option>
+            </select>
+            <button type="button" onClick={() => void load(true)} disabled={refreshing} className="px-3 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"><RefreshCw className={refreshing ? 'w-3.5 h-3.5 animate-spin' : 'w-3.5 h-3.5'} /> Refresh</button>
+          </div>
+
+          {loading ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-orange-500" /></div>
+          ) : batchGroups.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center"><PackageCheck className="w-8 h-8 text-gray-200 mx-auto mb-2" /><p className="text-sm font-bold text-gray-700">No fulfillment items found</p><p className="text-xs text-gray-400 mt-1">Only paid consolidation-shipping orders are included.</p></div>
+          ) : (
+            <div className="space-y-3">
+              {batchGroups.map(batch => {
+                const visibleOrders = batch.orders.filter(order =>
+                  statusFilter === 'all' || order.items.some(item => statusFilter === 'awaiting_arrival' ? item.received_quantity <= 0 : item.received_quantity > 0)
+                );
+                if (!visibleOrders.length) return null;
+                const batchItems = visibleOrders.flatMap(order => order.items);
+                const isOpen = openBatches.has(batch.id);
+                const batchOrdered = batchItems.reduce((sum, item) => sum + item.ordered_quantity, 0);
+                const batchReceived = batchItems.reduce((sum, item) => sum + item.received_quantity, 0);
+
+                return (
+                  <div key={batch.id} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                    <button type="button" onClick={() => setOpenBatches(current => { const next = new Set(current); if (next.has(batch.id)) next.delete(batch.id); else next.add(batch.id); return next; })} className="w-full p-4 flex items-center justify-between gap-3 text-left">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black text-gray-900">{batch.openedAt ? `Batch opened ${new Date(batch.openedAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })} · ${new Date(batch.openedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'Unassigned batch'}</p>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{batchItems.length} item line{batchItems.length === 1 ? '' : 's'} · {batchReceived}/{batchOrdered} units received</p>
+                      </div>
+                      {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                    </button>
+
+                    {isOpen && (
+                      <div className="border-t border-gray-50 p-3 space-y-3">
+                        {visibleOrders.map(order => {
+                          const isOrderOpen = openOrders.has(order.id);
+                          const orderReceived = order.items.reduce((sum, item) => sum + item.received_quantity, 0);
+                          const orderOrdered = order.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
+                          const available = order.items.reduce((sum, item) => sum + Math.max(0, item.received_quantity - item.allocated_quantity), 0);
+                          return (
+                            <div key={order.id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                              <button type="button" onClick={() => setOpenOrders(current => { const next = new Set(current); if (next.has(order.id)) next.delete(order.id); else next.add(order.id); return next; })} className="w-full p-3 flex items-center justify-between gap-3 text-left">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-1.5"><p className="text-xs font-black text-gray-900">{order.orderCode}</p><span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-white text-gray-500">{order.items.length} line{order.items.length === 1 ? '' : 's'}</span></div>
+                                  <p className="text-[10px] text-gray-500 mt-0.5 truncate">{order.customerName}{order.customerWhatsapp ? ' · ' + order.customerWhatsapp : ''}</p>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">{orderReceived}/{orderOrdered} units received</p>
+                                </div>
+                                {isOrderOpen ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                              </button>
+
+                              {isOrderOpen && (
+                                <>
+                                  <div className="border-t border-gray-100 divide-y divide-gray-100 bg-white">
+                                    {order.items.map(item => {
+                                      const complete = item.received_quantity >= item.ordered_quantity;
+                                      return (
+                                        <div key={item.id} className="p-4">
+                                          <div className="flex gap-3">
+                                            {item.image_url ? <img src={item.image_url} alt="" className="w-14 h-14 rounded-xl object-cover bg-gray-50 flex-shrink-0" /> : <div className="w-14 h-14 rounded-xl bg-gray-100 flex-shrink-0" />}
+                                            <div className="min-w-0 flex-1">
+                                              <div className="flex flex-wrap items-center gap-1.5"><span className="text-[10px] font-mono font-bold text-orange-600">{item.order_code}</span><span className={"text-[9px] font-bold px-1.5 py-0.5 rounded-full " + (complete ? 'bg-emerald-50 text-emerald-600' : item.received_quantity > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500')}>{complete ? 'At HQ' : item.received_quantity > 0 ? 'Partially received' : 'Awaiting arrival'}</span></div>
+                                              <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
+                                              {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
+                                              <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {item.received_quantity} · Remaining {Math.max(0, item.ordered_quantity - item.received_quantity)}</p>
+                                              {(sellerLabel(item) || item.seller_order_number) && <p className="text-[10px] text-gray-500 mt-1">{sellerLabel(item) ? `Seller store: ${sellerLabel(item)}` : ''}{item.seller_order_number ? `${sellerLabel(item) ? ' · ' : ''}Seller order: ${item.seller_order_number}` : ''}</p>}
+                                            </div>
+                                          </div>
+                                          {canReceive && !complete && (
+                                            <div className="mt-3 bg-gray-50 rounded-xl p-3">
+                                              <div className="flex items-center justify-between gap-3">
+                                                <div><p className="text-[10px] font-bold text-gray-500 uppercase">Available inventory</p><p className={"text-xs mt-0.5 font-bold " + (item.stock_quantity > 0 ? 'text-emerald-700' : 'text-red-500')}>{item.stock_quantity} unit{item.stock_quantity === 1 ? '' : 's'}</p></div>
+                                                <button onClick={() => void receive(item)} disabled={acting === item.id || item.stock_quantity <= 0} className="flex-1 max-w-[240px] py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-40">{acting === item.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}{item.stock_quantity > 0 ? 'Receive from inventory' : 'No stock available'}</button>
+                                              </div>
+                                              <textarea value={notes[item.id] ?? ''} onChange={e => setNotes(current => ({ ...current, [item.id]: e.target.value }))} rows={2} placeholder="Optional internal note…" className="w-full mt-2 px-2.5 py-2 rounded-lg border border-gray-200 text-xs resize-none" />
+                                            </div>
+                                          )}
+                                          {!canReceive && !complete && <p className="text-[10px] text-gray-400 mt-3">You can view fulfillment, but your account cannot record receiving.</p>}
+                                          {item.received_at && <p className="text-[10px] text-gray-400 mt-2">Last received: {new Date(item.received_at).toLocaleString()}</p>}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  <div className="border-t border-gray-100 p-3 flex items-center justify-between gap-3 bg-white">
+                                    <p className="text-[10px] text-gray-400">{available} unit{available === 1 ? '' : 's'} available to allocate</p>
+                                    {available > 0 && <button type="button" onClick={() => void openShipment(order.id)} className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" /> Create shipment</button>}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
       )}
     </div>
 
