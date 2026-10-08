@@ -49,10 +49,6 @@ type OrderGroup = {
   items: FulfillmentItem[];
 };
 
-type BatchGroup = {
-  id: string;
-  openedAt: string | null;
-  orders: ReturnType<typeof Object>;
 };
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/import-management`;
