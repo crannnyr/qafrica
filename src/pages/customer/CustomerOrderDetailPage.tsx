@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCustomerAuthStore } from '@/stores';
-import { supabase } from '@/services';
+import { supabase, orderService } from '@/services';
 import { toast } from 'sonner';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -175,10 +175,8 @@ export default function CustomerOrderDetailPage() {
   const handleMarkAsReceived = async () => {
     if (!order || !customer) return;
 
-    // ── UI guard: block if issue is reported ─────────────────────────────────
-    // NOTE: The release_escrow_funds RPC itself does NOT check buyer_reported_issue.
-    // This UI block is the only protection. A proper fix requires adding a check
-    // inside the RPC: AND buyer_reported_issue IS NOT TRUE
+    // Keep the UI guard for a clear message; the database RPC independently
+    // enforces the dispute check before releasing escrow.
     if (order.buyer_reported_issue) {
       toast.error('Cannot confirm receipt while an issue is reported. Please wait for admin resolution.');
       return;
@@ -186,10 +184,7 @@ export default function CustomerOrderDetailPage() {
 
     setIsReleasing(true);
     try {
-      const { error } = await supabase.rpc('release_escrow_funds', {
-        p_order_id: order.id,
-        p_customer_id: customer.id,
-      });
+      const { error } = await orderService.confirmDelivery(order.id);
 
       if (error) throw error;
 
