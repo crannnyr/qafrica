@@ -116,6 +116,11 @@ BEGIN
         -- Older products store dimensions as {name, options: []} and only
         -- track aggregate stock on the parent product. Validate each selected
         -- dimension, then use parent stock rather than inventing variant stock.
+        IF COALESCE(jsonb_typeof(it->'variant_options'), 'null') <> 'object' THEN
+          v_errors := v_errors || jsonb_build_object('code', 'invalid_variant', 'product_id', v_prod.id, 'store_id', v_store.id, 'message', format('Please select a valid option for "%s"', v_prod.name));
+          CONTINUE;
+        END IF;
+
         SELECT COUNT(*) INTO v_dimension_count
         FROM jsonb_array_elements(COALESCE(v_prod.variants, '[]'::jsonb)) d
         WHERE jsonb_typeof(d->'name') = 'string'
