@@ -164,6 +164,16 @@ export const orderService = {
       .select()
       .eq('id', orderId)
       .single();
-    return { data, error: fetchError };
+
+    // A successful RPC means escrow release is complete. A follow-up read
+    // failure must not make the UI report that the release itself failed.
+    if (fetchError || !data) {
+      return {
+        data: { id: orderId, status: 'delivered', is_escrow_released: true },
+        error: null,
+      };
+    }
+
+    return { data, error: null };
   },
 };
