@@ -979,12 +979,10 @@ export default function ImporterDashboardPage() {
                                 <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
                                 <div className="min-w-0 flex-1">
                                   <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">
-                                    {order.delivery_mode === 'pickup_station' ? 'Jumia pickup station' : 'Home delivery'}
+                                    Home delivery
                                   </p>
                                   <p className="text-[11px] text-gray-600 truncate">
-                                    {order.delivery_mode === 'pickup_station'
-                                      ? (order.pickup_station_name || order.pickup_station_address || 'Pickup station selected')
-                                      : [order.delivery_address?.address_line1, order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ') || 'Home address'}
+                                    {[order.delivery_address?.address_line1, order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ') || 'Home address'}
                                   </p>
                                 </div>
                                 {order.delivery_mode === 'home' && (
