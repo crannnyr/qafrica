@@ -102,7 +102,7 @@ export default function OrdersTab() {
     <div className="space-y-3">
       {orders.map((order, index) => {
         const orderItems: any[] = order.order_items || [];
-        const canRelease = order.status === 'shipped' && !order.is_escrow_released && !order.buyer_reported_issue;
+        const canRelease = order.payment_status === 'paid' && ['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && !order.is_escrow_released && !order.buyer_reported_issue;
 
         return (
           <motion.div key={order.id}
