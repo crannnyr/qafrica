@@ -973,7 +973,7 @@ export default function ImporterDashboardPage() {
                             </button>
                           </div>
 
-                          {order.delivery_type === 'to_me' && (
+                          {order.delivery_mode === 'home' && (
                             <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 px-3 py-2.5">
                               <div className="flex items-start gap-2">
                                 <MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5 shrink-0" />
