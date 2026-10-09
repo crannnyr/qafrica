@@ -36,6 +36,9 @@ DECLARE
   v_variant_stock int;
   v_requested_qty int;
   v_variant_found boolean;
+  v_dimension_count int;
+  v_matched_dimension_count int;
+  v_option record;
 BEGIN
   IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
     RETURN jsonb_build_object('ok', false, 'errors', jsonb_build_array(jsonb_build_object('code', 'empty_cart', 'message', 'Your cart is empty')));
@@ -88,30 +91,67 @@ BEGIN
       v_variant_stock := 0;
       IF jsonb_typeof(it->'variant_options') = 'object' AND jsonb_typeof(v_prod.variants) = 'array' THEN
         FOR v_variant IN SELECT value FROM jsonb_array_elements(v_prod.variants) LOOP
-          IF v_variant->'options' = it->'variant_options' THEN
+          IF v_variant->'options' = it->'variant_options' AND v_variant ? 'stock' THEN
             v_variant_found := true;
             v_variant_stock := GREATEST(COALESCE(NULLIF(v_variant->>'stock', '')::int, 0), 0);
             EXIT;
           END IF;
         END LOOP;
       END IF;
-      IF NOT v_variant_found THEN
-        v_errors := v_errors || jsonb_build_object('code', 'invalid_variant', 'product_id', v_prod.id, 'store_id', v_store.id, 'message', format('Please select a valid option for "%s"', v_prod.name));
-        CONTINUE;
-      END IF;
-      -- Cart lines can contain the same variant more than once. Count stock
-      -- already requested by earlier lines in this quote, across stores too:
-      -- imported and direct listings share the same source inventory row.
-      SELECT COALESCE(SUM((l->>'quantity')::int), 0)
-        INTO v_requested_qty
-      FROM jsonb_array_elements(v_lines) l
-      WHERE (l->>'product_id')::uuid = v_prod.id
-        AND l->'variant_options' = it->'variant_options';
 
-      IF v_variant_stock < v_qty + v_requested_qty THEN
-        v_variant_stock := GREATEST(v_variant_stock - v_requested_qty, 0);
-        v_errors := v_errors || jsonb_build_object('code', 'insufficient_stock', 'product_id', v_prod.id, 'store_id', v_store.id, 'available', v_variant_stock, 'message', format('Only %s left for the selected option of "%s"', v_variant_stock, v_prod.name));
-        CONTINUE;
+      IF v_variant_found THEN
+        -- Modern combination records have per-combination stock.
+        SELECT COALESCE(SUM((l->>'quantity')::int), 0)
+          INTO v_requested_qty
+        FROM jsonb_array_elements(v_lines) l
+        WHERE (l->>'product_id')::uuid = v_prod.id
+          AND l->'variant_options' = it->'variant_options';
+
+        IF v_variant_stock < v_qty + v_requested_qty THEN
+          v_variant_stock := GREATEST(v_variant_stock - v_requested_qty, 0);
+          v_errors := v_errors || jsonb_build_object('code', 'insufficient_stock', 'product_id', v_prod.id, 'store_id', v_store.id, 'available', v_variant_stock, 'message', format('Only %s left for the selected option of "%s"', v_variant_stock, v_prod.name));
+          CONTINUE;
+        END IF;
+      ELSE
+        -- Older products store dimensions as {name, options: []} and only
+        -- track aggregate stock on the parent product. Validate each selected
+        -- dimension, then use parent stock rather than inventing variant stock.
+        SELECT COUNT(*) INTO v_dimension_count
+        FROM jsonb_array_elements(COALESCE(v_prod.variants, '[]'::jsonb)) d
+        WHERE jsonb_typeof(d->'name') = 'string'
+          AND jsonb_typeof(d->'options') = 'array'
+          AND NOT (d ? 'stock');
+
+        SELECT COUNT(*) INTO v_matched_dimension_count
+        FROM jsonb_each(COALESCE(it->'variant_options', '{}'::jsonb)) opt
+        WHERE EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(COALESCE(v_prod.variants, '[]'::jsonb)) d
+          WHERE lower(trim(d->>'name')) = lower(trim(opt.key))
+            AND EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(d->'options') choice(value)
+              WHERE lower(trim(choice.value)) = lower(trim(opt.value #>> '{}'))
+            )
+        );
+
+        IF v_dimension_count = 0
+          OR v_matched_dimension_count <> v_dimension_count
+          OR jsonb_object_length(COALESCE(it->'variant_options', '{}'::jsonb)) <> v_dimension_count THEN
+          v_errors := v_errors || jsonb_build_object('code', 'invalid_variant', 'product_id', v_prod.id, 'store_id', v_store.id, 'message', format('Please select a valid option for "%s"', v_prod.name));
+          CONTINUE;
+        END IF;
+
+        SELECT COALESCE(SUM((l->>'quantity')::int), 0)
+          INTO v_requested_qty
+        FROM jsonb_array_elements(v_lines) l
+        WHERE (l->>'product_id')::uuid = v_prod.id;
+
+        IF COALESCE(v_prod.stock_quantity, 0) < v_qty + v_requested_qty THEN
+          v_variant_stock := GREATEST(COALESCE(v_prod.stock_quantity, 0) - v_requested_qty, 0);
+          v_errors := v_errors || jsonb_build_object('code', 'insufficient_stock', 'product_id', v_prod.id, 'store_id', v_store.id, 'available', v_variant_stock, 'message', format('Only %s left of "%s"', v_variant_stock, v_prod.name));
+          CONTINUE;
+        END IF;
       END IF;
     ELSE
       -- Apply the same cumulative check to non-variant products so duplicate
