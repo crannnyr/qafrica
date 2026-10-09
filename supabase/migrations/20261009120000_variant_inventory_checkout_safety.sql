@@ -34,6 +34,7 @@ DECLARE
   v_mkt_ids uuid[];
   v_variant jsonb;
   v_variant_stock int;
+  v_requested_qty int;
   v_variant_found boolean;
 BEGIN
   IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' OR jsonb_array_length(p_items) = 0 THEN
@@ -98,13 +99,34 @@ BEGIN
         v_errors := v_errors || jsonb_build_object('code', 'invalid_variant', 'product_id', v_prod.id, 'store_id', v_store.id, 'message', format('Please select a valid option for "%s"', v_prod.name));
         CONTINUE;
       END IF;
-      IF v_variant_stock < v_qty THEN
+      -- Cart lines can contain the same variant more than once. Count stock
+      -- already requested by earlier lines in this quote, across stores too:
+      -- imported and direct listings share the same source inventory row.
+      SELECT COALESCE(SUM((l->>'quantity')::int), 0)
+        INTO v_requested_qty
+      FROM jsonb_array_elements(v_lines) l
+      WHERE (l->>'product_id')::uuid = v_prod.id
+        AND l->'variant_options' = it->'variant_options';
+
+      IF v_variant_stock < v_qty + v_requested_qty THEN
+        v_variant_stock := GREATEST(v_variant_stock - v_requested_qty, 0);
         v_errors := v_errors || jsonb_build_object('code', 'insufficient_stock', 'product_id', v_prod.id, 'store_id', v_store.id, 'available', v_variant_stock, 'message', format('Only %s left for the selected option of "%s"', v_variant_stock, v_prod.name));
         CONTINUE;
       END IF;
-    ELSIF COALESCE(v_prod.stock_quantity, 0) < v_qty THEN
-      v_errors := v_errors || jsonb_build_object('code', 'insufficient_stock', 'product_id', v_prod.id, 'store_id', v_store.id, 'available', GREATEST(COALESCE(v_prod.stock_quantity, 0), 0), 'message', format('Only %s left of "%s"', GREATEST(COALESCE(v_prod.stock_quantity, 0), 0), v_prod.name));
-      CONTINUE;
+    ELSE
+      -- Apply the same cumulative check to non-variant products so duplicate
+      -- cart lines cannot pass the quote independently and fail after payment.
+      SELECT COALESCE(SUM((l->>'quantity')::int), 0)
+        INTO v_requested_qty
+      FROM jsonb_array_elements(v_lines) l
+      WHERE (l->>'product_id')::uuid = v_prod.id
+        AND COALESCE(l->'variant_options', 'null'::jsonb) = 'null'::jsonb;
+
+      IF COALESCE(v_prod.stock_quantity, 0) < v_qty + v_requested_qty THEN
+        v_variant_stock := GREATEST(COALESCE(v_prod.stock_quantity, 0) - v_requested_qty, 0);
+        v_errors := v_errors || jsonb_build_object('code', 'insufficient_stock', 'product_id', v_prod.id, 'store_id', v_store.id, 'available', v_variant_stock, 'message', format('Only %s left of "%s"', v_variant_stock, v_prod.name));
+        CONTINUE;
+      END IF;
     END IF;
 
     v_attr := CASE WHEN it->>'attribution' = 'marketplace' AND NOT v_imported AND v_store.id = ANY (COALESCE(v_mkt_ids, '{}')) THEN 'marketplace' ELSE 'own' END;
