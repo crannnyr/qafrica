@@ -3705,7 +3705,6 @@ serve(async (req: Request) => {
         .eq('user_id', customer_id)
         .maybeSingle()
       if (findErr || !order) return json({ error: 'Order not found' }, 404)
-      if (order.delivery_type !== 'to_me') return json({ error: 'This order does not use customer delivery.' }, 409)
       if (order.delivery_mode !== 'home') return json({ error: 'This order is not currently set for home delivery.' }, 409)
 
       const { data: deliverySettings } = await supabase
