@@ -240,6 +240,9 @@ DECLARE
   v_new_variants jsonb;
   v_variant_stock integer;
   v_stock_total integer;
+  v_legacy_variant boolean := false;
+  v_dimension_count integer;
+  v_matched_dimension_count integer;
 BEGIN
   -- Dedicated China Import fulfillment items have no products inventory row.
   IF NEW.product_id IS NULL AND NEW.original_product_id IS NULL THEN
@@ -294,14 +297,46 @@ BEGIN
       RETURN NEW;
     END IF;
 
-    -- Variant selection was provided but did not match source inventory.
+    -- Older variant records store option dimensions (name + options array)
+    -- and use parent stock. Validate the selection, but do not invent per-SKU
+    -- stock values that are not present in those legacy records.
     IF EXISTS (SELECT 1 FROM products p WHERE p.id = v_product_id AND COALESCE(p.has_variants, false)) THEN
-      RAISE EXCEPTION 'Selected product variant was not found in inventory';
+      SELECT COUNT(*) INTO v_dimension_count
+      FROM products p, jsonb_array_elements(COALESCE(p.variants, '[]'::jsonb)) d
+      WHERE p.id = v_product_id
+        AND jsonb_typeof(d->'name') = 'string'
+        AND jsonb_typeof(d->'options') = 'array'
+        AND NOT (d ? 'stock');
+
+      SELECT COUNT(*) INTO v_matched_dimension_count
+      FROM jsonb_each(NEW.variant_options) opt
+      WHERE EXISTS (
+        SELECT 1
+        FROM products p, jsonb_array_elements(COALESCE(p.variants, '[]'::jsonb)) d
+        WHERE p.id = v_product_id
+          AND lower(trim(d->>'name')) = lower(trim(opt.key))
+          AND jsonb_typeof(d->'options') = 'array'
+          AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements_text(d->'options') choice(value)
+            WHERE lower(trim(choice.value)) = lower(trim(opt.value #>> '{}'))
+          )
+      );
+
+      IF v_dimension_count > 0
+        AND v_matched_dimension_count = v_dimension_count
+        AND jsonb_object_length(NEW.variant_options) = v_dimension_count THEN
+        v_legacy_variant := true;
+      ELSE
+        RAISE EXCEPTION 'Selected product variant was not found in inventory';
+      END IF;
     END IF;
   END IF;
 
-  -- Variant products must not silently fall back to parent-level inventory.
-  IF EXISTS (SELECT 1 FROM products p WHERE p.id = v_product_id AND COALESCE(p.has_variants, false)) THEN
+  -- Modern combination rows return above after updating per-variant stock.
+  -- Legacy dimension rows continue to the parent-level stock update below.
+  IF EXISTS (SELECT 1 FROM products p WHERE p.id = v_product_id AND COALESCE(p.has_variants, false))
+    AND NOT v_legacy_variant THEN
     RAISE EXCEPTION 'A valid variant selection is required for this product';
   END IF;
 
