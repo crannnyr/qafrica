@@ -616,9 +616,17 @@ export default function ImporterDashboardPage() {
             ) : (
               <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-50 overflow-hidden">
                 {shippedOrders.map(order => {
-                  const unpaidShippingBill = bills.find(b => b.kind === 'consolidation_shipping' && b.status !== 'paid');
+                  // Only show a payment hold when an outstanding bill is linked to
+                  // this order. Cancelled bills must never block an order.
+                  const isOutstanding = (bill: ConsolidationBill) =>
+                    bill.status === 'pending' || bill.status === 'awaiting_confirmation';
+                  const unpaidShippingBill = bills.find(
+                    b => b.kind === 'consolidation_shipping' && b.order_id === order.id && isOutstanding(b),
+                  );
                   const unpaidClearanceBill = order.status === 'clearance_and_closed'
-                    ? bills.find(b => b.kind === 'clearance' && b.status !== 'paid')
+                    ? bills.find(
+                        b => b.kind === 'clearance' && b.order_id === order.id && isOutstanding(b),
+                      )
                     : undefined;
                   const held = unpaidShippingBill ?? unpaidClearanceBill;
                   return (
