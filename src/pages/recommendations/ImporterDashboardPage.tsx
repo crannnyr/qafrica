@@ -326,8 +326,11 @@ export default function ImporterDashboardPage() {
   const toPay = orders.filter(o => o.payment_status === 'unpaid' || o.payment_status === 'failed' || o.payment_status === 'awaiting_confirmation');
   const confirmedOrders = orders.filter(o => o.status === 'confirmed' || o.status === 'ordered');
   const unpaidBillsCount = bills.filter(b => b.status !== 'paid' && b.status !== 'cancelled').length;
-  const shippedOrders = orders.filter(o => o.status === 'shipped_and_closed' || o.status === 'clearance_and_closed');
-  const toReceiveOrders = orders.filter(o => o.status === 'received');
+  // Keep the pipeline buckets independent from Order History. Normalize status values
+  // so legacy rows with whitespace/casing or older status aliases remain visible.
+  const normalizedStatus = (status: string | null | undefined) => (status ?? '').trim().toLowerCase();
+  const shippedOrders = orders.filter(o => ['shipped_and_closed', 'clearance_and_closed', 'shipped', 'clearance'].includes(normalizedStatus(o.status)));
+  const toReceiveOrders = orders.filter(o => normalizedStatus(o.status) === 'received');
   const pendingRefundsCount = refunds.filter(r => r.status === 'pending').length;
 
   const TABS: Array<{ key: PipelineTab; label: string; icon: any; count: number }> = [
