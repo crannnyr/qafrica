@@ -25,6 +25,18 @@ const statusColors = {
   cancelled: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
 };
 
+const paymentStatusColors: Record<string, string> = {
+  paid: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+  failed: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
+  refunded: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
+  pending: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
+};
+
+function formatStatus(status?: string | null) {
+  if (!status) return 'Unknown';
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export default function OrdersPage() {
   const navigate = useNavigate();
   const { currentStore } = useStoreStore();
@@ -152,7 +164,8 @@ export default function OrdersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Order</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Customer</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Order Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Payment Status</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Total</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Action</th>
                 </tr>
@@ -162,12 +175,13 @@ export default function OrdersPage() {
                   const StatusIcon = statusIcons[order.status as keyof typeof statusIcons] || Package;
                   const isDropshipped = getIsDropshipped(order);
                   const dropshipperEarnings = getDropshipperEarnings(order);
+                  const paymentStatus = (order as any).payment_status as string | undefined;
+                  const paymentColor = paymentStatusColors[paymentStatus ?? ''] || 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
 
                   return (
                     <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                       <td className="px-6 py-4">
                         <p className="font-medium text-gray-900 dark:text-white">{order.order_number}</p>
-                        {/* BUG FIX: use order_items if items alias not present */}
                         <p className="text-sm text-gray-500 dark:text-gray-400">
                           {(order.order_items ?? order.items)?.length || 0} items
                         </p>
@@ -189,7 +203,12 @@ export default function OrdersPage() {
                           statusColors[order.status as keyof typeof statusColors] || 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300'
                         }`}>
                           <StatusIcon className="w-3.5 h-3.5" />
-                          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          {formatStatus(order.status)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${paymentColor}`}>
+                          {formatStatus(paymentStatus)}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
