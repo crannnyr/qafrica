@@ -40,10 +40,9 @@ export default function OrdersTab() {
     if (!customer) return;
     setReleasingOrderId(orderId);
     try {
-      const { error } = await supabase.rpc('release_escrow_funds', {
-        p_order_id: orderId,
-        p_customer_id: customer.id,
-      });
+      // Keep receipt confirmation on the shared service so the RPC contract,
+      // delivery timestamps, and escrow release stay consistent across screens.
+      const { error } = await orderService.confirmDelivery(orderId);
       if (error) throw error;
       toast.success('Payment released to seller');
       await fetchOrders();
