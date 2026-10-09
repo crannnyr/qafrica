@@ -152,19 +152,22 @@ export const orderService = {
   },
 
   async confirmDelivery(orderId: string) {
+    // The RPC validates customer ownership, payment, shipment status and disputes,
+    // then marks delivery and releases escrow in the same database transaction.
+    // Do not issue a second client-side UPDATE: it can fail after funds were already
+    // released, making the UI report failure for a successful financial operation.
     const { error } = await supabase.rpc('release_escrow_funds', { p_order_id: orderId });
     if (error) return { data: null, error };
 
-    const { data, error: updateError } = await supabase
-      .from('orders')
-      .update({
+    return {
+      data: {
+        id: orderId,
         status: 'delivered',
         delivered_at: new Date().toISOString(),
         delivery_confirmed_at: new Date().toISOString(),
-      })
-      .eq('id', orderId)
-      .select()
-      .single();
-    return { data, error: updateError };
+        is_escrow_released: true,
+      },
+      error: null,
+    };
   },
 };
