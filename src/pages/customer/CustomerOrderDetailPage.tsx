@@ -481,7 +481,8 @@ export default function CustomerOrderDetailPage() {
 
           <div className="space-y-4">
             {(order.order_items || []).map((item) => {
-              const image = item.product?.images?.[0] ?? null;
+              const legacyItem = ((order as any).items || []).find((legacy: any) => (legacy.product_id && legacy.product_id === item.product_id) || (legacy.name && legacy.name === item.product_name));
+              const image = item.product?.images?.[0] ?? item.original_product?.images?.[0] ?? (item as any).image_url ?? (item as any).image ?? legacyItem?.image_url ?? legacyItem?.image ?? null;
               return (
                 <div key={item.id} className="flex gap-4">
                   <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
