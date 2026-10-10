@@ -311,20 +311,19 @@ export default function ChinaImportCatalogSection() {
                     </div>
                   </div>
 
-                  <div className="rounded-lg bg-gray-50 dark:bg-gray-700/60 p-3 space-y-1.5 text-sm">
-                    <div className="flex justify-between items-start gap-2"><span className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">Supplier Price</span><strong className="text-xs lg:text-sm text-right">{money(supplierPrice)}</strong></div>
-                    <div className="flex justify-between items-start gap-2"><span className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">Suggested price</span><strong className="text-xs lg:text-sm text-right">{money(suggested)}</strong></div>
-                    <div className="flex justify-between items-start gap-2"><span className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">Profit per sale</span><strong className="text-xs lg:text-sm text-green-600 text-right">{money(margin)}</strong></div>
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-xs lg:text-sm font-bold text-orange-600">{money(supplierPrice)}</span>
+                    <Button
+                      onClick={() => openPricing(product)}
+                      disabled={!canImport || busyId === product.id}
+                      className={`shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 lg:px-4`}
+                      size="sm"
+                    >
+                      {busyId === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4 mr-1" />Configure Pricing</>}
+                    </Button>
                   </div>
 
-                  <Button
-                    onClick={() => openPricing(product)}
-                    disabled={!canImport || busyId === product.id}
-                    className={`w-full ${canImport ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'}`}
-                    size="sm"
-                  >
-                    {busyId === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4 mr-1" />Configure Pricing</>}
-                  </Button>
+
                 </div>
               </motion.div>
             );
