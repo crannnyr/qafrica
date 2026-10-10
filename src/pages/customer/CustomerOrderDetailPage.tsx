@@ -168,7 +168,47 @@ export default function CustomerOrderDetailPage() {
         return;
       }
 
-      setOrder(data as OrderDetail);
+      const orderData: any = data;
+      const importedIds = [...new Set((orderData.order_items || [])
+        .filter((item: any) => item?.source_type === 'china_import' && item?.source_id)
+        .map((item: any) => item.source_id))];
+
+      if (importedIds.length) {
+        const { data: importedProducts, error: importedError } = await supabase
+          .from('china_import_products')
+          .select('id,name,image_url,image_urls,variants')
+          .in('id', importedIds);
+        if (!importedError && importedProducts?.length) {
+          const importedById = new Map(importedProducts.map((product: any) => [
+            product.id,
+            {
+              id: product.id,
+              name: product.name,
+              images: Array.isArray(product.image_urls) && product.image_urls.length
+                ? product.image_urls
+                : product.image_url ? [product.image_url] : [],
+              variants: product.variants ?? [],
+            },
+          ]));
+          orderData.order_items = (orderData.order_items || []).map((item: any) => {
+            const imported = item?.source_type === 'china_import'
+              ? importedById.get(item.source_id)
+              : null;
+            if (!imported) return item;
+            return {
+              ...item,
+              product_name: item.product_name || imported.name,
+              product: item.product || imported,
+              original_product: item.original_product || imported,
+              image_url: item.image_url || imported.images[0] || null,
+              imported_variants: imported.variants,
+            };
+          });
+        } else if (importedError) {
+          console.warn('Could not resolve China Import order details:', importedError.message);
+        }
+      }
+      setOrder(orderData as OrderDetail);
     } catch (err) {
       console.error('Failed to fetch order:', err);
       toast.error('Failed to load order');
