@@ -260,13 +260,13 @@ async function quoteV2(items: ReturnType<typeof normalizeItems>, state: string) 
       sellerPrice <= 0 ||
       supplierCost < 0 ||
       shippingCost < 0 ||
-      sellerPrice < supplierCost + Number(catalog?.shipping_cost_ngn ?? 0)
+      sellerPrice < supplierCost
     ) {
       errors.push({
         code: 'china_dropship_unavailable',
         product_id: item.source_id,
         store_id: item.store_id,
-        message: 'This China Import dropship product is unavailable or its selling price does not cover the supplier and shipping cost',
+        message: 'This China Import dropship product is unavailable or its selling price is below the supplier product cost. Shipping is charged separately.',
       });
       continue;
     }
