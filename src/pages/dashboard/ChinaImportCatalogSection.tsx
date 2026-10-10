@@ -296,17 +296,25 @@ export default function ChinaImportCatalogSection() {
                   )}
                 </div>
 
-                <div className="p-3 lg:p-4 space-y-3">
+                <div className="p-2 lg:p-4 space-y-3">
                   <div>
-                    <h3 className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2">{product.name}</h3>
-                    {product.category && <p className="text-xs text-gray-500 mt-1">{product.category}</p>}
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">{product.description}</p>
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1 line-clamp-1 text-xs lg:text-sm">{product.name}</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 lg:mb-3 line-clamp-2">{product.description}</p>
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                        {product.category || product.niche_name || 'China Import'}
+                      </span>
+                      <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-1 rounded flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Available
+                      </span>
+                    </div>
                   </div>
 
                   <div className="rounded-lg bg-gray-50 dark:bg-gray-700/60 p-3 space-y-1.5 text-sm">
-                    <div className="flex justify-between gap-2"><span className="text-gray-500">Supplier Price</span><strong>{money(supplierPrice)}</strong></div>
-                    <div className="flex justify-between gap-2"><span className="text-gray-500">Suggested price</span><strong>{money(suggested)}</strong></div>
-                    <div className="flex justify-between gap-2"><span className="text-gray-500">Profit per sale</span><strong className="text-green-600">{money(margin)}</strong></div>
+                    <div className="flex justify-between items-start gap-2"><span className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">Supplier Price</span><strong className="text-xs lg:text-sm text-right">{money(supplierPrice)}</strong></div>
+                    <div className="flex justify-between items-start gap-2"><span className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">Suggested price</span><strong className="text-xs lg:text-sm text-right">{money(suggested)}</strong></div>
+                    <div className="flex justify-between items-start gap-2"><span className="text-xs lg:text-sm text-gray-500 dark:text-gray-400">Profit per sale</span><strong className="text-xs lg:text-sm text-green-600 text-right">{money(margin)}</strong></div>
                   </div>
 
                   <Button
