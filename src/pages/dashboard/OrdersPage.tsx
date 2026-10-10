@@ -226,15 +226,40 @@ export default function OrdersPage() {
                   return (
                     <tr key={order.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                       <td className="px-6 py-4">
-                        <p className="font-medium text-gray-900 dark:text-white">{order.order_number}</p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {(order.order_items ?? order.items)?.length || 0} items
-                        </p>
-                        {isDropshipped && (
-                          <span className="inline-block mt-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded-full">
-                            Dropshipped
-                          </span>
-                        )}
+                        <div className="flex items-center gap-3 min-w-[220px]">
+                          {(() => {
+                            const firstItem = getOrderItems(order)[0];
+                            const image = firstItem?.product?.images?.[0]
+                              ?? firstItem?.original_product?.images?.[0]
+                              ?? firstItem?.image_url
+                              ?? firstItem?.image
+                              ?? firstItem?.product_image_url
+                              ?? null;
+                            return image ? (
+                              <img
+                                src={image}
+                                alt={firstItem?.product?.name ?? firstItem?.product_name ?? firstItem?.name ?? 'Order product'}
+                                className="h-11 w-11 rounded-lg object-cover border border-gray-100 dark:border-gray-700 shrink-0"
+                                onError={(event) => { event.currentTarget.style.visibility = 'hidden'; }}
+                              />
+                            ) : (
+                              <div className="h-11 w-11 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center shrink-0">
+                                <Package className="h-5 w-5 text-gray-400" />
+                              </div>
+                            );
+                          })()}
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">{order.order_number}</p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              {getOrderItems(order).length || 0} items
+                            </p>
+                          {isDropshipped && (
+                            <span className="inline-block mt-1 text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 px-2 py-0.5 rounded-full">
+                              Dropshipped
+                            </span>
+                          )}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-sm font-medium text-gray-900 dark:text-white">{order.customer_name}</p>
