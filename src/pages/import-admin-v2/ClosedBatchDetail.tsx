@@ -279,12 +279,20 @@ export default function ClosedBatchDetail({
       // has the authoritative closed-batch order list. Merge any batch orders
       // missing from the breakdown so search can never hide a real order.
       const apiLines = (consolRes.rows ?? []) as CustomerLine[];
-      const existingOrderIds = new Set(apiLines.map(line => line.order_id));
+      // The RPC can return some (but not all) items for an order. Do not use
+      // order_id alone as the fallback guard: that silently dropped every
+      // other item from any partially represented order.
+      const representedItems = new Set(
+        apiLines.map(line => `${line.order_id}::${line.product_id}::${variantLabel(line.variant_options)}`)
+      );
       const fallbackLines: CustomerLine[] = [];
 
       for (const order of orders) {
-        if (!order.user_id || existingOrderIds.has(order.id)) continue;
+        if (!order.user_id) continue;
         for (const item of order.items ?? []) {
+          const itemKey = `${order.id}::${item.id}::${variantLabel(item.variant_options)}`;
+          if (representedItems.has(itemKey)) continue;
+          representedItems.add(itemKey);
           fallbackLines.push({
             customer_id: order.user_id,
             customer_name: order.customer_name,
@@ -678,14 +686,47 @@ export default function ClosedBatchDetail({
     [ledgerByKind, billKind]
   );
 
+  // Build the main Sourcing list from the same complete per-order lines
+  // shown in customer details, not only the aggregated RPC. This prevents
+  // missing products/customers when the summary RPC omits a partial order or
+  // filters a customer who has already been billed.
+  const completeSourcingRows = useMemo(() => {
+    const grouped = new Map<string, SourcingRow & { customerIds: Set<string> }>();
+    for (const line of customerLines) {
+      if (!line.product_id || !line.customer_id) continue;
+      const row = grouped.get(line.product_id) ?? {
+        product_id: line.product_id,
+        product_name: line.product_name || 'Unnamed product',
+        product_image: line.product_image ?? null,
+        source_url: line.source_url ?? null,
+        total_qty: 0,
+        customers_count: 0,
+        flight_qty: 0,
+        sea_qty: 0,
+        customerIds: new Set<string>(),
+      };
+      row.total_qty += Number(line.qty ?? 0);
+      row.customerIds.add(line.customer_id);
+      if (!row.product_image && line.product_image) row.product_image = line.product_image;
+      if (!row.source_url && line.source_url) row.source_url = line.source_url;
+      if (line.shipping_method === 'flight') row.flight_qty = (row.flight_qty ?? 0) + Number(line.qty ?? 0);
+      if (line.shipping_method === 'sea_freight') row.sea_qty = (row.sea_qty ?? 0) + Number(line.qty ?? 0);
+      grouped.set(line.product_id, row);
+    }
+    return Array.from(grouped.values()).map(({ customerIds, ...row }) => ({
+      ...row,
+      customers_count: customerIds.size,
+    })).sort((a, b) => a.product_name.localeCompare(b.product_name));
+  }, [customerLines]);
+
   const visibleSourcingRows = useMemo(() => {
-    let list = sourcingRows;
+    let list = completeSourcingRows;
     if (sourcingShippingFilter === 'flight') list = list.filter(r => (r.flight_qty ?? 0) > 0);
     if (sourcingShippingFilter === 'sea_freight') list = list.filter(r => (r.sea_qty ?? 0) > 0);
     const q = sourcingSearch.trim().toLowerCase();
     if (q) list = list.filter(r => r.product_name.toLowerCase().includes(q));
     return list;
-  }, [sourcingRows, sourcingShippingFilter, sourcingSearch]);
+  }, [completeSourcingRows, sourcingShippingFilter, sourcingSearch]);
 
   const [customerSearch, setCustomerSearch] = useState('');
 
@@ -1029,7 +1070,7 @@ export default function ClosedBatchDetail({
                 {visibleSourcingRows.length === 0 ? (
                   <div className="py-8 text-center">
                     <Boxes className="w-5 h-5 text-gray-300 mx-auto mb-2" />
-                    <p className="text-xs text-gray-400">{sourcingRows.length === 0 ? 'No items in this batch yet.' : 'No products match.'}</p>
+                    <p className="text-xs text-gray-400">{completeSourcingRows.length === 0 ? 'No items in this batch yet.' : 'No products match.'}</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
