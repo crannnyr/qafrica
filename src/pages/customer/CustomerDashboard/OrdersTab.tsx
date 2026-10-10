@@ -198,7 +198,7 @@ export default function OrdersTab() {
                   return (
                     <div key={idx} className="w-11 h-11 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-100">
                       {image
-                        ? <img src={image} alt={item.product?.name} className="w-full h-full object-cover" />
+                        ? <img src={image} alt={item.product?.name ?? item.product_name ?? item.name ?? "Product"} onError={(event) => { event.currentTarget.style.display = "none"; }} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs font-medium">
                             {(item.product?.name ?? item.product_name ?? item.name)?.charAt(0) ?? '?'}
                           </div>
