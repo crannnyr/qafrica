@@ -92,8 +92,7 @@ export default function OrdersPage() {
 
   const isChinaImportDropship = (item: any) =>
     item?.is_imported &&
-    (item?.source_type === 'china_import' || item?.attribution_source === 'marketplace') &&
-    item?.original_store_id === currentStore?.id;
+    (item?.source_type === 'china_import' || item?.attribution_source === 'marketplace');
 
   const getIsDropshipped = (order: Order) =>
     order.items?.some((item: any) =>
