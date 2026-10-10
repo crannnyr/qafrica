@@ -68,6 +68,40 @@ begin
 end;
 $$;
 
+-- Keep the order-item cost basis correct for future China Import dropship
+-- orders too. The checkout bridge historically wrote supplier + shipping into
+-- dropship_price, but shipping is charged separately as delivery.
+create or replace function public.set_china_import_dropship_product_cost()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  v_supplier_price numeric;
+begin
+  if new.source_type = 'china_import'
+     and coalesce(new.is_imported, false)
+     and coalesce(new.attribution_source, '') = 'marketplace'
+     and new.source_id is not null then
+    select greatest(coalesce(price_ngn, 0), 0)
+      into v_supplier_price
+      from public.china_import_products
+      where id = new.source_id;
+    if found then
+      new.dropship_price := v_supplier_price;
+    end if;
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists trg_china_import_dropship_product_cost on public.order_items;
+create trigger trg_china_import_dropship_product_cost
+before insert or update of dropship_price, source_type, source_id, is_imported, attribution_source
+on public.order_items
+for each row execute function public.set_china_import_dropship_product_cost();
+
 -- The legacy store-to-store markup calculation reads dropship_price; align
 -- existing China Import items with supplier product price only.
 update public.order_items oi
