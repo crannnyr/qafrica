@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/services';
 import { useCartStore } from '@/stores';
+import { useImportCartStore } from '@/stores/importCartStore';
 
 type CheckoutStatus = 'checking' | 'paid' | 'failed' | 'fulfilment_error' | 'pending';
 
@@ -37,7 +38,10 @@ export default function MarketplaceCheckoutCompletePage() {
             china_cart_ids?: string[];
             china_product_ids?: string[];
           } : null;
+          const importRaw = sessionStorage.getItem('qafrica_import_checkout_selection');
+          const importCartKeys: string[] = importRaw ? JSON.parse(importRaw) : [];
           const cart = useCartStore.getState();
+          const importCart = useImportCartStore.getState();
           const ids = new Set(selection?.product_cart_ids ?? []);
           const chinaCartIds = new Set(selection?.china_cart_ids ?? []);
           const chinaProductIds = new Set(selection?.china_product_ids ?? []);
@@ -54,6 +58,9 @@ export default function MarketplaceCheckoutCompletePage() {
               ))
             )
             .forEach(i => cart.removeItem(i.id));
+          // The separate China Import cart is keyed by product + variant,
+          // not by product ID. Remove only cart lines captured at checkout.
+          importCartKeys.forEach(cartKey => importCart.removeItem(cartKey));
 
           sessionStorage.removeItem('qafrica_marketplace_checkout_selection');
           sessionStorage.removeItem('qafrica_import_checkout_selection');
