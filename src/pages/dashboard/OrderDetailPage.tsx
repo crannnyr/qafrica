@@ -797,7 +797,7 @@ export default function OrderDetailPage() {
                   <span>Sale revenue</span><span>₦{dropshipEarnings.revenue.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-orange-800 dark:text-orange-400">
-                  <span>Supplier + shipping cost</span><span>₦{dropshipEarnings.cost.toLocaleString()}</span>
+                  <span>Supplier product cost</span><span>₦{dropshipEarnings.cost.toLocaleString()}</span>
                 </div>
               </>
             )}
@@ -815,7 +815,7 @@ export default function OrderDetailPage() {
             </div>
           </div>
           <p className="text-xs text-orange-600 dark:text-orange-500 mt-2">
-            The platform fee is calculated on positive dropshipping profit after supplier and shipping costs, not on the full sale price. Loss-making orders incur no platform fee and do not create a negative wallet credit.
+            Product profit is the selling price minus the supplier product cost. Shipping is charged separately as delivery, so it is not deducted from product profit a second time. The 8% platform fee applies only to positive product profit. Loss-making orders incur no platform fee and do not create a negative wallet credit.
           </p>
           <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">
             Positive net earnings are credited to your wallet after escrow is released.
