@@ -45,6 +45,7 @@ export default function OrdersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [chinaDropshipProfitByOrder, setChinaDropshipProfitByOrder] = useState<Record<string, number>>({});
+  const [orderProductImages, setOrderProductImages] = useState<Record<string, { image: string | null; name?: string }>>({});
 
   useEffect(() => {
     if (currentStore?.id) {
@@ -59,6 +60,57 @@ export default function OrdersPage() {
     const matchesStatus = selectedStatus === 'All' || order.status === selectedStatus.toLowerCase();
     return matchesSearch && matchesStatus;
   });
+
+  useEffect(() => {
+    const items = orders.flatMap(order => getOrderItems(order).map((item: any) => ({ orderId: order.id, item })));
+    const ids = [...new Set(items.flatMap(({ item }) =>
+      [item?.source_id, item?.original_product_id, item?.product_id, item?.product?.id, item?.original_product?.id]
+        .filter((id: unknown) => typeof id === 'string' && id.length > 0)
+    ))];
+    if (!ids.length) {
+      setOrderProductImages({});
+      return;
+    }
+
+    let cancelled = false;
+    const loadImages = async () => {
+      const [chinaResult, productsResult] = await Promise.all([
+        supabase.from('china_import_products').select('id,name,image_url,image_urls').in('id', ids),
+        supabase.from('products').select('id,name,images,image_url').in('id', ids),
+      ]);
+      if (cancelled) return;
+      const byId = new Map<string, { image: string | null; name?: string }>();
+      for (const product of chinaResult.data ?? []) {
+        byId.set(product.id, {
+          name: product.name,
+          image: Array.isArray(product.image_urls) && product.image_urls.length
+            ? product.image_urls[0]
+            : product.image_url ?? null,
+        });
+      }
+      for (const product of productsResult.data ?? []) {
+        const previous = byId.get(product.id);
+        const images = Array.isArray(product.images) ? product.images : [];
+        byId.set(product.id, {
+          name: previous?.name || product.name,
+          image: previous?.image || images[0] || product.image_url || null,
+        });
+      }
+      const next: Record<string, { image: string | null; name?: string }> = {};
+      for (const { orderId, item } of items) {
+        const candidates = [item?.source_id, item?.original_product_id, item?.product_id, item?.product?.id, item?.original_product?.id]
+          .filter((id: unknown) => typeof id === 'string' && id.length > 0);
+        const resolved = candidates.map((id: string) => byId.get(id)).find(Boolean);
+        next[orderId] = {
+          image: item?.product?.images?.[0] || item?.original_product?.images?.[0] || item?.image_url || item?.image || item?.product_image_url || resolved?.image || next[orderId]?.image || null,
+          name: item?.product?.name || item?.original_product?.name || item?.product_name || item?.name || resolved?.name,
+        };
+      }
+      setOrderProductImages(next);
+    };
+    void loadImages();
+    return () => { cancelled = true; };
+  }, [orders]);
 
   useEffect(() => {
     const orderIds = orders.map(order => order.id).filter(Boolean);
@@ -101,6 +153,7 @@ export default function OrdersPage() {
     (item?.attribution_source === 'marketplace' || item?.is_imported === true || !!item?.source_id);
 
   const getIsDropshipped = (order: Order) =>
+    !!((order as any).dropshipper_store_id || (order as any).is_dropshipped) ||
     getOrderItems(order).some((item: any) =>
       (item?.is_imported && item?.original_owner_id && item.original_owner_id !== currentStore?.owner_id) ||
       isChinaImportDropship(item)
@@ -234,6 +287,7 @@ export default function OrdersPage() {
                               ?? firstItem?.image_url
                               ?? firstItem?.image
                               ?? firstItem?.product_image_url
+                              ?? orderProductImages[order.id]?.image
                               ?? null;
                             return image ? (
                               <img
