@@ -197,10 +197,18 @@ export default function CustomerOrderDetailPage() {
             if (!imported) return item;
             return {
               ...item,
-              product_name: item.product_name || imported.name,
-              product: item.product || imported,
-              original_product: item.original_product || imported,
-              image_url: item.image_url || imported.images[0] || null,
+              product_name: item.product_name || item.product?.name || item.original_product?.name || imported.name,
+              product: {
+                ...(item.product || {}),
+                ...imported,
+                images: item.product?.images?.length ? item.product.images : imported.images,
+              },
+              original_product: {
+                ...(item.original_product || {}),
+                ...imported,
+                images: item.original_product?.images?.length ? item.original_product.images : imported.images,
+              },
+              image_url: item.image_url || item.product?.images?.[0] || item.original_product?.images?.[0] || imported.images[0] || null,
               imported_variants: imported.variants,
             };
           });
