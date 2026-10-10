@@ -9,15 +9,22 @@ const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPAB
 
 Deno.serve(async () => {
   const now = Date.now();
-  const { data: sessions } = await supabase
-    .from('checkout_sessions')
-    .select('reference')
-    .eq('status', 'awaiting_payment')
-    .not('checkout_link', 'is', null)
-    .lt('created_at', new Date(now - 3 * 60_000).toISOString())
-    .gt('created_at', new Date(now - 48 * 3600_000).toISOString())
-    .order('created_at', { ascending: true })
-    .limit(25);
+  const cutoff = new Date(now - 3 * 60_000).toISOString();
+  const horizon = new Date(now - 48 * 3600_000).toISOString();
+  const [legacyResult, marketplaceResult] = await Promise.all([
+    supabase.from('checkout_sessions').select('reference, created_at')
+      .eq('status', 'awaiting_payment').not('checkout_link', 'is', null)
+      .lt('created_at', cutoff).gt('created_at', horizon)
+      .order('created_at', { ascending: true }).limit(25),
+    supabase.from('marketplace_checkout_sessions').select('reference, created_at')
+      .eq('status', 'awaiting_payment').not('checkout_link', 'is', null)
+      .lt('created_at', cutoff).gt('created_at', horizon)
+      .order('created_at', { ascending: true }).limit(25),
+  ]);
+  if (legacyResult.error) console.error('legacy checkout sweep query failed', legacyResult.error);
+  if (marketplaceResult.error) console.error('marketplace checkout sweep query failed', marketplaceResult.error);
+  const sessions = [...(legacyResult.data ?? []), ...(marketplaceResult.data ?? [])]
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   const results: Record<string, string> = {};
   for (const s of sessions ?? []) {
