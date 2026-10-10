@@ -24,10 +24,10 @@ async function verifyAndFinalizeMarketplace(
   if (sessionError) throw new Error(`marketplace session lookup failed: ${sessionError.message}`);
   if (!session) return { status: 'unknown_reference' };
   if (session.status === 'paid') return { status: 'paid', order_ids: session.order_ids ?? [], already: true };
-  if (session.status === 'amount_mismatch' || session.status === 'fulfilment_error') {
+  if (session.status === 'amount_mismatch') {
     return { status: session.status };
   }
-  if (session.status !== 'awaiting_payment' && session.status !== 'expired' && session.status !== 'failed') {
+  if (session.status !== 'awaiting_payment' && session.status !== 'expired' && session.status !== 'failed' && session.status !== 'fulfilment_error') {
     return { status: session.status as Exclude<FinalizeResult['status'], 'paid'> };
   }
 
