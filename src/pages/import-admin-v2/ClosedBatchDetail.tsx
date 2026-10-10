@@ -1134,7 +1134,8 @@ export default function ClosedBatchDetail({
                               <div>
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Per order</p>
                                 <div className="space-y-1.5">
-                                  {customerLines.filter(l => l.product_id === r.product_id && !isBilled(l.customer_id, 'consolidation_shipping')).map(l => {
+                                  {customerLines.filter(l => l.product_id === r.product_id).map(l => {
+                                    const lineBilled = isBilled(l.customer_id, 'consolidation_shipping');
                                     const rowKey = `${l.order_id}:${l.product_id}:${JSON.stringify(l.variant_options)}`;
                                     const draft = sourcingDiscountDrafts[l.customer_id] ?? '';
                                     return (
@@ -1144,7 +1145,9 @@ export default function ClosedBatchDetail({
                                             <p className="text-[11px] font-semibold text-gray-700 truncate">{l.customer_name}</p>
                                             <p className="text-[10px] text-gray-400 truncate">{variantLabel(l.variant_options) || 'No variant'} · qty {l.qty}</p>
                                           </div>
-                                          {l.ship_only ? (
+                                          {lineBilled ? (
+                                            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 rounded-full px-1.5 py-0.5 flex-shrink-0">Bill sent</span>
+                                          ) : l.ship_only ? (
                                             <span className="text-[9px] font-bold text-blue-700 bg-blue-50 rounded-full px-1.5 py-0.5 flex-shrink-0">Sea only</span>
                                           ) : (
                                             <div className="flex gap-1 flex-shrink-0">
@@ -1163,28 +1166,32 @@ export default function ClosedBatchDetail({
                                             </div>
                                           )}
                                         </div>
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="text-[10px] text-gray-400">Discount</span>
-                                          <input
-                                            type="number" inputMode="numeric" min={1} max={100}
-                                            value={draft}
-                                            onChange={e => setSourcingDiscountDrafts(prev => ({ ...prev, [l.customer_id]: e.target.value }))}
-                                            placeholder="e.g. 20"
-                                            className="w-14 px-1.5 py-1 rounded-lg border border-gray-200 text-[10px] text-right"
-                                          />
-                                          <span className="text-[10px] text-gray-400">%</span>
-                                          <button
-                                            onClick={async () => {
-                                              await applyPercentDiscount(l.customer_id, customerLines.filter(cl => cl.customer_id === l.customer_id), Number(draft), billKind);
-                                              setSourcingDiscountDrafts(prev => ({ ...prev, [l.customer_id]: '' }));
-                                            }}
-                                            disabled={!draft || savingAdj}
-                                            className="px-2 py-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg"
-                                          >
-                                            {savingAdj ? '…' : 'Apply'}
-                                          </button>
-                                          <span className="text-[9px] text-gray-300">applies to their whole order</span>
-                                        </div>
+                                        {!lineBilled ? (
+                                          <div className="flex items-center gap-1.5">
+                                            <span className="text-[10px] text-gray-400">Discount</span>
+                                            <input
+                                              type="number" inputMode="numeric" min={1} max={100}
+                                              value={draft}
+                                              onChange={e => setSourcingDiscountDrafts(prev => ({ ...prev, [l.customer_id]: e.target.value }))}
+                                              placeholder="e.g. 20"
+                                              className="w-14 px-1.5 py-1 rounded-lg border border-gray-200 text-[10px] text-right"
+                                            />
+                                            <span className="text-[10px] text-gray-400">%</span>
+                                            <button
+                                              onClick={async () => {
+                                                await applyPercentDiscount(l.customer_id, customerLines.filter(cl => cl.customer_id === l.customer_id), Number(draft), billKind);
+                                                setSourcingDiscountDrafts(prev => ({ ...prev, [l.customer_id]: '' }));
+                                              }}
+                                              disabled={!draft || savingAdj}
+                                              className="px-2 py-1 bg-orange-500 hover:bg-orange-600 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg"
+                                            >
+                                              {savingAdj ? '…' : 'Apply'}
+                                            </button>
+                                            <span className="text-[9px] text-gray-300">applies to their whole order</span>
+                                          </div>
+                                        ) : (
+                                          <p className="text-[10px] text-gray-400">Already billed — shown for sourcing reference; edits are locked.</p>
+                                        )}
                                       </div>
                                     );
                                   })}
