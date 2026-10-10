@@ -621,7 +621,7 @@ function ProductCard(p: {
   const { product, look, primary, store } = p;
   const img = product.images?.[0];
   const was = product.compare_at_price && product.compare_at_price > product.selling_price ? product.compare_at_price : null;
-  const soldOut = !product.has_variants && product.stock_quantity !== undefined && product.stock_quantity <= 0;
+  const soldOut = !!product.is_out_of_stock || (!product.has_variants && product.stock_quantity !== undefined && product.stock_quantity <= 0);
 
   const aspect =
     look.id === 'boutique' ? 'aspect-[3/4]' : look.id === 'social' ? 'aspect-[4/5]' : 'aspect-square';
