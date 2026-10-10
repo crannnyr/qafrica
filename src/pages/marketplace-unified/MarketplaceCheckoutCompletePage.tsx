@@ -89,7 +89,7 @@ export default function MarketplaceCheckoutCompletePage() {
   }, [reference, attempt, clearCart]);
 
   if (status === 'paid') {
-    return <Result icon={<CheckCircle2 className="h-9 w-9 text-green-600" />} title="Payment confirmed" text="Your marketplace order has been recorded. China Import items have also been sent into the existing import fulfilment flow." action={<Link to="/customer/dashboard" className="rounded-xl bg-orange-500 px-5 py-3 text-sm font-bold text-white">View my orders</Link>} />;
+    return <Result icon={<CheckCircle2 className="h-9 w-9 text-green-600" />} title="Payment successful" text={`Your payment is confirmed and your order has been recorded. Reference: ${reference}. China Import items have been sent into the existing import fulfilment flow.`} action={<Link to="/customer/dashboard?tab=orders" className="rounded-xl bg-orange-500 px-5 py-3 text-sm font-bold text-white">View my orders</Link>} />;
   }
 
   if (status === 'fulfilment_error') {
@@ -108,7 +108,7 @@ export default function MarketplaceCheckoutCompletePage() {
   return <Result
     icon={status === 'pending' ? <RefreshCw className="h-9 w-9 text-orange-500" /> : <Loader2 className="h-9 w-9 animate-spin text-orange-500" />}
     title={status === 'pending' ? 'Payment is still processing' : 'Confirming your payment…'}
-    text={`Please keep this reference if you need support: ${reference}`}
+    text={`We are checking your payment with Nomba. Reference: ${reference}. Do not pay again while confirmation is pending.`}
     action={status === 'pending' ? <Link to="/customer/dashboard" className="rounded-xl border px-5 py-3 text-sm font-semibold text-gray-700">Go to my account</Link> : undefined}
   />;
 }
