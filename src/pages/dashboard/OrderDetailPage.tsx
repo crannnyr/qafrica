@@ -168,7 +168,55 @@ export default function OrderDetailPage() {
         return;
       }
   
-      setOrder(data as OrderDetail);
+      // Imported/dropshipped items can reference the China Import catalog rather
+      // than the regular products table. Resolve both the explicit source ID and
+      // legacy product IDs so seller details use the same catalog image as buyers.
+      const importedIds = [...new Set((data.order_items || [])
+        .filter((item: any) => item?.source_type === 'china_import' || item?.is_imported)
+        .flatMap((item: any) => [item.source_id, item.original_product_id, item.product_id].filter(Boolean))
+        .filter((id: unknown) => typeof id === 'string' && id.length > 0))];
+
+      let orderForDisplay: any = data;
+      if (importedIds.length) {
+        const { data: catalogProducts, error: catalogError } = await supabase
+          .from('china_import_products')
+          .select('id,name,image_url,image_urls,variants')
+          .in('id', importedIds);
+
+        if (catalogError) {
+          console.warn('Could not resolve dropship product images:', catalogError.message);
+        } else if (catalogProducts?.length) {
+          const catalogById = new Map(catalogProducts.map((product: any) => [
+            product.id,
+            {
+              id: product.id,
+              name: product.name,
+              images: Array.isArray(product.image_urls) && product.image_urls.length
+                ? product.image_urls
+                : product.image_url ? [product.image_url] : [],
+              variants: product.variants ?? [],
+            },
+          ]));
+          orderForDisplay = {
+            ...data,
+            order_items: (data.order_items || []).map((item: any) => {
+              const imported = item?.source_type === 'china_import' || item?.is_imported
+                ? catalogById.get(item.source_id || item.original_product_id || item.product_id)
+                : null;
+              if (!imported) return item;
+              return {
+                ...item,
+                product_name: item.product_name || imported.name,
+                product: item.product?.images?.length ? item.product : imported,
+                image_url: item.image_url || imported.images[0] || null,
+                imported_variants: imported.variants,
+              };
+            }),
+          };
+        }
+      }
+
+      setOrder(orderForDisplay as OrderDetail);
 
       // China Import earnings are recorded by the server-side ledger; never
       // derive this seller's profit from legacy order-item fields.
@@ -451,7 +499,7 @@ export default function OrderDetailPage() {
           </h2>
           <div className="space-y-4">
             {myDropshippedItems.map((item, idx) => {
-              const image = item.product?.images?.[0] ?? null;
+              const image = item.product?.images?.[0] ?? (item as any).image_url ?? null;
               return (
                 <div key={item.id ?? idx} className="flex gap-4">
                   <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0">
