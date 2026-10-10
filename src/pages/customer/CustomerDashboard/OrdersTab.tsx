@@ -31,8 +31,8 @@ export default function OrdersTab() {
         const loadedOrders: any[] = data || [];
         const importedIds = [...new Set(loadedOrders.flatMap(order =>
           (order.order_items || order.items || [])
-            .filter((item: any) => item?.source_type === 'china_import' && item?.source_id)
-            .map((item: any) => item.source_id)
+            .filter((item: any) => (item?.source_type === 'china_import' || item?.is_imported) && (item?.source_id || item?.product_id))
+            .map((item: any) => item.source_id || item.product_id)
         ))];
 
         if (importedIds.length) {
@@ -52,8 +52,8 @@ export default function OrdersTab() {
             ]));
             for (const order of loadedOrders) {
               for (const item of (order.order_items || order.items || [])) {
-                const imported = item?.source_type === 'china_import'
-                  ? importedById.get(item.source_id)
+                const imported = item?.source_type === 'china_import' || item?.is_imported
+                  ? importedById.get(item.source_id || item.product_id)
                   : null;
                 if (imported) {
                   item.original_product = item.original_product || imported;
