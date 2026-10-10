@@ -185,6 +185,7 @@ export default function ChinaImportCatalogSection() {
       toast.error(result.error.message);
     } else {
       toast.success(existing ? 'China Import product reactivated' : 'China Import product added to your store');
+      setConfiguringProduct(null);
       await load();
     }
 
