@@ -121,12 +121,13 @@ export default function StorePage() {
       // the original supplier product so stale import_catalog stock cannot mark
       // an in-stock dropship item as sold out (or the reverse).
       const importedProductIds = [...new Set((importedData || []).map((item: any) => item.original_product_id).filter(Boolean))];
-      const { data: sourceInventory } = importedProductIds.length
+      const sourceInventoryResult = importedProductIds.length
         ? await supabase
             .from('products')
             .select('id,stock_quantity,is_out_of_stock,is_active,has_variants,variants')
             .in('id', importedProductIds)
-        : { data: [], error: null };
+        : null;
+      const sourceInventory = sourceInventoryResult?.data ?? [];
       const inventoryByProductId = new Map((sourceInventory || []).map((product: any) => [product.id, product]));
 
       const mappedImports = (importedData || []).flatMap((item: any) => {
