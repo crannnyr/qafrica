@@ -127,16 +127,12 @@ export default function OrdersTab() {
               original_product: {
                 ...(item.original_product || {}),
                 ...(productInfo || {}),
-                images: item.original_product?.images?.length
-                  ? item.original_product.images
-                  : images,
+                images: images.length ? images : (item.original_product?.images || []),
               },
               product: {
                 ...(item.product || {}),
                 ...(productInfo || {}),
-                images: item.product?.images?.length
-                  ? item.product.images
-                  : images,
+                images: images.length ? images : (item.product?.images || []),
               },
               product_name: item.product_name || item.product?.name || item.original_product?.name || resolved?.name || item.name,
               image_url: existingImage || images[0] || null,
