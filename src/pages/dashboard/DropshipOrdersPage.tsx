@@ -1,10 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Package, Truck, CheckCircle, Clock, Eye, Lock } from 'lucide-react';
+import { Package, Truck, CheckCircle, Clock, Eye } from 'lucide-react';
 import { useStoreStore, useOrderStore } from '@/stores';
-import { toast } from 'sonner';
 import type { DropshipOrderView } from '@/types';
+
+const paymentStatusColors: Record<string, string> = {
+  paid: 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300',
+  failed: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
+  refunded: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
+  pending: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
+};
+
+function formatStatus(status?: string | null) {
+  if (!status) return 'Unknown';
+  return status.replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
 
 export default function DropshipOrdersPage() {
   const navigate = useNavigate();
@@ -78,13 +88,16 @@ export default function DropshipOrdersPage() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Order</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Customer</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Your Earnings</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Order Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Payment Status</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {filteredOrders.map((order) => {
+                {filteredOrders.map((order: DropshipOrderView) => {
                   const StatusIcon = getStatusIcon(order.status);
+                  const paymentStatus = order.payment_status;
+                  const paymentColor = paymentStatusColors[paymentStatus?.toLowerCase()] || 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-300';
                   return (
                     <tr key={order.order_id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                       <td className="px-6 py-4">
@@ -108,7 +121,12 @@ export default function DropshipOrdersPage() {
                           'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
                         }`}>
                           <StatusIcon className="w-3.5 h-3.5" />
-                          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          {formatStatus(order.status)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${paymentColor}`}>
+                          {formatStatus(paymentStatus)}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">

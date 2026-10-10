@@ -59,7 +59,16 @@ export type CreateResult =
 
 export async function createCheckout(items: CartItem[] | ReturnType<typeof toQuoteItems>, details: CheckoutDetails): Promise<CreateResult> {
   const payloadItems = (items as CartItem[])[0] && 'productId' in (items as CartItem[])[0] ? toQuoteItems(items as CartItem[]) : items;
-  const { data, error } = await supabase.functions.invoke('checkout-create', { body: { items: payloadItems, ...details } });
+
+  // Explicitly forward the active shopper session to checkout-create. The
+  // endpoint permits guest checkout, so relying on an implicit Authorization
+  // header can leave a signed-in dropship buyer's order customer_id null.
+  const { data: authData } = await supabase.auth.getSession();
+  const accessToken = authData.session?.access_token;
+  const { data, error } = await supabase.functions.invoke('checkout-create', {
+    body: { items: payloadItems, ...details },
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
   if (error) {
     // Supabase wraps non-2xx responses; read our JSON error body when present
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -88,7 +97,14 @@ export type SessionStatus = {
 };
 
 export async function confirmCheckout(reference: string): Promise<SessionStatus | null> {
-  const { data, error } = await supabase.functions.invoke('checkout-confirm', { body: { reference } });
+  // The confirmation endpoint must receive the same signed-in identity as
+  // checkout creation so it can verify ownership and return the final status.
+  const { data: authData } = await supabase.auth.getSession();
+  const accessToken = authData.session?.access_token;
+  const { data, error } = await supabase.functions.invoke('checkout-confirm', {
+    body: { reference },
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
   if (error) return null;
   return data as SessionStatus;
 }

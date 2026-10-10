@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Loader2, Package, Plus, Search } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { AlertCircle, Check, Loader2, Package, Plus, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services';
 import { toast } from 'sonner';
@@ -35,6 +36,7 @@ type CatalogRow = {
 };
 
 const money = (value: number) => `₦${Math.round(value).toLocaleString()}`;
+const imageOf = (product: ChinaProduct) => product.image_urls?.[0] || product.image_url || '';
 
 export default function ChinaImportCatalogSection() {
   const { currentStore } = useStoreStore();
@@ -46,20 +48,24 @@ export default function ChinaImportCatalogSection() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [configuringProduct, setConfiguringProduct] = useState<ChinaProduct | null>(null);
+  const [markupPrice, setMarkupPrice] = useState('');
   const [myCategoryIds, setMyCategoryIds] = useState<Set<string>>(new Set());
   const isUnlimited = (user as any)?.subscription_tier === 'unlimited';
 
   const load = async () => {
-    if (!currentStore?.id) return;
+    if (!currentStore?.id) {
+      setProducts([]);
+      setCatalog([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-
     const storeNiches = currentStore.niches || [];
 
     const [{ data: categoryRows, error: categoryError }, { data: catalogRows, error: catalogError }] =
       await Promise.all([
-        supabase
-          .from('niche_categories')
-          .select('id,niche_id'),
+        supabase.from('niche_categories').select('id,niche_id'),
         supabase
           .from('china_import_dropship_catalog')
           .select('id,china_import_product_id,seller_price_ngn,supplier_cost_ngn,shipping_cost_ngn,landed_cost_ngn,status')
@@ -76,17 +82,16 @@ export default function ChinaImportCatalogSection() {
       ? await supabase.from('niches').select('id,name').in('id', nicheIds)
       : { data: [], error: null };
     if (nicheError) toast.error(nicheError.message);
+
     const nicheNameById = new Map((nicheRows || []).map(row => [row.id, row.name]));
     const nicheNameByCategoryId = new Map(categories.map(row => [row.id, nicheNameById.get(row.niche_id) || null]));
-    const myCategorySet = new Set(categories.filter(row => storeNiches.includes(row.niche_id)).map(row => row.id));
-    setMyCategoryIds(myCategorySet);
-    const categoryIds = categories
-      .filter(row => {
-        if (filterType === 'all') return true;
-        const isMyNiche = storeNiches.includes(row.niche_id);
-        return filterType === 'my_niches' ? isMyNiche : !isMyNiche;
-      })
-      .map(row => row.id);
+    setMyCategoryIds(new Set(categories.filter(row => storeNiches.includes(row.niche_id)).map(row => row.id)));
+
+    const categoryIds = categories.filter(row => {
+      if (filterType === 'all') return true;
+      const matchesStoreNiche = storeNiches.includes(row.niche_id);
+      return filterType === 'my_niches' ? matchesStoreNiche : !matchesStoreNiche;
+    }).map(row => row.id);
 
     if (categoryIds.length === 0) {
       setProducts([]);
@@ -105,7 +110,6 @@ export default function ChinaImportCatalogSection() {
       .order('created_at', { ascending: false });
 
     if (productError) toast.error(productError.message);
-
     setProducts((productRows || []).map(product => ({
       ...(product as ChinaProduct),
       niche_name: nicheNameByCategoryId.get(product.category_id) || null,
@@ -113,13 +117,14 @@ export default function ChinaImportCatalogSection() {
     setCatalog((catalogRows || []) as CatalogRow[]);
     setLoading(false);
   };
+
   useEffect(() => {
     void load();
   }, [currentStore?.id, currentStore?.niches?.join(','), filterType]);
 
   const catalogByProduct = useMemo(
     () => new Map(catalog.map(row => [row.china_import_product_id, row])),
-    [catalog]
+    [catalog],
   );
 
   const availableProducts = products.filter(product => {
@@ -135,7 +140,14 @@ export default function ChinaImportCatalogSection() {
       product.description?.toLowerCase().includes(q);
   });
 
-  const addToStore = async (product: ChinaProduct) => {
+  const openPricing = (product: ChinaProduct) => {
+    const existing = catalogByProduct.get(product.id);
+    const supplierPrice = Math.max(Number(product.price_ngn ?? 0), 0);
+    setConfiguringProduct(product);
+    setMarkupPrice(String(existing?.seller_price_ngn ?? Math.ceil(supplierPrice * 1.2)));
+  };
+
+  const addToStore = async (product: ChinaProduct, enteredPrice?: string) => {
     if (!currentStore?.id || !currentStore.owner_id) return;
 
     if (!isUnlimited && !myCategoryIds.has(product.category_id || '')) {
@@ -144,26 +156,25 @@ export default function ChinaImportCatalogSection() {
     }
 
     const existing = catalogByProduct.get(product.id);
-    const landed = Math.max(Number(product.price_ngn ?? 0), 0);
-    const entered = Number(prices[product.id]);
+    const supplierPrice = Math.max(Number(product.price_ngn ?? 0), 0);
+    const entered = Number(enteredPrice ?? prices[product.id]);
     const sellerPrice = Number.isFinite(entered) && entered > 0
       ? entered
-      : Math.ceil(landed * 1.2);
+      : Math.ceil(supplierPrice * 1.2);
 
-    if (sellerPrice < landed) {
-      toast.error(`Selling price must be at least ${money(landed)}`);
+    if (sellerPrice < supplierPrice) {
+      toast.error(`Selling price must be at least ${money(supplierPrice)}`);
       return;
     }
 
     setBusyId(product.id);
-
     const payload = {
       seller_store_id: currentStore.id,
       seller_owner_id: currentStore.owner_id,
       china_import_product_id: product.id,
       seller_price_ngn: sellerPrice,
-      // Supplier cost and shipping are authoritative database snapshots.
-      // Shipping is added separately at checkout.
+      // Supplier cost and shipping remain authoritative DB snapshots.
+      // China shipping is charged separately at checkout.
       status: 'active',
     };
 
@@ -184,23 +195,7 @@ export default function ChinaImportCatalogSection() {
       toast.error(result.error.message);
     } else {
       toast.success(existing ? 'China Import product reactivated' : 'China Import product added to your store');
-      await load();
-    }
-
-    setBusyId(null);
-  };
-
-  const toggleStatus = async (row: CatalogRow) => {
-    setBusyId(row.id);
-    const next = row.status === 'active' ? 'paused' : 'active';
-    const { error } = await supabase
-      .from('china_import_dropship_catalog')
-      .update({ status: next })
-      .eq('id', row.id);
-
-    if (error) toast.error(error.message);
-    else {
-      toast.success(next === 'active' ? 'Product is live in your store' : 'Product paused');
+      setConfiguringProduct(null);
       await load();
     }
     setBusyId(null);
@@ -260,23 +255,34 @@ export default function ChinaImportCatalogSection() {
           <p className="font-medium text-gray-700 dark:text-gray-200">No China Import products found</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 lg:gap-6">
-          {filtered.map(product => {
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 lg:gap-6">
+          {filtered.map((product, index) => {
             const row = catalogByProduct.get(product.id);
-            const landed = row?.landed_cost_ngn ?? Math.max(Number(product.price_ngn ?? 0), 0);
-            const suggested = Math.ceil(landed * 1.2);
-            const margin = Math.max((row?.seller_price_ngn ?? suggested) - landed, 0);
+            const supplierPrice = Math.max(Number(product.price_ngn ?? 0), 0);
+            const suggested = Math.ceil(supplierPrice * 1.2);
+            const currentPrice = row?.seller_price_ngn ?? Number(prices[product.id] ?? suggested);
+            const margin = Math.max(currentPrice - supplierPrice, 0);
             const canImport = isUnlimited || myCategoryIds.has(product.category_id || '');
+            const image = imageOf(product);
 
             return (
-              <div key={product.id} className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-shadow hover:shadow-lg ${canImport ? 'border-gray-100 dark:border-gray-700' : 'border-gray-200 dark:border-gray-600 opacity-75'}`}>
+              <motion.div
+                key={product.id}
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.025 }}
+                className={`bg-white dark:bg-gray-800 rounded-xl border overflow-hidden transition-shadow hover:shadow-lg ${canImport ? 'border-gray-100 dark:border-gray-700' : 'border-gray-200 dark:border-gray-600 opacity-75'}`}
+              >
                 <div className="aspect-square bg-gray-100 dark:bg-gray-700 relative overflow-hidden">
-                  {((product.image_urls?.[0]) || product.image_url) ? (
-                    <img src={(product.image_urls?.[0]) || product.image_url || ''} alt={product.name} className="w-full h-full object-cover" />
+                  {image ? (
+                    <img
+                      src={image}
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                      onError={event => { (event.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+                    />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Package className="w-12 h-12 text-gray-300" />
-                    </div>
+                    <div className="w-full h-full flex items-center justify-center"><Package className="w-16 h-16 text-gray-300" /></div>
                   )}
                   <div className="absolute top-3 left-3">
                     <span className="px-2 py-1 bg-gray-900/70 text-white text-xs rounded backdrop-blur-sm">
@@ -285,56 +291,132 @@ export default function ChinaImportCatalogSection() {
                   </div>
                   {!canImport && (
                     <div className="absolute inset-0 bg-gray-900/50 flex items-center justify-center">
-                      <span className="px-3 py-1 bg-gray-900 text-white text-xs rounded-full">
-                        Upgrade to Import
-                      </span>
+                      <span className="px-3 py-1 bg-gray-900 text-white text-xs rounded-full">Upgrade to Import</span>
                     </div>
                   )}
                 </div>
 
-                <div className="p-3 lg:p-4 space-y-3">
+                <div className="p-2 lg:p-4 space-y-3">
                   <div>
-                    <h3 className="font-semibold text-sm text-gray-900 dark:text-white line-clamp-2">{product.name}</h3>
-                    {product.category && <p className="text-xs text-gray-500 mt-1">{product.category}</p>}
+                    <h3 className="font-semibold text-gray-900 dark:text-white mb-1 line-clamp-1 text-xs lg:text-sm">{product.name}</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 lg:mb-3 line-clamp-2">{product.description}</p>
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                        {product.category || product.niche_name || 'China Import'}
+                      </span>
+                      <span className="text-xs text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-500/10 px-2 py-1 rounded flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Available
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="rounded-lg bg-gray-50 dark:bg-gray-700/60 p-3 space-y-1.5 text-sm">
-                    <div className="flex justify-between"><span className="text-gray-500">Landed cost</span><strong>{money(landed)}</strong></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Suggested price</span><strong>{money(suggested)}</strong></div>
-                    <div className="flex justify-between"><span className="text-gray-500">Your margin</span><strong className="text-green-600">{money(margin)}</strong></div>
-                  </div>
-
-                  <input
-                    type="number"
-                    min={Math.ceil(landed)}
-                    value={prices[product.id] ?? (row ? String(row.seller_price_ngn) : String(suggested))}
-                    onChange={e => setPrices(prev => ({ ...prev, [product.id]: e.target.value }))}
-                    className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold outline-none focus:border-orange-500"
-                    aria-label={`Selling price for ${product.name}`}
-                  />
-
-                  <div className="flex gap-2">
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-xs lg:text-sm font-bold text-orange-600">{money(supplierPrice)}</span>
                     <Button
-                      onClick={() => void addToStore(product)}
-                      disabled={busyId === product.id || !canImport}
-                      className={`flex-1 ${canImport ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'}`}
+                      onClick={() => openPricing(product)}
+                      disabled={!canImport || busyId === product.id}
+                      className={`shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 lg:px-4`}
                       size="sm"
                     >
-                      {busyId === product.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        canImport
-                          ? <><Plus className="w-4 h-4 mr-1" />Add to Store</>
-                          : 'Upgrade to Import'
-                      )}
+                      {busyId === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4 mr-1" />Import</>}
                     </Button>
                   </div>
+
+
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
       )}
+
+      <AnimatePresence>
+        {configuringProduct && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onMouseDown={event => {
+            if (event.target === event.currentTarget) setConfiguringProduct(null);
+          }}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="china-import-pricing-title"
+              className="bg-white dark:bg-gray-800 rounded-3xl p-5 sm:p-7 max-w-2xl w-full max-h-[90dvh] overflow-y-auto shadow-2xl"
+            >
+              <div className="flex justify-between items-center mb-6 gap-4">
+                <h2 id="china-import-pricing-title" className="text-2xl font-extrabold text-gray-900 dark:text-white">Configure Pricing</h2>
+                <button onClick={() => setConfiguringProduct(null)} aria-label="Close pricing dialog" className="p-2 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl mb-6">
+                <div className="w-24 h-24 sm:w-28 sm:h-28 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                  {imageOf(configuringProduct) ? (
+                    <img src={imageOf(configuringProduct)} className="w-full h-full object-cover" alt={configuringProduct.name} />
+                  ) : <Package className="w-8 h-8 text-gray-300" />}
+                </div>
+                <div className="min-w-0 flex-1 self-center">
+                  <p className="font-bold text-xl text-gray-900 dark:text-white line-clamp-2">{configuringProduct.name}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Niche: {configuringProduct.niche_name || configuringProduct.category || 'China Import'}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Supplier Price: {money(Math.max(Number(configuringProduct.price_ngn ?? 0), 0))}</p>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <div className="flex justify-between items-center gap-4 border-b border-gray-200 dark:border-gray-700 pb-4">
+                  <span className="text-gray-500 dark:text-gray-400 font-medium flex items-center gap-2"><AlertCircle className="w-5 h-5" />Dropship Base Cost:</span>
+                  <span className="font-extrabold text-xl sm:text-2xl text-gray-900 dark:text-white">
+                    {money(Math.max(Number(configuringProduct.price_ngn ?? 0), 0))}
+                  </span>
+                </div>
+
+                <div>
+                  <label htmlFor="china-import-selling-price" className="block text-base font-bold text-gray-700 dark:text-gray-300 mb-3">Set Your Selling Price (₦)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium text-lg">₦</span>
+                    <input
+                      id="china-import-selling-price"
+                      type="number"
+                      min={Math.ceil(Math.max(Number(configuringProduct.price_ngn ?? 0), 0))}
+                      step="1"
+                      inputMode="numeric"
+                      value={markupPrice}
+                      onChange={event => setMarkupPrice(event.target.value)}
+                      className="w-full pl-10 pr-4 py-4 rounded-2xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-orange-500 outline-none font-extrabold text-2xl text-orange-600"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">This is the price customers will pay for the product on your store. China shipping is calculated separately at checkout.</p>
+                </div>
+
+                <div className="p-5 bg-green-50 dark:bg-green-500/10 rounded-2xl border border-green-100 dark:border-green-800">
+                  <div className="flex justify-between items-center gap-3">
+                    <span className="text-green-700 dark:text-green-400 text-base font-medium">Your Profit per Sale:</span>
+                    <span className="text-green-700 dark:text-green-400 font-extrabold text-2xl">
+                      {money(Math.max(0, (Number(markupPrice) || 0) - Math.max(Number(configuringProduct.price_ngn ?? 0), 0)))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-7 flex flex-col sm:flex-row gap-3">
+                <Button variant="outline" className="flex-1 py-6 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300" onClick={() => setConfiguringProduct(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 py-6 bg-orange-500 hover:bg-orange-600 text-white"
+                  onClick={() => void addToStore(configuringProduct, markupPrice)}
+                  disabled={busyId === configuringProduct.id || !markupPrice || Number(markupPrice) < Math.max(Number(configuringProduct.price_ngn ?? 0), 0)}
+                >
+                  {busyId === configuringProduct.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5 mr-2" />Add to Store</>}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </section>
   );
 }

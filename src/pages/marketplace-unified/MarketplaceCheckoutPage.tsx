@@ -13,7 +13,14 @@ const naira = (value: number) => `₦${Number(value || 0).toLocaleString(undefin
 type QuoteStore = { store_id: string; store_name: string; items: any[]; subtotal: number; delivery_fee: number; total: number; shipping_included?: boolean; flight_shipping_total?: number };
 
 async function invokeCheckout(body: Record<string, unknown>) {
-  const result = await supabase.functions.invoke('marketplace-v2-checkout', { body });
+  // This endpoint validates the signed-in customer and checkout owner.
+  // Explicitly forward the active access token for quote, create, and confirm flows.
+  const { data: authData } = await supabase.auth.getSession();
+  const accessToken = authData.session?.access_token;
+  const result = await supabase.functions.invoke('marketplace-v2-checkout', {
+    body,
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
   if (!result.error) return result;
   let serverBody: any = null;
   try { serverBody = result.error.context ? await result.error.context.clone().json() : null; } catch { /* non-JSON response */ }

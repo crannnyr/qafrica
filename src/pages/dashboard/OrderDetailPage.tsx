@@ -103,6 +103,9 @@ export default function OrderDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
   const [showTrackingInput, setShowTrackingInput] = useState(false);
+  const [chinaImportEarnings, setChinaImportEarnings] = useState<{
+    revenue: number; cost: number; grossProfit: number; platformFee: number; netProfit: number;
+  } | null>(null);
 
   useEffect(() => {
     if (orderId && currentStore?.id) {
@@ -165,7 +168,77 @@ export default function OrderDetailPage() {
         return;
       }
   
-      setOrder(data as OrderDetail);
+      // Imported/dropshipped items can reference the China Import catalog rather
+      // than the regular products table. Resolve both the explicit source ID and
+      // legacy product IDs so seller details use the same catalog image as buyers.
+      const importedIds = [...new Set((data.order_items || [])
+        .filter((item: any) => item?.source_type === 'china_import' || item?.is_imported)
+        .flatMap((item: any) => [item.source_id, item.original_product_id, item.product_id].filter(Boolean))
+        .filter((id: unknown) => typeof id === 'string' && id.length > 0))];
+
+      let orderForDisplay: any = data;
+      if (importedIds.length) {
+        const { data: catalogProducts, error: catalogError } = await supabase
+          .from('china_import_products')
+          .select('id,name,image_url,image_urls,variants')
+          .in('id', importedIds);
+
+        if (catalogError) {
+          console.warn('Could not resolve dropship product images:', catalogError.message);
+        } else if (catalogProducts?.length) {
+          const catalogById = new Map(catalogProducts.map((product: any) => [
+            product.id,
+            {
+              id: product.id,
+              name: product.name,
+              images: Array.isArray(product.image_urls) && product.image_urls.length
+                ? product.image_urls
+                : product.image_url ? [product.image_url] : [],
+              variants: product.variants ?? [],
+            },
+          ]));
+          orderForDisplay = {
+            ...data,
+            order_items: (data.order_items || []).map((item: any) => {
+              const imported = item?.source_type === 'china_import' || item?.is_imported
+                ? catalogById.get(item.source_id || item.original_product_id || item.product_id)
+                : null;
+              if (!imported) return item;
+              return {
+                ...item,
+                product_name: item.product_name || imported.name,
+                product: item.product?.images?.length ? item.product : imported,
+                image_url: item.image_url || imported.images[0] || null,
+                imported_variants: imported.variants,
+              };
+            }),
+          };
+        }
+      }
+
+      setOrder(orderForDisplay as OrderDetail);
+
+      // China Import earnings are recorded by the server-side ledger; never
+      // derive this seller's profit from legacy order-item fields.
+      setChinaImportEarnings(null);
+      if (data.store_id === currentStore.id || data.dropshipper_store_id === currentStore.id) {
+        const { data: earningsRows, error: earningsError } = await supabase
+          .from('china_import_dropship_earnings')
+          .select('total_revenue_ngn,total_cost_ngn,gross_profit_ngn,platform_fee_ngn,net_profit_ngn')
+          .eq('seller_order_id', data.id);
+        if (!earningsError && earningsRows?.length) {
+          const totals = earningsRows.reduce((acc: any, row: any) => ({
+            revenue: acc.revenue + Number(row.total_revenue_ngn ?? 0),
+            cost: acc.cost + Number(row.total_cost_ngn ?? 0),
+            grossProfit: acc.grossProfit + Number(row.gross_profit_ngn ?? 0),
+            platformFee: acc.platformFee + Number(row.platform_fee_ngn ?? 0),
+            netProfit: acc.netProfit + Number(row.net_profit_ngn ?? 0),
+          }), { revenue: 0, cost: 0, grossProfit: 0, platformFee: 0, netProfit: 0 });
+          setChinaImportEarnings(totals);
+        } else if (earningsError) {
+          console.warn('Could not load China Import dropship earnings:', earningsError.message);
+        }
+      }
   
       if (data.tracking_number) {
         setTrackingNumber(data.tracking_number);
@@ -197,27 +270,40 @@ export default function OrderDetailPage() {
     (item) => item.is_imported && item.original_store_id === currentStore?.id
   );
 
+  const isChinaImportMarketplaceItem = (item: any) =>
+    item?.source_type === 'china_import' &&
+    (item?.attribution_source === 'marketplace' || item?.is_imported === true || !!item?.source_id);
+
   const hasDropshippedItems = (order?.order_items || []).some(
     (item) =>
-      item.is_imported &&
-      item.original_owner_id &&
-      item.original_owner_id !== currentStore?.id
+      (item.is_imported && item.original_owner_id && item.original_owner_id !== currentStore?.id) ||
+      isChinaImportMarketplaceItem(item)
   );
 
   const isFullyDropshipped =
     (order?.order_items?.length ?? 0) > 0 &&
-    order?.order_items.every((item) => item.is_imported);
+    order?.order_items.every((item) => item.is_imported || isChinaImportMarketplaceItem(item));
 
   const dropshipEarnings = (() => {
-    if (!order) return { margin: 0, platformFee: 0, net: 0 };
+    if (chinaImportEarnings) {
+      return {
+        margin: chinaImportEarnings.grossProfit,
+        platformFee: chinaImportEarnings.platformFee,
+        net: chinaImportEarnings.netProfit,
+        cost: chinaImportEarnings.cost,
+        revenue: chinaImportEarnings.revenue,
+        fromLedger: true,
+      };
+    }
+    if (!order) return { margin: 0, platformFee: 0, net: 0, cost: 0, revenue: 0, fromLedger: false };
     const margin = (order.order_items || []).reduce((sum, item) => {
       if (item.is_imported && item.original_owner_id && item.original_owner_id !== currentStore?.id) {
         return sum + (item.unit_price - (item.dropship_price || 0)) * item.quantity;
       }
       return sum;
     }, 0);
-    const platformFee = margin * 0.08;
-    return { margin, platformFee, net: margin - platformFee };
+    const platformFee = Math.max(0, margin) * 0.08;
+    return { margin, platformFee, net: Math.max(0, margin - platformFee), cost: 0, revenue: 0, fromLedger: false };
   })();
 
   const originalOwnerTotal = myDropshippedItems.reduce(
@@ -413,7 +499,7 @@ export default function OrderDetailPage() {
           </h2>
           <div className="space-y-4">
             {myDropshippedItems.map((item, idx) => {
-              const image = item.product?.images?.[0] ?? null;
+              const image = item.product?.images?.[0] ?? (item as any).image_url ?? null;
               return (
                 <div key={item.id ?? idx} className="flex gap-4">
                   <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-lg overflow-hidden flex-shrink-0">
@@ -705,12 +791,22 @@ export default function OrderDetailPage() {
         <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-6">
           <h2 className="font-semibold text-orange-900 dark:text-orange-300 mb-3">Your Dropship Earnings</h2>
           <div className="space-y-2 text-sm">
+            {dropshipEarnings.fromLedger && (
+              <>
+                <div className="flex justify-between text-orange-800 dark:text-orange-400">
+                  <span>Sale revenue</span><span>₦{dropshipEarnings.revenue.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-orange-800 dark:text-orange-400">
+                  <span>Supplier product cost</span><span>₦{dropshipEarnings.cost.toLocaleString()}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-orange-800 dark:text-orange-400">
-              <span>Total Margin (selling price − dropship cost)</span>
+              <span>{dropshipEarnings.fromLedger ? 'Gross profit / loss' : 'Total Margin (selling price − dropship cost)'}</span>
               <span>₦{dropshipEarnings.margin.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-orange-800 dark:text-orange-400">
-              <span>Platform Fee (8%)</span>
+              <span>Platform fee (8% of positive profit)</span>
               <span>− ₦{dropshipEarnings.platformFee.toLocaleString()}</span>
             </div>
             <div className="flex justify-between font-bold text-orange-900 dark:text-orange-200 pt-2 border-t border-orange-200 dark:border-orange-700">
@@ -719,7 +815,10 @@ export default function OrderDetailPage() {
             </div>
           </div>
           <p className="text-xs text-orange-600 dark:text-orange-500 mt-2">
-            Credited to your wallet after escrow is released.
+            Product profit is the selling price minus the supplier product cost. Shipping is charged separately as delivery, so it is not deducted from product profit a second time. The store’s configured dropshipping commission applies only to positive product profit. Loss-making orders incur no platform fee and do not create a negative wallet credit.
+          </p>
+          <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">
+            Positive net earnings are credited to your wallet after escrow is released.
           </p>
         </div>
       )}

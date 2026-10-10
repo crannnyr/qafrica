@@ -141,13 +141,34 @@ async function attachChinaDropshipTracking(order: MyOrder): Promise<MyOrder> {
 }
 
 async function fetchUnifiedOrders(customerId: string): Promise<MyOrder[]> {
-  const [storeResult, chinaResult] = await Promise.all([
-    supabase.from('orders').select(SELECT).eq('customer_id', customerId).order('created_at', { ascending: false }).limit(200),
+  // Fetch store orders through the authenticated get-orders function. It uses
+  // the verified JWT identity and service-role reads, avoiding a silent empty
+  // list when the browser's direct PostgREST/RLS query fails.
+  const [storeResponse, chinaResult] = await Promise.all([
+    supabase.functions.invoke('get-orders', { body: { mode: 'customer', limit: 200 } }),
     supabase.from('china_import_orders').select('id, code, status, payment_status, total_ngn, subtotal_ngn, shipping_ngn, created_at, shipped_at, received_at, user_id, customer_whatsapp, delivery_address, shipping_method, batch_id, items').eq('user_id', customerId).order('created_at', { ascending: false }).limit(200),
   ]);
 
-  const storeOrders = ((storeResult.data ?? []) as unknown as MyOrder[]).map((o) => ({ ...o, source_type: 'store' as const }));
+  let storeRows: any[] = [];
+  if (!storeResponse.error && !storeResponse.data?.error) {
+    const payload = storeResponse.data?.data ?? storeResponse.data;
+    if (Array.isArray(payload)) storeRows = payload;
+  } else {
+    console.error('Customer orders function failed; falling back to direct query:', storeResponse.error ?? storeResponse.data?.error);
+    const { data, error } = await supabase.from('orders').select(SELECT)
+      .eq('customer_id', customerId).order('created_at', { ascending: false }).limit(200);
+    if (error) console.error('Direct customer orders query failed:', error);
+    storeRows = data ?? [];
+  }
+
+  const storeOrders = storeRows.map((o) => ({
+    ...o,
+    stores: o.stores ?? o.store ?? null,
+    source_type: 'store' as const,
+    order_items: Array.isArray(o.order_items) ? o.order_items : [],
+  })) as MyOrder[];
   const trackedStoreOrders = await Promise.all(storeOrders.map(attachChinaDropshipTracking));
+  if (chinaResult.error) console.error('China Import customer orders query failed:', chinaResult.error);
   const chinaOrders = ((chinaResult.data ?? []) as unknown as ChinaRow[]).map(normalizeChina);
 
   return [...trackedStoreOrders, ...chinaOrders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -170,12 +191,39 @@ export function useMyOrders() {
 }
 
 export async function fetchOrder(id: string, customerId: string): Promise<MyOrder | null> {
-  const { data } = await supabase.from('orders').select(SELECT).eq('id', id).eq('customer_id', customerId).maybeSingle();
+  // Use the same authenticated endpoint as the customer order list. The direct
+  // embedded PostgREST query can fail for orders even when the list endpoint
+  // successfully returns them, which previously surfaced as a false "not found".
+  const { data: detailResponse, error: detailError } = await supabase.functions.invoke('get-orders', {
+    body: { mode: 'detail', order_id: id },
+  });
+  const detailPayload = detailResponse?.data ?? detailResponse;
+  const detailRow = Array.isArray(detailPayload) ? detailPayload[0] : detailPayload;
+
+  if (!detailError && detailRow && !detailRow.error && detailRow.id === id) {
+    return {
+      ...detailRow,
+      stores: detailRow.stores ?? detailRow.store ?? null,
+      source_type: 'store',
+      order_items: Array.isArray(detailRow.order_items) ? detailRow.order_items : [],
+    } as MyOrder;
+  }
+
+  if (detailError || detailResponse?.error) {
+    console.error('Customer order detail endpoint failed; trying direct query:', detailError ?? detailResponse?.error);
+  }
+
+  // Keep a direct-query fallback for deployments where the edge function's
+  // detail mode is not yet available.
+  const { data, error } = await supabase.from('orders').select(SELECT)
+    .eq('id', id).eq('customer_id', customerId).maybeSingle();
+  if (error) console.error('Direct customer order detail query failed:', error);
   if (data) return { ...(data as unknown as MyOrder), source_type: 'store' };
 
-  const { data: china } = await supabase.from('china_import_orders')
+  const { data: china, error: chinaError } = await supabase.from('china_import_orders')
     .select('id, code, status, payment_status, total_ngn, subtotal_ngn, shipping_ngn, created_at, shipped_at, received_at, user_id, customer_whatsapp, delivery_address, shipping_method, batch_id, items')
     .eq('id', id).eq('user_id', customerId).maybeSingle();
+  if (chinaError) console.error('China Import order detail query failed:', chinaError);
 
   return china ? normalizeChina(china as unknown as ChinaRow) : null;
 }

@@ -20,17 +20,133 @@ export default function OrdersTab() {
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const { customer } = useCustomerAuthStore();
 
-  useEffect(() => { if (customer?.id) fetchOrders(); }, [customer?.id]);
+  useEffect(() => {
+    if (customer?.id) {
+      void fetchOrders();
+    } else {
+      // Do not leave the whole Orders tab spinning forever when the customer
+      // session is not ready or the user has signed out.
+      setOrders([]);
+      setIsLoading(false);
+    }
+  }, [customer?.id]);
 
   const fetchOrders = async () => {
-    if (!customer) return;
+    if (!customer?.id) {
+      setOrders([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
     try {
       const { data, error } = await orderService.getUserOrders(customer.id);
-      if (error) { console.error('Fetch orders error:', error); setOrders([]); }
-      else setOrders(data || []);
+      if (error) {
+        console.error('Fetch orders error:', error);
+        setOrders([]);
+        toast.error('We could not load your orders. Please try again.');
+        return;
+      }
+
+      // Render the order list as soon as the authenticated order request
+      // succeeds. Imported catalog enrichment is secondary and must never
+      // block customer order history from appearing.
+      const loadedOrders: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray((data as any)?.orders)
+          ? (data as any).orders
+          : [];
+      setOrders(loadedOrders);
+      setIsLoading(false);
+
+      const productIds = [...new Set(loadedOrders.flatMap(order =>
+        (order.order_items || order.items || []).flatMap((item: any) =>
+          [item?.source_id, item?.original_product_id, item?.product_id, item?.product?.id, item?.original_product?.id]
+            .filter((id: unknown) => typeof id === 'string' && id.length > 0)
+        )
+      ))];
+
+      if (!productIds.length) return;
+
+      // Product image enrichment is deliberately separate from order loading.
+      // Try both catalogs because dropship order items may retain the original
+      // China Import ID or a regular products-table ID depending on their age.
+      const catalogPromise = Promise.all([
+        supabase.from('china_import_products').select('id,name,image_url,image_urls').in('id', productIds),
+        supabase.from('products').select('id,name,images,image_url').in('id', productIds),
+      ]);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        window.setTimeout(() => reject(new Error('Product image lookup timed out')), 5000)
+      );
+
+      try {
+        const [chinaResult, productsResult] = await Promise.race([catalogPromise, timeoutPromise]) as any;
+        const productById = new Map<string, { name?: string; images: string[] }>();
+
+        for (const product of chinaResult.data ?? []) {
+          productById.set(product.id, {
+            name: product.name,
+            images: Array.isArray(product.image_urls) && product.image_urls.length
+              ? product.image_urls.filter(Boolean)
+              : product.image_url ? [product.image_url] : [],
+          });
+        }
+        for (const product of productsResult.data ?? []) {
+          const existing = productById.get(product.id);
+          const images = Array.isArray(product.images)
+            ? product.images.filter(Boolean)
+            : product.image_url ? [product.image_url] : [];
+          productById.set(product.id, {
+            name: existing?.name || product.name,
+            images: existing?.images.length ? existing.images : images,
+          });
+        }
+
+        if (chinaResult.error && productsResult.error) {
+          console.warn('Could not resolve order product images:', chinaResult.error.message, productsResult.error.message);
+          return;
+        }
+
+        const enrichedOrders = loadedOrders.map(order => ({
+          ...order,
+          order_items: (order.order_items || order.items || []).map((item: any) => {
+            const candidates = [item?.source_id, item?.original_product_id, item?.product_id, item?.product?.id, item?.original_product?.id]
+              .filter((id: unknown) => typeof id === 'string' && id.length > 0);
+            const resolved = candidates.map((id: string) => productById.get(id)).find(Boolean);
+            const existingImage = item?.product?.images?.[0]
+              || item?.original_product?.images?.[0]
+              || item?.image_url
+              || item?.image
+              || item?.product_image_url;
+            if (!resolved && existingImage) return item;
+            if (!resolved && !existingImage) return item;
+            const images = resolved?.images?.length ? resolved.images : existingImage ? [existingImage] : [];
+            const productInfo = resolved ? { name: resolved.name, images } : { name: item.product_name || item.name, images };
+            return {
+              ...item,
+              original_product: {
+                ...(item.original_product || {}),
+                ...(productInfo || {}),
+                images: images.length ? images : (item.original_product?.images || []),
+              },
+              product: {
+                ...(item.product || {}),
+                ...(productInfo || {}),
+                images: images.length ? images : (item.product?.images || []),
+              },
+              product_name: item.product_name || item.product?.name || item.original_product?.name || resolved?.name || item.name,
+              image_url: existingImage || images[0] || null,
+            };
+          }),
+        }));
+        setOrders(enrichedOrders);
+      } catch (enrichmentError) {
+        console.warn('China Import catalog enrichment skipped:', enrichmentError);
+      }
     } catch (err) {
       console.error('Failed to fetch orders:', err);
       setOrders([]);
+      toast.error('We could not load your orders. Please refresh and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -40,10 +156,9 @@ export default function OrdersTab() {
     if (!customer) return;
     setReleasingOrderId(orderId);
     try {
-      const { error } = await supabase.rpc('release_escrow_funds', {
-        p_order_id: orderId,
-        p_customer_id: customer.id,
-      });
+      // Keep receipt confirmation on the shared service so the RPC contract,
+      // delivery timestamps, and escrow release stay consistent across screens.
+      const { error } = await orderService.confirmDelivery(orderId);
       if (error) throw error;
       toast.success('Payment released to seller');
       await fetchOrders();
@@ -102,8 +217,8 @@ export default function OrdersTab() {
   return (
     <div className="space-y-3">
       {orders.map((order, index) => {
-        const orderItems: any[] = order.order_items || [];
-        const canRelease = order.status === 'shipped' && !order.is_escrow_released && !order.buyer_reported_issue;
+        const orderItems: any[] = order.order_items || order.items || [];
+        const canRelease = order.payment_status === 'paid' && ['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && !order.is_escrow_released && !order.buyer_reported_issue;
 
         return (
           <motion.div key={order.id}
@@ -154,13 +269,13 @@ export default function OrdersTab() {
             {orderItems.length > 0 && (
               <div className="flex gap-2 mb-3">
                 {orderItems.slice(0, 4).map((item: any, idx: number) => {
-                  const image = item.product?.images?.[0] ?? null;
+                  const image = item.product?.images?.[0] ?? item.original_product?.images?.[0] ?? item.image_url ?? item.image ?? null;
                   return (
                     <div key={idx} className="w-11 h-11 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-100">
                       {image
-                        ? <img src={image} alt={item.product?.name} className="w-full h-full object-cover" />
+                        ? <img src={image} alt={item.product?.name ?? item.product_name ?? item.name ?? "Product"} onError={(event) => { event.currentTarget.style.display = "none"; }} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs font-medium">
-                            {item.product?.name?.charAt(0) ?? '?'}
+                            {(item.product?.name ?? item.product_name ?? item.name)?.charAt(0) ?? '?'}
                           </div>
                       }
                     </div>

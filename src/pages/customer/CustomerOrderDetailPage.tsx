@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCustomerAuthStore } from '@/stores';
-import { supabase } from '@/services';
+import { supabase, orderService } from '@/services';
 import { toast } from 'sonner';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -22,6 +22,11 @@ interface OrderItem {
   variant_options: any;
   is_imported: boolean;
   product: {
+    id: string;
+    name: string;
+    images: string[];
+  } | null;
+  original_product?: {
     id: string;
     name: string;
     images: string[];
@@ -163,7 +168,55 @@ export default function CustomerOrderDetailPage() {
         return;
       }
 
-      setOrder(data as OrderDetail);
+      const orderData: any = data;
+      const importedIds = [...new Set((orderData.order_items || [])
+        .filter((item: any) => (item?.source_type === 'china_import' || item?.is_imported) && (item?.source_id || item?.product_id))
+        .flatMap((item: any) => [item.source_id, item.original_product_id, item.product_id].filter(Boolean)))];
+
+      if (importedIds.length) {
+        const { data: importedProducts, error: importedError } = await supabase
+          .from('china_import_products')
+          .select('id,name,image_url,image_urls,variants')
+          .in('id', importedIds);
+        if (!importedError && importedProducts?.length) {
+          const importedById = new Map(importedProducts.map((product: any) => [
+            product.id,
+            {
+              id: product.id,
+              name: product.name,
+              images: Array.isArray(product.image_urls) && product.image_urls.length
+                ? product.image_urls
+                : product.image_url ? [product.image_url] : [],
+              variants: product.variants ?? [],
+            },
+          ]));
+          orderData.order_items = (orderData.order_items || []).map((item: any) => {
+            const imported = item?.source_type === 'china_import' || item?.is_imported
+              ? importedById.get(item.source_id || item.original_product_id || item.product_id)
+              : null;
+            if (!imported) return item;
+            return {
+              ...item,
+              product_name: item.product_name || item.product?.name || item.original_product?.name || imported.name,
+              product: {
+                ...(item.product || {}),
+                ...imported,
+                images: imported.images?.length ? imported.images : (item.product?.images || []),
+              },
+              original_product: {
+                ...(item.original_product || {}),
+                ...imported,
+                images: imported.images?.length ? imported.images : (item.original_product?.images || []),
+              },
+              image_url: item.image_url || imported.images?.[0] || item.product?.images?.[0] || item.original_product?.images?.[0] || null,
+              imported_variants: imported.variants,
+            };
+          });
+        } else if (importedError) {
+          console.warn('Could not resolve China Import order details:', importedError.message);
+        }
+      }
+      setOrder(orderData as OrderDetail);
     } catch (err) {
       console.error('Failed to fetch order:', err);
       toast.error('Failed to load order');
@@ -175,10 +228,8 @@ export default function CustomerOrderDetailPage() {
   const handleMarkAsReceived = async () => {
     if (!order || !customer) return;
 
-    // ── UI guard: block if issue is reported ─────────────────────────────────
-    // NOTE: The release_escrow_funds RPC itself does NOT check buyer_reported_issue.
-    // This UI block is the only protection. A proper fix requires adding a check
-    // inside the RPC: AND buyer_reported_issue IS NOT TRUE
+    // Keep the UI guard for a clear message; the database RPC independently
+    // enforces the dispute check before releasing escrow.
     if (order.buyer_reported_issue) {
       toast.error('Cannot confirm receipt while an issue is reported. Please wait for admin resolution.');
       return;
@@ -186,10 +237,7 @@ export default function CustomerOrderDetailPage() {
 
     setIsReleasing(true);
     try {
-      const { error } = await supabase.rpc('release_escrow_funds', {
-        p_order_id: order.id,
-        p_customer_id: customer.id,
-      });
+      const { error } = await orderService.confirmDelivery(order.id);
 
       if (error) throw error;
 
@@ -486,12 +534,13 @@ export default function CustomerOrderDetailPage() {
 
           <div className="space-y-4">
             {(order.order_items || []).map((item) => {
-              const image = item.product?.images?.[0] ?? null;
+              const legacyItem = ((order as any).items || []).find((legacy: any) => (legacy.product_id && legacy.product_id === item.product_id) || (legacy.name && legacy.name === item.product_name));
+              const image = item.product?.images?.[0] ?? item.original_product?.images?.[0] ?? (item as any).image_url ?? (item as any).image ?? legacyItem?.image_url ?? legacyItem?.image ?? null;
               return (
                 <div key={item.id} className="flex gap-4">
                   <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                     {image ? (
-                      <img src={image} alt={item.product_name} className="w-full h-full object-cover" />
+                      <img src={image} alt={item.product_name} onError={(event) => { event.currentTarget.style.display = "none"; }} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm font-medium">
                         {item.product_name?.charAt(0) ?? '?'}

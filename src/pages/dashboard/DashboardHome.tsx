@@ -259,7 +259,7 @@ export default function DashboardHome() {
             <table className="w-full">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
-                  {['Order ID', 'Customer', 'Amount', 'Status'].map(h => (
+                  {['Order ID', 'Customer', 'Amount', 'Order Status', 'Payment Status'].map(h => (
                     <th key={h} className="px-6 py-4 text-left text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       {h}
                     </th>
@@ -284,13 +284,22 @@ export default function DashboardHome() {
                         order.status === 'shipped'   ? 'bg-blue-100 text-blue-800' :
                                                        'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {order.status}
+                        {order.status.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+                        order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                        order.payment_status === 'failed' || order.payment_status === 'refunded' ? 'bg-red-100 text-red-800' :
+                        'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {(order.payment_status || 'unknown').replace(/_/g, ' ')}
                       </span>
                     </td>
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-gray-400 font-medium">
+                    <td colSpan={5} className="px-6 py-12 text-center text-gray-400 font-medium">
                       No orders yet
                     </td>
                   </tr>
