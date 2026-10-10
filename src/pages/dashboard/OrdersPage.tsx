@@ -5,6 +5,7 @@ import {
   ShoppingCart, Search, Package, CheckCircle, Truck, Clock, Eye 
 } from 'lucide-react';
 import { useStoreStore, useOrderStore } from '@/stores';
+import { supabase } from '@/services';
 import type { Order } from '@/types';
 
 const statusFilters = ['All', 'Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled'];
@@ -43,6 +44,7 @@ export default function OrdersPage() {
   const { orders, fetchStoreOrders } = useOrderStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('All');
+  const [chinaDropshipProfitByOrder, setChinaDropshipProfitByOrder] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (currentStore?.id) {
@@ -58,29 +60,67 @@ export default function OrdersPage() {
     return matchesSearch && matchesStatus;
   });
 
+  useEffect(() => {
+    const orderIds = orders.map(order => order.id).filter(Boolean);
+    if (!currentStore?.id || orderIds.length === 0) {
+      setChinaDropshipProfitByOrder({});
+      return;
+    }
+
+    let cancelled = false;
+    const loadChinaDropshipEarnings = async () => {
+      const { data, error } = await supabase
+        .from('china_import_dropship_earnings')
+        .select('seller_order_id, net_profit_ngn')
+        .eq('seller_store_id', currentStore.id)
+        .in('seller_order_id', orderIds);
+
+      if (cancelled) return;
+      if (error) {
+        console.warn('Could not load China Import dropship earnings:', error.message);
+        return;
+      }
+      const profits: Record<string, number> = {};
+      for (const row of data ?? []) {
+        profits[row.seller_order_id] = (profits[row.seller_order_id] ?? 0) + Number(row.net_profit_ngn ?? 0);
+      }
+      setChinaDropshipProfitByOrder(profits);
+    };
+    void loadChinaDropshipEarnings();
+    return () => { cancelled = true; };
+  }, [orders, currentStore?.id]);
+
+  const isChinaImportDropship = (item: any) =>
+    item?.is_imported &&
+    (item?.source_type === 'china_import' || item?.attribution_source === 'marketplace') &&
+    item?.original_store_id === currentStore?.id;
+
   const getIsDropshipped = (order: Order) =>
-    order.items?.some(
-      (item: any) =>
-        item.is_imported &&
-        item.original_owner_id &&
-        item.original_owner_id !== currentStore?.owner_id
+    order.items?.some((item: any) =>
+      (item.is_imported && item.original_owner_id && item.original_owner_id !== currentStore?.owner_id) ||
+      isChinaImportDropship(item)
     ) ?? false;
 
   const getDropshipperEarnings = (order: Order): number | null => {
     if (!getIsDropshipped(order)) return null;
-    const margin =
-      order.items?.reduce((sum: number, item: any) => {
-        if (
-          item.is_imported &&
-          item.original_owner_id &&
-          item.original_owner_id !== currentStore?.owner_id
-        ) {
-          return sum + (((item.unit_price ?? 0) - (item.dropship_price ?? 0)) * item.quantity);
-        }
-        return sum;
-      }, 0) ?? 0;
-    const platformFee = margin * 0.08;
-    return margin - platformFee;
+    const persistedChinaProfit = chinaDropshipProfitByOrder[order.id];
+    if (persistedChinaProfit !== undefined) return persistedChinaProfit;
+
+    const storedProfit = Number((order as any).dropshipper_profit);
+    if (Number.isFinite(storedProfit) && storedProfit > 0) return storedProfit;
+
+    // Legacy marketplace products do not have a dedicated earnings-ledger row.
+    const margin = order.items?.reduce((sum: number, item: any) => {
+      const isLegacyDropship =
+        item.is_imported &&
+        item.original_owner_id &&
+        item.original_owner_id !== currentStore?.owner_id;
+      if (isLegacyDropship) {
+        return sum + (((item.unit_price ?? item.price_at_time ?? 0) - (item.dropship_price ?? 0)) * item.quantity);
+      }
+      return sum;
+    }, 0) ?? 0;
+    return margin > 0 ? margin * (1 - Number((order as any).dropship_commission_rate ?? 8) / 100) : 0;
   };
 
   return (
