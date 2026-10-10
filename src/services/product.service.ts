@@ -93,6 +93,8 @@ export const importCatalogService = {
       .eq('is_importable', true)
       .neq('store_id', excludeStoreId)
       .eq('is_active', true)
+      .eq('is_out_of_stock', false)
+      .gte('stock_quantity', 5)
       .order('created_at', { ascending: false });
     return { data, error };
   },
@@ -106,6 +108,8 @@ export const importCatalogService = {
       .eq('is_importable', true)
       .neq('store_id', excludeStoreId)
       .eq('is_active', true)
+      .eq('is_out_of_stock', false)
+      .gte('stock_quantity', 5)
       .order('created_at', { ascending: false });
     return { data, error };
   },
@@ -118,6 +122,8 @@ export const importCatalogService = {
       .eq('is_importable', true)
       .neq('store_id', excludeStoreId)
       .eq('is_active', true)
+      .eq('is_out_of_stock', false)
+      .gte('stock_quantity', 5)
       .order('created_at', { ascending: false });
     return { data, error };
   },
@@ -129,6 +135,8 @@ export const importCatalogService = {
       .eq('is_importable', true)
       .neq('store_id', excludeStoreId)
       .eq('is_active', true)
+      .eq('is_out_of_stock', false)
+      .gte('stock_quantity', 5)
       .order('created_at', { ascending: false });
     return { data, error };
   },
