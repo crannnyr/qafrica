@@ -27,7 +27,48 @@ export default function OrdersTab() {
     try {
       const { data, error } = await orderService.getUserOrders(customer.id);
       if (error) { console.error('Fetch orders error:', error); setOrders([]); }
-      else setOrders(data || []);
+      else {
+        const loadedOrders: any[] = data || [];
+        const importedIds = [...new Set(loadedOrders.flatMap(order =>
+          (order.order_items || order.items || [])
+            .filter((item: any) => item?.source_type === 'china_import' && item?.source_id)
+            .map((item: any) => item.source_id)
+        ))];
+
+        if (importedIds.length) {
+          const { data: importedProducts, error: importedError } = await supabase
+            .from('china_import_products')
+            .select('id,name,image_url,image_urls')
+            .in('id', importedIds);
+          if (!importedError && importedProducts?.length) {
+            const importedById = new Map(importedProducts.map((product: any) => [
+              product.id,
+              {
+                name: product.name,
+                images: (Array.isArray(product.image_urls) && product.image_urls.length
+                  ? product.image_urls
+                  : product.image_url ? [product.image_url] : []),
+              },
+            ]));
+            for (const order of loadedOrders) {
+              for (const item of (order.order_items || order.items || [])) {
+                const imported = item?.source_type === 'china_import'
+                  ? importedById.get(item.source_id)
+                  : null;
+                if (imported) {
+                  item.original_product = item.original_product || imported;
+                  item.product = item.product || imported;
+                  item.product_name = item.product_name || imported.name;
+                  item.image_url = item.image_url || imported.images[0] || null;
+                }
+              }
+            }
+          } else if (importedError) {
+            console.warn('Could not resolve China Import order thumbnails:', importedError.message);
+          }
+        }
+        setOrders(loadedOrders);
+      }
     } catch (err) {
       console.error('Failed to fetch orders:', err);
       setOrders([]);
