@@ -77,7 +77,43 @@ async function requireCustomer(req: Request) {
   if (!token) throw new Error('AUTH_REQUIRED');
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) throw new Error('AUTH_REQUIRED');
-  const { data: customer } = await supabase.from('customers').select('id,email,full_name,phone').eq('id', data.user.id).maybeSingle();
+  let { data: customer } = await supabase.from('customers').select('id,email,full_name,phone').eq('id', data.user.id).maybeSingle();
+
+  // Some valid auth users predate their customers row. Repair that missing
+  // checkout identity from the authenticated Supabase user instead of
+  // rejecting checkout with a misleading 401.
+  if (!customer && data.user.email) {
+    const metadata = data.user.user_metadata ?? {};
+    const fullName = clean(
+      metadata.full_name ?? metadata.name ?? [metadata.first_name, metadata.last_name].filter(Boolean).join(' '),
+      80,
+    );
+    const phone = clean(metadata.phone ?? metadata.phone_number, 20);
+    const { data: createdCustomer, error: createCustomerError } = await supabase
+      .from('customers')
+      .upsert({
+        id: data.user.id,
+        email: data.user.email.toLowerCase(),
+        full_name: fullName || null,
+        phone: phone || null,
+      }, { onConflict: 'id', ignoreDuplicates: true })
+      .select('id,email,full_name,phone')
+      .maybeSingle();
+
+    if (createCustomerError) {
+      console.error('marketplace-v2 customer bootstrap failed', createCustomerError.message);
+    }
+    customer = createdCustomer;
+    if (!customer) {
+      const { data: existingCustomer } = await supabase
+        .from('customers')
+        .select('id,email,full_name,phone')
+        .eq('id', data.user.id)
+        .maybeSingle();
+      customer = existingCustomer;
+    }
+  }
+
   if (!customer) throw new Error('CUSTOMER_REQUIRED');
   return customer;
 }
