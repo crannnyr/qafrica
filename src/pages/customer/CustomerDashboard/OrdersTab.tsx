@@ -93,15 +93,15 @@ export default function OrdersTab() {
         }
         if (!importedProducts?.length) return;
 
-        const importedById = new Map(importedProducts.map((product: any) => [
+        const importedById = new Map<string, { name: string; images: string[] }>(importedProducts.map((product: any) => [
           product.id,
           {
             name: product.name,
             images: Array.isArray(product.image_urls) && product.image_urls.length
               ? product.image_urls
               : product.image_url ? [product.image_url] : [],
-          },
-        ]));
+          } as { name: string; images: string[] },
+        ] as [string, { name: string; images: string[] }]));
 
         const enrichedOrders = loadedOrders.map(order => ({
           ...order,
