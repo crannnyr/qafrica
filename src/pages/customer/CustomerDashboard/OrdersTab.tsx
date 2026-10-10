@@ -124,9 +124,21 @@ export default function OrdersTab() {
             const productInfo = resolved ? { name: resolved.name, images } : { name: item.product_name || item.name, images };
             return {
               ...item,
-              original_product: item.original_product || productInfo,
-              product: item.product || productInfo,
-              product_name: item.product_name || resolved?.name || item.name,
+              original_product: {
+                ...(item.original_product || {}),
+                ...(productInfo || {}),
+                images: item.original_product?.images?.length
+                  ? item.original_product.images
+                  : images,
+              },
+              product: {
+                ...(item.product || {}),
+                ...(productInfo || {}),
+                images: item.product?.images?.length
+                  ? item.product.images
+                  : images,
+              },
+              product_name: item.product_name || item.product?.name || item.original_product?.name || resolved?.name || item.name,
               image_url: existingImage || images[0] || null,
             };
           }),
