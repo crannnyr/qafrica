@@ -103,6 +103,9 @@ export default function OrderDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [trackingNumber, setTrackingNumber] = useState('');
   const [showTrackingInput, setShowTrackingInput] = useState(false);
+  const [chinaImportEarnings, setChinaImportEarnings] = useState<{
+    revenue: number; cost: number; grossProfit: number; platformFee: number; netProfit: number;
+  } | null>(null);
 
   useEffect(() => {
     if (orderId && currentStore?.id) {
@@ -166,6 +169,28 @@ export default function OrderDetailPage() {
       }
   
       setOrder(data as OrderDetail);
+
+      // China Import earnings are recorded by the server-side ledger; never
+      // derive this seller's profit from legacy order-item fields.
+      setChinaImportEarnings(null);
+      if (data.dropshipper_store_id === currentStore.id) {
+        const { data: earningsRows, error: earningsError } = await supabase
+          .from('china_import_dropship_earnings')
+          .select('total_revenue_ngn,total_cost_ngn,gross_profit_ngn,platform_fee_ngn,net_profit_ngn')
+          .eq('seller_order_id', data.id);
+        if (!earningsError && earningsRows?.length) {
+          const totals = earningsRows.reduce((acc: any, row: any) => ({
+            revenue: acc.revenue + Number(row.total_revenue_ngn ?? 0),
+            cost: acc.cost + Number(row.total_cost_ngn ?? 0),
+            grossProfit: acc.grossProfit + Number(row.gross_profit_ngn ?? 0),
+            platformFee: acc.platformFee + Number(row.platform_fee_ngn ?? 0),
+            netProfit: acc.netProfit + Number(row.net_profit_ngn ?? 0),
+          }), { revenue: 0, cost: 0, grossProfit: 0, platformFee: 0, netProfit: 0 });
+          setChinaImportEarnings(totals);
+        } else if (earningsError) {
+          console.warn('Could not load China Import dropship earnings:', earningsError.message);
+        }
+      }
   
       if (data.tracking_number) {
         setTrackingNumber(data.tracking_number);
@@ -209,15 +234,25 @@ export default function OrderDetailPage() {
     order?.order_items.every((item) => item.is_imported);
 
   const dropshipEarnings = (() => {
-    if (!order) return { margin: 0, platformFee: 0, net: 0 };
+    if (chinaImportEarnings) {
+      return {
+        margin: chinaImportEarnings.grossProfit,
+        platformFee: chinaImportEarnings.platformFee,
+        net: chinaImportEarnings.netProfit,
+        cost: chinaImportEarnings.cost,
+        revenue: chinaImportEarnings.revenue,
+        fromLedger: true,
+      };
+    }
+    if (!order) return { margin: 0, platformFee: 0, net: 0, cost: 0, revenue: 0, fromLedger: false };
     const margin = (order.order_items || []).reduce((sum, item) => {
       if (item.is_imported && item.original_owner_id && item.original_owner_id !== currentStore?.id) {
         return sum + (item.unit_price - (item.dropship_price || 0)) * item.quantity;
       }
       return sum;
     }, 0);
-    const platformFee = margin * 0.08;
-    return { margin, platformFee, net: margin - platformFee };
+    const platformFee = Math.max(0, margin) * 0.08;
+    return { margin, platformFee, net: Math.max(0, margin - platformFee), cost: 0, revenue: 0, fromLedger: false };
   })();
 
   const originalOwnerTotal = myDropshippedItems.reduce(
@@ -705,8 +740,18 @@ export default function OrderDetailPage() {
         <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-6">
           <h2 className="font-semibold text-orange-900 dark:text-orange-300 mb-3">Your Dropship Earnings</h2>
           <div className="space-y-2 text-sm">
+            {dropshipEarnings.fromLedger && (
+              <>
+                <div className="flex justify-between text-orange-800 dark:text-orange-400">
+                  <span>Sale revenue</span><span>₦{dropshipEarnings.revenue.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-orange-800 dark:text-orange-400">
+                  <span>Supplier + shipping cost</span><span>₦{dropshipEarnings.cost.toLocaleString()}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-orange-800 dark:text-orange-400">
-              <span>Total Margin (selling price − dropship cost)</span>
+              <span>{dropshipEarnings.fromLedger ? 'Gross profit / loss' : 'Total Margin (selling price − dropship cost)'}</span>
               <span>₦{dropshipEarnings.margin.toLocaleString()}</span>
             </div>
             <div className="flex justify-between text-orange-800 dark:text-orange-400">
