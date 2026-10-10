@@ -19,25 +19,46 @@ export default function MarketplaceCheckoutCompletePage() {
     let timer: number | undefined;
 
     const check = async () => {
+      // Confirmation is owner-checked by the Edge Function; forward the shopper
+      // session explicitly so the payment can be verified and the cart reconciled.
+      const { data: authData } = await supabase.auth.getSession();
+      const accessToken = authData.session?.access_token;
       const { data, error } = await supabase.functions.invoke('marketplace-v2-checkout', {
         body: { action: 'confirm', reference },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
       });
       if (cancelled) return;
 
       if (!error && data?.status === 'paid') {
         try {
           const raw = sessionStorage.getItem('qafrica_marketplace_checkout_selection');
-          const selection = raw ? JSON.parse(raw) as { product_cart_ids?: string[]; china_product_ids?: string[] } : null;
+          const selection = raw ? JSON.parse(raw) as {
+            product_cart_ids?: string[];
+            china_cart_ids?: string[];
+            china_product_ids?: string[];
+          } : null;
           const cart = useCartStore.getState();
           const ids = new Set(selection?.product_cart_ids ?? []);
-          const chinaIds = new Set(selection?.china_product_ids ?? []);
+          const chinaCartIds = new Set(selection?.china_cart_ids ?? []);
+          const chinaProductIds = new Set(selection?.china_product_ids ?? []);
+
+          // Remove only the lines selected for this checkout. If selection
+          // metadata is missing/corrupt, preserve the cart rather than deleting
+          // unrelated items the shopper may have added.
           cart.items
-            .filter(i => ids.has(i.id) || (i.sourceType === 'china_import' && !!i.sourceId && chinaIds.has(i.sourceId)))
+            .filter(i =>
+              ids.has(i.id) ||
+              (i.sourceType === 'china_import' && (
+                chinaCartIds.has(i.id) ||
+                (!!i.sourceId && chinaProductIds.has(i.sourceId))
+              ))
+            )
             .forEach(i => cart.removeItem(i.id));
+
           sessionStorage.removeItem('qafrica_marketplace_checkout_selection');
           sessionStorage.removeItem('qafrica_import_checkout_selection');
         } catch {
-          clearCart();
+          // Keep the cart intact if selection metadata cannot be read safely.
         }
         setStatus('paid');
         return;
