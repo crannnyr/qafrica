@@ -1,8 +1,5 @@
--- This legacy-storefront trigger is intentionally not applied to production.
--- The active Supabase project is inventory-backed and does not have the legacy
--- products/import_catalog schema referenced here. Apply only after the correct
--- environment/schema is confirmed. This file remains a candidate migration for
--- the legacy app schema, not a production-safe migration.
+-- Legacy storefront import eligibility only; NOT valid for the active inventory-backed production schema.
+-- Keep this migration for a legacy storefront database only after confirming its target.
 -- Enforce the shared seller-import catalog stock rule in the database.
 -- Products remain on their owner's storefront; this only governs whether a
 -- product may be newly added/reactivated in another seller's import catalog.
