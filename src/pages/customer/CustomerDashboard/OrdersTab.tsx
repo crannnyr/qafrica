@@ -59,63 +59,75 @@ export default function OrdersTab() {
       setOrders(loadedOrders);
       setIsLoading(false);
 
-      const importedIds = [...new Set(loadedOrders.flatMap(order =>
-        (order.order_items || order.items || [])
-          .filter((item: any) =>
-            (item?.source_type === 'china_import' || item?.is_imported) &&
-            (item?.source_id || item?.product_id)
-          )
-          .flatMap((item: any) => [item.source_id, item.original_product_id, item.product_id].filter(Boolean))
-          .filter((id: unknown) => typeof id === 'string' && id.length > 0)
+      const productIds = [...new Set(loadedOrders.flatMap(order =>
+        (order.order_items || order.items || []).flatMap((item: any) =>
+          [item?.source_id, item?.original_product_id, item?.product_id, item?.product?.id, item?.original_product?.id]
+            .filter((id: unknown) => typeof id === 'string' && id.length > 0)
+        )
       ))];
 
-      if (!importedIds.length) return;
+      if (!productIds.length) return;
 
-      // Bound the optional catalog lookup. Even if it fails or is slow, the
-      // order list is already visible and remains usable.
-      const enrichPromise = supabase
-        .from('china_import_products')
-        .select('id,name,image_url,image_urls')
-        .in('id', importedIds);
+      // Product image enrichment is deliberately separate from order loading.
+      // Try both catalogs because dropship order items may retain the original
+      // China Import ID or a regular products-table ID depending on their age.
+      const catalogPromise = Promise.all([
+        supabase.from('china_import_products').select('id,name,image_url,image_urls').in('id', productIds),
+        supabase.from('products').select('id,name,images,image_url').in('id', productIds),
+      ]);
       const timeoutPromise = new Promise<never>((_, reject) =>
-        window.setTimeout(() => reject(new Error('Imported catalog lookup timed out')), 5000)
+        window.setTimeout(() => reject(new Error('Product image lookup timed out')), 5000)
       );
 
       try {
-        const { data: importedProducts, error: importedError } = await Promise.race([
-          enrichPromise,
-          timeoutPromise,
-        ]) as any;
+        const [chinaResult, productsResult] = await Promise.race([catalogPromise, timeoutPromise]) as any;
+        const productById = new Map<string, { name?: string; images: string[] }>();
 
-        if (importedError) {
-          console.warn('Could not resolve China Import order thumbnails:', importedError.message);
-          return;
-        }
-        if (!importedProducts?.length) return;
-
-        const importedById = new Map<string, { name: string; images: string[] }>(importedProducts.map((product: any) => [
-          product.id,
-          {
+        for (const product of chinaResult.data ?? []) {
+          productById.set(product.id, {
             name: product.name,
             images: Array.isArray(product.image_urls) && product.image_urls.length
-              ? product.image_urls
+              ? product.image_urls.filter(Boolean)
               : product.image_url ? [product.image_url] : [],
-          } as { name: string; images: string[] },
-        ] as [string, { name: string; images: string[] }]));
+          });
+        }
+        for (const product of productsResult.data ?? []) {
+          const existing = productById.get(product.id);
+          const images = Array.isArray(product.images)
+            ? product.images.filter(Boolean)
+            : product.image_url ? [product.image_url] : [];
+          productById.set(product.id, {
+            name: existing?.name || product.name,
+            images: existing?.images.length ? existing.images : images,
+          });
+        }
+
+        if (chinaResult.error && productsResult.error) {
+          console.warn('Could not resolve order product images:', chinaResult.error.message, productsResult.error.message);
+          return;
+        }
 
         const enrichedOrders = loadedOrders.map(order => ({
           ...order,
           order_items: (order.order_items || order.items || []).map((item: any) => {
-            const imported = item?.source_type === 'china_import' || item?.is_imported
-              ? importedById.get(item.source_id || item.original_product_id || item.product_id)
-              : null;
-            if (!imported) return item;
+            const candidates = [item?.source_id, item?.original_product_id, item?.product_id, item?.product?.id, item?.original_product?.id]
+              .filter((id: unknown) => typeof id === 'string' && id.length > 0);
+            const resolved = candidates.map((id: string) => productById.get(id)).find(Boolean);
+            const existingImage = item?.product?.images?.[0]
+              || item?.original_product?.images?.[0]
+              || item?.image_url
+              || item?.image
+              || item?.product_image_url;
+            if (!resolved && existingImage) return item;
+            if (!resolved && !existingImage) return item;
+            const images = resolved?.images?.length ? resolved.images : existingImage ? [existingImage] : [];
+            const productInfo = resolved ? { name: resolved.name, images } : { name: item.product_name || item.name, images };
             return {
               ...item,
-              original_product: item.original_product || imported,
-              product: item.product || imported,
-              product_name: item.product_name || imported.name,
-              image_url: item.image_url || imported.images[0] || null,
+              original_product: item.original_product || productInfo,
+              product: item.product || productInfo,
+              product_name: item.product_name || resolved?.name || item.name,
+              image_url: existingImage || images[0] || null,
             };
           }),
         }));
