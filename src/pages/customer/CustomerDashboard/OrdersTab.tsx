@@ -20,58 +20,113 @@ export default function OrdersTab() {
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const { customer } = useCustomerAuthStore();
 
-  useEffect(() => { if (customer?.id) fetchOrders(); }, [customer?.id]);
+  useEffect(() => {
+    if (customer?.id) {
+      void fetchOrders();
+    } else {
+      // Do not leave the whole Orders tab spinning forever when the customer
+      // session is not ready or the user has signed out.
+      setOrders([]);
+      setIsLoading(false);
+    }
+  }, [customer?.id]);
 
   const fetchOrders = async () => {
-    if (!customer) return;
+    if (!customer?.id) {
+      setOrders([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
     try {
       const { data, error } = await orderService.getUserOrders(customer.id);
-      if (error) { console.error('Fetch orders error:', error); setOrders([]); }
-      else {
-        const loadedOrders: any[] = data || [];
-        const importedIds = [...new Set(loadedOrders.flatMap(order =>
-          (order.order_items || order.items || [])
-            .filter((item: any) => (item?.source_type === 'china_import' || item?.is_imported) && (item?.source_id || item?.product_id))
-            .map((item: any) => item.source_id || item.product_id)
-        ))];
+      if (error) {
+        console.error('Fetch orders error:', error);
+        setOrders([]);
+        toast.error('We could not load your orders. Please try again.');
+        return;
+      }
 
-        if (importedIds.length) {
-          const { data: importedProducts, error: importedError } = await supabase
-            .from('china_import_products')
-            .select('id,name,image_url,image_urls')
-            .in('id', importedIds);
-          if (!importedError && importedProducts?.length) {
-            const importedById = new Map(importedProducts.map((product: any) => [
-              product.id,
-              {
-                name: product.name,
-                images: (Array.isArray(product.image_urls) && product.image_urls.length
-                  ? product.image_urls
-                  : product.image_url ? [product.image_url] : []),
-              },
-            ]));
-            for (const order of loadedOrders) {
-              for (const item of (order.order_items || order.items || [])) {
-                const imported = item?.source_type === 'china_import' || item?.is_imported
-                  ? importedById.get(item.source_id || item.product_id)
-                  : null;
-                if (imported) {
-                  item.original_product = item.original_product || imported;
-                  item.product = item.product || imported;
-                  item.product_name = item.product_name || imported.name;
-                  item.image_url = item.image_url || imported.images[0] || null;
-                }
-              }
-            }
-          } else if (importedError) {
-            console.warn('Could not resolve China Import order thumbnails:', importedError.message);
-          }
+      // Render the order list as soon as the authenticated order request
+      // succeeds. Imported catalog enrichment is secondary and must never
+      // block customer order history from appearing.
+      const loadedOrders: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray((data as any)?.orders)
+          ? (data as any).orders
+          : [];
+      setOrders(loadedOrders);
+      setIsLoading(false);
+
+      const importedIds = [...new Set(loadedOrders.flatMap(order =>
+        (order.order_items || order.items || [])
+          .filter((item: any) =>
+            (item?.source_type === 'china_import' || item?.is_imported) &&
+            (item?.source_id || item?.product_id)
+          )
+          .map((item: any) => item.source_id || item.product_id)
+          .filter((id: unknown) => typeof id === 'string' && id.length > 0)
+      ))];
+
+      if (!importedIds.length) return;
+
+      // Bound the optional catalog lookup. Even if it fails or is slow, the
+      // order list is already visible and remains usable.
+      const enrichPromise = supabase
+        .from('china_import_products')
+        .select('id,name,image_url,image_urls')
+        .in('id', importedIds);
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        window.setTimeout(() => reject(new Error('Imported catalog lookup timed out')), 5000)
+      );
+
+      try {
+        const { data: importedProducts, error: importedError } = await Promise.race([
+          enrichPromise,
+          timeoutPromise,
+        ]) as any;
+
+        if (importedError) {
+          console.warn('Could not resolve China Import order thumbnails:', importedError.message);
+          return;
         }
-        setOrders(loadedOrders);
+        if (!importedProducts?.length) return;
+
+        const importedById = new Map(importedProducts.map((product: any) => [
+          product.id,
+          {
+            name: product.name,
+            images: Array.isArray(product.image_urls) && product.image_urls.length
+              ? product.image_urls
+              : product.image_url ? [product.image_url] : [],
+          },
+        ]));
+
+        const enrichedOrders = loadedOrders.map(order => ({
+          ...order,
+          order_items: (order.order_items || order.items || []).map((item: any) => {
+            const imported = item?.source_type === 'china_import' || item?.is_imported
+              ? importedById.get(item.source_id || item.product_id)
+              : null;
+            if (!imported) return item;
+            return {
+              ...item,
+              original_product: item.original_product || imported,
+              product: item.product || imported,
+              product_name: item.product_name || imported.name,
+              image_url: item.image_url || imported.images[0] || null,
+            };
+          }),
+        }));
+        setOrders(enrichedOrders);
+      } catch (enrichmentError) {
+        console.warn('China Import catalog enrichment skipped:', enrichmentError);
       }
     } catch (err) {
       console.error('Failed to fetch orders:', err);
       setOrders([]);
+      toast.error('We could not load your orders. Please refresh and try again.');
     } finally {
       setIsLoading(false);
     }
