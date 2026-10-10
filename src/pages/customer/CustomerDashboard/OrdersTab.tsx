@@ -65,7 +65,7 @@ export default function OrdersTab() {
             (item?.source_type === 'china_import' || item?.is_imported) &&
             (item?.source_id || item?.product_id)
           )
-          .map((item: any) => item.source_id || item.product_id)
+          .flatMap((item: any) => [item.source_id, item.original_product_id, item.product_id].filter(Boolean))
           .filter((id: unknown) => typeof id === 'string' && id.length > 0)
       ))];
 
@@ -107,7 +107,7 @@ export default function OrdersTab() {
           ...order,
           order_items: (order.order_items || order.items || []).map((item: any) => {
             const imported = item?.source_type === 'china_import' || item?.is_imported
-              ? importedById.get(item.source_id || item.product_id)
+              ? importedById.get(item.source_id || item.original_product_id || item.product_id)
               : null;
             if (!imported) return item;
             return {
