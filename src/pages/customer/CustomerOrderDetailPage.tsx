@@ -26,6 +26,11 @@ interface OrderItem {
     name: string;
     images: string[];
   } | null;
+  original_product?: {
+    id: string;
+    name: string;
+    images: string[];
+  } | null;
 }
 
 interface OrderDetail {
