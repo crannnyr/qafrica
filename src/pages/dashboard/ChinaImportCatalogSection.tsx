@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Loader2, Package, Plus, Search } from 'lucide-react';
+import { AlertCircle, Check, Loader2, Package, Plus, Search, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services';
 import { toast } from 'sonner';
@@ -46,6 +46,7 @@ export default function ChinaImportCatalogSection() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [configuringProduct, setConfiguringProduct] = useState<ChinaProduct | null>(null);
   const [myCategoryIds, setMyCategoryIds] = useState<Set<string>>(new Set());
   const isUnlimited = (user as any)?.subscription_tier === 'unlimited';
 
@@ -304,37 +305,95 @@ export default function ChinaImportCatalogSection() {
                     <div className="flex justify-between"><span className="text-gray-500">Your margin</span><strong className="text-green-600">{money(margin)}</strong></div>
                   </div>
 
-                  <input
-                    type="number"
-                    min={Math.ceil(landed)}
-                    value={prices[product.id] ?? (row ? String(row.seller_price_ngn) : String(suggested))}
-                    onChange={e => setPrices(prev => ({ ...prev, [product.id]: e.target.value }))}
-                    className="w-full rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm font-semibold outline-none focus:border-orange-500"
-                    aria-label={`Selling price for ${product.name}`}
-                  />
-
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => void addToStore(product)}
-                      disabled={busyId === product.id || !canImport}
-                      className={`flex-1 ${canImport ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'}`}
-                      size="sm"
-                    >
-                      {busyId === product.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        canImport
-                          ? <><Plus className="w-4 h-4 mr-1" />Add to Store</>
-                          : 'Upgrade to Import'
-                      )}
-                    </Button>
-                  </div>
+                  <Button
+                    onClick={() => {
+                      setPrices(prev => ({ ...prev, [product.id]: prev[product.id] ?? String(row?.seller_price_ngn ?? suggested) }));
+                      setConfiguringProduct(product);
+                    }}
+                    disabled={!canImport}
+                    className={`w-full ${canImport ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'}`}
+                    size="sm"
+                  >
+                    {canImport ? <><Plus className="w-4 h-4 mr-1" />Configure Pricing</> : 'Upgrade to Import'}
+                  </Button>
                 </div>
               </div>
             );
           })}
         </div>
       )}
+
+      {configuringProduct && (() => {
+        const product = configuringProduct;
+        const catalogRow = catalogByProduct.get(product.id);
+        const baseCost = Math.max(Number(product.price_ngn ?? 0), 0);
+        const enteredPrice = Number(prices[product.id] ?? catalogRow?.seller_price_ngn ?? Math.ceil(baseCost * 1.2));
+        const profit = Math.max(0, (Number.isFinite(enteredPrice) ? enteredPrice : 0) - baseCost);
+        return (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setConfiguringProduct(null)}>
+            <div role="dialog" aria-modal="true" aria-labelledby="china-pricing-title" className="bg-white dark:bg-gray-800 rounded-3xl p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl" onClick={event => event.stopPropagation()}>
+              <div className="flex justify-between items-center mb-6">
+                <h2 id="china-pricing-title" className="text-2xl font-extrabold text-gray-900 dark:text-white">Configure Pricing</h2>
+                <button aria-label="Close pricing dialog" onClick={() => setConfiguringProduct(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
+                  <X className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl mb-6">
+                <div className="w-24 h-24 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 overflow-hidden flex-shrink-0">
+                  {(product.image_urls?.[0] || product.image_url) ? (
+                    <img src={product.image_urls?.[0] || product.image_url || ''} className="w-full h-full object-cover" alt={product.name} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center"><Package className="w-8 h-8 text-gray-300" /></div>
+                  )}
+                </div>
+                <div className="min-w-0 self-center">
+                  <p className="font-bold text-lg text-gray-900 dark:text-white line-clamp-2">{product.name}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Niche: {product.niche_name || product.category || 'China Import'}</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Supplier Price: {money(baseCost)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="flex justify-between items-center border-b border-gray-200 dark:border-gray-700 pb-5">
+                  <span className="text-base text-gray-500 dark:text-gray-400 font-medium flex items-center gap-2"><AlertCircle className="w-5 h-5" />Dropship Base Cost:</span>
+                  <span className="font-extrabold text-2xl text-gray-900 dark:text-white">{money(baseCost)}</span>
+                </div>
+
+                <div>
+                  <label htmlFor="china-seller-price" className="block text-base font-bold text-gray-700 dark:text-gray-300 mb-3">Set Your Selling Price (₦)</label>
+                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium text-lg">₦</span>
+                    <input
+                      id="china-seller-price"
+                      type="number"
+                      min={Math.ceil(baseCost)}
+                      value={prices[product.id] ?? String(catalogRow?.seller_price_ngn ?? Math.ceil(baseCost * 1.2))}
+                      onChange={event => setPrices(prev => ({ ...prev, [product.id]: event.target.value }))}
+                      className="w-full pl-10 pr-4 py-4 rounded-2xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-orange-500 outline-none font-extrabold text-2xl text-orange-600"
+                    />
+                  </div>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">This is the product price your customers will pay on your store. China shipping is calculated separately at checkout.</p>
+                </div>
+
+                <div className="p-5 bg-green-50 dark:bg-green-500/10 rounded-2xl border border-green-100 dark:border-green-800">
+                  <div className="flex justify-between items-center gap-3">
+                    <span className="text-base text-green-700 dark:text-green-400 font-medium">Your Profit per Sale:</span>
+                    <span className="text-2xl font-extrabold text-green-700 dark:text-green-400">{money(profit)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 flex flex-col sm:flex-row gap-3">
+                <Button variant="outline" className="flex-1 py-6 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300" onClick={() => setConfiguringProduct(null)}>Cancel</Button>
+                <Button className="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-6" onClick={() => void addToStore(product)} disabled={busyId === product.id || !Number.isFinite(enteredPrice) || enteredPrice < baseCost}>
+                  {busyId === product.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Check className="w-5 h-5 mr-2" />Add to Store</>}
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </section>
   );
 }
