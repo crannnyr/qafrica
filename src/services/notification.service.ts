@@ -11,13 +11,23 @@ export const notificationService = {
     return { data, error };
   },
 
-  async getUserNotifications(userId: string) {
+  async getUserNotifications(userId: string, limit = 50) {
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
     return { data, error };
+  },
+
+  async getUnreadNotificationCount(userId: string) {
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('is_read', false);
+    return { count, error };
   },
 
   async markAsRead(notificationId: string) {
