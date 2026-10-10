@@ -97,7 +97,14 @@ export type SessionStatus = {
 };
 
 export async function confirmCheckout(reference: string): Promise<SessionStatus | null> {
-  const { data, error } = await supabase.functions.invoke('checkout-confirm', { body: { reference } });
+  // The confirmation endpoint must receive the same signed-in identity as
+  // checkout creation so it can verify ownership and return the final status.
+  const { data: authData } = await supabase.auth.getSession();
+  const accessToken = authData.session?.access_token;
+  const { data, error } = await supabase.functions.invoke('checkout-confirm', {
+    body: { reference },
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
   if (error) return null;
   return data as SessionStatus;
 }
