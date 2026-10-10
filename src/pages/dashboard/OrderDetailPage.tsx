@@ -173,7 +173,7 @@ export default function OrderDetailPage() {
       // China Import earnings are recorded by the server-side ledger; never
       // derive this seller's profit from legacy order-item fields.
       setChinaImportEarnings(null);
-      if (data.dropshipper_store_id === currentStore.id) {
+      if (data.store_id === currentStore.id || data.dropshipper_store_id === currentStore.id) {
         const { data: earningsRows, error: earningsError } = await supabase
           .from('china_import_dropship_earnings')
           .select('total_revenue_ngn,total_cost_ngn,gross_profit_ngn,platform_fee_ngn,net_profit_ngn')
@@ -222,16 +222,19 @@ export default function OrderDetailPage() {
     (item) => item.is_imported && item.original_store_id === currentStore?.id
   );
 
+  const isChinaImportMarketplaceItem = (item: any) =>
+    item?.source_type === 'china_import' &&
+    (item?.attribution_source === 'marketplace' || item?.is_imported === true || !!item?.source_id);
+
   const hasDropshippedItems = (order?.order_items || []).some(
     (item) =>
-      item.is_imported &&
-      item.original_owner_id &&
-      item.original_owner_id !== currentStore?.id
+      (item.is_imported && item.original_owner_id && item.original_owner_id !== currentStore?.id) ||
+      isChinaImportMarketplaceItem(item)
   );
 
   const isFullyDropshipped =
     (order?.order_items?.length ?? 0) > 0 &&
-    order?.order_items.every((item) => item.is_imported);
+    order?.order_items.every((item) => item.is_imported || isChinaImportMarketplaceItem(item));
 
   const dropshipEarnings = (() => {
     if (chinaImportEarnings) {
