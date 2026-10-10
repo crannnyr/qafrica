@@ -117,20 +117,39 @@ export default function StorePage() {
         .eq('importer_store_id', storeData.id)
         .eq('is_active', true);
 
-      const mappedImports = (importedData || []).map((item: any) => ({
-        id: item.original_product_id,
-        name: item.name,
-        description: item.description,
-        category: item.category,
-        niche: item.niche,
-        images: item.images,
-        selling_price: item.custom_selling_price || item.selling_price,
-        is_imported: true,
-        is_active: item.is_active,
-        has_variants: item.has_variants,
-        variants: item.variants,
-        stock_quantity: item.stock_quantity,
-      })) as unknown as Product[];
+      // Imported listings are price/content snapshots. Inventory must come from
+      // the original supplier product so stale import_catalog stock cannot mark
+      // an in-stock dropship item as sold out (or the reverse).
+      const importedProductIds = [...new Set((importedData || []).map((item: any) => item.original_product_id).filter(Boolean))];
+      const { data: sourceInventory } = importedProductIds.length
+        ? await supabase
+            .from('products')
+            .select('id,stock_quantity,is_out_of_stock,is_active,has_variants,variants')
+            .in('id', importedProductIds)
+        : { data: [], error: null };
+      const inventoryByProductId = new Map((sourceInventory || []).map((product: any) => [product.id, product]));
+
+      const mappedImports = (importedData || []).flatMap((item: any) => {
+        const source = inventoryByProductId.get(item.original_product_id);
+        // Do not display imported copies of products that the original supplier
+        // has deactivated or removed.
+        if (!source || !source.is_active) return [];
+        return [{
+          id: item.original_product_id,
+          name: item.name,
+          description: item.description,
+          category: item.category,
+          niche: item.niche,
+          images: item.images,
+          selling_price: item.custom_selling_price || item.selling_price,
+          is_imported: true,
+          is_active: item.is_active,
+          is_out_of_stock: source.is_out_of_stock,
+          has_variants: source.has_variants,
+          variants: source.variants,
+          stock_quantity: source.stock_quantity,
+        }];
+      }) as unknown as Product[];
 
       const { data: chinaProducts } = await supabase
         .rpc('get_store_china_dropship_products', { p_store_id: storeData.id });
