@@ -79,9 +79,13 @@ export default function MarketplaceCheckoutCompletePage() {
         setStatus('failed');
         return;
       }
-      if (attempt >= 59) { setStatus('pending'); return; }
+      // Nomba can take several minutes to settle a transaction. Keep checking
+      // the same reference instead of treating a slow confirmation as failure.
+      // The pending screen remains safe: it explicitly tells the customer not
+      // to pay again and allows them to return to their account.
+      if (attempt >= 149) { setStatus('pending'); return; }
       setAttempt(v => v + 1);
-      timer = window.setTimeout(check, 2000);
+      timer = window.setTimeout(check, attempt < 10 ? 2000 : 3000);
     };
 
     void check();
