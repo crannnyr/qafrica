@@ -90,15 +90,21 @@ export default function OrdersPage() {
     return () => { cancelled = true; };
   }, [orders, currentStore?.id]);
 
+  const getOrderItems = (order: Order): any[] =>
+    ((order as any).order_items ?? (order as any).items ?? []) as any[];
+
+  // China Import catalog items are identified by their explicit source marker.
+  // Do not infer China Import from generic marketplace attribution; that can
+  // mislabel ordinary marketplace products as dropshipped.
   const isChinaImportDropship = (item: any) =>
-    item?.is_imported &&
-    (item?.source_type === 'china_import' || item?.attribution_source === 'marketplace');
+    item?.source_type === 'china_import' &&
+    (item?.attribution_source === 'marketplace' || item?.is_imported === true || !!item?.source_id);
 
   const getIsDropshipped = (order: Order) =>
-    order.items?.some((item: any) =>
-      (item.is_imported && item.original_owner_id && item.original_owner_id !== currentStore?.owner_id) ||
+    getOrderItems(order).some((item: any) =>
+      (item?.is_imported && item?.original_owner_id && item.original_owner_id !== currentStore?.owner_id) ||
       isChinaImportDropship(item)
-    ) ?? false;
+    );
 
   const getDropshipperEarnings = (order: Order): number | null => {
     if (!getIsDropshipped(order)) return null;
@@ -109,7 +115,7 @@ export default function OrdersPage() {
     if (Number.isFinite(storedProfit) && storedProfit > 0) return storedProfit;
 
     // Legacy marketplace products do not have a dedicated earnings-ledger row.
-    const margin = order.items?.reduce((sum: number, item: any) => {
+    const margin = getOrderItems(order).reduce((sum: number, item: any) => {
       const isLegacyDropship =
         item.is_imported &&
         item.original_owner_id &&
