@@ -319,7 +319,7 @@ export default function ChinaImportCatalogSection() {
                       className={`shrink-0 bg-orange-500 hover:bg-orange-600 text-white px-3 lg:px-4`}
                       size="sm"
                     >
-                      {busyId === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4 mr-1" />Configure Pricing</>}
+                      {busyId === product.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Plus className="w-4 h-4 mr-1" />Import</>}
                     </Button>
                   </div>
 
