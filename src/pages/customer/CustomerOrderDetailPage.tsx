@@ -201,14 +201,14 @@ export default function CustomerOrderDetailPage() {
               product: {
                 ...(item.product || {}),
                 ...imported,
-                images: item.product?.images?.length ? item.product.images : imported.images,
+                images: imported.images?.length ? imported.images : (item.product?.images || []),
               },
               original_product: {
                 ...(item.original_product || {}),
                 ...imported,
-                images: item.original_product?.images?.length ? item.original_product.images : imported.images,
+                images: imported.images?.length ? imported.images : (item.original_product?.images || []),
               },
-              image_url: item.image_url || item.product?.images?.[0] || item.original_product?.images?.[0] || imported.images[0] || null,
+              image_url: item.image_url || imported.images?.[0] || item.product?.images?.[0] || item.original_product?.images?.[0] || null,
               imported_variants: imported.variants,
             };
           });
