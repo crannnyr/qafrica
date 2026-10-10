@@ -189,7 +189,14 @@ export default function ImportCatalogPage() {
       fetchStoreImports(currentStore.id); // Refresh imports list
       setConfiguringProduct(null); // Close modal
     } else {
-      toast.error(result.error || 'Failed to import product');
+      const errorMessage = result.error || 'Failed to import product';
+      if (errorMessage.toLowerCase().includes('at least 5 available units')) {
+        toast.error('This product needs at least 5 available units before it can be imported.');
+      } else if (errorMessage.toLowerCase().includes('not available for importing')) {
+        toast.error('This product is no longer available for import.');
+      } else {
+        toast.error(errorMessage);
+      }
     }
 
     setIsImporting(null);
