@@ -171,7 +171,7 @@ export default function CustomerOrderDetailPage() {
       const orderData: any = data;
       const importedIds = [...new Set((orderData.order_items || [])
         .filter((item: any) => (item?.source_type === 'china_import' || item?.is_imported) && (item?.source_id || item?.product_id))
-        .map((item: any) => item.source_id || item.product_id))];
+        .flatMap((item: any) => [item.source_id, item.original_product_id, item.product_id].filter(Boolean)))];
 
       if (importedIds.length) {
         const { data: importedProducts, error: importedError } = await supabase
@@ -192,7 +192,7 @@ export default function CustomerOrderDetailPage() {
           ]));
           orderData.order_items = (orderData.order_items || []).map((item: any) => {
             const imported = item?.source_type === 'china_import' || item?.is_imported
-              ? importedById.get(item.source_id || item.product_id)
+              ? importedById.get(item.source_id || item.original_product_id || item.product_id)
               : null;
             if (!imported) return item;
             return {
