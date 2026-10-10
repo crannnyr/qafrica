@@ -300,7 +300,15 @@ begin
     );
   end if;
 
-  if cs.status in ('amount_mismatch', 'fulfilment_error') then
+  if cs.status = 'amount_mismatch' then
+    return jsonb_build_object('status', cs.status);
+  end if;
+
+  -- Retry only the exact same verified payment after the exception block has
+  -- rolled back all partial order and ledger writes.
+  if cs.status = 'fulfilment_error'
+     and (p_paid_amount is distinct from cs.paid_amount
+       or p_transaction_id is distinct from cs.nomba_transaction_id) then
     return jsonb_build_object('status', cs.status);
   end if;
 
@@ -600,7 +608,7 @@ begin
           'home',
           'China Import dropship fulfillment for seller order ' ||
             v_order_id::text ||
-            ' (store ' || st->>'store_id' || ')',
+            ' (store ' || (st->>'store_id') || ')',
           v_china_shipping
         )
         returning id into v_china_order_id;
