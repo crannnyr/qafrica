@@ -101,7 +101,7 @@ export default function OrdersTab() {
   return (
     <div className="space-y-3">
       {orders.map((order, index) => {
-        const orderItems: any[] = order.order_items || [];
+        const orderItems: any[] = order.order_items || order.items || [];
         const canRelease = order.payment_status === 'paid' && ['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && !order.is_escrow_released && !order.buyer_reported_issue;
 
         return (
@@ -153,13 +153,13 @@ export default function OrdersTab() {
             {orderItems.length > 0 && (
               <div className="flex gap-2 mb-3">
                 {orderItems.slice(0, 4).map((item: any, idx: number) => {
-                  const image = item.product?.images?.[0] ?? null;
+                  const image = item.product?.images?.[0] ?? item.original_product?.images?.[0] ?? item.image_url ?? item.image ?? null;
                   return (
                     <div key={idx} className="w-11 h-11 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 border border-gray-100">
                       {image
                         ? <img src={image} alt={item.product?.name} className="w-full h-full object-cover" />
                         : <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs font-medium">
-                            {item.product?.name?.charAt(0) ?? '?'}
+                            {(item.product?.name ?? item.product_name ?? item.name)?.charAt(0) ?? '?'}
                           </div>
                       }
                     </div>
