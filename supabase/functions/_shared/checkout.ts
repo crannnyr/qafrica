@@ -11,11 +11,80 @@ export type FinalizeResult =
 
 const SITE = Deno.env.get('APP_URL') ?? 'https://qafrica.store';
 
+async function verifyAndFinalizeMarketplace(
+  supabase: SupabaseClient,
+  reference: string,
+  hint: { fee?: number } = {},
+): Promise<FinalizeResult> {
+  const { data: session, error: sessionError } = await supabase
+    .from('marketplace_checkout_sessions')
+    .select('id, status, amount, expires_at, order_ids')
+    .eq('reference', reference)
+    .maybeSingle();
+  if (sessionError) throw new Error(`marketplace session lookup failed: ${sessionError.message}`);
+  if (!session) return { status: 'unknown_reference' };
+  if (session.status === 'paid') return { status: 'paid', order_ids: session.order_ids ?? [], already: true };
+  if (session.status === 'amount_mismatch' || session.status === 'fulfilment_error') {
+    return { status: session.status };
+  }
+  if (session.status !== 'awaiting_payment' && session.status !== 'expired' && session.status !== 'failed') {
+    return { status: session.status as Exclude<FinalizeResult['status'], 'paid'> };
+  }
+
+  // Always verify with Nomba; the signed webhook payload is only a trigger.
+  let tx: any = null;
+  try {
+    const res = await nombaFetch(`/v1/transactions/accounts/single?orderReference=${encodeURIComponent(reference)}`);
+    tx = res?.data ?? null;
+  } catch (e) {
+    if (e instanceof NombaError && (e.code === '01' || e.status === 404)) tx = null;
+    else throw e;
+  }
+
+  if (!tx) {
+    if (session.status === 'awaiting_payment' && new Date(session.expires_at).getTime() < Date.now()) {
+      await supabase.from('marketplace_checkout_sessions').update({ status: 'expired', updated_at: new Date().toISOString() })
+        .eq('id', session.id).eq('status', 'awaiting_payment');
+      return { status: 'expired' };
+    }
+    return { status: 'not_paid' };
+  }
+
+  const txRef = tx.onlineCheckoutOrderReference ?? tx.orderReference;
+  if (txRef !== reference) return { status: 'not_paid', detail: 'reference mismatch' };
+  const txStatus = String(tx.status ?? '').toUpperCase();
+  if (txStatus !== 'SUCCESS') {
+    if (txStatus === 'FAILED') {
+      await supabase.from('marketplace_checkout_sessions').update({ status: 'failed', updated_at: new Date().toISOString() })
+        .eq('id', session.id).eq('status', 'awaiting_payment');
+      return { status: 'failed' };
+    }
+    return { status: 'not_paid', detail: txStatus };
+  }
+
+  const { data, error } = await supabase.rpc('finalize_marketplace_checkout_session', {
+    p_reference: reference,
+    p_paid_amount: Number(tx.onlineCheckoutAmount ?? tx.amount),
+    p_gateway_fee: Number(hint.fee ?? tx.fee ?? tx.fixedCharge ?? 0) || 0,
+    p_transaction_id: String(tx.id ?? ''),
+  });
+  if (error) throw new Error(`marketplace finalize failed: ${error.message}`);
+  const result = data as FinalizeResult;
+  if (result.status === 'paid' && !result.already) {
+    await notifyNewOrders(supabase, result.order_ids ?? []).catch((e) => console.error('marketplace notify failed', e));
+  }
+  return result;
+}
+
 export async function verifyAndFinalize(
   supabase: SupabaseClient,
   reference: string,
   hint: { fee?: number } = {},
 ): Promise<FinalizeResult> {
+  if (reference.startsWith('QAF-MKT-')) {
+    return await verifyAndFinalizeMarketplace(supabase, reference, hint);
+  }
+
   const { data: session } = await supabase
     .from('checkout_sessions')
     .select('id, status, amount, expires_at')
