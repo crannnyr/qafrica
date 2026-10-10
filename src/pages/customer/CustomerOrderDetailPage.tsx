@@ -532,7 +532,7 @@ export default function CustomerOrderDetailPage() {
                 <div key={item.id} className="flex gap-4">
                   <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0">
                     {image ? (
-                      <img src={image} alt={item.product_name} className="w-full h-full object-cover" />
+                      <img src={image} alt={item.product_name} onError={(event) => { event.currentTarget.style.display = "none"; }} className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm font-medium">
                         {item.product_name?.charAt(0) ?? '?'}
