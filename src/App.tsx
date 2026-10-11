@@ -140,7 +140,7 @@ const AddProductPage = lazy(() => import('@/pages/dashboard/AddProduct'));
 const EditProductPage = lazy(() => import('@/pages/dashboard/EditProduct'));
 const ImportCatalogPage = lazy(() => import('@/pages/dashboard/ImportCatalogPage'));
 const OrdersPage = lazy(() => import('@/pages/dashboard/OrdersPage'));
-const ManualSalesPage = lazy(() => import('@/pages/dashboard/ManualSalesPage'));
+const ManualSalesPage = lazy(() => import('@/pages/dashboard/ManualSalesPage'));\nconst POSPage = lazy(() => import('@/pages/dashboard/POSPage'));
 const OrderManagementPage = lazy(() => import('@/pages/dashboard/OrderManagementPage'));
 const OrderDetailPage = lazy(() => import('@/pages/dashboard/OrderDetailPage'));
 const DropshipOrdersPage = lazy(() => import('@/pages/dashboard/DropshipOrdersPage'));
@@ -614,7 +614,7 @@ function App() {
             <Route path="subscription" element={<StaffGuard><SubscriptionPage /></StaffGuard>} />
             <Route path="niches" element={<StaffGuard permission="can_manage_settings"><NicheCustomizationPage /></StaffGuard>} />
             <Route path="how-to-use" element={<HowToUsePage />} />
-            <Route path="manual-sales" element={<ManualSalesPage />} />
+            <Route path="manual-sales" element={<ManualSalesPage />} />\n            <Route path="pos" element={<POSPage />} />
             <Route path="jumia" element={<JumiaPage />} />
             <Route path="jumia/add" element={<JumiaComingSoon />} />
             <Route path="jumia/locations" element={<JumiaDropOffLocationsPage />} />
