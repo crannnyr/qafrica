@@ -256,21 +256,137 @@ GRANT EXECUTE ON FUNCTION public.sync_seller_reengagement_enrollments() TO servi
 GRANT EXECUTE ON FUNCTION public.get_seller_reengagement_due() TO service_role;
 GRANT EXECUTE ON FUNCTION public.queue_seller_reengagement_email(uuid, integer, text, text) TO service_role;
 
--- Before applying this migration, store the service-role JWT in Supabase Vault as
--- `qafrica_service_role_key`. Do not commit the key to source control. The
--- function only queues messages; the existing queue processor applies email
--- suppression, per-domain throttling, and global daily caps before sending.
+
+-- Database-native campaign runner: no Vault secret or Edge Function HTTP call is
+-- required. pg_cron runs this function inside Postgres, and emails still enter
+-- the existing email_queue so its normal suppression and rate limits apply.
+CREATE OR REPLACE FUNCTION public.process_seller_reengagement_campaigns()
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_sync jsonb;
+  v_candidate record;
+  v_subject text;
+  v_heading text;
+  v_body text;
+  v_cta text;
+  v_href text;
+  v_html text;
+  v_result jsonb;
+  v_queued integer := 0;
+  v_skipped integer := 0;
+  v_errors integer := 0;
+  v_first_name text;
+  v_store_name text;
+BEGIN
+  v_sync := public.sync_seller_reengagement_enrollments();
+
+  FOR v_candidate IN SELECT * FROM public.get_seller_reengagement_due()
+  LOOP
+    v_first_name := split_part(coalesce(nullif(trim(v_candidate.full_name), ''), 'there'), ' ', 1);
+    v_store_name := coalesce(nullif(trim(v_candidate.store_name), ''), 'your store');
+
+    CASE v_candidate.current_step
+      WHEN 0 THEN
+        v_subject := 'Your first QAfrica sale starts with one small step';
+        v_heading := 'Let’s get your store moving';
+        v_body := CASE WHEN v_candidate.product_count = 0
+          THEN 'Start by choosing one product that fits the customer you want to serve. Browse the import catalog and review the current product details before adding it.'
+          ELSE 'Start with your strongest product. Check that its photo, title, price, and description make the value clear within a few seconds.' END;
+        v_cta := CASE WHEN v_candidate.product_count = 0 THEN 'Browse products to import' ELSE 'Review my products' END;
+        v_href := CASE WHEN v_candidate.product_count = 0 THEN '/dashboard/catalog' ELSE '/dashboard/products' END;
+      WHEN 1 THEN
+        v_subject := 'A simple product-picking method for ' || v_store_name;
+        v_heading := 'Choose for a specific customer';
+        v_body := 'Instead of listing everything, think of one customer group and the problem they want solved. Choose products that fit that audience.';
+        v_cta := 'Explore the import catalog'; v_href := '/dashboard/catalog';
+      WHEN 2 THEN
+        v_subject := 'One product photo can change the first impression';
+        v_heading := 'Make the product easy to understand';
+        v_body := 'Use a clear, well-lit image that shows the item itself. Add extra angles when available, and make sure the first image is easy to understand on a phone screen.';
+        v_cta := 'Improve my product pages'; v_href := '/dashboard/products';
+      WHEN 3 THEN
+        v_subject := 'Check your price before you share your store';
+        v_heading := 'Make the price make sense';
+        v_body := 'Compare similar products, account for delivery and platform charges, and decide what value your store adds. Do not set a price based only on what another seller charges.';
+        v_cta := 'Review my product prices'; v_href := '/dashboard/products';
+      WHEN 4 THEN
+        v_subject := 'A product idea for your QAfrica niche';
+        v_heading := 'Review products that fit your niche';
+        v_body := 'Open the import catalog and filter for products that match your store niche. Check photos, current stock, and the current cost before importing.';
+        v_cta := 'View the import catalog'; v_href := '/dashboard/catalog';
+      WHEN 5 THEN
+        v_subject := 'Help customers trust your store';
+        v_heading := 'Answer the questions buyers already have';
+        v_body := 'Clear product details, accurate delivery expectations, and visible contact information reduce uncertainty. Review your storefront as if you were a first-time visitor.';
+        v_cta := 'Open my storefront settings'; v_href := '/dashboard/store-setup';
+      WHEN 6 THEN
+        v_subject := 'Try a focused product collection this week';
+        v_heading := 'Keep your store easy to browse';
+        v_body := 'A small collection around one theme can be easier to understand than a scattered catalog. Add related products or remove anything that distracts from your main offer.';
+        v_cta := 'Manage products'; v_href := '/dashboard/products';
+      WHEN 7 THEN
+        v_subject := 'Give your store link a real audience';
+        v_heading := 'Share where your customers already are';
+        v_body := 'Share a useful product or collection with people likely to care about it. Add a short explanation of who it helps instead of posting a bare link with no context.';
+        v_cta := 'Open my store dashboard'; v_href := '/dashboard';
+      WHEN 8 THEN
+        v_subject := 'A quick 10-minute QAfrica store check';
+        v_heading := 'Use this quick checklist';
+        v_body := 'Check four things: a clear product image, a specific title, a complete description, and a price that covers your costs. Then test the buying steps on your phone.';
+        v_cta := 'Run through my store'; v_href := '/dashboard/products';
+      WHEN 9 THEN
+        v_subject := 'Your QAfrica next step: turn setup into action';
+        v_heading := 'Ready for your next step?';
+        v_body := CASE WHEN v_candidate.product_count = 0
+          THEN 'Pick one suitable product today and complete its details. Getting one product live is a practical first milestone.'
+          ELSE 'Choose one product to improve, share it with a relevant audience, and review the result. Small, repeatable improvements are more useful than changing everything at once.' END;
+        v_cta := CASE WHEN v_candidate.product_count = 0 THEN 'Add my first product' ELSE 'Open my products' END;
+        v_href := CASE WHEN v_candidate.product_count = 0 THEN '/dashboard/products/add' ELSE '/dashboard/products' END;
+      ELSE
+        v_skipped := v_skipped + 1;
+        CONTINUE;
+    END CASE;
+
+    -- Escape interpolated profile/store values before placing them in HTML.
+    v_first_name := replace(replace(replace(replace(replace(v_first_name, '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '"', '&quot;'), '''', '&#39;');
+    v_store_name := replace(replace(replace(replace(replace(v_store_name, '&', '&amp;'), '<', '&lt;'), '>', '&gt;'), '"', '&quot;'), '''', '&#39;');
+    v_html := '<!doctype html><html><body style="margin:0;background:#f8fafc;font-family:Arial,sans-serif;color:#172033"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8fafc;padding:28px 12px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border-radius:16px"><tr><td style="background:#f97316;padding:20px 28px;color:#fff;font-size:21px;font-weight:800">QAFRICA</td></tr><tr><td style="padding:28px;line-height:1.65"><p style="color:#475569">Hi ' || v_first_name || ',</p><h1 style="font-size:25px;line-height:1.25;color:#111827">' || v_heading || '</h1><p style="color:#475569">Your store, <strong>' || v_store_name || '</strong>, is part of your QAfrica journey. Here is one practical next step:</p><p style="color:#475569">' || v_body || '</p><p style="margin:24px 0"><a href="https://qafrica.store' || v_href || '" style="display:inline-block;background:#f97316;color:#fff;text-decoration:none;font-weight:700;padding:13px 20px;border-radius:9px">' || v_cta || ' →</a></p><p style="color:#64748b;font-size:13px">You are receiving this because you have a paid QAfrica store. These check-ins stop when your store records a sale. If you need help, reply to this email and our team can assist.</p></td></tr><tr><td style="padding:16px 28px;background:#fff7ed;color:#9a3412;font-size:12px">QAfrica · Build your store, one step at a time.</td></tr></table></td></tr></table></body></html>';
+
+    BEGIN
+      v_result := public.queue_seller_reengagement_email(
+        v_candidate.campaign_id, v_candidate.current_step, v_subject, v_html
+      );
+      IF coalesce((v_result->>'queued')::boolean, false) THEN
+        v_queued := v_queued + 1;
+      ELSE
+        v_skipped := v_skipped + 1;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      v_errors := v_errors + 1;
+      RAISE WARNING 'Seller re-engagement campaign % step % failed: %',
+        v_candidate.campaign_id, v_candidate.current_step, SQLERRM;
+    END;
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'enrolled', coalesce((v_sync->>'enrolled')::integer, 0),
+    'exited', coalesce((v_sync->>'exited')::integer, 0),
+    'queued', v_queued, 'skipped', v_skipped, 'errors', v_errors
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.process_seller_reengagement_campaigns() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.process_seller_reengagement_campaigns() TO service_role;
+
+-- Run entirely inside Postgres. No service-role key needs to be stored in Vault.
+SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'seller-reengagement-campaign-daily';
 SELECT cron.schedule(
   'seller-reengagement-campaign-daily',
   '0 8 * * *',
-  $cron$
-    SELECT net.http_post(
-      url := 'https://bahiqhpypapvktpxrths.supabase.co/functions/v1/seller-reengagement-campaign',
-      headers := jsonb_build_object(
-        'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'qafrica_service_role_key' LIMIT 1)
-      ),
-      body := '{}'::jsonb
-    );
-  $cron$
+  $$SELECT public.process_seller_reengagement_campaigns();$$
 );
