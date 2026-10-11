@@ -5,7 +5,7 @@ import { useStoreStore } from '@/stores';
 import type { ShipbubblePickupAddress, PackagingDimensions } from '../types';
 
 export function useDeliverySettings() {
-  const { currentStore, deliveryZones, fetchDeliveryZones, addDeliveryZone, deleteDeliveryZone, updateStore } = useStoreStore();
+  const { currentStore, deliveryZones, fetchDeliveryZones, updateStore } = useStoreStore();
 
   const [deliveryMode, setDeliveryMode]   = useState<'manual' | 'shipbubble'>('manual');
   const [deliveryWindow, setDeliveryWindow] = useState(7);
@@ -24,8 +24,7 @@ export function useDeliverySettings() {
   const [isValidatingAddress, setIsValidatingAddress] = useState(false);
   const [isSavingPackaging, setIsSavingPackaging] = useState(false);
   const [isSavingCategory, setIsSavingCategory]   = useState(false);
-  const [isAdding, setIsAdding]                   = useState(false);
-  const [isDeleting, setIsDeleting]               = useState<string | null>(null);
+  const [isTogglingZone, setIsTogglingZone] = useState<string | null>(null);
   const [isSavingZone, setIsSavingZone]           = useState(false);
 
   // Sync store data on mount
