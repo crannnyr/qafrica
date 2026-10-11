@@ -982,8 +982,8 @@ async function themeStart(req: Request) {
   if (themeId !== 'black') return json({ ok: false, message: 'This add-on is not available.' }, 400)
 
   const { data: store } = body.store_id
-    ? await admin.from('stores').select('id, owner_id, theme').eq('id', String(body.store_id)).maybeSingle()
-    : await admin.from('stores').select('id, owner_id, theme').eq('owner_id', userId).order('created_at').limit(1).maybeSingle()
+    ? await admin.from('stores').select('id, owner_id, name, theme').eq('id', String(body.store_id)).maybeSingle()
+    : await admin.from('stores').select('id, owner_id, name, theme').eq('owner_id', userId).order('created_at').limit(1).maybeSingle()
   if (!store || store.owner_id !== userId) return json({ ok: false, message: 'Store not found on your account.' }, 403)
 
   const { data: existing } = await admin.from('store_theme_purchases')
