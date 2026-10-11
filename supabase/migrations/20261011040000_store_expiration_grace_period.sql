@@ -15,7 +15,7 @@ CREATE OR REPLACE FUNCTION public.expire_overdue_subscriptions()
 RETURNS void LANGUAGE plpgsql SET search_path TO 'public','pg_temp'
 AS $function$
 DECLARE
-  r record; st record; ev uuid; covered boolean;
+  r record; store_row record; ev uuid; covered boolean;
   expired_count int := 0; closed_count int := 0;
   owner_name text; store_name_safe text; owner_name_safe text;
 BEGIN
@@ -87,7 +87,7 @@ BEGIN
   END LOOP;
 
   -- Close only uncovered stores whose seven-day grace has ended.
-  FOR st IN
+  FOR store_row IN
     SELECT x.id,x.owner_id,x.name,x.slug
       FROM public.stores x
      WHERE x.is_active IS TRUE
@@ -99,33 +99,33 @@ BEGIN
   LOOP
     SELECT s.id,s.user_id INTO r FROM public.subscriptions s
       JOIN public.subscription_lifecycle_events e ON e.subscription_id=s.id AND e.event_type='expired'
-     WHERE s.store_id=st.id AND s.expires_at<=now()-interval '7 days'
+     WHERE s.store_id=store_row.id AND s.expires_at<=now()-interval '7 days'
      ORDER BY s.expires_at DESC LIMIT 1;
     ev := NULL;
     INSERT INTO public.subscription_lifecycle_events(subscription_id,store_id,user_id,event_type)
-    VALUES(r.id,st.id,r.user_id,'grace_ended')
+    VALUES(r.id,store_row.id,r.user_id,'grace_ended')
     ON CONFLICT(subscription_id,event_type) DO NOTHING RETURNING id INTO ev;
     IF ev IS NULL THEN CONTINUE; END IF;
 
     INSERT INTO public.notifications(user_id,type,title,message,data,store_id)
     SELECT DISTINCT ic.importer_owner_id,'supplier_store_expired',
       'Supplier store is no longer available',
-      format('Supplier store "%s" went offline after its subscription grace period. Its imported listings have been deactivated.',st.name),
-      jsonb_build_object('supplier_store_id',st.id,'supplier_store_name',st.name,'reason','subscription_expired'),
+      format('Supplier store "%s" went offline after its subscription grace period. Its imported listings have been deactivated.',store_row.name),
+      jsonb_build_object('supplier_store_id',store_row.id,'supplier_store_name',store_row.name,'reason','subscription_expired'),
       ic.importer_store_id
       FROM public.import_catalog ic
-     WHERE ic.original_store_id=st.id AND ic.is_active IS TRUE;
+     WHERE ic.original_store_id=store_row.id AND ic.is_active IS TRUE;
 
     UPDATE public.stores SET is_active=false,deactivation_reason='subscription_expired',updated_at=now()
-     WHERE id=st.id AND is_active IS TRUE;
+     WHERE id=store_row.id AND is_active IS TRUE;
     UPDATE public.products SET is_active=false,is_importable=false,updated_at=now()
-     WHERE store_id=st.id AND (is_active IS TRUE OR is_importable IS TRUE);
+     WHERE store_id=store_row.id AND (is_active IS TRUE OR is_importable IS TRUE);
     UPDATE public.import_catalog SET is_active=false
-     WHERE original_store_id=st.id AND is_active IS TRUE;
+     WHERE original_store_id=store_row.id AND is_active IS TRUE;
     INSERT INTO public.system_failure_logs(failure_type,entity_type,entity_id,affected_user_id,error_message,metadata)
-    VALUES('subscription_grace_ended','store',st.id::text,st.owner_id,
-      format('Store %s was taken offline after its seven-day subscription grace period',st.name),
-      jsonb_build_object('store_id',st.id,'store_slug',st.slug));
+    VALUES('subscription_grace_ended','store',store_row.id::text,store_row.owner_id,
+      format('Store %s was taken offline after its seven-day subscription grace period',store_row.name),
+      jsonb_build_object('store_id',store_row.id,'store_slug',store_row.slug));
     closed_count := closed_count+1;
   END LOOP;
 
@@ -157,13 +157,13 @@ UPDATE public.stores st
    AND st.deactivation_reason IN ('subscription_expired','trial_expired')
    AND EXISTS (
      SELECT 1 FROM public.subscriptions s
-      WHERE s.store_id = st.id
+      WHERE s.store_id = store_row.id
         AND s.expires_at > now() - interval '7 days'
         AND s.expires_at <= now()
    )
    AND NOT EXISTS (
      SELECT 1 FROM public.subscriptions s
-      WHERE s.store_id = st.id
+      WHERE s.store_id = store_row.id
         AND s.is_active IS TRUE
         AND s.is_trial IS FALSE
         AND s.expires_at > now()
