@@ -52,6 +52,7 @@ export type CheckoutDetails = {
   payer?: { name: string; email: string; phone?: string } | null;
   shared_cart_id?: string | null;
   shared_cart_code?: string;
+  contribution_amount?: number | null;
 };
 
 export type CreateResult =
@@ -156,6 +157,10 @@ export type SharedCartView = {
   state: string | null;
   note: string | null;
   quote: Quote | null;
+  is_marketplace?: boolean;
+  amount_raised?: number;
+  target_amount?: number;
+  remaining_amount?: number;
 };
 
 export async function createSharedCart(
@@ -180,13 +185,14 @@ export async function getSharedCart(code: string): Promise<SharedCartView | null
   return data as SharedCartView;
 }
 
-export async function paySharedCart(code: string, payer: { name: string; email: string; phone?: string }): Promise<CreateResult> {
+export async function paySharedCart(code: string, payer: { name: string; email: string; phone?: string }, contributionAmount?: number): Promise<CreateResult> {
   // Items, recipient and address are taken from the saved link on the server
   return createCheckout([] as ReturnType<typeof toQuoteItems>, {
     customer: { name: '', email: '', phone: '' },
     delivery: { address: '', city: '', state: '' },
     shared_cart_code: code,
     payer,
+    contribution_amount: contributionAmount ?? null,
   });
 }
 
