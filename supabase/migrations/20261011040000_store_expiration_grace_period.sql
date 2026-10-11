@@ -137,3 +137,34 @@ $function$;
 
 COMMENT ON FUNCTION public.expire_overdue_subscriptions()
 IS 'Queues deduplicated subscription expiry emails, keeps storefronts online for seven days after expiry, then closes uncovered stores and notifies/deactivates affected imported listings. The existing hourly cron continues to invoke this function.';
+
+-- Preserve the intended grace period for subscriptions that the previous
+-- hourly implementation already marked inactive during the last seven days.
+INSERT INTO public.subscription_lifecycle_events(subscription_id,store_id,user_id,event_type)
+SELECT s.id,s.store_id,s.user_id,'expired'
+  FROM public.subscriptions s
+ WHERE s.is_active IS FALSE
+   AND s.expires_at IS NOT NULL
+   AND s.expires_at <= now()
+ON CONFLICT(subscription_id,event_type) DO NOTHING;
+
+UPDATE public.stores st
+   SET is_active = true,
+       deactivation_reason = NULL,
+       updated_at = now()
+ WHERE st.is_active IS FALSE
+   AND st.is_blocked IS NOT TRUE
+   AND st.deactivation_reason IN ('subscription_expired','trial_expired')
+   AND EXISTS (
+     SELECT 1 FROM public.subscriptions s
+      WHERE s.store_id = st.id
+        AND s.expires_at > now() - interval '7 days'
+        AND s.expires_at <= now()
+   )
+   AND NOT EXISTS (
+     SELECT 1 FROM public.subscriptions s
+      WHERE s.store_id = st.id
+        AND s.is_active IS TRUE
+        AND s.is_trial IS FALSE
+        AND s.expires_at > now()
+   );
