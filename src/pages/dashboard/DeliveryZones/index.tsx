@@ -54,22 +54,17 @@ export default function DeliveryZonesPage() {
 
       {s.deliveryMode === 'manual' && (
         <>
-          <ManualZoneAdd
-            newZone={s.newZone}
-            setNewZone={s.setNewZone}
-            isAdding={s.isAdding}
-            onAdd={s.handleAddZone}
-          />
+          <ManualZoneAdd />
           <ManualZonesTable
             zones={s.deliveryZones}
             editingZoneId={s.editingZoneId}
             editingZonePrice={s.editingZonePrice}
             isSavingZone={s.isSavingZone}
-            isDeleting={s.isDeleting}
+            isToggling={s.isTogglingZone}
             setEditingZoneId={s.setEditingZoneId}
             setEditingZonePrice={s.setEditingZonePrice}
             onSavePrice={s.handleSaveZonePrice}
-            onDelete={s.handleDeleteZone}
+            onToggleActive={s.handleToggleZone}
           />
         </>
       )}
