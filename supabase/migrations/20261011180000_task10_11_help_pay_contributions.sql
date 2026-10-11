@@ -53,6 +53,9 @@ BEGIN
 END;
 $$;
 
+-- Remove existing public listings that do not satisfy the marketplace-only rule.
+UPDATE public.shared_carts SET is_public = false WHERE is_public = true AND public.shared_cart_is_marketplace(items, delivery->>'state') = false;
+
 -- Atomically reserve a contribution so concurrent payers cannot overfund the cart.
 -- For non-marketplace carts, only the full current quote is allowed.
 CREATE OR REPLACE FUNCTION public.prepare_shared_cart_payment(
