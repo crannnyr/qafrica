@@ -389,7 +389,7 @@ export default function DashboardHome() {
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-sm font-semibold text-gray-900">Want a fully branded address?</p>
                   <p className="break-words text-sm leading-5 text-gray-600">
-                    Set up a custom domain such as <span className="font-semibold text-gray-800">joshua.com</span> from <span className="font-semibold">Sidebar → Store Setup → Custom Domain</span>. It gives your store its own identity instead of a link that looks affiliated with QAfrica.
+                    Set up a custom domain such as <span className="font-semibold text-gray-800">{currentStore?.name?.trim() ? `${currentStore.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.com` : 'yourstore.com'}</span> from <span className="font-semibold">Sidebar → Store Setup → Custom Domain</span>. It gives your store its own identity instead of a link that looks affiliated with QAfrica.
                   </p>
                   <p className="break-words text-xs leading-5 text-gray-500">You can keep using your default store link for testing or sharing on social media in the meantime.</p>
                 </div>
