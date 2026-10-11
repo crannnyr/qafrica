@@ -158,7 +158,7 @@ export default function POSPage() {
         <section className="min-w-0 rounded-2xl border bg-card shadow-sm">
           <div className="border-b p-4 sm:p-5">
             <div className="flex items-center justify-between gap-3">
-              <div><h2 className="text-lg font-semibold">Choose products</h2><p className="mt-1 text-sm text-muted-foreground">{visible.length} of {products.length} products</p></div>
+              <div><h2 className="text-lg font-semibold">Products</h2><p className="mt-1 text-sm text-muted-foreground">{visible.length} of {products.length} products</p></div>
               <Button variant="outline" size="sm" onClick={() => void loadProducts()} disabled={loading}>{loading ? 'Loading…' : 'Refresh stock'}</Button>
             </div>
             <div className="relative mt-4">
@@ -175,7 +175,7 @@ export default function POSPage() {
           <div className="p-4 sm:p-5">
             {loading ? <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-52 animate-pulse rounded-xl bg-muted" />)}</div>
               : visible.length === 0 ? <div className="flex min-h-56 flex-col items-center justify-center text-center"><ShoppingBag className="h-10 w-10 text-muted-foreground/50" /><p className="mt-3 font-medium">{search ? 'No matching products' : 'No products to show'}</p><p className="mt-1 text-sm text-muted-foreground">{search ? 'Try another name or clear your search.' : 'Active original products will appear here.'}</p>{(search || stockFilter !== 'all') && <Button className="mt-3" variant="outline" size="sm" onClick={() => { setSearch(''); setStockFilter('all'); }}>Clear filters</Button>}</div>
-              : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              : <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
                 {visible.map((product) => {
                   const unavailable = product.is_out_of_stock || product.stock_quantity < 1;
                   const inCart = cart.find((line) => line.product.id === product.id)?.quantity || 0;
