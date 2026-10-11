@@ -464,8 +464,8 @@ export default function StorePage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="text-center">
-          <p className="text-2xl font-semibold text-gray-900 mb-1">Store not found</p>
-          <p className="text-gray-400 mb-6 text-sm">This store doesn't exist or may have moved.</p>
+          <p className="text-2xl font-semibold text-gray-900 mb-1">Store Not Found</p>
+          <p className="text-gray-400 mb-6 text-sm">This store is unavailable or its subscription has expired.</p>
           <Link to="/">
             <Button className="bg-gray-900 hover:bg-gray-800 text-white rounded-full px-6">
               Go home
