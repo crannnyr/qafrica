@@ -1,15 +1,28 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ShoppingCart, Package, ArrowUpRight,
   DollarSign, Eye, Plus, Store, TrendingUp,
-  ExternalLink,
+  ExternalLink, Copy, Link2, Globe, Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from 'sonner';
 import { useAuthStore, useStoreStore, useOrderStore, useWalletStore } from '@/stores';
 
+const STORE_PROMO_IMAGES = [
+  'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.19689509870634492.webp',
+  'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.47853263406407076.webp',
+  'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.8566548358244728.webp',
+  'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.42678237174556055.webp',
+  'https://dpioixansygkjdbphfdj.supabase.co/storage/v1/object/public/product-images/0.09752996319874485.webp',
+];
+
 export default function DashboardHome() {
+  const [isStoreLinkOpen, setIsStoreLinkOpen] = useState(false);
+  const [storePromoImage, setStorePromoImage] = useState(STORE_PROMO_IMAGES[0]);
+  const [isCopyingStoreLink, setIsCopyingStoreLink] = useState(false);
   const { user }                                       = useAuthStore();
   const { currentStore, products, fetchUserStore }     = useStoreStore();
   const { orders, fetchStoreOrders }                   = useOrderStore();
@@ -84,34 +97,17 @@ export default function DashboardHome() {
         </div>
 
         <div className="flex items-center gap-3 flex-wrap">
-          {/* Ads manager quick links */}
-          <a
-            href="https://ads.tiktok.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 bg-black text-white text-sm rounded-lg hover:bg-gray-900 transition-colors"
-            title="TikTok Ads Manager"
+          <Button
+            type="button"
+            onClick={() => {
+              setStorePromoImage(STORE_PROMO_IMAGES[Math.floor(Math.random() * STORE_PROMO_IMAGES.length)]);
+              setIsStoreLinkOpen(true);
+            }}
+            className="bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200"
           >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.27 6.27 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.78a4.85 4.85 0 01-1.01-.09z"/>
-            </svg>
-            TikTok Ads
-            <ExternalLink className="w-3 h-3 opacity-60" />
-          </a>
-
-          <a
-            href="https://adsmanager.facebook.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-500 text-white text-sm rounded-lg hover:opacity-90 transition-opacity"
-            title="Instagram / Meta Ads Manager"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>
-            </svg>
-            Instagram Ads
-            <ExternalLink className="w-3 h-3 opacity-60" />
-          </a>
+            <Link2 className="w-4 h-4 mr-2" />
+            Copy Store Link
+          </Button>
 
           <Link to="/dashboard/products/add">
             <Button className="bg-orange-500 hover:bg-orange-600 text-white">
@@ -363,6 +359,75 @@ export default function DashboardHome() {
           <div className="absolute -right-10 -top-10 w-64 h-64 bg-white/10 rounded-full blur-3xl pointer-events-none" />
         </motion.div>
       )}
+      <Dialog open={isStoreLinkOpen} onOpenChange={setIsStoreLinkOpen}>
+        <DialogContent className="sm:max-w-xl p-0 overflow-hidden border-0">
+          <div className="relative h-44 sm:h-52 bg-orange-50 overflow-hidden">
+            <img
+              src={storePromoImage}
+              alt="Store promotion inspiration"
+              className="h-full w-full object-cover"
+              onError={() => setStorePromoImage(STORE_PROMO_IMAGES[0])}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-950/75 via-gray-950/15 to-transparent" />
+            <div className="absolute bottom-4 left-5 right-5 text-white">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur">
+                <Store className="h-3.5 w-3.5" /> Your store, your brand
+              </span>
+              <h2 className="mt-2 text-2xl font-bold">Share your store with the world</h2>
+            </div>
+          </div>
+          <div className="p-5 sm:p-6 space-y-5">
+            <DialogHeader className="text-left space-y-2">
+              <DialogTitle className="text-xl">Your personal store link</DialogTitle>
+              <DialogDescription className="text-sm leading-6">
+                This is your own storefront link. Share it with friends, customers, and on social media so people can browse and buy directly from your store.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-3">
+              <div className="flex items-start gap-3">
+                <Globe className="mt-0.5 h-5 w-5 shrink-0 text-orange-600" />
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-gray-900">Want a fully branded address?</p>
+                  <p className="text-sm leading-5 text-gray-600">
+                    Set up a custom domain such as <span className="font-semibold text-gray-800">joshua.com</span> from <span className="font-semibold">Sidebar → Store Setup → Custom Domain</span>. It gives your store its own identity instead of a link that looks affiliated with QAfrica.
+                  </p>
+                  <p className="text-xs leading-5 text-gray-500">You can keep using your default store link for testing or sharing on social media in the meantime.</p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Your current store link</label>
+              <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+                <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-gray-800">
+                  {currentStore ? `${window.location.origin}/${currentStore.slug}` : 'Set up your store to get a link'}
+                </span>
+                <Button
+                  type="button"
+                  disabled={!currentStore || isCopyingStoreLink}
+                  onClick={async () => {
+                    if (!currentStore) return;
+                    const url = `${window.location.origin}/${currentStore.slug}`;
+                    setIsCopyingStoreLink(true);
+                    try {
+                      await navigator.clipboard.writeText(url);
+                      toast.success('Store link copied to clipboard');
+                    } catch {
+                      toast.error('Could not copy automatically. Please copy the link from your browser.');
+                    } finally {
+                      setIsCopyingStoreLink(false);
+                    }
+                  }}
+                  className="shrink-0 bg-orange-500 text-white hover:bg-orange-600"
+                >
+                  {isCopyingStoreLink ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                  Copy Link
+                </Button>
+              </div>
+              {!currentStore && <p className="text-xs text-amber-700">Complete store setup before sharing your storefront.</p>}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
