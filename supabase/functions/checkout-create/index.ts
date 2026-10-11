@@ -120,6 +120,30 @@ Deno.serve(async (req) => {
   }
 
   const reference = newReference();
+  let paymentAmount = Number(quote.amount);
+  if (shared) {
+    const rawContribution = body?.contribution_amount;
+    const requestedAmount = rawContribution === undefined || rawContribution === null || rawContribution === ''
+      ? null : Number(rawContribution);
+    if (requestedAmount !== null && (!Number.isFinite(requestedAmount) || requestedAmount <= 0)) {
+      return json(400, { error: 'Enter a valid contribution amount', field_errors: { contribution_amount: 'Enter a valid amount' } });
+    }
+    const { data: prepared, error: prepareError } = await supabase.rpc('prepare_shared_cart_payment', {
+      p_code: sharedCode,
+      p_reference: reference,
+      p_requested_amount: requestedAmount,
+      p_payer_name: payer?.name ?? '',
+      p_payer_email: payer?.email ?? '',
+    });
+    if (prepareError || !prepared) {
+      return json(409, { error: prepareError?.message?.replace(/^.*?ERROR:\\s*/, '') ?? 'We could not prepare this payment. Please try again.' });
+    }
+    paymentAmount = Number(prepared.amount);
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+      await supabase.from('shared_cart_contributions').update({ status: 'failed' }).eq('checkout_reference', reference);
+      return json(409, { error: 'The remaining balance is not available for payment.' });
+    }
+  }
   const returnSlug = clean(body?.return_slug, 80) || null;
   const { data: session, error: sErr } = await supabase
     .from('checkout_sessions')
@@ -132,7 +156,7 @@ Deno.serve(async (req) => {
       delivery,
       attribution_source: items.some((i: { attribution: string }) => i.attribution === 'marketplace') ? 'marketplace' : 'own',
       store_orders: quote.stores,
-      amount: quote.amount,
+      amount: paymentAmount,
       coupons,
       return_slug: returnSlug,
       payer_name: payer?.name ?? null,
@@ -144,6 +168,7 @@ Deno.serve(async (req) => {
     .select('id')
     .single();
   if (sErr || !session) {
+    if (shared) await supabase.from('shared_cart_contributions').update({ status: 'failed' }).eq('checkout_reference', reference);
     console.error('session insert failed', sErr);
     return json(500, { error: 'We could not start your payment. Please try again.' });
   }
@@ -154,7 +179,7 @@ Deno.serve(async (req) => {
       body: {
         order: {
           orderReference: reference,
-          amount: Number(quote.amount).toFixed(2),
+          amount: paymentAmount.toFixed(2),
           currency: 'NGN',
           customerEmail: payer?.email ?? customer.email,
           callbackUrl: `${SITE}/checkout/complete?ref=${encodeURIComponent(reference)}${shared ? '&for=' + encodeURIComponent(shared.recipient_name.split(' ')[0]) : ''}`,
@@ -167,8 +192,9 @@ Deno.serve(async (req) => {
       .from('checkout_sessions')
       .update({ checkout_link: link, nomba_order_id: order?.data?.orderReference ?? null, updated_at: new Date().toISOString() })
       .eq('id', session.id);
-    return json(200, { reference, checkout_link: link, amount: quote.amount });
+    return json(200, { reference, checkout_link: link, amount: paymentAmount });
   } catch (e) {
+    if (shared) await supabase.from('shared_cart_contributions').update({ status: 'failed' }).eq('checkout_reference', reference);
     console.error('nomba order failed', e instanceof NombaError ? { status: e.status, code: e.code, description: e.description } : e);
     await supabase.from('checkout_sessions').update({ status: 'failed', error: 'nomba_create_failed', updated_at: new Date().toISOString() }).eq('id', session.id);
     return json(502, { error: 'Payment service is busy. Please try again in a moment.' });
