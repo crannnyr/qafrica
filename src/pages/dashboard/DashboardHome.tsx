@@ -395,9 +395,9 @@ export default function DashboardHome() {
                 </div>
               </div>
             </div>
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Your current store link</label>
-              <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
+              <div className="flex min-w-0 flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2 sm:flex-row sm:items-center">
                 <span className="block min-w-0 w-full break-all px-1 py-1 text-sm font-medium text-gray-800 sm:flex-1 sm:truncate">
                   {currentStore ? `${window.location.origin}/${currentStore.slug}` : 'Set up your store to get a link'}
                 </span>
