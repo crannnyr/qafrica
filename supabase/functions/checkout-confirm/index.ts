@@ -31,5 +31,18 @@ Deno.serve(async (req) => {
   }
   const { data } = await supabase.rpc('checkout_session_status', { p_reference: reference });
   if (!data) return json(404, { error: 'Not found' });
+  const { data: session } = await supabase.from('checkout_sessions').select('shared_cart_id').eq('reference', reference).maybeSingle();
+  if (session?.shared_cart_id && data.status === 'paid') {
+    const { data: contribution } = await supabase.from('shared_cart_contributions')
+      .select('amount, is_marketplace').eq('checkout_reference', reference).eq('status', 'paid').maybeSingle();
+    if (contribution?.is_marketplace) {
+      const { data: cart } = await supabase.from('shared_carts').select('amount_snapshot').eq('id', session.shared_cart_id).maybeSingle();
+      const { data: rows } = await supabase.from('shared_cart_contributions').select('amount')
+        .eq('shared_cart_id', session.shared_cart_id).eq('status', 'paid');
+      const amountRaised = (rows ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+      const targetAmount = Number(cart?.amount_snapshot || 0);
+      return json(200, { ...data, contribution: { amount: Number(contribution.amount), amount_raised: amountRaised, target_amount: targetAmount, complete: amountRaised + 0.01 >= targetAmount } });
+    }
+  }
   return json(200, data);
 });
