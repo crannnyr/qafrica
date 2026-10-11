@@ -1,0 +1,243 @@
+-- Task 10 & 11: Help Pay eligibility, 30-day links, and marketplace contributions.
+ALTER TABLE public.shared_carts
+  ALTER COLUMN expires_at SET DEFAULT (now() + interval '30 days');
+
+-- Extend only links that are still active; never revive an expired link.
+UPDATE public.shared_carts
+SET expires_at = created_at + interval '30 days'
+WHERE status = 'active'
+  AND expires_at > now()
+  AND expires_at < created_at + interval '30 days';
+
+CREATE TABLE IF NOT EXISTS public.shared_cart_contributions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  shared_cart_id uuid NOT NULL REFERENCES public.shared_carts(id) ON DELETE CASCADE,
+  checkout_reference text NOT NULL UNIQUE,
+  amount numeric(12,2) NOT NULL CHECK (amount > 0),
+  payer_name text NOT NULL,
+  payer_email text NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','failed','expired')),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  paid_at timestamptz,
+  notification_sent_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS shared_cart_contributions_cart_status_idx
+  ON public.shared_cart_contributions(shared_cart_id, status, created_at);
+
+ALTER TABLE public.shared_cart_contributions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.shared_cart_contributions FROM anon, authenticated;
+GRANT ALL ON public.shared_cart_contributions TO service_role;
+
+CREATE OR REPLACE FUNCTION public.shared_cart_is_marketplace(p_items jsonb, p_state text)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE q jsonb; total_items integer; marketplace_items integer;
+BEGIN
+  q := public.checkout_quote(p_items, p_state, '{}'::jsonb);
+  IF COALESCE((q->>'ok')::boolean, false) IS NOT TRUE THEN RETURN false; END IF;
+  SELECT count(*), count(*) FILTER (WHERE line->>'attribution' = 'marketplace')
+    INTO total_items, marketplace_items
+  FROM jsonb_array_elements(q->'stores') store,
+       jsonb_array_elements(store->'items') line;
+  RETURN total_items > 0 AND total_items = marketplace_items;
+END;
+$$;
+
+-- Atomically reserve a contribution so concurrent payers cannot overfund the cart.
+-- For non-marketplace carts, only the full current quote is allowed.
+CREATE OR REPLACE FUNCTION public.prepare_shared_cart_payment(
+  p_code text,
+  p_reference text,
+  p_requested_amount numeric,
+  p_payer_name text,
+  p_payer_email text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  sc public.shared_carts%ROWTYPE;
+  q jsonb;
+  target numeric(12,2);
+  raised numeric(12,2);
+  reserved numeric(12,2);
+  remaining numeric(12,2);
+  chosen numeric(12,2);
+  marketplace boolean;
+BEGIN
+  SELECT * INTO sc FROM public.shared_carts
+  WHERE code = upper(trim(p_code))
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'This payment link was not found' USING ERRCODE='22023'; END IF;
+  IF sc.status <> 'active' OR sc.expires_at <= now() THEN
+    RAISE EXCEPTION 'This payment link has expired or is already paid' USING ERRCODE='22023';
+  END IF;
+
+  q := public.checkout_quote(sc.items, sc.delivery->>'state', '{}'::jsonb);
+  IF COALESCE((q->>'ok')::boolean, false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'Some items need attention before payment' USING ERRCODE='22023';
+  END IF;
+  target := round((q->>'amount')::numeric, 2);
+  marketplace := public.shared_cart_is_marketplace(sc.items, sc.delivery->>'state');
+
+  UPDATE public.shared_cart_contributions
+  SET status='expired'
+  WHERE shared_cart_id=sc.id AND status='pending' AND created_at <= now() - interval '2 hours';
+
+  SELECT COALESCE(sum(amount),0) INTO raised
+  FROM public.shared_cart_contributions WHERE shared_cart_id=sc.id AND status='paid';
+  SELECT COALESCE(sum(amount),0) INTO reserved
+  FROM public.shared_cart_contributions WHERE shared_cart_id=sc.id AND status='pending';
+  remaining := greatest(round(target - raised - reserved, 2), 0);
+
+  IF remaining <= 0 THEN RAISE EXCEPTION 'The remaining balance is already being paid' USING ERRCODE='22023'; END IF;
+  chosen := COALESCE(p_requested_amount, remaining);
+  IF chosen <= 0 OR chosen > remaining THEN
+    RAISE EXCEPTION 'Contribution must not exceed the remaining balance of %', remaining USING ERRCODE='22023';
+  END IF;
+
+  IF NOT marketplace AND (abs(chosen - target) > 0.01 OR raised > 0) THEN
+    RAISE EXCEPTION 'This cart requires one full payment' USING ERRCODE='22023';
+  END IF;
+  IF marketplace AND chosen < least(1000::numeric, remaining) THEN
+    RAISE EXCEPTION 'The minimum contribution is ₦%', least(1000::numeric, remaining) USING ERRCODE='22023';
+  END IF;
+
+  UPDATE public.shared_carts SET amount_snapshot=target WHERE id=sc.id;
+  IF marketplace THEN
+    INSERT INTO public.shared_cart_contributions
+      (shared_cart_id, checkout_reference, amount, payer_name, payer_email)
+    VALUES (sc.id, p_reference, chosen, left(trim(p_payer_name),80), lower(left(trim(p_payer_email),120)));
+  END IF;
+
+  RETURN jsonb_build_object(
+    'amount', chosen, 'target_amount', target, 'amount_raised', raised,
+    'remaining', greatest(round(target-raised,2),0), 'marketplace', marketplace
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.prepare_shared_cart_payment(text,text,numeric,text,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.prepare_shared_cart_payment(text,text,numeric,text,text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.set_help_pay_public(p_code text, p_public boolean)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE sc public.shared_carts%ROWTYPE;
+BEGIN
+  SELECT * INTO sc FROM public.shared_carts
+  WHERE code = upper(trim(p_code))
+  FOR UPDATE;
+  IF NOT FOUND OR sc.created_by IS NULL OR sc.created_by <> auth.uid() THEN
+    RAISE EXCEPTION 'Sign in with the account that created this link to post it on Help Pay' USING ERRCODE='42501';
+  END IF;
+  IF p_public AND (sc.status <> 'active' OR sc.expires_at < now()) THEN
+    RAISE EXCEPTION 'This link is no longer active' USING ERRCODE='22023';
+  END IF;
+  IF p_public AND NOT public.shared_cart_is_marketplace(sc.items, sc.delivery->>'state') THEN
+    RAISE EXCEPTION 'Only marketplace-product carts can be posted on Help Pay' USING ERRCODE='22023';
+  END IF;
+  IF p_public AND (
+    SELECT count(*) FROM public.shared_carts
+    WHERE created_by=auth.uid() AND is_public AND status='active'
+      AND expires_at > now() AND id <> sc.id
+  ) >= 3 THEN
+    RAISE EXCEPTION 'You can have up to 3 carts on Help Pay at a time' USING ERRCODE='22023';
+  END IF;
+  UPDATE public.shared_carts
+  SET is_public=p_public, published_at=CASE WHEN p_public THEN now() ELSE published_at END
+  WHERE id=sc.id;
+END;
+$$;
+
+-- Preserve the existing full-checkout implementation, then route marketplace
+-- Help Pay contributions through an aggregate funding check.
+ALTER FUNCTION public.finalize_checkout_session(text,numeric,numeric,text)
+  RENAME TO finalize_checkout_session_base;
+
+CREATE OR REPLACE FUNCTION public.finalize_checkout_session(
+  p_reference text,
+  p_paid_amount numeric,
+  p_gateway_fee numeric,
+  p_transaction_id text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  cs public.checkout_sessions%ROWTYPE;
+  contribution public.shared_cart_contributions%ROWTYPE;
+  cart_row public.shared_carts%ROWTYPE;
+  target numeric(12,2);
+  raised numeric(12,2);
+  base_result jsonb;
+BEGIN
+  SELECT * INTO cs FROM public.checkout_sessions WHERE reference=p_reference FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('status','unknown_reference'); END IF;
+  IF cs.status='paid' THEN
+    RETURN jsonb_build_object('status','paid','order_ids',to_jsonb(cs.order_ids),'already',true);
+  END IF;
+
+  SELECT * INTO contribution FROM public.shared_cart_contributions
+  WHERE checkout_reference=p_reference;
+  IF NOT FOUND THEN
+    RETURN public.finalize_checkout_session_base(p_reference,p_paid_amount,p_gateway_fee,p_transaction_id);
+  END IF;
+
+  IF p_paid_amount IS NULL OR p_paid_amount + 1 < cs.amount THEN
+    RETURN public.finalize_checkout_session_base(p_reference,p_paid_amount,p_gateway_fee,p_transaction_id);
+  END IF;
+
+  SELECT * INTO cart_row FROM public.shared_carts WHERE id=contribution.shared_cart_id FOR UPDATE;
+  IF NOT FOUND OR cart_row.status <> 'active' OR cart_row.expires_at <= now() THEN
+    UPDATE public.shared_cart_contributions SET status='failed'
+    WHERE id=contribution.id AND status='pending';
+    UPDATE public.checkout_sessions SET status='fulfilment_error', error='Shared cart is no longer active',
+      paid_amount=p_paid_amount, gateway_fee=p_gateway_fee, nomba_transaction_id=p_transaction_id, updated_at=now()
+    WHERE id=cs.id;
+    RETURN jsonb_build_object('status','fulfilment_error','detail','Shared cart is no longer active');
+  END IF;
+
+  UPDATE public.shared_cart_contributions SET status='paid', paid_at=COALESCE(paid_at,now())
+  WHERE id=contribution.id AND status='pending';
+
+  SELECT COALESCE(sum(amount),0) INTO raised
+  FROM public.shared_cart_contributions
+  WHERE shared_cart_id=cart_row.id AND status='paid';
+  target := round(COALESCE((public.checkout_quote(cart_row.items,cart_row.delivery->>'state','{}'::jsonb)->>'amount')::numeric, cart_row.amount_snapshot,0),2);
+
+  IF raised + 0.01 < target THEN
+    UPDATE public.checkout_sessions SET status='paid', paid_amount=p_paid_amount, gateway_fee=p_gateway_fee,
+      nomba_transaction_id=p_transaction_id, paid_at=now(), updated_at=now()
+    WHERE id=cs.id;
+    RETURN jsonb_build_object('status','paid','order_ids','[]'::jsonb,'already',false,
+      'contribution_complete',false,'amount_raised',raised,'target_amount',target,
+      'contribution_amount',contribution.amount);
+  END IF;
+
+  -- The final contributor triggers the existing order-creation transaction.
+  -- Its session's store_orders still contains the full validated cart quote.
+  base_result := public.finalize_checkout_session_base(p_reference,target,p_gateway_fee,p_transaction_id);
+  IF base_result->>'status'='paid' THEN
+    UPDATE public.checkout_sessions SET paid_amount=p_paid_amount, updated_at=now() WHERE id=cs.id;
+    RETURN base_result || jsonb_build_object('contribution_complete',true,'amount_raised',raised,
+      'target_amount',target,'contribution_amount',contribution.amount);
+  END IF;
+  RETURN base_result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.finalize_checkout_session(text,numeric,numeric,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.finalize_checkout_session(text,numeric,numeric,text) TO service_role;
