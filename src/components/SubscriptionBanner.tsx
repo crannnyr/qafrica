@@ -11,7 +11,7 @@ export default function SubscriptionBanner() {
   const [dismissed, setDismissed] = useState(false);
   const { user } = useAuthStore();
   const noticeType = isExpired ? 'expired' : 'expiring';
-  const storageKey = user?.id ? `qafrica-subscription-banner:${user.id}:${new Date().toLocaleDateString('en-CA')}` : null;
+  const storageKey = user?.id ? `qafrica-subscription-banner:${user.id}:${new Date().toISOString().slice(0, 10)}` : null;
 
   useEffect(() => {
     setDismissed(false);
