@@ -93,12 +93,19 @@ export default function POSPage() {
       }));
       const { data: order, error } = await supabase.from('orders').insert({
         store_id: currentStore.id, customer_id: null, customer_name: customer.trim(), customer_phone: phone.trim() || null,
-        customer_email: null, delivery_address: 'Point of Sale - In Store Pickup', delivery_city: 'Point of Sale',
-        delivery_state: 'Point of Sale', status: 'delivered', payment_method: method, payment_status: 'received',
+        customer_email: null, delivery_address: { address: 'Point of Sale - In Store Pickup', city: 'Point of Sale', state: 'Point of Sale', landmark: '' },
+        delivery_state: 'Point of Sale', status: 'delivered', payment_method: method, payment_status: 'paid', paid_at: now,
         subtotal, discount: cut, total, delivery_fee: 0, platform_fee: 0, items, notes: 'Recorded through Point of Sale',
         is_manual_sale: true, delivered_at: now, created_at: now,
       }).select('id,order_number').single();
       if (error) throw error;
+      const { error: itemError } = await supabase.from('order_items').insert(cart.map((line) => ({
+        order_id: order.id, product_id: line.product.id, original_product_id: line.product.id,
+        product_name: line.product.name, quantity: line.quantity, unit_price: line.price,
+        price_at_time: line.price, total_price: line.price * line.quantity, is_imported: false,
+        original_owner_id: null, original_store_id: null,
+      })));
+      if (itemError) throw new Error(`Sale was created but its item records could not be saved: ${itemError.message}`);
       for (const line of cart) {
         const remaining = line.product.stock_quantity - line.quantity;
         const { error: stockError } = await supabase.from('products').update({
