@@ -229,7 +229,11 @@ BEGIN
 
   -- The final contributor triggers the existing order-creation transaction.
   -- Its session's store_orders still contains the full validated cart quote.
+  -- The legacy finalizer uses checkout_sessions.amount to allocate gateway fees.
+  -- Temporarily set it to the full cart target, then restore the actual contribution.
+  UPDATE public.checkout_sessions SET amount=target WHERE id=cs.id;
   base_result := public.finalize_checkout_session_base(p_reference,target,p_gateway_fee,p_transaction_id);
+  UPDATE public.checkout_sessions SET amount=contribution.amount WHERE id=cs.id;
   IF base_result->>'status'='paid' THEN
     UPDATE public.checkout_sessions SET paid_amount=p_paid_amount, updated_at=now() WHERE id=cs.id;
     RETURN base_result || jsonb_build_object('contribution_complete',true,'amount_raised',raised,
