@@ -79,7 +79,7 @@ export default function CheckoutCompletePage() {
       <Result
         icon={<CheckCircle2 className="w-12 h-12 text-[#1A7F37]" />}
         title={s.contribution && !s.contribution.complete ? 'Your contribution was received' : forName ? (s.contribution ? `${forName}'s cart is fully funded` : `You paid for ${forName}'s cart`) : 'Payment received'}
-text={s.contribution && !s.contribution.complete ? `${naira(s.contribution.amount)} contributed. ${naira(s.contribution.amount_raised)} of ${naira(s.contribution.target_amount)} raised so far; the order will be placed when fully funded.` : forName ? `${naira(s.amount)} paid. ${forName} will get the order updates and delivery. Thank you!` : `${naira(s.amount)} paid. We've emailed your receipt.`}
+text={s.contribution ? (s.contribution.complete ? `${naira(s.contribution.amount)} contributed and the cart is fully funded at ${naira(s.contribution.target_amount)}. ${forName} will get the order updates and delivery.` : `${naira(s.contribution.amount)} contributed. ${naira(s.contribution.amount_raised)} of ${naira(s.contribution.target_amount)} raised so far; the order will be placed when fully funded.`) : forName ? `${naira(s.amount)} paid. ${forName} will get the order updates and delivery. Thank you!` : `${naira(s.amount)} paid. We've emailed your receipt.`}
         foot={
           <div className="mt-5 w-full text-left">
             <ul className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
