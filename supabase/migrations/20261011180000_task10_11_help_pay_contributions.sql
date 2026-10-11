@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS public.shared_cart_contributions (
   notification_sent_at timestamptz
 );
 
+ALTER TABLE public.shared_cart_contributions ADD COLUMN IF NOT EXISTS gateway_fee numeric(12,2) NOT NULL DEFAULT 0;
+ALTER TABLE public.shared_cart_contributions ADD COLUMN IF NOT EXISTS is_marketplace boolean NOT NULL DEFAULT false;
+
 CREATE INDEX IF NOT EXISTS shared_cart_contributions_cart_status_idx
   ON public.shared_cart_contributions(shared_cart_id, status, created_at);
 
