@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Package, ShoppingCart, Wallet,
   MapPin, ChartBar as BarChart3, Settings, BookOpen,
   MessageSquare, Tag, Upload, Import, Palette, Layers, Store,
-  Globe, Calculator, Truck, ShoppingBag, Plus,
+  Globe, Calculator, Truck, ShoppingBag, Plus, Store as StoreIcon,
 } from 'lucide-react';
 import type { PermissionKey } from '@/lib/staffPermissions';
 
@@ -148,7 +148,7 @@ export const PATH_PERMISSIONS: Record<string, PermissionKey | null> = {
   '/dashboard/products/bulk-import':  'can_manage_products',
   '/dashboard/import-catalog':        'can_manage_products',
 
-  '/dashboard/orders':           'can_view_orders',
+  '/dashboard/pos':              'can_manage_products',\n  '/dashboard/orders':           'can_view_orders',
   '/dashboard/dropship-orders':  'can_view_orders',
   '/dashboard/reviews':          'can_view_products',
   '/dashboard/coupons':          'can_manage_products',
