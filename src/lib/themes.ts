@@ -2,6 +2,24 @@ import type { Theme } from '@/types';
 
 export const AVAILABLE_THEMES: Theme[] = [
   {
+    id: 'black',
+    name: 'Black',
+    description: 'Dark charcoal fashion storefront with crisp off-white text and restrained gold accents',
+    preview_image: '/themes/black-preview.jpg',
+    is_premium: true,
+    colors: {
+      primary: '#D4AF37',
+      secondary: '#262626',
+      accent: '#D4AF37',
+      background: '#171717',
+      text: '#F5F5F5',
+    },
+    fonts: {
+      heading: 'Playfair Display',
+      body: 'Inter',
+    },
+  },
+  {
     id: 'modern',
     name: 'Modern',
     description: 'Clean, minimalist design with focus on products',
