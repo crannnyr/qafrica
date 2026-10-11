@@ -141,7 +141,7 @@ const templates = [
 ];
 
 // Theme Preview Component
-function ThemePreview({ themeId, isSelected, onClick }: { themeId: string; isSelected: boolean; onClick: () => void }) {
+function ThemePreview({ themeId, isSelected, hasBlackTheme, onClick }: { themeId: string; isSelected: boolean; hasBlackTheme: boolean; onClick: () => void }) {
   const theme = getThemeById(themeId);
   if (!theme) return null;
 
@@ -451,6 +451,7 @@ export default function StoreTemplatesPage() {
                             key={theme.id}
                             themeId={theme.id}
                             isSelected={selectedTheme === theme.id}
+                            hasBlackTheme={hasBlackTheme}
                             onClick={() => setSelectedTheme(theme.id)}
                           />
                         ))}
