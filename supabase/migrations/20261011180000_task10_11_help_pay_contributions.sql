@@ -59,6 +59,8 @@ DECLARE q jsonb; total_items integer; marketplace_items integer;
 BEGIN
   q := public.checkout_quote(p_items, p_state, '{}'::jsonb);
   IF COALESCE((q->>'ok')::boolean, false) IS NOT TRUE THEN RETURN false; END IF;
+  -- Check each validated quote line's server-derived attribution. Do not trust
+  -- the raw cart's attribution field for contribution eligibility.
   SELECT count(*), count(*) FILTER (WHERE line_json->>'attribution' = 'marketplace')
     INTO total_items, marketplace_items
   FROM jsonb_array_elements(q->'stores') AS stores(store_json),
