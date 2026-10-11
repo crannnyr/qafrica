@@ -121,6 +121,7 @@ Deno.serve(async (req) => {
 
   const reference = newReference();
   let paymentAmount = Number(quote.amount);
+  let checkoutQuote = quote;
   if (shared) {
     const rawContribution = body?.contribution_amount;
     const requestedAmount = rawContribution === undefined || rawContribution === null || rawContribution === ''
@@ -139,6 +140,7 @@ Deno.serve(async (req) => {
       return json(409, { error: prepareError?.message?.replace(/^.*?ERROR:\s*/, '') ?? 'We could not prepare this payment. Please try again.' });
     }
     paymentAmount = Number(prepared.amount);
+    if (prepared.quote?.ok) checkoutQuote = prepared.quote;
     if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
       await supabase.from('shared_cart_contributions').update({ status: 'failed' }).eq('checkout_reference', reference);
       return json(409, { error: 'The remaining balance is not available for payment.' });
@@ -155,7 +157,7 @@ Deno.serve(async (req) => {
       customer_phone: customer.phone,
       delivery,
       attribution_source: items.some((i: { attribution: string }) => i.attribution === 'marketplace') ? 'marketplace' : 'own',
-      store_orders: quote.stores,
+      store_orders: checkoutQuote.stores,
       amount: paymentAmount,
       coupons,
       return_slug: returnSlug,
