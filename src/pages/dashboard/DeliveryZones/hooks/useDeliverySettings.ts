@@ -12,7 +12,6 @@ export function useDeliverySettings() {
   const [pickupAddress, setPickupAddress] = useState<Partial<ShipbubblePickupAddress>>({});
   const [packaging, setPackaging]         = useState<PackagingDimensions>({ length_cm: 30, width_cm: 25, height_cm: 20, weight_kg: 0.5 });
   const [categoryId, setCategoryId]       = useState<number>(8);
-  const [newZone, setNewZone]             = useState({ state: '', price: '1500' });
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [editingZonePrice, setEditingZonePrice] = useState('');
   const [addressValidated, setAddressValidated] = useState(false);
@@ -165,7 +164,7 @@ export function useDeliverySettings() {
     // State
     currentStore, deliveryZones, deliveryMode, deliveryWindow, setDeliveryWindow,
     pickupAddress, setPickupAddress, packaging, setPackaging,
-    categoryId, setCategoryId, newZone, setNewZone,
+    categoryId, setCategoryId,
     editingZoneId, setEditingZoneId, editingZonePrice, setEditingZonePrice,
     addressValidated, hasPickupAddress,
     // Loading
