@@ -124,7 +124,7 @@ export default function StorePage() {
       const sourceInventoryResult = importedProductIds.length
         ? await supabase
             .from('products')
-            .select('id,stock_quantity,is_out_of_stock,is_active,has_variants,variants')
+            .select('id,stock_quantity,is_out_of_stock,is_active,is_importable,has_variants,variants')
             .in('id', importedProductIds)
         : null;
       const sourceInventory = sourceInventoryResult?.data ?? [];
@@ -132,9 +132,15 @@ export default function StorePage() {
 
       const mappedImports = (importedData || []).flatMap((item: any) => {
         const source = inventoryByProductId.get(item.original_product_id);
-        // Do not display imported copies of products that the original supplier
-        // has deactivated or removed.
-        if (!source || !source.is_active) return [];
+        // Imported storefront listings must follow the supplier's current eligibility,
+        // not a stale active flag on the import_catalog snapshot.
+        if (
+          !source ||
+          !source.is_active ||
+          !source.is_importable ||
+          source.is_out_of_stock ||
+          Number(source.stock_quantity ?? 0) < 5
+        ) return [];
         return [{
           id: item.original_product_id,
           name: item.name,
