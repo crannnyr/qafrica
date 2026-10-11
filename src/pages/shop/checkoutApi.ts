@@ -20,6 +20,7 @@ export type QuoteStore = {
   items: QuoteLine[];
   subtotal: number;
   delivery_fee: number | null;
+  platform_fee: number;
   coupon_code: string | null;
   coupon_discount: number;
   coupon_message: string | null;
