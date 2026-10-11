@@ -33,7 +33,7 @@ export default function MarketplaceLayout({ children, initialQuery = '', subhead
       <header className="sticky top-0 z-40 bg-white" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 flex items-center gap-2.5">
           <Link to={basePath} aria-label="QAFRICA marketplace home" className="shrink-0 flex items-center gap-1.5">
-            <img src="/qafrica-bag-logo.svg" alt="" className="w-7 h-7" />
+            <img src="/qafrica-bag-logo.svg" alt="" className="w-7 h-7 rounded-lg object-cover" />
             <span className="hidden sm:inline font-black tracking-tight text-lg">QAFRICA</span>
           </Link>
           <form onSubmit={submit} role="search" className="flex-1 relative">
