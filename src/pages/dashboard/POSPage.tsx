@@ -205,12 +205,12 @@ export default function POSPage() {
           </div>
         </section>
 
-        {cartOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCartOpen(false); }}><aside className="flex max-h-[calc(100dvh-0.5rem)] w-full flex-col overflow-hidden rounded-t-2xl border bg-card shadow-2xl sm:max-h-[92dvh] sm:max-w-xl sm:rounded-2xl">
+        {cartOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCartOpen(false); }}><aside className="flex max-h-[96dvh] w-full flex-col overflow-hidden rounded-t-2xl border bg-card shadow-2xl sm:max-h-[92dvh] sm:max-w-xl sm:rounded-2xl">
           <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b bg-card p-4 sm:p-5">
             <div><h2 className="text-lg font-semibold">Current sale</h2><p className="mt-1 text-sm text-muted-foreground">{cart.length} product type{cart.length === 1 ? '' : 's'} · {cartQuantity} item{cartQuantity === 1 ? '' : 's'}</p></div>
             <button type="button" aria-label="Close current sale" onClick={() => setCartOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
           </div>
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-5">
+          <div className="min-h-[18dvh] flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:min-h-0 sm:p-5">
             {cart.length === 0 ? <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed text-center"><ShoppingCart className="h-8 w-8 text-muted-foreground/40" /><p className="mt-2 text-sm font-medium">Your basket is empty</p><p className="mt-1 text-xs text-muted-foreground">Add products from the list to get started.</p></div>
               : cart.map((line) => <div key={line.product.id} className="flex gap-3 rounded-xl border p-3">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">{line.product.images?.[0] ? <img src={line.product.images[0]} alt="" className="h-full w-full object-contain" /> : <ShoppingBag className="h-5 w-5 text-muted-foreground/50" />}</div>
@@ -221,21 +221,21 @@ export default function POSPage() {
                 </div>
               </div>)}
           </div>
-          <div className="shrink-0 space-y-3 overflow-y-auto border-t bg-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:space-y-4 sm:p-5">
-            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-1">
-              <label className="block text-sm font-medium">Customer name <span className="text-destructive">*</span><input value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Enter customer name" className="mt-1.5 h-10 w-full rounded-lg border bg-background px-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" /></label>
-              <label className="block text-sm font-medium">Phone <span className="font-normal text-muted-foreground">(optional)</span><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Customer phone number" className="mt-1.5 h-10 w-full rounded-lg border bg-background px-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" /></label>
+          <div className="shrink-0 space-y-2 overflow-y-auto border-t bg-card p-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:space-y-4 sm:p-5">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 2xl:grid-cols-1">
+              <label className="block text-sm font-medium">Customer name <span className="text-destructive">*</span><input value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Enter customer name" className="mt-1 h-9 w-full min-w-0 rounded-lg border bg-background px-2 text-sm font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" /></label>
+              <label className="block text-sm font-medium">Phone <span className="font-normal text-muted-foreground">(optional)</span><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Customer phone number" className="mt-1 h-9 w-full min-w-0 rounded-lg border bg-background px-2 text-sm font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" /></label>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-1">
-              <label className="block text-sm font-medium">Payment method<select value={method} onChange={(event) => setMethod(event.target.value as typeof method)} className="mt-1.5 h-10 w-full rounded-lg border bg-background px-3 font-normal"><option value="cash">Cash</option><option value="transfer">Bank transfer</option><option value="pos">POS / Card</option><option value="check">Cheque</option></select></label>
-              <label className="block text-sm font-medium">Discount (₦)<input type="number" min="0" max={subtotal} value={discount} onChange={(event) => setDiscount(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border bg-background px-3 font-normal" /></label>
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 2xl:grid-cols-1">
+              <label className="block text-sm font-medium">Payment method<select value={method} onChange={(event) => setMethod(event.target.value as typeof method)} className="mt-1 h-9 w-full min-w-0 rounded-lg border bg-background px-2 text-sm font-normal"><option value="cash">Cash</option><option value="transfer">Bank transfer</option><option value="pos">POS / Card</option><option value="check">Cheque</option></select></label>
+              <label className="block text-sm font-medium">Discount (₦)<input type="number" min="0" max={subtotal} value={discount} onChange={(event) => setDiscount(event.target.value)} className="mt-1 h-9 w-full min-w-0 rounded-lg border bg-background px-2 text-sm font-normal" /></label>
             </div>
-            <div className="space-y-2 rounded-xl bg-muted/50 p-4 text-sm">
+            <div className="space-y-1.5 rounded-xl bg-muted/50 p-3 text-sm sm:space-y-2 sm:p-4">
               <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{money(subtotal)}</span></div>
               <div className="flex justify-between text-muted-foreground"><span>Discount</span><span>−{money(cut)}</span></div>
               <div className="flex justify-between border-t pt-3 text-base font-bold"><span>Total due</span><span>{money(total)}</span></div>
             </div>
-            <Button className="h-11 w-full" disabled={busy || !cart.length || !customer.trim()} onClick={sell}>{busy ? 'Recording sale…' : `Complete sale · ${money(total)}`}</Button>
+            <Button className="h-10 w-full" disabled={busy || !cart.length || !customer.trim()} onClick={sell}>{busy ? 'Recording sale…' : `Complete sale · ${money(total)}`}</Button>
             {cart.length > 0 && <Button variant="ghost" className="w-full text-muted-foreground" disabled={busy} onClick={() => setCart([])}>Clear basket</Button>}
           </div>
         </aside></div>}
