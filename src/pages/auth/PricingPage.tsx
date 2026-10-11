@@ -1,7 +1,7 @@
 // src/pages/auth/PricingPage.tsx
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores';
@@ -221,6 +221,18 @@ export default function PricingPage() {
           transition={{ duration: 0.5 }}
         >
           <BillingToggle billingType={billingType} onToggle={setBillingType} />
+
+          <div className="mb-5 rounded-xl border border-orange-200 bg-orange-50/90 px-4 py-3 text-center shadow-sm">
+            <Link
+              to="/recommendations"
+              className="inline-flex items-center justify-center gap-2 font-semibold text-orange-700 underline decoration-orange-400 decoration-2 underline-offset-4 transition-colors hover:text-orange-900 animate-pulse focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 rounded-md"
+            >
+              View what you could start selling first before payment
+            </Link>
+            <p className="mt-1.5 text-sm text-gray-600">
+              You can browse product ideas and come back to complete your payment. Your store setup and selections are saved.
+            </p>
+          </div>
 
           <FreePlanBanner isLoading={isSkipLoading} onContinue={handleStartStarterPack} />
 
