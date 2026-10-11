@@ -180,8 +180,8 @@ export default function POSPage() {
                   const unavailable = product.is_out_of_stock || product.stock_quantity < 1;
                   const inCart = cart.find((line) => line.product.id === product.id)?.quantity || 0;
                   return <article key={product.id} className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white transition-shadow hover:shadow-lg dark:border-gray-700 dark:bg-gray-800">
-                    <div className="relative aspect-square overflow-hidden bg-gray-100 dark:bg-gray-700">
-                      {product.images?.[0] ? <img src={product.images[0]} alt={product.name} loading="lazy" className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.03]" /> : <ShoppingBag className="h-10 w-10 text-muted-foreground/40" />}
+                    <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-white p-2 dark:bg-gray-700 sm:p-3">
+                      {product.images?.[0] ? <img src={product.images[0]} alt={product.name} loading="lazy" className="h-full w-full object-contain transition duration-200" /> : <ShoppingBag className="h-10 w-10 text-muted-foreground/40" />}
                       <span className={`absolute left-2 top-2 rounded-full px-2 py-1 text-[11px] font-medium ${unavailable ? 'bg-destructive/10 text-destructive' : product.stock_quantity <= 5 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{unavailable ? 'Out of stock' : product.stock_quantity <= 5 ? `Only ${product.stock_quantity} left` : `${product.stock_quantity} in stock`}</span>
                       {inCart > 0 && <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center gap-1 rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground"><Check className="h-3 w-3" />{inCart}</span>}
                     </div>
@@ -198,12 +198,12 @@ export default function POSPage() {
           </div>
         </section>
 
-        {cartOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCartOpen(false); }}><aside className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border bg-card shadow-2xl sm:max-w-xl sm:rounded-2xl">
-          <div className="flex items-center justify-between border-b p-4 sm:p-5">
+        {cartOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCartOpen(false); }}><aside className="flex max-h-[calc(100dvh-0.5rem)] w-full flex-col overflow-hidden rounded-t-2xl border bg-card shadow-2xl sm:max-h-[92dvh] sm:max-w-xl sm:rounded-2xl">
+          <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b bg-card p-4 sm:p-5">
             <div><h2 className="text-lg font-semibold">Current sale</h2><p className="mt-1 text-sm text-muted-foreground">{cart.length} product type{cart.length === 1 ? '' : 's'} · {cartQuantity} item{cartQuantity === 1 ? '' : 's'}</p></div>
             <button type="button" aria-label="Close current sale" onClick={() => setCartOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
           </div>
-          <div className="max-h-[360px] space-y-3 overflow-y-auto p-4 sm:p-5">
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 sm:p-5">
             {cart.length === 0 ? <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed text-center"><ShoppingCart className="h-8 w-8 text-muted-foreground/40" /><p className="mt-2 text-sm font-medium">Your basket is empty</p><p className="mt-1 text-xs text-muted-foreground">Add products from the list to get started.</p></div>
               : cart.map((line) => <div key={line.product.id} className="flex gap-3 rounded-xl border p-3">
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">{line.product.images?.[0] ? <img src={line.product.images[0]} alt="" className="h-full w-full object-contain" /> : <ShoppingBag className="h-5 w-5 text-muted-foreground/50" />}</div>
@@ -214,7 +214,7 @@ export default function POSPage() {
                 </div>
               </div>)}
           </div>
-          <div className="space-y-4 border-t p-4 sm:p-5">
+          <div className="shrink-0 space-y-3 overflow-y-auto border-t bg-card p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:space-y-4 sm:p-5">
             <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-1">
               <label className="block text-sm font-medium">Customer name <span className="text-destructive">*</span><input value={customer} onChange={(event) => setCustomer(event.target.value)} placeholder="Enter customer name" className="mt-1.5 h-10 w-full rounded-lg border bg-background px-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" /></label>
               <label className="block text-sm font-medium">Phone <span className="font-normal text-muted-foreground">(optional)</span><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="Customer phone number" className="mt-1.5 h-10 w-full rounded-lg border bg-background px-3 font-normal outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" /></label>
@@ -233,7 +233,7 @@ export default function POSPage() {
           </div>
         </aside></div>}
       </div>
-      <button type="button" onClick={() => setCartOpen(true)} className="fixed bottom-5 right-5 z-40 flex items-center gap-3 rounded-full bg-orange-500 px-4 py-4 text-white shadow-xl hover:bg-orange-600"><span className="relative"><ShoppingCart className="h-6 w-6" />{cartQuantity > 0 && <span className="absolute -right-3 -top-3 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-orange-500 bg-white px-1 text-[10px] font-bold text-orange-600">{cartQuantity}</span>}</span><span className="text-sm font-semibold">Current sale</span><span className="rounded-full bg-white/20 px-2 py-1 text-xs font-bold">{money(total)}</span></button>
+      <button type="button" onClick={() => setCartOpen(true)} className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2 rounded-full bg-orange-500 px-3 py-3 text-white shadow-xl hover:bg-orange-600 sm:bottom-5 sm:right-5 sm:gap-3 sm:px-4 sm:py-4"><span className="relative"><ShoppingCart className="h-6 w-6" />{cartQuantity > 0 && <span className="absolute -right-3 -top-3 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-orange-500 bg-white px-1 text-[10px] font-bold text-orange-600">{cartQuantity}</span>}</span><span className="text-sm font-semibold">Current sale</span><span className="rounded-full bg-white/20 px-2 py-1 text-xs font-bold">{money(total)}</span></button>
     </div>
   );
 }
