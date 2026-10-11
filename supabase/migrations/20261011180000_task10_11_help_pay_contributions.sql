@@ -40,10 +40,10 @@ DECLARE q jsonb; total_items integer; marketplace_items integer;
 BEGIN
   q := public.checkout_quote(p_items, p_state, '{}'::jsonb);
   IF COALESCE((q->>'ok')::boolean, false) IS NOT TRUE THEN RETURN false; END IF;
-  SELECT count(*), count(*) FILTER (WHERE line->>'attribution' = 'marketplace')
+  SELECT count(*), count(*) FILTER (WHERE line_json->>'attribution' = 'marketplace')
     INTO total_items, marketplace_items
-  FROM jsonb_array_elements(q->'stores') store,
-       jsonb_array_elements(store->'items') line;
+  FROM jsonb_array_elements(q->'stores') AS stores(store_json),
+       jsonb_array_elements(stores.store_json->'items') AS lines(line_json);
   RETURN total_items > 0 AND total_items = marketplace_items;
 END;
 $$;
