@@ -338,15 +338,7 @@ export default function ProductsPage() {
                       </button>
                     </div>
                     
-                    {/* Manual Sales Entry Button - NEW */}
-                    <Link
-                      to={`/dashboard/manual-sales?productId=${product.id}&productName=${encodeURIComponent(product.name)}&price=${product.selling_price}`}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-orange-50 hover:bg-orange-100 dark:bg-orange-900/20 dark:hover:bg-orange-900/40 text-orange-600 dark:text-orange-400 rounded-lg transition-colors text-sm font-medium"
-                      title="Record a Manual Sale"
-                    >
-                      <ShoppingCart className="w-4 h-4" />
-                      Manual Sale
-                    </Link>
+
                   </div>
                 </div>
 

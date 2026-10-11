@@ -141,6 +141,8 @@ const EditProductPage = lazy(() => import('@/pages/dashboard/EditProduct'));
 const ImportCatalogPage = lazy(() => import('@/pages/dashboard/ImportCatalogPage'));
 const OrdersPage = lazy(() => import('@/pages/dashboard/OrdersPage'));
 const ManualSalesPage = lazy(() => import('@/pages/dashboard/ManualSalesPage'));
+const POSPage = lazy(() => import('@/pages/dashboard/POSPage'));
+const POSHistoryPage = lazy(() => import('@/pages/dashboard/POSHistoryPage'));
 const OrderManagementPage = lazy(() => import('@/pages/dashboard/OrderManagementPage'));
 const OrderDetailPage = lazy(() => import('@/pages/dashboard/OrderDetailPage'));
 const DropshipOrdersPage = lazy(() => import('@/pages/dashboard/DropshipOrdersPage'));
@@ -615,6 +617,8 @@ function App() {
             <Route path="niches" element={<StaffGuard permission="can_manage_settings"><NicheCustomizationPage /></StaffGuard>} />
             <Route path="how-to-use" element={<HowToUsePage />} />
             <Route path="manual-sales" element={<ManualSalesPage />} />
+            <Route path="pos" element={<POSPage />} />
+            <Route path="pos/history" element={<POSHistoryPage />} />
             <Route path="jumia" element={<JumiaPage />} />
             <Route path="jumia/add" element={<JumiaComingSoon />} />
             <Route path="jumia/locations" element={<JumiaDropOffLocationsPage />} />
