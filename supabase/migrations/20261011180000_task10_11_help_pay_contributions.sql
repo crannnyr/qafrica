@@ -265,20 +265,18 @@ DECLARE
   raised numeric(12,2);
   target numeric(12,2);
   marketplace boolean;
+  v_status text;
 BEGIN
   SELECT * INTO sc FROM public.shared_carts WHERE code=upper(trim(p_code));
   IF NOT FOUND THEN RETURN NULL; END IF;
-  IF sc.status='active' AND sc.expires_at <= now() THEN
-    UPDATE public.shared_carts SET status='expired', is_public=false WHERE id=sc.id AND status='active';
-    sc.status := 'expired';
-  END IF;
-  IF sc.status='active' THEN q := public.checkout_quote(sc.items,sc.delivery->>'state','{}'::jsonb); END IF;
+  v_status := CASE WHEN sc.status='active' AND sc.expires_at <= now() THEN 'expired' ELSE sc.status END;
+  IF v_status='active' THEN q := public.checkout_quote(sc.items,sc.delivery->>'state','{}'::jsonb); END IF;
   target := COALESCE((q->>'amount')::numeric, sc.amount_snapshot, 0);
   marketplace := public.shared_cart_is_marketplace(sc.items,sc.delivery->>'state');
   SELECT COALESCE(sum(amount),0) INTO raised
     FROM public.shared_cart_contributions WHERE shared_cart_id=sc.id AND status='paid';
   RETURN jsonb_build_object(
-    'code',sc.code,'status',sc.status,'expires_at',sc.expires_at,'created_at',sc.created_at,
+    'code',sc.code,'status',v_status,'expires_at',sc.expires_at,'created_at',sc.created_at,
     'first_name',split_part(sc.recipient_name,' ',1),'city',sc.delivery->>'city',
     'state',sc.delivery->>'state','note',sc.note,'quote',q,
     'is_marketplace',marketplace,'amount_raised',raised,'target_amount',target,
