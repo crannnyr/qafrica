@@ -60,7 +60,7 @@ export default function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
     <div className="min-h-screen bg-white text-gray-900">
       <PageHeader title="" />
       <div className="max-w-sm mx-auto px-5 pb-12">
-        <img src="/qafrica-bag-logo.svg" alt="" className="w-10 h-10" />
+        <img src="/qafrica-bag-logo.svg" alt="" className="w-10 h-10 rounded-xl object-cover" />
         <h1 className="mt-4 text-[22px] font-bold">{mode === 'login' ? 'Welcome back' : 'Create your account'}</h1>
         <p className="mt-1 text-[13px] text-gray-500">
           {mode === 'login' ? 'Sign in to see your orders, wishlist and pay-for-me links.' : 'Track orders, save items and join the Cart Clearers board.'}
