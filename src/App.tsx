@@ -615,7 +615,8 @@ function App() {
             <Route path="subscription" element={<StaffGuard><SubscriptionPage /></StaffGuard>} />
             <Route path="niches" element={<StaffGuard permission="can_manage_settings"><NicheCustomizationPage /></StaffGuard>} />
             <Route path="how-to-use" element={<HowToUsePage />} />
-            <Route path="manual-sales" element={<ManualSalesPage />} />\n            <Route path="pos" element={<POSPage />} />
+            <Route path="manual-sales" element={<ManualSalesPage />} />
+            <Route path="pos" element={<POSPage />} />
             <Route path="jumia" element={<JumiaPage />} />
             <Route path="jumia/add" element={<JumiaComingSoon />} />
             <Route path="jumia/locations" element={<JumiaDropOffLocationsPage />} />
