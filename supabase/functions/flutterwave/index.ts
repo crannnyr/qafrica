@@ -231,7 +231,20 @@ async function customerId(email: string, first: string, last: string, userId: st
   const { data: prev } = await admin.from('subscription_payments').select('provider_customer_id')
     .eq('user_id', userId).not('provider_customer_id', 'is', null).order('created_at', { ascending: false }).limit(1).maybeSingle()
   if (prev?.provider_customer_id) return prev.provider_customer_id
-  const created = await flw('POST', '/customers', { email, name: { first, last } })
+  // Flutterwave v4 requires first and last names to be at least 2 characters
+  // and rejects digits/symbol-only values. Profile names can be incomplete, so
+  // normalize them and use safe fallback values before creating a customer.
+  const validName = (value: string, fallback: string) => {
+    const normalized = String(value ?? '')
+      .replace(/[^a-zA-Z ,.'-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 50)
+    return normalized.length >= 2 && /[a-zA-Z]/.test(normalized) ? normalized : fallback
+  }
+  const customerFirst = validName(first, 'QAFRICA')
+  const customerLast = validName(last, 'Seller')
+  const created = await flw('POST', '/customers', { email, name: { first: customerFirst, last: customerLast } })
   if (created.ok && created.data?.data?.id) return created.data.data.id
   const found = await flw('POST', '/customers/search', { email })
   const match = Array.isArray(found.data?.data) ? found.data.data.find((c: { email?: string }) => c.email?.toLowerCase() === email.toLowerCase()) : null
