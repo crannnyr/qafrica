@@ -1021,7 +1021,7 @@ async function themeStart(req: Request) {
     const { data: authUser } = await admin.auth.admin.getUserById(userId)
     const email = authUser?.user?.email ?? profile?.email
     if (!email) throw new Error('Add an email address to your account first.')
-    const parts = String(profile?.full_name || store.name || 'QAFRICA Seller').trim().split(/\\s+/)
+    const parts = String(profile?.full_name || store.name || 'QAFRICA Seller').trim().split(/\s+/)
     const cus = await customerId(email, (parts[0] || 'QAFRICA').slice(0, 50), (parts.slice(1).join(' ') || 'Seller').slice(0, 50), userId)
     const r = await flw('POST', '/virtual-accounts', {
       reference, customer_id: cus, amount: BLACK_THEME_PRICE, currency: 'NGN',
