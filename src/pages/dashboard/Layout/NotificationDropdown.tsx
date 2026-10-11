@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { supabase } from '@/services/supabase';
 import { useNavigate } from 'react-router-dom';
 import {
   Bell, Package, CreditCard, Wallet, AlertTriangle, ArrowUpRight,
@@ -128,9 +129,37 @@ export default function NotificationDropdown({
     setLoading(false);
   }, [user?.id]);
 
+  // Load the unread badge as soon as the dashboard mounts, not only when
+  // the bell is opened. Realtime events keep the badge fresh while the menu is closed.
   useEffect(() => {
-    if (isOpen) void loadNotifications();
-  }, [isOpen, loadNotifications]);
+    if (!user?.id) {
+      setNotifications([]);
+      setUnreadCount(0);
+      return;
+    }
+
+    void loadNotifications();
+
+    const channel = supabase
+      .channel(`dashboard-notifications-${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`,
+        },
+        () => {
+          void loadNotifications();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [user?.id, loadNotifications]);
 
   const markReadAndOpen = async (notification: AppNotification) => {
     if (!notification.is_read) {
