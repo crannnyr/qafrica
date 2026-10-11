@@ -6,7 +6,7 @@ import type { SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import { NombaError, nombaFetch } from './nomba.ts';
 
 export type FinalizeResult =
-  | { status: 'paid'; order_ids: string[]; already?: boolean }
+  | { status: 'paid'; order_ids: string[]; already?: boolean; contribution_complete?: boolean; amount_raised?: number; target_amount?: number; contribution_amount?: number }
   | { status: 'not_paid' | 'failed' | 'amount_mismatch' | 'fulfilment_error' | 'unknown_reference' | 'expired'; detail?: string };
 
 const SITE = Deno.env.get('APP_URL') ?? 'https://qafrica.store';
@@ -141,6 +141,7 @@ export async function verifyAndFinalize(
   if (error) throw new Error(`finalize failed: ${error.message}`);
   const result = data as FinalizeResult;
   if (result.status === 'paid' && !result.already) {
+    await notifySharedCartContribution(supabase, reference).catch((e) => console.error('shared cart contribution email failed', e));
     await notifyNewOrders(supabase, result.order_ids).catch((e) => console.error('notify failed', e));
   }
   return result;
@@ -156,6 +157,34 @@ async function sendEmail(to: string, subject: string, html: string) {
 
 const naira = (n: number) => 'NGN ' + Math.round(Number(n) || 0).toLocaleString('en-NG');
 const esc = (s: string) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+async function notifySharedCartContribution(supabase: SupabaseClient, reference: string) {
+  const { data: contribution } = await supabase.from('shared_cart_contributions')
+    .select('id, shared_cart_id, amount, payer_name, status, notification_sent_at')
+    .eq('checkout_reference', reference).eq('status', 'paid').maybeSingle();
+  if (!contribution || contribution.notification_sent_at) return;
+  const { data: cart } = await supabase.from('shared_carts')
+    .select('recipient_name, recipient_email, amount_snapshot').eq('id', contribution.shared_cart_id).maybeSingle();
+  if (!cart?.recipient_email) return;
+  const { data: contributions } = await supabase.from('shared_cart_contributions')
+    .select('amount').eq('shared_cart_id', contribution.shared_cart_id).eq('status', 'paid');
+  const raised = (contributions ?? []).reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const target = Number(cart.amount_snapshot || 0);
+  const remaining = Math.max(target - raised, 0);
+  const completed = remaining <= 0.01;
+  const subject = completed ? 'Your QAFRICA Help Pay cart is fully funded' : 'Someone contributed to your QAFRICA cart';
+  const html = '<div style="font-family:system-ui,sans-serif;max-width:540px;margin:auto;padding:24px;color:#111">' +
+    '<p style="font-size:20px;font-weight:700;margin:0 0 12px">' + (completed ? 'Your cart is fully funded!' : 'Your cart received a contribution') + '</p>' +
+    '<p style="color:#555;margin:0 0 16px">Hi ' + esc(cart.recipient_name) + ', ' + esc(contribution.payer_name) + ' contributed <b>' + naira(Number(contribution.amount)) + '</b> toward your shared cart.</p>' +
+    '<div style="background:#F9FAFB;border-radius:12px;padding:16px;margin-bottom:20px">' +
+    '<p style="margin:0 0 8px">Raised so far: <b>' + naira(raised) + ' of ' + naira(target) + '</b></p>' +
+    '<p style="margin:0;color:#555">' + (completed ? 'The cart is fully funded and the order is being prepared.' : 'Remaining balance: ' + naira(remaining)) + '</p></div>' +
+    '<a href="' + SITE + '/customer/links" style="display:inline-block;background:#111;color:#fff;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:600">View my payment links</a>' +
+    '<p style="font-size:12px;color:#777;margin-top:20px">QAFRICA will only place the order once the full amount has been raised.</p></div>';
+  await sendEmail(cart.recipient_email, subject, html);
+  await supabase.from('shared_cart_contributions').update({ notification_sent_at: new Date().toISOString() })
+    .eq('id', contribution.id).is('notification_sent_at', null);
+}
 
 async function notifyNewOrders(supabase: SupabaseClient, orderIds: string[]) {
   if (!orderIds?.length) return;
