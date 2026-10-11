@@ -157,13 +157,13 @@ UPDATE public.stores st
    AND st.deactivation_reason IN ('subscription_expired','trial_expired')
    AND EXISTS (
      SELECT 1 FROM public.subscriptions s
-      WHERE s.store_id = store_row.id
+      WHERE s.store_id = st.id
         AND s.expires_at > now() - interval '7 days'
         AND s.expires_at <= now()
    )
    AND NOT EXISTS (
      SELECT 1 FROM public.subscriptions s
-      WHERE s.store_id = store_row.id
+      WHERE s.store_id = st.id
         AND s.is_active IS TRUE
         AND s.is_trial IS FALSE
         AND s.expires_at > now()
