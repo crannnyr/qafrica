@@ -194,7 +194,7 @@ export default function CheckoutPage() {
               </div>
               {state && s.delivery_fee != null && s.platform_fee > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600">QAFRICA platform fee</span>
+                  <span className="text-gray-600">Platform fee</span>
                   <span className="tabular-nums">{naira(s.platform_fee)}</span>
                 </div>
               )}
