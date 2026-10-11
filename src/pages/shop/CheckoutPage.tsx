@@ -192,6 +192,12 @@ export default function CheckoutPage() {
                 <span className="text-gray-600">Delivery</span>
                 <span className="tabular-nums">{!state ? <span className="text-gray-400">Choose your state</span> : s.delivery_fee == null ? <span className="text-[#C4320A]">Not available</span> : s.delivery_fee === 0 ? 'Free' : naira(s.delivery_fee)}</span>
               </div>
+              {state && s.delivery_fee != null && s.platform_fee > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">QAFRICA platform fee</span>
+                  <span className="tabular-nums">{naira(s.platform_fee)}</span>
+                </div>
+              )}
               {s.coupon_discount > 0 && (
                 <div className="flex justify-between text-[#1A7F37]"><span>Discount ({s.coupon_code})</span><span className="tabular-nums">−{naira(s.coupon_discount)}</span></div>
               )}
