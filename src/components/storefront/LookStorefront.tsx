@@ -130,7 +130,7 @@ export default function LookStorefront(props: Props) {
           <Intro {...shared} products={products} onOpen={openProduct} onAdd={props.onAddToCart} />
 
           {categories.length > 0 && (
-            <div className={look.id === 'social' ? 'mt-5' : 'mt-8'}>
+            <div className={`min-w-0 max-w-full ${look.id === 'social' ? 'mt-5' : 'mt-8'}`}>
               {look.id !== 'social' && (
                 <h2 className="sr-only">Categories</h2>
               )}
