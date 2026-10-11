@@ -1,4 +1,18 @@
 -- Task 10 & 11: Help Pay eligibility, 30-day links, and marketplace contributions.
+-- PostgreSQL does not provide jsonb_object_length; checkout_quote uses it to
+-- validate legacy variant option objects. Supply the missing helper explicitly.
+CREATE OR REPLACE FUNCTION public.jsonb_object_length(p_value jsonb)
+RETURNS integer
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path TO 'public'
+AS $fn$
+  SELECT CASE WHEN jsonb_typeof(p_value) = 'object'
+    THEN (SELECT count(*)::integer FROM jsonb_object_keys(p_value))
+    ELSE 0 END
+$fn$;
+
 ALTER TABLE public.shared_carts
   ALTER COLUMN expires_at SET DEFAULT (now() + interval '30 days');
 
