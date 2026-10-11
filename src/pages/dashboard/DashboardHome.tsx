@@ -360,8 +360,8 @@ export default function DashboardHome() {
         </motion.div>
       )}
       <Dialog open={isStoreLinkOpen} onOpenChange={setIsStoreLinkOpen}>
-        <DialogContent className="sm:max-w-xl p-0 overflow-hidden border-0">
-          <div className="relative h-44 sm:h-52 bg-orange-50 overflow-hidden">
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-xl max-h-[88dvh] overflow-y-auto overflow-x-hidden p-0 border-0">
+          <div className="relative h-40 sm:h-52 min-w-0 bg-orange-50 overflow-hidden">
             <img
               src={storePromoImage}
               alt="Store promotion inspiration"
@@ -369,36 +369,36 @@ export default function DashboardHome() {
               onError={() => setStorePromoImage(STORE_PROMO_IMAGES[0])}
             />
             <div className="absolute inset-0 bg-gradient-to-t from-gray-950/75 via-gray-950/15 to-transparent" />
-            <div className="absolute bottom-4 left-5 right-5 text-white">
+            <div className="absolute bottom-4 left-4 right-4 sm:left-5 sm:right-5 min-w-0 text-white">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold backdrop-blur">
                 <Store className="h-3.5 w-3.5" /> Your store, your brand
               </span>
-              <h2 className="mt-2 text-2xl font-bold">Share your store with the world</h2>
+              <h2 className="mt-2 max-w-full break-words text-xl font-bold leading-tight sm:text-2xl">Share your store with the world</h2>
             </div>
           </div>
-          <div className="p-5 sm:p-6 space-y-5">
+          <div className="min-w-0 p-4 sm:p-6 space-y-5">
             <DialogHeader className="text-left space-y-2">
-              <DialogTitle className="text-xl">Your personal store link</DialogTitle>
-              <DialogDescription className="text-sm leading-6">
+              <DialogTitle className="break-words text-xl">Your personal store link</DialogTitle>
+              <DialogDescription className="break-words text-sm leading-6">
                 This is your own storefront link. Share it with friends, customers, and on social media so people can browse and buy directly from your store.
               </DialogDescription>
             </DialogHeader>
-            <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-3">
-              <div className="flex items-start gap-3">
+            <div className="min-w-0 rounded-xl border border-orange-200 bg-orange-50/70 p-3">
+              <div className="flex min-w-0 items-start gap-3">
                 <Globe className="mt-0.5 h-5 w-5 shrink-0 text-orange-600" />
-                <div className="space-y-1">
+                <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-sm font-semibold text-gray-900">Want a fully branded address?</p>
-                  <p className="text-sm leading-5 text-gray-600">
+                  <p className="break-words text-sm leading-5 text-gray-600">
                     Set up a custom domain such as <span className="font-semibold text-gray-800">joshua.com</span> from <span className="font-semibold">Sidebar → Store Setup → Custom Domain</span>. It gives your store its own identity instead of a link that looks affiliated with QAfrica.
                   </p>
-                  <p className="text-xs leading-5 text-gray-500">You can keep using your default store link for testing or sharing on social media in the meantime.</p>
+                  <p className="break-words text-xs leading-5 text-gray-500">You can keep using your default store link for testing or sharing on social media in the meantime.</p>
                 </div>
               </div>
             </div>
             <div className="space-y-2">
               <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Your current store link</label>
               <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 p-2">
-                <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-gray-800">
+                <span className="block min-w-0 w-full break-all px-1 py-1 text-sm font-medium text-gray-800 sm:flex-1 sm:truncate">
                   {currentStore ? `${window.location.origin}/${currentStore.slug}` : 'Set up your store to get a link'}
                 </span>
                 <Button
@@ -417,7 +417,7 @@ export default function DashboardHome() {
                       setIsCopyingStoreLink(false);
                     }
                   }}
-                  className="shrink-0 bg-orange-500 text-white hover:bg-orange-600"
+                  className="w-full shrink-0 bg-orange-500 text-white hover:bg-orange-600 sm:w-auto"
                 >
                   {isCopyingStoreLink ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
                   Copy Link
