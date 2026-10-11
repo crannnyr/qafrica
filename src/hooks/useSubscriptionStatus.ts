@@ -34,9 +34,11 @@ export function useSubscriptionStatus(): SubscriptionStatus {
     try {
       const { data, error } = await subscriptionService.getUserSubscription(user.id);
       
+      // A missing subscription or a temporary query/RLS error is not proof
+      // that the user's plan expired. Do not show a global false-positive banner.
       if (error || !data) {
         setStatus({
-          isExpired: true,
+          isExpired: false,
           isExpiringSoon: false,
           daysRemaining: 0,
           subscription: null,
@@ -59,8 +61,9 @@ export function useSubscriptionStatus(): SubscriptionStatus {
         loading: false,
       });
     } catch (err) {
+      // Fail closed: errors must not be interpreted as an expired subscription.
       setStatus({
-        isExpired: true,
+        isExpired: false,
         isExpiringSoon: false,
         daysRemaining: 0,
         subscription: null,
