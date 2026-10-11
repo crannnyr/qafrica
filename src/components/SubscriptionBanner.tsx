@@ -1,13 +1,37 @@
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Clock, ArrowRight, Sparkles } from 'lucide-react';
+import { AlertTriangle, Clock, ArrowRight, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '@/stores';
 import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus';
 
 export default function SubscriptionBanner() {
-  const { isExpired, isExpiringSoon, daysRemaining, loading } = useSubscriptionStatus();
+  const { isExpired, isExpiringSoon, daysRemaining, loading, subscription } = useSubscriptionStatus();
+  const [dismissed, setDismissed] = useState(false);
+  const { user } = useAuthStore();
+  const noticeType = isExpired ? 'expired' : 'expiring';
+  const storageKey = user?.id ? `qafrica-subscription-banner:${user.id}:${new Date().toLocaleDateString('en-CA')}` : null;
 
-  if (loading) return null;
+  useEffect(() => {
+    setDismissed(false);
+    if (!storageKey) return;
+    try {
+      const stored = localStorage.getItem(storageKey);
+      setDismissed(stored === noticeType);
+    } catch {
+      setDismissed(false);
+    }
+  }, [storageKey, noticeType]);
+
+  const dismissForToday = () => {
+    if (storageKey) {
+      try { localStorage.setItem(storageKey, noticeType); } catch { /* storage may be disabled */ }
+    }
+    setDismissed(true);
+  };
+
+  if (loading || !user?.id || !subscription || dismissed) return null;
 
   // Don't show if subscription is active and not expiring soon
   if (!isExpired && !isExpiringSoon) return null;
@@ -31,12 +55,17 @@ export default function SubscriptionBanner() {
               </p>
             </div>
           </div>
-          <Link to="/dashboard/subscription">
-            <Button className="bg-red-600 hover:bg-red-700 text-white">
-              Renew Subscription
-              <ArrowRight className="w-4 h-4 ml-2" />
+          <div className="flex items-center gap-2">
+            <Link to="/dashboard/subscription">
+              <Button className="bg-red-600 hover:bg-red-700 text-white">
+                Renew Subscription
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </Link>
+            <Button aria-label="Dismiss subscription notice for today" variant="ghost" size="icon" onClick={dismissForToday} className="text-red-700 hover:bg-red-100">
+              <X className="w-4 h-4" />
             </Button>
-          </Link>
+          </div>
         </div>
       </motion.div>
     );
@@ -63,13 +92,16 @@ export default function SubscriptionBanner() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Link to="/dashboard/subscription">
             <Button className="bg-orange-500 hover:bg-orange-600 text-white">
               <Sparkles className="w-4 h-4 mr-2" />
               Upgrade Now
             </Button>
           </Link>
+          <Button aria-label="Dismiss subscription notice for today" variant="ghost" size="icon" onClick={dismissForToday} className="text-orange-700 hover:bg-orange-100">
+            <X className="w-4 h-4" />
+          </Button>
         </div>
       </div>
     </motion.div>
