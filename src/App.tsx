@@ -134,6 +134,7 @@ const AdminIssues = lazy(() => import('@/pages/admin/AdminIssues'));
 // Dashboard Pages
 const DashboardLayout = lazy(() => import('@/pages/dashboard/DashboardLayout'));
 const DashboardHome = lazy(() => import('@/pages/dashboard/DashboardHome'));
+const AdsPage = lazy(() => import('@/pages/dashboard/AdsPage'));
 const StoreSetup = lazy(() => import('@/pages/dashboard/StoreSetup'));
 const ProductsPage = lazy(() => import('@/pages/dashboard/ProductsPage'));
 const AddProductPage = lazy(() => import('@/pages/dashboard/AddProduct'));
@@ -591,6 +592,7 @@ function App() {
             <ProtectedRoute><DashboardLayout /></ProtectedRoute>
           }>
             <Route index element={<DashboardHome />} />
+            <Route path="ads" element={<StaffGuard permission="can_manage_settings"><AdsPage /></StaffGuard>} />
             <Route path="store-setup" element={<StoreSetup />} />
             <Route path="products" element={<ProductsPage />} />
             <Route path="products/add" element={<StaffGuard permission="can_manage_products"><AddProductPage /></StaffGuard>} />
