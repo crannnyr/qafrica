@@ -79,45 +79,35 @@ export default function POSPage() {
     if (!currentStore?.id || !cart.length || !customer.trim()) { toast.error('Add products and customer name'); return; }
     setBusy(true);
     try {
-      for (const line of cart) {
-        const { data, error } = await supabase.from('products').select('stock_quantity,store_id,is_active').eq('id', line.product.id).single();
-        if (error || !data || data.store_id !== currentStore.id || !data.is_active || line.quantity > Number(data.stock_quantity)) {
-          throw new Error('Product availability changed. Refresh and try again.');
-        }
-      }
-      const now = new Date().toISOString();
-      const items = cart.map((line) => ({
-        product_id: line.product.id, original_product_id: line.product.id, name: line.product.name,
-        quantity: line.quantity, unit_price: line.price, total_price: line.price * line.quantity,
-        is_imported: false, original_owner_id: null, original_store_id: null,
-      }));
-      const { data: order, error } = await supabase.from('orders').insert({
-        store_id: currentStore.id, customer_id: null, customer_name: customer.trim(), customer_phone: phone.trim() || null,
-        customer_email: null, delivery_address: { address: 'Point of Sale - In Store Pickup', city: 'Point of Sale', state: 'Point of Sale', landmark: '' },
-        delivery_state: 'Point of Sale', status: 'delivered', payment_method: method, payment_status: 'paid', paid_at: now,
-        subtotal, discount: cut, total, delivery_fee: 0, platform_fee: 0, items, notes: 'Recorded through Point of Sale',
-        is_manual_sale: true, delivered_at: now, created_at: now,
-      }).select('id,order_number').single();
-      if (error) throw error;
-      const { error: itemError } = await supabase.from('order_items').insert(cart.map((line) => ({
-        order_id: order.id, product_id: line.product.id, original_product_id: line.product.id,
-        product_name: line.product.name, quantity: line.quantity, unit_price: line.price,
-        price_at_time: line.price, total_price: line.price * line.quantity, is_imported: false,
-        original_owner_id: null, original_store_id: null,
-      })));
-      if (itemError) throw new Error(`Sale was created but its item records could not be saved: ${itemError.message}`);
-      for (const line of cart) {
-        const remaining = line.product.stock_quantity - line.quantity;
-        const { error: stockError } = await supabase.from('products').update({
-          stock_quantity: remaining, is_out_of_stock: remaining <= 0, updated_at: now,
-        }).eq('id', line.product.id).eq('store_id', currentStore.id);
-        if (stockError) throw stockError;
-      }
-      setReceipt({
-        number: order?.order_number || order?.id, customer: customer.trim(), cart: [...cart],
-        subtotal, cut, total, date: new Date().toLocaleString(),
+      const { data, error } = await supabase.rpc('record_pos_sale', {
+        p_store_id: currentStore.id,
+        p_customer_name: customer.trim(),
+        p_customer_phone: phone.trim(),
+        p_payment_method: method,
+        p_discount: cut,
+        p_items: cart.map((line) => ({
+          product_id: line.product.id,
+          quantity: line.quantity,
+          unit_price: line.price,
+        })),
       });
-      setCart([]); setCustomer(''); setPhone(''); setDiscount('0');
+      if (error) throw error;
+      const saved = data as { id: string; order_number: string; subtotal: number; discount: number; total: number } | null;
+      if (!saved?.id) throw new Error('The database did not confirm the sale. Refresh orders before retrying.');
+
+      setReceipt({
+        number: saved.order_number || saved.id,
+        customer: customer.trim(),
+        cart: [...cart],
+        subtotal: Number(saved.subtotal ?? subtotal),
+        cut: Number(saved.discount ?? cut),
+        total: Number(saved.total ?? total),
+        date: new Date().toLocaleString(),
+      });
+      setCart([]);
+      setCustomer('');
+      setPhone('');
+      setDiscount('0');
       toast.success('Sale recorded');
       await loadProducts();
     } catch (error: unknown) {
