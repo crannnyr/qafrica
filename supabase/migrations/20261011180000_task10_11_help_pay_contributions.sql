@@ -122,7 +122,7 @@ BEGIN
 
   RETURN jsonb_build_object(
     'amount', chosen, 'target_amount', target, 'amount_raised', raised,
-    'remaining', greatest(round(target-raised,2),0), 'marketplace', marketplace
+    'remaining', greatest(round(target-raised,2),0), 'marketplace', marketplace, 'quote', q
   );
 END;
 $$;
@@ -220,7 +220,8 @@ BEGIN
   SELECT COALESCE(sum(amount),0) INTO raised
   FROM public.shared_cart_contributions
   WHERE shared_cart_id=cart_row.id AND status='paid';
-  target := round(COALESCE((public.checkout_quote(cart_row.items,cart_row.delivery->>'state','{}'::jsonb)->>'amount')::numeric, cart_row.amount_snapshot,0),2);
+  SELECT round(COALESCE(sum((store_json->>'total')::numeric),cart_row.amount_snapshot,0),2)
+    INTO target FROM jsonb_array_elements(cs.store_orders) AS stores(store_json);
   SELECT COALESCE(sum(gateway_fee),0) INTO total_gateway_fee
     FROM public.shared_cart_contributions WHERE shared_cart_id=cart_row.id AND status='paid';
 
