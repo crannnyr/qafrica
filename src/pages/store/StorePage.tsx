@@ -124,7 +124,7 @@ export default function StorePage() {
       const sourceInventoryResult = importedProductIds.length
         ? await supabase
             .from('products')
-            .select('id,stock_quantity,is_out_of_stock,is_active,has_variants,variants')
+            .select('id,stock_quantity,is_out_of_stock,is_active,is_importable,has_variants,variants')
             .in('id', importedProductIds)
         : null;
       const sourceInventory = sourceInventoryResult?.data ?? [];
@@ -132,9 +132,15 @@ export default function StorePage() {
 
       const mappedImports = (importedData || []).flatMap((item: any) => {
         const source = inventoryByProductId.get(item.original_product_id);
-        // Do not display imported copies of products that the original supplier
-        // has deactivated or removed.
-        if (!source || !source.is_active) return [];
+        // Imported storefront listings must follow the supplier's current eligibility,
+        // not a stale active flag on the import_catalog snapshot.
+        if (
+          !source ||
+          !source.is_active ||
+          !source.is_importable ||
+          source.is_out_of_stock ||
+          Number(source.stock_quantity ?? 0) < 5
+        ) return [];
         return [{
           id: item.original_product_id,
           name: item.name,
@@ -201,15 +207,26 @@ export default function StorePage() {
 
   const handleAddToCart = (product: Product) => {
     if (!store) return;
+
+    // Imported storefront listings use live source inventory. Keep stale/empty
+    // listings visible if needed, but never let a customer add unavailable stock.
+    if (product.is_out_of_stock || (
+      !(product.has_variants && (product.variants?.length ?? 0) > 0) &&
+      Number(product.stock_quantity ?? 0) <= 0
+    )) {
+      toast.error('This product is currently out of stock');
+      return;
+    }
+
     if (product.has_variants && (product.variants?.length ?? 0) > 0) {
       setSelectedProduct(product);
       setSelectedVariants({});
       setQuantity(1);
     } else {
       addItem(product, store, 1, undefined, product.selling_price, {
-      sourceType: (product as any).__sourceType ?? 'product',
-      sourceId: (product as any).__sourceId ?? product.id,
-    });
+        sourceType: (product as any).__sourceType ?? 'product',
+        sourceId: (product as any).__sourceId ?? product.id,
+      });
       toast.success(`${product.name} added to cart!`);
     }
   };
@@ -246,6 +263,11 @@ export default function StorePage() {
 
   const handleConfirmVariantAdd = () => {
     if (!selectedProduct || !store) return;
+
+    if (selectedProduct.is_out_of_stock) {
+      toast.error('This product is currently out of stock');
+      return;
+    }
 
     const variants = selectedProduct.variants as any[] | undefined;
     const requiredOptions = getVariantNames(selectedProduct);
@@ -784,11 +806,18 @@ export default function StorePage() {
                   <div className="absolute inset-x-0 bottom-0 translate-y-full group-hover:translate-y-0 transition-transform duration-200">
                     <button
                       onClick={e => { e.stopPropagation(); handleAddToCart(product); }}
-                      className="w-full py-2.5 text-white text-xs font-semibold flex items-center justify-center gap-1.5"
+                      disabled={!!product.is_out_of_stock || (
+                        !(product.has_variants && (product.variants?.length ?? 0) > 0) &&
+                        Number(product.stock_quantity ?? 0) <= 0
+                      )}
+                      className="w-full py-2.5 text-white text-xs font-semibold flex items-center justify-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
                       style={{ backgroundColor: primary }}
                     >
                       <ShoppingCart className="w-3.5 h-3.5" />
-                      Add to cart
+                      {product.is_out_of_stock || (
+                        !(product.has_variants && (product.variants?.length ?? 0) > 0) &&
+                        Number(product.stock_quantity ?? 0) <= 0
+                      ) ? 'Out of stock' : 'Add to cart'}
                     </button>
                   </div>
                 </div>
