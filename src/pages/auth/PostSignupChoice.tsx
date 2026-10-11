@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ShoppingBag, Sparkles, CheckCircle, Loader2, Users, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -60,6 +60,17 @@ export default function PostSignupChoice() {
         <div className="text-center mb-8"><div className="inline-flex items-center gap-2"><div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center"><ShoppingBag className="w-7 h-7 text-white" /></div><span className="text-2xl font-bold text-gray-900">QAFRICA</span></div></div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <div className="text-center mb-8"><h1 className="text-3xl font-bold text-gray-900 mb-2">Everyone starts here</h1><p className="text-gray-600">A simple starter pack gets your store live and gives you three months to learn the platform, build your community, and start selling.</p></div>
+          <div className="mb-5 rounded-xl border border-orange-200 bg-orange-50 px-4 py-4 text-center shadow-sm">
+            <Link
+              to="/recommendations"
+              className="inline-flex items-center justify-center font-semibold text-orange-700 underline decoration-orange-400 decoration-2 underline-offset-4 transition-colors hover:text-orange-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 rounded-md"
+            >
+              Browse product ideas before paying
+            </Link>
+            <p className="mt-1.5 text-sm text-gray-600">
+              Explore products first, then return here to complete your starter pack. Your store setup and niche selections are saved.
+            </p>
+          </div>
           <div className="bg-white rounded-2xl shadow-xl border-2 border-orange-100 p-8 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">STARTER PACK</div>
             <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mb-6"><Sparkles className="w-7 h-7 text-orange-500" /></div>
