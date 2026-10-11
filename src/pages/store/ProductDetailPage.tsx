@@ -209,6 +209,39 @@ export default function ProductDetailPage() {
 
       const { data: productData } = await productService.getProduct(productId!);
       if (productData) {
+        // A supplier product can be opened by ID even when it is no longer
+        // eligible for this dropshipper's storefront. Validate the import
+        // relationship and live source inventory before rendering the detail page.
+        if (productData.store_id !== storeData.id) {
+          const [{ data: importListing }, { data: sourceProduct }] = await Promise.all([
+            supabase
+              .from('import_catalog')
+              .select('id')
+              .eq('importer_store_id', storeData.id)
+              .eq('original_product_id', productId!)
+              .eq('is_active', true)
+              .maybeSingle(),
+            supabase
+              .from('products')
+              .select('is_active,is_importable,is_out_of_stock,stock_quantity')
+              .eq('id', productId!)
+              .maybeSingle(),
+          ]);
+
+          if (
+            !importListing ||
+            !sourceProduct ||
+            !sourceProduct.is_active ||
+            !sourceProduct.is_importable ||
+            sourceProduct.is_out_of_stock ||
+            Number(sourceProduct.stock_quantity ?? 0) < 5
+          ) {
+            toast.error('This product is no longer available in this store');
+            navigate(`/${slug}`);
+            return;
+          }
+        }
+
         setProduct(productData as Product);
         setIsChinaDropship(false);
       } else {
