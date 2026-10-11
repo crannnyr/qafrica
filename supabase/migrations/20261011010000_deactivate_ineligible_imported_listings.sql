@@ -39,3 +39,23 @@ CREATE TRIGGER deactivate_ineligible_imported_listings
 
 COMMENT ON FUNCTION public.deactivate_ineligible_imported_listings()
 IS 'Deactivates seller-to-seller import_catalog listings when their source product becomes inactive, non-importable, out of stock, or has fewer than five units. Does not auto-reactivate listings when stock recovers.';
+
+
+-- Enable Postgres Changes for the dashboard's per-user notification subscription.
+DO $publication$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM pg_publication
+     WHERE pubname = 'supabase_realtime'
+  ) AND NOT EXISTS (
+    SELECT 1
+      FROM pg_publication_tables
+     WHERE pubname = 'supabase_realtime'
+       AND schemaname = 'public'
+       AND tablename = 'notifications'
+  ) THEN
+    EXECUTE 'ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications';
+  END IF;
+END;
+$publication$;
