@@ -101,6 +101,15 @@ export default function DomainPage() {
     await Promise.all([load(), currentStore?.id ? fetchStore(currentStore.id) : Promise.resolve()]);
   };
 
+  const selectTld = (extension: '.com' | '.store' | '.shop') => {
+    const current = cleanDomain(input);
+    const base = current.includes('.') ? current.slice(0, current.lastIndexOf('.')) : current;
+    const name = base || currentStore?.slug || '';
+    if (!name) return;
+    setInput(`${name}${extension}`);
+    setTouched(false);
+  };
+
   const startPay = () => {
     setTouched(true);
     if (!valid) return;
@@ -193,14 +202,31 @@ export default function DomainPage() {
                 )}
 
                 {domainType === 'new' && (
-                  <dl className="mt-4 grid grid-cols-3 gap-2 text-center">
-                    {[['.com', DOMAIN_PRICES.com], ['.store', DOMAIN_PRICES.store], ['.shop', DOMAIN_PRICES.shop]].map(([ext, p]) => (
-                      <div key={ext as string} className={`rounded-xl border px-2 py-2.5 ${tld && `.${tld}` === ext ? 'border-orange-400 bg-orange-50 dark:bg-orange-500/10' : 'border-gray-200 dark:border-gray-700'}`}>
-                        <dt className="text-sm font-semibold text-gray-900 dark:text-white">{ext}</dt>
-                        <dd className="text-xs text-gray-500 dark:text-gray-400">{naira(p as number)} first year</dd>
-                      </div>
-                    ))}
-                  </dl>
+                  <div className="mt-4 grid grid-cols-3 gap-2 text-center" role="group" aria-label="Choose domain extension">
+                    {([
+                      { ext: '.com' as const, price: DOMAIN_PRICES.com },
+                      { ext: '.store' as const, price: DOMAIN_PRICES.store },
+                      { ext: '.shop' as const, price: DOMAIN_PRICES.shop },
+                    ]).map(({ ext, price: extensionPrice }) => {
+                      const selected = tld ? `.${tld}` === ext : false;
+                      return (
+                        <button
+                          key={ext}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => selectTld(ext)}
+                          className={`rounded-xl border px-2 py-2.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2 ${
+                            selected
+                              ? 'border-orange-400 bg-orange-50 dark:bg-orange-500/10'
+                              : 'border-gray-200 hover:border-orange-300 hover:bg-orange-50/50 dark:border-gray-700 dark:hover:bg-orange-500/5'
+                          }`}
+                        >
+                          <span className="block text-sm font-semibold text-gray-900 dark:text-white">{ext}</span>
+                          <span className="block text-xs text-gray-500 dark:text-gray-400">{naira(extensionPrice)} first year</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
