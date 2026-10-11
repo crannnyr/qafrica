@@ -41,6 +41,11 @@ export const sidebarItems: NavItem[] = [
     ],
   },
   {
+    icon: StoreIcon,
+    label: 'Point of Sale',
+    path: '/dashboard/pos',
+  },
+  {
     icon: ShoppingCart,
     label: 'Sales',
     path: '/dashboard/orders',
@@ -148,7 +153,8 @@ export const PATH_PERMISSIONS: Record<string, PermissionKey | null> = {
   '/dashboard/products/bulk-import':  'can_manage_products',
   '/dashboard/import-catalog':        'can_manage_products',
 
-  '/dashboard/pos':              'can_manage_products',\n  '/dashboard/orders':           'can_view_orders',
+  '/dashboard/pos':              'can_manage_products',\n  '/dashboard/pos':              'can_manage_products',
+  '/dashboard/orders':           'can_view_orders',
   '/dashboard/dropship-orders':  'can_view_orders',
   '/dashboard/reviews':          'can_view_products',
   '/dashboard/coupons':          'can_manage_products',
