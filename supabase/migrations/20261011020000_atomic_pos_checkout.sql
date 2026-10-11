@@ -1,4 +1,8 @@
 -- Atomic checkout RPC for POS sales.
+ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_payment_method_check;
+ALTER TABLE public.orders ADD CONSTRAINT orders_payment_method_check
+  CHECK (payment_method = ANY (ARRAY['paystack'::text, 'wallet'::text, 'nomba'::text, 'cash'::text, 'transfer'::text, 'pos'::text, 'check'::text]));
+
 CREATE OR REPLACE FUNCTION public.record_pos_sale(
   p_store_id uuid,
   p_customer_name text,
@@ -40,6 +44,10 @@ BEGIN
   END IF;
   IF coalesce(p_discount, 0) < 0 THEN
     RAISE EXCEPTION 'Discount cannot be negative' USING ERRCODE = '22023';
+  END IF;
+  IF (SELECT count(*) FROM jsonb_array_elements(p_items)) <>
+     (SELECT count(DISTINCT (value->>'product_id')::uuid) FROM jsonb_array_elements(p_items)) THEN
+    RAISE EXCEPTION 'Each product may appear only once in a POS basket' USING ERRCODE = '22023';
   END IF;
 
   -- Lock products in deterministic order before checking quantities.
