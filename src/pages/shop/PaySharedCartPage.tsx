@@ -30,7 +30,7 @@ export default function PaySharedCartPage() {
     e.preventDefault();
     const fe: Record<string, string> = {};
     if (name.trim().length < 2) fe.payer_name = 'Enter your name';
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$/.test(email.trim())) fe.payer_email = 'Enter a valid email for your receipt';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) fe.payer_email = 'Enter a valid email for your receipt';
     if (cart?.is_marketplace && contributionAmount.trim()) {
       const amount = Number(contributionAmount);
       const remaining = Math.max(Number(cart.remaining_amount ?? cart.quote?.amount ?? 0), 0);
