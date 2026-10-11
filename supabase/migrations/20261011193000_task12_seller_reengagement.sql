@@ -256,7 +256,9 @@ GRANT EXECUTE ON FUNCTION public.sync_seller_reengagement_enrollments() TO servi
 GRANT EXECUTE ON FUNCTION public.get_seller_reengagement_due() TO service_role;
 GRANT EXECUTE ON FUNCTION public.queue_seller_reengagement_email(uuid, integer, text, text) TO service_role;
 
--- The function only queues messages; the existing queue processor applies
+-- Before applying this migration, store the service-role JWT in Supabase Vault as
+-- `qafrica_service_role_key`. Do not commit the key to source control. The
+-- function only queues messages; the existing queue processor applies email
 -- suppression, per-domain throttling, and global daily caps before sending.
 SELECT cron.schedule(
   'seller-reengagement-campaign-daily',
@@ -266,7 +268,7 @@ SELECT cron.schedule(
       url := 'https://bahiqhpypapvktpxrths.supabase.co/functions/v1/seller-reengagement-campaign',
       headers := jsonb_build_object(
         'Content-Type', 'application/json',
-        'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true)
+        'Authorization', 'Bearer ' || (SELECT decrypted_secret FROM vault.decrypted_secrets WHERE name = 'qafrica_service_role_key' LIMIT 1)
       ),
       body := '{}'::jsonb
     );
