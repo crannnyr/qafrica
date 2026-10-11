@@ -13,6 +13,7 @@ export default function PaySharedCartPage() {
   const [cart, setCart] = useState<SharedCartView | null | undefined>(undefined);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [contributionAmount, setContributionAmount] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -30,11 +31,18 @@ export default function PaySharedCartPage() {
     const fe: Record<string, string> = {};
     if (name.trim().length < 2) fe.payer_name = 'Enter your name';
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) fe.payer_email = 'Enter a valid email for your receipt';
+    if (cart?.is_marketplace && contributionAmount.trim()) {
+      const amount = Number(contributionAmount);
+      const remaining = Math.max(Number(cart.remaining_amount ?? cart.quote?.amount ?? 0), 0);
+      const minimum = Math.min(1000, remaining);
+      if (!Number.isFinite(amount) || amount < minimum) fe.contribution_amount = 'Minimum contribution is ' + naira(minimum);
+      else if (amount > remaining) fe.contribution_amount = 'Maximum contribution is ' + naira(remaining);
+    }
     setErrors(fe);
     if (Object.keys(fe).length) return;
     setBusy(true);
     setFormError(null);
-    const r = await paySharedCart(code, { name: name.trim(), email: email.trim() });
+    const r = await paySharedCart(code, { name: name.trim(), email: email.trim() }, cart?.is_marketplace && contributionAmount.trim() ? Number(contributionAmount) : undefined);
     if (!r.ok) {
       setBusy(false);
       if (r.field_errors) setErrors(r.field_errors);
@@ -61,6 +69,10 @@ export default function PaySharedCartPage() {
 
   const q = cart.quote;
   const blocked = !q.ok;
+  const targetAmount = Number(cart.target_amount ?? q.amount);
+  const amountRaised = Math.max(Number(cart.amount_raised ?? 0), 0);
+  const remainingAmount = Math.max(Number(cart.remaining_amount ?? q.amount), 0);
+  const paymentLabelAmount = cart.is_marketplace && contributionAmount.trim() && Number(contributionAmount) > 0 ? Number(contributionAmount) : remainingAmount;
 
   return (
     <div className="min-h-screen bg-[#F6F6F6] text-gray-900 pb-10">
@@ -102,6 +114,14 @@ export default function PaySharedCartPage() {
           </section>
         ))}
 
+        {cart.is_marketplace && (
+          <section className="bg-white px-4 py-4">
+            <div className="flex items-center justify-between text-[13px] font-semibold"><span>Help Pay progress</span><span>{naira(amountRaised)} of {naira(targetAmount)}</span></div>
+            <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={targetAmount} aria-valuenow={Math.min(amountRaised, targetAmount)}><div className="h-full rounded-full bg-[#FA6338]" style={{ width: (targetAmount > 0 ? Math.min(100, amountRaised / targetAmount * 100) : 0) + '%' }} /></div>
+            <p className="mt-2 text-[12px] text-gray-500">Remaining: {naira(remainingAmount)}. You can contribute part of the balance; the order is placed when the full amount is raised.</p>
+          </section>
+        )}
+
         {blocked && (
           <div className="mx-4 rounded-lg bg-[#FFF4F0] border border-[#FFD8CC] p-3 text-[12px] text-[#C4320A] flex gap-2" role="alert">
             <AlertTriangle className="w-4 h-4 shrink-0" aria-hidden />
@@ -117,6 +137,7 @@ export default function PaySharedCartPage() {
               <p>We'll email your receipt. We never share your details with {cart.first_name}'s sellers.</p>
             </InfoButton>
           </h2>
+          {cart.is_marketplace && <div><label htmlFor="contribution_amount" className="block text-[12px] font-medium text-gray-700 mb-1">Contribution amount (₦)</label><input id="contribution_amount" type="number" min={Math.min(1000, remainingAmount)} max={remainingAmount} step="0.01" inputMode="decimal" value={contributionAmount} onChange={(e) => setContributionAmount(e.target.value)} placeholder={String(Math.round(remainingAmount))} className="w-full h-11 px-3 rounded-lg border border-gray-300 text-[14px] focus:outline-none focus:ring-2 focus:ring-gray-900" aria-describedby="contribution-help" aria-invalid={Boolean(errors.contribution_amount)} />{errors.contribution_amount && <p className="mt-1 text-[12px] text-[#C4320A]" role="alert">{errors.contribution_amount}</p>}<p id="contribution-help" className="mt-1 text-[11px] text-gray-500">Minimum {naira(Math.min(1000, remainingAmount))}. Leave blank to pay the remaining balance.</p></div>}
           <Field id="payer_name" label="Your name" value={name} onChange={setName} error={errors.payer_name} autoComplete="name" />
           <Field id="payer_email" label="Email for your receipt" type="email" inputMode="email" value={email} onChange={setEmail} error={errors.payer_email} autoComplete="email" />
           <div className="flex items-start gap-2 text-[12px] text-gray-500">
@@ -126,7 +147,7 @@ export default function PaySharedCartPage() {
           {formError && <p className="text-[13px] text-[#C4320A]" role="alert">{formError}</p>}
           <button type="submit" disabled={busy || blocked} className="w-full h-12 rounded-lg bg-gray-900 text-white text-[15px] font-semibold disabled:opacity-40 inline-flex items-center justify-center gap-2">
             <Lock className="w-4 h-4" aria-hidden />
-            {busy ? 'Opening payment…' : `Pay ${naira(q.amount)}`}
+            {busy ? 'Opening payment…' : `Pay ${naira(paymentLabelAmount)}`}
           </button>
           <p className="text-center text-[11px] text-gray-400">Never send money to anyone outside QAFRICA for this cart.</p>
         </form>

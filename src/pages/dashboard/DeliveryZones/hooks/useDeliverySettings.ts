@@ -5,14 +5,13 @@ import { useStoreStore } from '@/stores';
 import type { ShipbubblePickupAddress, PackagingDimensions } from '../types';
 
 export function useDeliverySettings() {
-  const { currentStore, deliveryZones, fetchDeliveryZones, addDeliveryZone, deleteDeliveryZone, updateStore } = useStoreStore();
+  const { currentStore, deliveryZones, fetchDeliveryZones, updateStore } = useStoreStore();
 
   const [deliveryMode, setDeliveryMode]   = useState<'manual' | 'shipbubble'>('manual');
   const [deliveryWindow, setDeliveryWindow] = useState(7);
   const [pickupAddress, setPickupAddress] = useState<Partial<ShipbubblePickupAddress>>({});
   const [packaging, setPackaging]         = useState<PackagingDimensions>({ length_cm: 30, width_cm: 25, height_cm: 20, weight_kg: 0.5 });
   const [categoryId, setCategoryId]       = useState<number>(8);
-  const [newZone, setNewZone]             = useState({ state: '', price: '' });
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
   const [editingZonePrice, setEditingZonePrice] = useState('');
   const [addressValidated, setAddressValidated] = useState(false);
@@ -24,8 +23,7 @@ export function useDeliverySettings() {
   const [isValidatingAddress, setIsValidatingAddress] = useState(false);
   const [isSavingPackaging, setIsSavingPackaging] = useState(false);
   const [isSavingCategory, setIsSavingCategory]   = useState(false);
-  const [isAdding, setIsAdding]                   = useState(false);
-  const [isDeleting, setIsDeleting]               = useState<string | null>(null);
+  const [isTogglingZone, setIsTogglingZone] = useState<string | null>(null);
   const [isSavingZone, setIsSavingZone]           = useState(false);
 
   // Sync store data on mount
@@ -135,23 +133,15 @@ export function useDeliverySettings() {
     setIsSavingCategory(false);
   };
 
-  const handleAddZone = async () => {
-    if (!newZone.state || !newZone.price) { toast.error('Please fill in all fields'); return; }
-    if (!currentStore?.id) return;
-    setIsAdding(true);
-    const result = await addDeliveryZone({ store_id: currentStore.id, state: newZone.state, price: parseFloat(newZone.price), is_active: true });
-    if (result.success) { toast.success('Delivery zone added'); setNewZone({ state: '', price: '' }); }
-    else toast.error(result.error || 'Failed to add zone');
-    setIsAdding(false);
-  };
-
-  const handleDeleteZone = async (zoneId: string) => {
-    if (!confirm('Are you sure?')) return;
-    setIsDeleting(zoneId);
-    const result = await deleteDeliveryZone(zoneId);
-    if (result.success) toast.success('Zone removed');
-    else toast.error(result.error || 'Failed to remove zone');
-    setIsDeleting(null);
+  const handleToggleZone = async (zone: { id: string; state: string; is_active: boolean }) => {
+    setIsTogglingZone(zone.id);
+    const { error } = await deliveryZoneService.updateZone(zone.id, { is_active: !zone.is_active });
+    if (error) toast.error(`Failed to ${zone.is_active ? 'disable' : 'enable'} ${zone.state}`);
+    else {
+      toast.success(`${zone.state} delivery ${zone.is_active ? 'disabled' : 'enabled'}`);
+      if (currentStore?.id) fetchDeliveryZones(currentStore.id);
+    }
+    setIsTogglingZone(null);
   };
 
   const handleSaveZonePrice = async (zoneId: string) => {
@@ -174,15 +164,15 @@ export function useDeliverySettings() {
     // State
     currentStore, deliveryZones, deliveryMode, deliveryWindow, setDeliveryWindow,
     pickupAddress, setPickupAddress, packaging, setPackaging,
-    categoryId, setCategoryId, newZone, setNewZone,
+    categoryId, setCategoryId,
     editingZoneId, setEditingZoneId, editingZonePrice, setEditingZonePrice,
     addressValidated, hasPickupAddress,
     // Loading
     isSavingMode, isSavingWindow, isSavingAddress, isValidatingAddress,
-    isSavingPackaging, isSavingCategory, isAdding, isDeleting, isSavingZone,
+    isSavingPackaging, isSavingCategory, isAdding: false, isTogglingZone, isSavingZone,
     // Handlers
     handleSaveDeliveryMode, handleSaveDeliveryWindow, handleSavePickupAddress,
     handleValidateAddress, handleSavePackaging, handleSaveCategory,
-    handleAddZone, handleDeleteZone, handleSaveZonePrice,
+    handleToggleZone, handleSaveZonePrice,
   };
 }
