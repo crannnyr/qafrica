@@ -160,9 +160,9 @@ const esc = (s: string) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&
 
 async function notifySharedCartContribution(supabase: SupabaseClient, reference: string) {
   const { data: contribution } = await supabase.from('shared_cart_contributions')
-    .select('id, shared_cart_id, amount, payer_name, status, notification_sent_at')
+    .select('id, shared_cart_id, amount, payer_name, status, is_marketplace, notification_sent_at')
     .eq('checkout_reference', reference).eq('status', 'paid').maybeSingle();
-  if (!contribution || contribution.notification_sent_at) return;
+  if (!contribution || !contribution.is_marketplace || contribution.notification_sent_at) return;
   const { data: cart } = await supabase.from('shared_carts')
     .select('recipient_name, recipient_email, amount_snapshot').eq('id', contribution.shared_cart_id).maybeSingle();
   if (!cart?.recipient_email) return;
