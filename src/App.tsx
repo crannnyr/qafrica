@@ -114,12 +114,10 @@ const MyLinksPage = lazy(() => import('@/pages/shop/account/SimplePages').then((
 const HelpPayPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.HelpPayPage })));
 const LeaderboardPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.LeaderboardPage })));
 const ClaimClearPage = lazy(() => import('@/pages/shop/account/HelpPayPages').then((m) => ({ default: m.ClaimClearPage })));
-const MarketplaceHome = lazy(() => import('@/pages/marketplace/MarketplaceHome'));
 const UnifiedMarketplaceHome = lazy(() => import('@/pages/marketplace-unified/UnifiedMarketplaceHome'));
 const UnifiedProductPage = lazy(() => import('@/pages/marketplace-unified/UnifiedProductPage'));
 const MarketplaceCheckoutPage = lazy(() => import('@/pages/marketplace-unified/MarketplaceCheckoutPage'));
 const MarketplaceCheckoutCompletePage = lazy(() => import('@/pages/marketplace-unified/MarketplaceCheckoutCompletePage'));
-const MarketplaceCategories = lazy(() => import('@/pages/marketplace/MarketplaceCategories'));
 const UnifiedMarketplaceCategories = lazy(() => import('@/pages/marketplace-unified/UnifiedMarketplaceCategories'));
 const CartPage = lazy(() => import('@/pages/shop/CartPage'));
 const ShopCheckoutPage = lazy(() => import('@/pages/shop/CheckoutPage'));
@@ -576,8 +574,8 @@ function App() {
           <Route path="/stores-v2/checkout" element={<MarketplaceCheckoutPage />} />
           <Route path="/stores-v2/checkout/complete" element={<MarketplaceCheckoutCompletePage />} />
           <Route path="/stores-v2/product/:sourceType/:sourceId" element={<UnifiedProductPage />} />
-          <Route path="/stores" element={<MarketplaceHome />} />
-          <Route path="/stores/categories" element={<MarketplaceCategories />} />
+          <Route path="/stores" element={<Navigate to="/stores-v2" replace />} />
+          <Route path="/stores/categories" element={<Navigate to="/stores-v2/categories" replace />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/cart/share" element={<ShareCartPage />} />
           <Route path="/pay/:code" element={<PaySharedCartPage />} />
