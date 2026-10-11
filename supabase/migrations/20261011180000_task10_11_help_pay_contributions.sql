@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.shared_cart_contributions (
   shared_cart_id uuid NOT NULL REFERENCES public.shared_carts(id) ON DELETE CASCADE,
   checkout_reference text NOT NULL UNIQUE,
   amount numeric(12,2) NOT NULL CHECK (amount > 0),
+  gateway_fee numeric(12,2) NOT NULL DEFAULT 0,
   payer_name text NOT NULL,
   payer_email text NOT NULL,
   is_marketplace boolean NOT NULL DEFAULT false,
@@ -181,6 +182,7 @@ DECLARE
   cart_row public.shared_carts%ROWTYPE;
   target numeric(12,2);
   raised numeric(12,2);
+  total_gateway_fee numeric(12,2);
   base_result jsonb;
 BEGIN
   SELECT * INTO cs FROM public.checkout_sessions WHERE reference=p_reference FOR UPDATE;
@@ -209,13 +211,15 @@ BEGIN
     RETURN jsonb_build_object('status','fulfilment_error','detail','Shared cart is no longer active');
   END IF;
 
-  UPDATE public.shared_cart_contributions SET status='paid', paid_at=COALESCE(paid_at,now())
+  UPDATE public.shared_cart_contributions SET status='paid', paid_at=COALESCE(paid_at,now()), gateway_fee=COALESCE(p_gateway_fee,0)
   WHERE id=contribution.id AND status='pending';
 
   SELECT COALESCE(sum(amount),0) INTO raised
   FROM public.shared_cart_contributions
   WHERE shared_cart_id=cart_row.id AND status='paid';
   target := round(COALESCE((public.checkout_quote(cart_row.items,cart_row.delivery->>'state','{}'::jsonb)->>'amount')::numeric, cart_row.amount_snapshot,0),2);
+  SELECT COALESCE(sum(gateway_fee),0) INTO total_gateway_fee
+    FROM public.shared_cart_contributions WHERE shared_cart_id=cart_row.id AND status='paid';
 
   IF raised + 0.01 < target THEN
     UPDATE public.checkout_sessions SET status='paid', paid_amount=p_paid_amount, gateway_fee=p_gateway_fee,
@@ -231,7 +235,7 @@ BEGIN
   -- The legacy finalizer uses checkout_sessions.amount to allocate gateway fees.
   -- Temporarily set it to the full cart target, then restore the actual contribution.
   UPDATE public.checkout_sessions SET amount=target WHERE id=cs.id;
-  base_result := public.finalize_checkout_session_base(p_reference,target,p_gateway_fee,p_transaction_id);
+  base_result := public.finalize_checkout_session_base(p_reference,target,total_gateway_fee,p_transaction_id);
   UPDATE public.checkout_sessions SET amount=contribution.amount WHERE id=cs.id;
   IF base_result->>'status'='paid' THEN
     UPDATE public.checkout_sessions SET paid_amount=p_paid_amount, updated_at=now() WHERE id=cs.id;
@@ -282,3 +286,51 @@ $$;
 
 REVOKE ALL ON FUNCTION public.shared_cart_is_marketplace(jsonb,text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.shared_cart_is_marketplace(jsonb,text) TO service_role;
+
+
+-- Keep the RPC's returned expiry in sync with the table's 30-day default.
+CREATE OR REPLACE FUNCTION public.create_shared_cart(
+  p_items jsonb,
+  p_recipient jsonb,
+  p_delivery jsonb,
+  p_note text DEFAULT NULL::text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_name text := left(trim(COALESCE(p_recipient->>'name','')),80);
+  v_email text := lower(left(trim(COALESCE(p_recipient->>'email','')),120));
+  v_phone text := regexp_replace(COALESCE(p_recipient->>'phone',''),'[^\d+]','','g');
+  v_state text := left(trim(COALESCE(p_delivery->>'state','')),40);
+  v_q jsonb;
+  v_code text;
+  v_note text;
+  v_customer uuid;
+BEGIN
+  IF length(v_name)<2 THEN RAISE EXCEPTION 'Enter your full name' USING ERRCODE='22023'; END IF;
+  IF v_email !~ '^[^\s@]+@[^\s@]+\.[^\s@]{2,}$' THEN RAISE EXCEPTION 'Enter a valid email address' USING ERRCODE='22023'; END IF;
+  IF v_phone !~ '^\+?\d{10,14}$' THEN RAISE EXCEPTION 'Enter a valid phone number' USING ERRCODE='22023'; END IF;
+  IF length(trim(COALESCE(p_delivery->>'address','')))<5 OR trim(COALESCE(p_delivery->>'city',''))='' OR v_state='' THEN
+    RAISE EXCEPTION 'Enter your full delivery address' USING ERRCODE='22023';
+  END IF;
+  v_note := public.clean_share_note(p_note);
+  v_q := public.checkout_quote(p_items,v_state,'{}'::jsonb);
+  IF NOT COALESCE((v_q->>'ok')::boolean,false) THEN
+    RAISE EXCEPTION '%',COALESCE(v_q->'errors'->0->>'message','Some items can''t be ordered right now') USING ERRCODE='22023';
+  END IF;
+  IF (SELECT count(*) FROM public.shared_carts WHERE recipient_email=v_email AND created_at>now()-interval '1 day')>=20 THEN
+    RAISE EXCEPTION 'Too many links today. Please try again tomorrow.' USING ERRCODE='22023';
+  END IF;
+  SELECT id INTO v_customer FROM public.customers WHERE id=auth.uid();
+  v_code := upper(substr(translate(encode(extensions.gen_random_bytes(12),'base64'),'+/=0O1Il',''),1,10));
+  INSERT INTO public.shared_carts(code,items,recipient_name,recipient_email,recipient_phone,delivery,note,created_by)
+  VALUES(v_code,p_items,v_name,v_email,v_phone,
+    jsonb_build_object('address',left(trim(p_delivery->>'address'),200),'city',left(trim(p_delivery->>'city'),60),
+      'state',v_state,'landmark',left(trim(COALESCE(p_delivery->>'landmark','')),120)),
+    v_note,v_customer);
+  RETURN jsonb_build_object('code',v_code,'amount',v_q->'amount','expires_at',now()+interval '30 days');
+END;
+$$;
