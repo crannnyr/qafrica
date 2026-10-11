@@ -1,5 +1,5 @@
 import StorefrontLookSettings from '@/components/storefront/StorefrontLookSettings';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Palette, Check, ArrowRight, Sparkles, Shirt, 
@@ -12,6 +12,9 @@ import { useStoreStore } from '@/stores';
 import { toast } from 'sonner';
 import { AVAILABLE_THEMES, getThemeById } from '@/lib/themes';
 import { NICHE_CATEGORIES } from '@/lib/nicheCategories';
+import { supabase } from '@/services';
+import FlutterwavePayDialog from '@/components/payments/FlutterwavePayDialog';
+import { startThemePayment, checkThemePayment } from '@/services/flutterwave';
 
 // Template definitions - for theme preview purposes only
 const templates = [
@@ -157,7 +160,7 @@ function ThemePreview({ themeId, isSelected, onClick }: { themeId: string; isSel
       {theme.is_premium && (
         <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-amber-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
           <Crown className="w-3 h-3" />
-          {theme.id === 'black' ? '₦5,000 ADD-ON' : 'PRO'}
+          {theme.id === 'black' ? (hasBlackTheme ? 'PURCHASED' : '₦5,000 ADD-ON') : 'PRO'}
         </div>
       )}
 
@@ -204,14 +207,29 @@ function ThemePreview({ themeId, isSelected, onClick }: { themeId: string; isSel
 }
 
 export default function StoreTemplatesPage() {
-  const { currentStore, updateStore } = useStoreStore();
+  const { currentStore, updateStore, fetchStore } = useStoreStore();
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
   const [viewingTemplate, setViewingTemplate] = useState<string | null>(null);
   const [isApplying, setIsApplying] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'popular' | 'new'>('all');
+  const [hasBlackTheme, setHasBlackTheme] = useState(false);
+  const [showThemePayment, setShowThemePayment] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!currentStore?.id) { setHasBlackTheme(false); return; }
+    supabase.from('store_theme_purchases').select('id')
+      .eq('store_id', currentStore.id).eq('theme_id', 'black').eq('payment_status', 'paid')
+      .maybeSingle().then(({ data }) => { if (active) setHasBlackTheme(!!data); });
+    return () => { active = false; };
+  }, [currentStore?.id]);
 
   const handleApplyTheme = async () => {
     if (!selectedTheme || !currentStore) return;
+    if (selectedTheme === 'black' && !hasBlackTheme) {
+      setShowThemePayment(true);
+      return;
+    }
 
     const theme = getThemeById(selectedTheme);
     if (!theme) return;
@@ -227,6 +245,7 @@ export default function StoreTemplatesPage() {
       });
 
       toast.success(`Theme changed to ${theme.name}`);
+      if (selectedTheme === 'black') setHasBlackTheme(true);
       setSelectedTheme(null);
       setViewingTemplate(null);
     } catch (err) {
@@ -465,7 +484,7 @@ export default function StoreTemplatesPage() {
                         </Button>
                         <Button
                           onClick={handleApplyTheme}
-                          disabled={!selectedTheme || isApplying || selectedTheme === currentStore?.theme}
+                          disabled={!selectedTheme || isApplying || (selectedTheme === currentStore?.theme && (selectedTheme !== 'black' || hasBlackTheme))}
                           className="bg-orange-500 hover:bg-orange-600 text-white"
                         >
                           {isApplying ? (
@@ -491,6 +510,25 @@ export default function StoreTemplatesPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showThemePayment && currentStore && (
+        <FlutterwavePayDialog
+          start={() => startThemePayment({ store_id: currentStore.id, theme_id: 'black' })}
+          check={checkThemePayment}
+          itemNoun="theme add-on"
+          planLabel="Black storefront theme · ₦5,000"
+          paidMessage="Your Black theme has been purchased and applied."
+          onClose={() => setShowThemePayment(false)}
+          onPaid={async () => {
+            setShowThemePayment(false);
+            setHasBlackTheme(true);
+            setSelectedTheme(null);
+            setViewingTemplate(null);
+            await fetchStore(currentStore.id);
+            toast.success('Black theme purchased and applied to your store.');
+          }}
+        />
+      )}
     </div>
   );
 }
