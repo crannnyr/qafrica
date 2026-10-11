@@ -21,6 +21,7 @@ export default function POSPage() {
   const [discount, setDiscount] = useState('0');
   const [method, setMethod] = useState<'cash' | 'transfer' | 'pos' | 'check'>('cash');
   const [busy, setBusy] = useState(false);
+  const [cartOpen, setCartOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
 
@@ -153,7 +154,7 @@ export default function POSPage() {
         </div>
       </header>
 
-      <div className="grid items-start gap-5 2xl:grid-cols-[minmax(0,1.6fr)_minmax(360px,0.9fr)]">
+      <div className="grid items-start gap-5">
         <section className="min-w-0 rounded-2xl border bg-card shadow-sm">
           <div className="border-b p-4 sm:p-5">
             <div className="flex items-center justify-between gap-3">
@@ -172,21 +173,21 @@ export default function POSPage() {
             </div>
           </div>
           <div className="p-4 sm:p-5">
-            {loading ? <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-52 animate-pulse rounded-xl bg-muted" />)}</div>
+            {loading ? <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-52 animate-pulse rounded-xl bg-muted" />)}</div>
               : visible.length === 0 ? <div className="flex min-h-56 flex-col items-center justify-center text-center"><ShoppingBag className="h-10 w-10 text-muted-foreground/50" /><p className="mt-3 font-medium">{search ? 'No matching products' : 'No products to show'}</p><p className="mt-1 text-sm text-muted-foreground">{search ? 'Try another name or clear your search.' : 'Active original products will appear here.'}</p>{(search || stockFilter !== 'all') && <Button className="mt-3" variant="outline" size="sm" onClick={() => { setSearch(''); setStockFilter('all'); }}>Clear filters</Button>}</div>
               : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {visible.map((product) => {
                   const unavailable = product.is_out_of_stock || product.stock_quantity < 1;
                   const inCart = cart.find((line) => line.product.id === product.id)?.quantity || 0;
-                  return <article key={product.id} className="group flex min-w-0 flex-col overflow-hidden rounded-xl border bg-background transition hover:border-primary/40 hover:shadow-md">
-                    <div className="relative flex h-36 items-center justify-center overflow-hidden bg-muted/50">
-                      {product.images?.[0] ? <img src={product.images[0]} alt={product.name} loading="lazy" className="h-full w-full object-contain p-2 transition duration-200 group-hover:scale-[1.03]" /> : <ShoppingBag className="h-10 w-10 text-muted-foreground/40" />}
+                  return <article key={product.id} className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-gray-100 bg-white transition-shadow hover:shadow-lg dark:border-gray-700 dark:bg-gray-800">
+                    <div className="relative aspect-square overflow-hidden bg-gray-100 dark:bg-gray-700">
+                      {product.images?.[0] ? <img src={product.images[0]} alt={product.name} loading="lazy" className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.03]" /> : <ShoppingBag className="h-10 w-10 text-muted-foreground/40" />}
                       <span className={`absolute left-2 top-2 rounded-full px-2 py-1 text-[11px] font-medium ${unavailable ? 'bg-destructive/10 text-destructive' : product.stock_quantity <= 5 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{unavailable ? 'Out of stock' : product.stock_quantity <= 5 ? `Only ${product.stock_quantity} left` : `${product.stock_quantity} in stock`}</span>
                       {inCart > 0 && <span className="absolute right-2 top-2 flex h-6 min-w-6 items-center justify-center gap-1 rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground"><Check className="h-3 w-3" />{inCart}</span>}
                     </div>
-                    <div className="flex flex-1 flex-col p-3">
-                      <h3 className="line-clamp-2 min-h-10 text-sm font-medium leading-5" title={product.name}>{product.name}</h3>
-                      <p className="mt-2 text-lg font-bold">{money(Number(product.selling_price) || 0)}</p>
+                    <div className="flex flex-1 flex-col p-2 sm:p-3">
+                      <h3 className="line-clamp-2 min-h-9 text-xs font-semibold leading-4 text-gray-900 dark:text-white sm:text-sm" title={product.name}>{product.name}</h3>
+                      <p className="mt-2 text-sm font-bold text-orange-600 sm:text-base">{money(Number(product.selling_price) || 0)}</p>
                       <Button className="mt-3 w-full" size="sm" variant={inCart ? 'secondary' : 'default'} disabled={unavailable || inCart >= product.stock_quantity} onClick={() => add(product)}>
                         <Plus className="mr-1.5 h-4 w-4" />{unavailable ? 'Unavailable' : inCart ? 'Add another' : 'Add to basket'}
                       </Button>
@@ -197,7 +198,7 @@ export default function POSPage() {
           </div>
         </section>
 
-        <aside className="min-w-0 rounded-2xl border bg-card shadow-sm 2xl:sticky 2xl:top-4">
+        {cartOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCartOpen(false); }}><aside className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border bg-card shadow-2xl sm:max-w-xl sm:rounded-2xl">
           <div className="flex items-center justify-between border-b p-4 sm:p-5">
             <div><h2 className="text-lg font-semibold">Current sale</h2><p className="mt-1 text-sm text-muted-foreground">{cart.length} product type{cart.length === 1 ? '' : 's'} · {cartQuantity} item{cartQuantity === 1 ? '' : 's'}</p></div>
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><ShoppingCart className="h-5 w-5" /></span>
@@ -230,8 +231,9 @@ export default function POSPage() {
             <Button className="h-11 w-full" disabled={busy || !cart.length || !customer.trim()} onClick={sell}>{busy ? 'Recording sale…' : `Complete sale · ${money(total)}`}</Button>
             {cart.length > 0 && <Button variant="ghost" className="w-full text-muted-foreground" disabled={busy} onClick={() => setCart([])}>Clear basket</Button>}
           </div>
-        </aside>
+        </aside></div>}
       </div>
+      <button type="button" onClick={() => setCartOpen(true)} className="fixed bottom-5 right-5 z-40 flex items-center gap-3 rounded-full bg-orange-500 px-4 py-4 text-white shadow-xl hover:bg-orange-600"><span className="relative"><ShoppingCart className="h-6 w-6" />{cartQuantity > 0 && <span className="absolute -right-3 -top-3 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-orange-500 bg-white px-1 text-[10px] font-bold text-orange-600">{cartQuantity}</span>}</span><span className="text-sm font-semibold">Current sale</span><span className="rounded-full bg-white/20 px-2 py-1 text-xs font-bold">{money(total)}</span></button>
     </div>
   );
 }
