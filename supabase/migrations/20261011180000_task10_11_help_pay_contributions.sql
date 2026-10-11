@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.shared_cart_contributions (
   amount numeric(12,2) NOT NULL CHECK (amount > 0),
   payer_name text NOT NULL,
   payer_email text NOT NULL,
+  is_marketplace boolean NOT NULL DEFAULT false,
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','paid','failed','expired')),
   created_at timestamptz NOT NULL DEFAULT now(),
   paid_at timestamptz,
@@ -111,11 +112,9 @@ BEGIN
   END IF;
 
   UPDATE public.shared_carts SET amount_snapshot=target WHERE id=sc.id;
-  IF marketplace THEN
-    INSERT INTO public.shared_cart_contributions
-      (shared_cart_id, checkout_reference, amount, payer_name, payer_email)
-    VALUES (sc.id, p_reference, chosen, left(trim(p_payer_name),80), lower(left(trim(p_payer_email),120)));
-  END IF;
+  INSERT INTO public.shared_cart_contributions
+    (shared_cart_id, checkout_reference, amount, payer_name, payer_email, is_marketplace)
+  VALUES (sc.id, p_reference, chosen, left(trim(p_payer_name),80), lower(left(trim(p_payer_email),120)), marketplace);
 
   RETURN jsonb_build_object(
     'amount', chosen, 'target_amount', target, 'amount_raised', raised,
