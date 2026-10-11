@@ -969,6 +969,139 @@ async function activateDomain(row: DomainRow, charge: Charge): Promise<{ ok: boo
   return { ok: true }
 }
 
+const BLACK_THEME_PRICE = 5000
+
+async function themeStart(req: Request) {
+  const userId = await callerId(req)
+  if (!userId) return json({ ok: false, message: 'Please sign in again.' }, 401)
+  if (!FLW_ID || !FLW_SECRET) return json({ ok: false, message: 'Payments are not set up yet. Contact support.' }, 500)
+
+  let body: Record<string, unknown> = {}
+  try { body = await req.json() } catch { /* empty */ }
+  const themeId = String(body.theme_id ?? '')
+  if (themeId !== 'black') return json({ ok: false, message: 'This add-on is not available.' }, 400)
+
+  const { data: store } = body.store_id
+    ? await admin.from('stores').select('id, owner_id, theme').eq('id', String(body.store_id)).maybeSingle()
+    : await admin.from('stores').select('id, owner_id, theme').eq('owner_id', userId).order('created_at').limit(1).maybeSingle()
+  if (!store || store.owner_id !== userId) return json({ ok: false, message: 'Store not found on your account.' }, 403)
+
+  const { data: existing } = await admin.from('store_theme_purchases')
+    .select('*').eq('store_id', store.id).eq('theme_id', themeId).maybeSingle()
+  if (existing?.payment_status === 'paid') {
+    return json({ ok: false, message: 'The Black theme add-on has already been purchased for this store.' }, 409)
+  }
+  if (existing?.payment_status === 'pending' && existing.payment_expires_at &&
+      Date.parse(existing.payment_expires_at) > Date.now() + 10 * 60 * 1000) {
+    const account = toAccount(existing.payment_account as Record<string, unknown> | null, Number(existing.amount))
+    if (account) return json({ ok: true, reference: existing.payment_reference, amount: Number(existing.amount), account, reused: true })
+  }
+
+  const reference = `QTHEME${Date.now().toString(36)}${randomId(10)}`.toUpperCase()
+  let rowId = existing?.id as string | undefined
+  if (rowId) {
+    const { error } = await admin.from('store_theme_purchases').update({
+      user_id: userId, amount: BLACK_THEME_PRICE, currency: 'NGN', payment_reference: reference,
+      payment_status: 'pending', payment_account: null, payment_expires_at: null,
+      provider_charge_id: null, paid_amount: null, paid_at: null, raw_confirm: null,
+      payment_error: null, updated_at: now(),
+    }).eq('id', rowId)
+    if (error) return json({ ok: false, message: 'Could not start payment. Please try again.' }, 500)
+  } else {
+    const { data: row, error } = await admin.from('store_theme_purchases').insert({
+      store_id: store.id, user_id: userId, theme_id: themeId, amount: BLACK_THEME_PRICE,
+      currency: 'NGN', payment_reference: reference, payment_status: 'pending',
+    }).select('id').single()
+    if (error || !row) return json({ ok: false, message: 'Could not start payment. Please try again.' }, 500)
+    rowId = row.id
+  }
+
+  try {
+    const { data: profile } = await admin.from('profiles').select('full_name, email').eq('id', userId).maybeSingle()
+    const { data: authUser } = await admin.auth.admin.getUserById(userId)
+    const email = authUser?.user?.email ?? profile?.email
+    if (!email) throw new Error('Add an email address to your account first.')
+    const parts = String(profile?.full_name || store.name || 'QAFRICA Seller').trim().split(/\\s+/)
+    const cus = await customerId(email, (parts[0] || 'QAFRICA').slice(0, 50), (parts.slice(1).join(' ') || 'Seller').slice(0, 50), userId)
+    const r = await flw('POST', '/virtual-accounts', {
+      reference, customer_id: cus, amount: BLACK_THEME_PRICE, currency: 'NGN',
+      account_type: 'dynamic', expiry: ACCOUNT_MINUTES * 60, narration: 'QAFRICA BLACK THEME',
+    }, reference)
+    const va = r.data?.data as Record<string, unknown> | undefined
+    const account = toAccount(va ?? null, BLACK_THEME_PRICE)
+    if (!r.ok || !account) {
+      const message = flwError(r.data)
+      await admin.from('store_theme_purchases').update({ payment_status: 'failed', payment_error: message, updated_at: now() }).eq('id', rowId)
+      return json({ ok: false, message: `Payment could not start: ${message}` }, 502)
+    }
+    await admin.from('store_theme_purchases').update({
+      payment_account: va,
+      payment_expires_at: account.expires_at ?? new Date(Date.now() + ACCOUNT_MINUTES * 60 * 1000).toISOString(),
+      updated_at: now(),
+    }).eq('id', rowId)
+    return json({ ok: true, reference, amount: BLACK_THEME_PRICE, account })
+  } catch (e) {
+    await admin.from('store_theme_purchases').update({ payment_status: 'failed', payment_error: (e as Error).message, updated_at: now() }).eq('id', rowId)
+    return json({ ok: false, message: (e as Error).message }, 502)
+  }
+}
+
+async function themeStatus(req: Request) {
+  const userId = await callerId(req)
+  if (!userId) return json({ ok: false, message: 'Please sign in again.' }, 401)
+  let body: Record<string, unknown> = {}
+  try { body = await req.json() } catch { /* empty */ }
+  const reference = String(body.reference ?? '')
+  const { data: row } = await admin.from('store_theme_purchases').select('*').eq('payment_reference', reference).maybeSingle()
+  if (!row || row.user_id !== userId) return json({ ok: false, message: 'Payment not found.' }, 404)
+
+  if (row.payment_status === 'pending' || row.payment_status === 'failed') {
+    const charge = row.provider_charge_id
+      ? await chargeById(row.provider_charge_id)
+      : (await chargesByReference(row.payment_reference)).find(succeeded) ?? null
+    if (charge && succeeded(charge)) {
+      const paid = Number(charge.amount ?? 0)
+      const currency = String(charge.currency ?? 'NGN').toUpperCase()
+      if (currency !== 'NGN' || paid + 0.5 < Number(row.amount)) {
+        await admin.from('store_theme_purchases').update({
+          payment_status: 'review', provider_charge_id: String(charge.id ?? ''),
+          paid_amount: paid, raw_confirm: charge,
+          payment_error: `Paid ${paid} ${currency}, theme costs ${row.amount} NGN`, updated_at: now(),
+        }).eq('id', row.id)
+      } else {
+        const { data: claimed } = await admin.from('store_theme_purchases').update({
+          payment_status: 'paid', paid_amount: paid, paid_at: now(),
+          provider_charge_id: String(charge.id ?? ''), raw_confirm: charge,
+          payment_error: null, updated_at: now(),
+        }).eq('id', row.id).in('payment_status', ['pending', 'failed']).select('id').maybeSingle()
+        if (claimed) {
+          const theme = themeIdColors(row.theme_id)
+          const { error } = await admin.from('stores').update({
+            theme: row.theme_id, primary_color: theme.primary, secondary_color: theme.secondary,
+          }).eq('id', row.store_id).eq('owner_id', userId)
+          if (error) {
+            console.error('[flutterwave] paid theme could not be applied', row.payment_reference, error.message)
+            await admin.from('store_theme_purchases').update({ payment_error: 'Payment received; theme application needs support review.', updated_at: now() }).eq('id', row.id)
+          }
+        }
+      }
+    }
+  }
+
+  const { data: latest } = await admin.from('store_theme_purchases').select('payment_status, payment_expires_at').eq('id', row.id).single()
+  const expired = latest?.payment_status === 'pending' && latest.payment_expires_at && Date.parse(latest.payment_expires_at) < Date.now()
+  return json({
+    ok: true, reference,
+    status: latest?.payment_status === 'paid' ? 'paid' : latest?.payment_status === 'review' ? 'review' : expired ? 'expired' : latest?.payment_status,
+    paid: latest?.payment_status === 'paid',
+  })
+}
+
+function themeIdColors(themeId: string): { primary: string; secondary: string } {
+  if (themeId === 'black') return { primary: '#D4AF37', secondary: '#262626' }
+  return { primary: '#F97316', secondary: '#FED7AA' }
+}
+
 async function domainStart(req: Request) {
   const userId = await callerId(req)
   if (!userId) return json({ ok: false, message: 'Please sign in again.' }, 401)
@@ -1089,7 +1222,7 @@ Deno.serve(async (req) => {
     if (action === 'remove-card') return await removeCard(req)
     if (action === 'set-default-card') return await setDefaultCard(req)
     if (action === 'status') return await status(req)
-    if (action === 'domain-start') return await domainStart(req)
+    if (action === 'theme-start') return await themeStart(req)\n    if (action === 'theme-status') return await themeStatus(req)\n    if (action === 'domain-start') return await domainStart(req)
     if (action === 'domain-status') return await domainStatus(req)
     if (action === 'webhook') return await webhook(req)
     return json({ error: 'Unknown action' }, 400)
