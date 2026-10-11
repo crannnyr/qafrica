@@ -162,7 +162,7 @@ export default function CartPage() {
 
   return (
     <div className="min-h-screen bg-[#F6F6F6] text-gray-900 pb-28">
-      <PageHeader title={<>Cart <span className="text-gray-400 font-normal">({items.reduce((n, i) => n + i.quantity, 0)})</span></>} />
+      <PageHeader title={<>Cart <span className="text-gray-400 font-normal">({items.reduce((n, i) => n + i.quantity, 0)})</span></>} back={location.pathname.startsWith('/stores-v2') ? '/stores-v2' : '/stores'} />
 
       <div className="max-w-2xl mx-auto">
         <div className="bg-white px-4 py-2.5 flex items-center gap-2 text-[12px] text-gray-600 border-b border-gray-100">
