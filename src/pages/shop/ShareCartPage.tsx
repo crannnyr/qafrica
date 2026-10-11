@@ -44,6 +44,7 @@ export default function ShareCartPage() {
   const [result, setResult] = useState<{ code: string; amount: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [posted, setPosted] = useState(false);
+  const helpPayEligible = items.length > 0 && items.every((item) => item.attribution === 'marketplace');
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,7 +101,7 @@ export default function ShareCartPage() {
               <Share2 className="w-4 h-4" /> More options
             </button>
           </div>
-          {isAuthenticated ? (
+          {isAuthenticated && helpPayEligible ? (
             <button
               type="button"
               onClick={async () => {
@@ -113,13 +114,15 @@ export default function ShareCartPage() {
             >
               <HandHeart className="w-4 h-4" /> {posted ? 'Posted on Help Pay' : 'Also post on Help Pay'}
             </button>
+          ) : isAuthenticated ? (
+            <p className="mt-3 text-[12px] text-gray-500">Help Pay listings are only available for carts made entirely of marketplace products. You can still share this private payment link.</p>
           ) : (
-            <p className="mt-3 text-[12px] text-gray-500"><Link to={`/customer/login?return=${encodeURIComponent('/customer/links')}`} className="underline">Sign in</Link> to also post your cart on Help Pay, where anyone can clear it.</p>
+            <p className="mt-3 text-[12px] text-gray-500"><Link to={`/customer/login?return=${encodeURIComponent('/customer/links')}`} className="underline">Sign in</Link> to post an eligible marketplace cart on Help Pay, where anyone can contribute.</p>
           )}
           {error && <p className="mt-2 text-[12px] text-[#C4320A]">{error}</p>}
           <ul className="mt-6 space-y-2 text-[12px] text-gray-600">
             <li className="flex gap-2"><ShieldCheck className="w-4 h-4 text-[#1A7F37] shrink-0" aria-hidden />They only see your first name, city, the items and your note. Never your address or phone.</li>
-            <li className="flex gap-2"><ShieldCheck className="w-4 h-4 text-[#1A7F37] shrink-0" aria-hidden />The link works for 7 days and stops once someone pays.</li>
+            <li className="flex gap-2"><ShieldCheck className="w-4 h-4 text-[#1A7F37] shrink-0" aria-hidden />The link works for 30 days. Marketplace carts can receive multiple contributions until fully funded.</li>
             <li className="flex gap-2"><ShieldCheck className="w-4 h-4 text-[#1A7F37] shrink-0" aria-hidden />Prices are re-checked when they pay, so the total can change if a seller updates a price.</li>
           </ul>
           <p className="mt-5 text-[12px] text-gray-500">Keep the items in your cart. They'll be removed automatically once the order is paid.</p>
