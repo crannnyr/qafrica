@@ -150,15 +150,14 @@ export default function POSPage() {
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Point of Sale</h1>
           <p className="mt-1 text-sm text-muted-foreground">Find products quickly, build a basket, and check out in store.</p>
         </div>
-        <div className="flex items-center gap-2 rounded-xl border bg-background px-4 py-3 text-sm">
-          <ShoppingCart className="h-5 w-5 text-primary" />
-          <span><strong>{cartQuantity}</strong> item{cartQuantity === 1 ? '' : 's'} in basket</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-3 text-sm sm:px-4">
+            <ShoppingCart className="h-5 w-5 text-primary" />
+            <span><strong>{cartQuantity}</strong> item{cartQuantity === 1 ? '' : 's'} in basket</span>
+          </div>
+          <Button variant="outline" className="px-3" onClick={() => navigate('/dashboard/pos/history')}><History className="mr-2 h-4 w-4" />Sales history</Button>
         </div>
       </header>
-
-      <div className="flex justify-end">
-        <Button variant="outline" onClick={() => navigate('/dashboard/pos/history')}><History className="mr-2 h-4 w-4" />View sales history</Button>
-      </div>
 
       <div className="grid items-start gap-5">
         <section className="min-w-0 rounded-2xl border bg-card shadow-sm">
