@@ -96,6 +96,7 @@ export type SessionStatus = {
   amount: number;
   return_slug: string | null;
   orders: { order_number: string; total: number }[];
+  contribution?: { amount: number; amount_raised: number; target_amount: number; complete: boolean };
 };
 
 export async function confirmCheckout(reference: string): Promise<SessionStatus | null> {
