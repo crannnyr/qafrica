@@ -357,3 +357,30 @@ BEGIN
   RETURN jsonb_build_object('code',v_code,'amount',v_q->'amount','expires_at',now()+interval '30 days');
 END;
 $$;
+
+
+-- Lock down internal payment finalization/status RPCs. Payment status is exposed
+-- to the browser through checkout-confirm, which verifies with the payment gateway.
+REVOKE ALL ON FUNCTION public.create_shared_cart(jsonb,jsonb,jsonb,text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.create_shared_cart(jsonb,jsonb,jsonb,text) TO anon, authenticated, service_role;
+
+REVOKE ALL ON FUNCTION public.get_shared_cart(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_shared_cart(text) TO anon, authenticated, service_role;
+
+REVOKE ALL ON FUNCTION public.set_help_pay_public(text,boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.set_help_pay_public(text,boolean) TO authenticated, service_role;
+
+REVOKE ALL ON FUNCTION public.checkout_session_status(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.checkout_session_status(text) TO service_role;
+
+REVOKE ALL ON FUNCTION public.finalize_checkout_session_base(text,numeric,numeric,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.finalize_checkout_session_base(text,numeric,numeric,text) TO service_role;
+
+REVOKE ALL ON FUNCTION public.finalize_checkout_session(text,numeric,numeric,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.finalize_checkout_session(text,numeric,numeric,text) TO service_role;
+
+REVOKE ALL ON FUNCTION public.shared_cart_is_marketplace(jsonb,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.shared_cart_is_marketplace(jsonb,text) TO service_role;
+
+REVOKE ALL ON FUNCTION public.prepare_shared_cart_payment(text,text,numeric,text,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.prepare_shared_cart_payment(text,text,numeric,text,text) TO service_role;
