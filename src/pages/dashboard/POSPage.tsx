@@ -9,7 +9,6 @@ import { toast } from 'sonner';
 type Product = { id: string; name: string; selling_price: number; stock_quantity: number; is_active: boolean; is_out_of_stock: boolean; images: string[] | null };
 type Line = { product: Product; quantity: number; price: number };
 type Receipt = { number: string | number; customer: string; cart: Line[]; subtotal: number; cut: number; total: number; date: string };
-type SaleHistory = { id: string; order_number: string; customer_name: string | null; total: number; payment_method: string | null; created_at: string };
 const money = (value: number) => `₦${value.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 
 export default function POSPage() {
