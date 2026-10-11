@@ -157,7 +157,7 @@ function ThemePreview({ themeId, isSelected, onClick }: { themeId: string; isSel
       {theme.is_premium && (
         <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-amber-500 text-white text-xs px-2 py-0.5 rounded-full flex items-center gap-1 shadow-md">
           <Crown className="w-3 h-3" />
-          PRO
+          {theme.id === 'black' ? '₦5,000 ADD-ON' : 'PRO'}
         </div>
       )}
 
@@ -254,7 +254,7 @@ export default function StoreTemplatesPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Themes</h1>
         <p className="text-gray-500 dark:text-gray-400 mt-1">
-          Pick how your store looks to shoppers, then its colours. Premium themes add a rotating hero and curated collections.
+          Choose a storefront design and preview its colours. The new Black fashion theme is a one-time ₦5,000 add-on on top of your existing plan.
         </p>
       </div>
 
@@ -302,8 +302,7 @@ export default function StoreTemplatesPage() {
         <div>
           <p className="font-medium text-blue-900">How Themes Work</p>
           <p className="text-sm text-blue-700 mt-1">
-            Click on any template below to preview and select a theme. This will change the appearance 
-            of your entire store. Your niches and products will not be affected.
+            Click a template to preview themes. Applying a theme changes your storefront styling only; your niches and products stay intact. The Black theme is a paid add-on priced at ₦5,000.
           </p>
         </div>
       </div>
