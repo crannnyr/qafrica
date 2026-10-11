@@ -492,7 +492,7 @@ export default function StoreTemplatesPage() {
                               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                               Applying...
                             </>
-                          ) : selectedTheme === currentStore?.theme ? (
+                          ) : selectedTheme === currentStore?.theme && (selectedTheme !== 'black' || hasBlackTheme) ? (
                             'Already Active'
                           ) : (
                             <>
