@@ -92,9 +92,11 @@ export default function Sidebar({
           to={homePath}
           className={`flex items-center gap-3 ${!isSidebarOpen ? 'lg:hidden' : ''}`}
         >
-          <div className="w-9 h-9 bg-orange-500 rounded-lg flex items-center justify-center flex-shrink-0">
-            <Store className="w-5 h-5 text-white" />
-          </div>
+          <img
+            src="/qafrica-bag-logo.svg"
+            alt="QAFRICA"
+            className="w-9 h-9 rounded-xl object-cover flex-shrink-0"
+          />
           <div className="overflow-hidden">
             <span className="text-base font-bold text-gray-900 dark:text-white leading-none">
               QAFRICA
@@ -108,9 +110,11 @@ export default function Sidebar({
         {/* Collapsed logo */}
         {!isSidebarOpen && (
           <div className="hidden lg:flex items-center justify-center">
-            <div className="w-9 h-9 bg-orange-500 rounded-lg flex items-center justify-center">
-              <Store className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src="/qafrica-bag-logo.svg"
+              alt="QAFRICA"
+              className="w-9 h-9 rounded-xl object-cover"
+            />
           </div>
         )}
 
