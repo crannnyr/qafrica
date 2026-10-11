@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Package, ShoppingCart, Wallet,
   MapPin, ChartBar as BarChart3, Settings, BookOpen,
   MessageSquare, Tag, Upload, Import, Palette, Layers, Store,
-  Globe, Calculator, Truck, ShoppingBag, Plus, Store as StoreIcon,
+  Globe, Calculator, Truck, ShoppingBag, Plus, Store as StoreIcon, Megaphone,
 } from 'lucide-react';
 import type { PermissionKey } from '@/lib/staffPermissions';
 
@@ -70,6 +70,7 @@ export const sidebarItems: NavItem[] = [
       { icon: Layers, label: 'Niches', path: '/dashboard/niches' },
     ],
   },
+  { icon: Megaphone, label: 'Ads', path: '/dashboard/ads' },
   { icon: Store, label: 'Marketplace', path: '/dashboard/marketplace' },
   {
     icon: StoreIcon,
@@ -121,6 +122,7 @@ export const jumiaSidebarItems: NavItem[] = [
 export const PATH_PERMISSIONS: Record<string, PermissionKey | null> = {
   '/dashboard': null,
   '/dashboard/how-to-use': null,
+  '/dashboard/ads': 'can_manage_settings',
 
   '/dashboard/products': 'can_view_products',
   '/dashboard/products/bulk-import': 'can_manage_products',
