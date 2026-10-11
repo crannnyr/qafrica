@@ -77,6 +77,7 @@ DECLARE
   raised numeric(12,2);
   reserved numeric(12,2);
   remaining numeric(12,2);
+  remaining_total numeric(12,2);
   chosen numeric(12,2);
   marketplace boolean;
 BEGIN
@@ -103,7 +104,8 @@ BEGIN
   FROM public.shared_cart_contributions WHERE shared_cart_id=sc.id AND status='paid';
   SELECT COALESCE(sum(amount),0) INTO reserved
   FROM public.shared_cart_contributions WHERE shared_cart_id=sc.id AND status='pending';
-  remaining := greatest(round(target - raised - reserved, 2), 0);
+  remaining_total := greatest(round(target - raised, 2), 0);
+  remaining := greatest(round(remaining_total - reserved, 2), 0);
 
   IF remaining <= 0 THEN RAISE EXCEPTION 'The remaining balance is already being paid' USING ERRCODE='22023'; END IF;
   chosen := COALESCE(p_requested_amount, remaining);
@@ -114,8 +116,8 @@ BEGIN
   IF NOT marketplace AND (abs(chosen - target) > 0.01 OR raised > 0) THEN
     RAISE EXCEPTION 'This cart requires one full payment' USING ERRCODE='22023';
   END IF;
-  IF marketplace AND chosen < least(1000::numeric, remaining) THEN
-    RAISE EXCEPTION 'The minimum contribution is ₦%', least(1000::numeric, remaining) USING ERRCODE='22023';
+  IF marketplace AND chosen < least(1000::numeric, remaining_total) THEN
+    RAISE EXCEPTION 'The minimum contribution is ₦%', least(1000::numeric, remaining_total) USING ERRCODE='22023';
   END IF;
 
   UPDATE public.shared_carts SET amount_snapshot=target WHERE id=sc.id;
