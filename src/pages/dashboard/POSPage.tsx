@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Minus, Plus, Printer, Search, ShoppingBag, ShoppingCart, Trash2, X } from 'lucide-react';
+import { Check, Minus, Plus, Printer, Search, ShoppingBag, ShoppingCart, Trash2, X, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services';
 import { useStoreStore } from '@/stores';
@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 type Product = { id: string; name: string; selling_price: number; stock_quantity: number; is_active: boolean; is_out_of_stock: boolean; images: string[] | null };
 type Line = { product: Product; quantity: number; price: number };
 type Receipt = { number: string | number; customer: string; cart: Line[]; subtotal: number; cut: number; total: number; date: string };
+type SaleHistory = { id: string; order_number: string; customer_name: string | null; total: number; payment_method: string | null; created_at: string };
 const money = (value: number) => `₦${value.toLocaleString('en-NG', { maximumFractionDigits: 2 })}`;
 
 export default function POSPage() {
@@ -24,6 +25,8 @@ export default function POSPage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const [history, setHistory] = useState<SaleHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const loadProducts = async () => {
     if (!currentStore?.id) { setProducts([]); setLoading(false); return; }
@@ -40,7 +43,16 @@ export default function POSPage() {
     setLoading(false);
   };
 
-  useEffect(() => { void loadProducts(); }, [currentStore?.id]);
+  const loadHistory = async () => {
+    if (!currentStore?.id) { setHistory([]); return; }
+    setHistoryLoading(true);
+    const { data, error } = await supabase.from('orders').select('id,order_number,customer_name,total,payment_method,created_at').eq('store_id', currentStore.id).eq('is_manual_sale', true).order('created_at', { ascending: false }).limit(50);
+    if (error) toast.error('Could not load POS sale history');
+    else setHistory((data || []) as SaleHistory[]);
+    setHistoryLoading(false);
+  };
+
+  useEffect(() => { void loadProducts(); void loadHistory(); }, [currentStore?.id]);
 
   const visible = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -109,7 +121,7 @@ export default function POSPage() {
       setPhone('');
       setDiscount('0');
       toast.success('Sale recorded');
-      await loadProducts();
+      await Promise.all([loadProducts(), loadHistory()]);
     } catch (error: unknown) {
       const message = error && typeof error === 'object' && 'message' in error
         ? String((error as { message: unknown }).message)
@@ -153,6 +165,14 @@ export default function POSPage() {
           <span><strong>{cartQuantity}</strong> item{cartQuantity === 1 ? '' : 's'} in basket</span>
         </div>
       </header>
+
+      <section className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4 sm:p-5">
+          <div className="flex items-center gap-3"><History className="h-5 w-5 text-primary" /><div><h2 className="text-lg font-semibold">Recent POS sales</h2><p className="text-sm text-muted-foreground">Latest in-store sales. Full order records remain in Total Orders.</p></div></div>
+          <Button variant="outline" size="sm" onClick={() => void loadHistory()} disabled={historyLoading}>{historyLoading ? 'Loading…' : 'Refresh history'}</Button>
+        </div>
+        {historyLoading && history.length === 0 ? <p className="p-5 text-sm text-muted-foreground">Loading sale history…</p> : history.length === 0 ? <p className="p-5 text-sm text-muted-foreground">No POS sales recorded yet. Completed sales will appear here.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[620px] text-sm"><thead className="bg-muted/50 text-left text-muted-foreground"><tr><th className="px-4 py-3 font-medium">Receipt / Order</th><th className="px-4 py-3 font-medium">Customer</th><th className="px-4 py-3 font-medium">Payment</th><th className="px-4 py-3 font-medium">Date</th><th className="px-4 py-3 text-right font-medium">Total</th></tr></thead><tbody>{history.map((sale) => <tr key={sale.id} className="border-t"><td className="px-4 py-3 font-medium">{sale.order_number || sale.id.slice(0, 8)}</td><td className="px-4 py-3">{sale.customer_name || 'Walk-in customer'}</td><td className="px-4 py-3 capitalize">{sale.payment_method || '—'}</td><td className="px-4 py-3">{new Date(sale.created_at).toLocaleString()}</td><td className="px-4 py-3 text-right font-semibold">{money(Number(sale.total) || 0)}</td></tr>)}</tbody></table></div>}
+      </section>
 
       <div className="grid items-start gap-5">
         <section className="min-w-0 rounded-2xl border bg-card shadow-sm">
