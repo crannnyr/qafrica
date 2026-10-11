@@ -41,11 +41,6 @@ export const sidebarItems: NavItem[] = [
     ],
   },
   {
-    icon: StoreIcon,
-    label: 'Point of Sale',
-    path: '/dashboard/pos',
-  },
-  {
     icon: ShoppingCart,
     label: 'Sales',
     path: '/dashboard/orders',
@@ -76,6 +71,11 @@ export const sidebarItems: NavItem[] = [
     ],
   },
   { icon: Store, label: 'Marketplace', path: '/dashboard/marketplace' },
+  {
+    icon: StoreIcon,
+    label: 'Point of Sale',
+    path: '/dashboard/pos',
+  },
   { icon: Palette, label: 'Themes', path: '/dashboard/themes' },
   {
     icon: ShoppingBag,
