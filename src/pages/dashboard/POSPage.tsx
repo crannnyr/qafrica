@@ -201,7 +201,7 @@ export default function POSPage() {
         {cartOpen && <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setCartOpen(false); }}><aside className="flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-2xl border bg-card shadow-2xl sm:max-w-xl sm:rounded-2xl">
           <div className="flex items-center justify-between border-b p-4 sm:p-5">
             <div><h2 className="text-lg font-semibold">Current sale</h2><p className="mt-1 text-sm text-muted-foreground">{cart.length} product type{cart.length === 1 ? '' : 's'} · {cartQuantity} item{cartQuantity === 1 ? '' : 's'}</p></div>
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary"><ShoppingCart className="h-5 w-5" /></span>
+            <button type="button" aria-label="Close current sale" onClick={() => setCartOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-muted"><X className="h-5 w-5" /></button>
           </div>
           <div className="max-h-[360px] space-y-3 overflow-y-auto p-4 sm:p-5">
             {cart.length === 0 ? <div className="flex min-h-36 flex-col items-center justify-center rounded-xl border border-dashed text-center"><ShoppingCart className="h-8 w-8 text-muted-foreground/40" /><p className="mt-2 text-sm font-medium">Your basket is empty</p><p className="mt-1 text-xs text-muted-foreground">Add products from the list to get started.</p></div>
