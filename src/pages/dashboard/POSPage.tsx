@@ -111,7 +111,10 @@ export default function POSPage() {
       toast.success('Sale recorded');
       await loadProducts();
     } catch (error: unknown) {
-      toast.error(error instanceof Error ? error.message : 'Could not record sale');
+      const message = error && typeof error === 'object' && 'message' in error
+        ? String((error as { message: unknown }).message)
+        : error instanceof Error ? error.message : 'Could not record sale';
+      toast.error(message);
     } finally { setBusy(false); }
   };
 
