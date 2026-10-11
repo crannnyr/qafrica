@@ -128,25 +128,40 @@ export default function SubscriptionPage() {
     setIsLoading(true);
     try {
       // Load subscription
-      const { data: subData, error: subError } = await supabase
+      // Prefer a live subscription. If none exists, retain the most recently
+      // expired subscription for the seven-day grace window so the owner sees
+      // the expiration banner and can renew without losing context.
+      const { data: activeSub, error: activeSubError } = await supabase
         .from('subscriptions')
         .select('*')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (subError && subError.code !== 'PGRST116') {
-        console.error('Error loading subscription:', subError);
+      if (activeSubError) console.error('Error loading active subscription:', activeSubError);
+      let subData = activeSub;
+      if (!subData) {
+        const graceCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: expiredSub, error: expiredSubError } = await supabase
+          .from('subscriptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('is_active', false)
+          .lt('expires_at', new Date().toISOString())
+          .gte('expires_at', graceCutoff)
+          .order('expires_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (expiredSubError) console.error('Error loading expired subscription:', expiredSubError);
+        subData = expiredSub;
       }
 
       if (subData) {
         setSubscription(subData);
         setAutoRenewEnabled(subData.auto_renew || false);
-        if (subData.auto_renew_method) {
-          setAutoRenewMethod(subData.auto_renew_method);
-        }
+        if (subData.auto_renew_method) setAutoRenewMethod(subData.auto_renew_method);
       }
 
       // Load saved cards
@@ -687,7 +702,7 @@ export default function SubscriptionPage() {
             </p>
             <p className="text-sm">
               {isExpired 
-                ? 'Renew now to restore access to your store and products.' 
+                ? 'Your store remains available during the 7-day grace period. Renew now to keep it online.'
                 : 'Renew now to avoid interruption to your store.'}
             </p>
           </div>

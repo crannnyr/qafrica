@@ -25,6 +25,8 @@ export const storeService = {
       .from('stores')
       .select('*')
       .eq('slug', slug)
+      .eq('is_active', true)
+      .eq('is_blocked', false)
       .single();
     return { data, error };
   },

@@ -1,46 +1,41 @@
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertTriangle, Clock, ArrowRight, Sparkles } from 'lucide-react';
+import { Clock, ArrowRight, Sparkles, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { useAuthStore } from '@/stores';
 import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus';
 
 export default function SubscriptionBanner() {
-  const { isExpired, isExpiringSoon, daysRemaining, loading } = useSubscriptionStatus();
+  const { isExpired, isExpiringSoon, daysRemaining, loading, subscription } = useSubscriptionStatus();
+  const [dismissed, setDismissed] = useState(false);
+  const { user } = useAuthStore();
+  const noticeType = 'expiring';
+  const storageKey = user?.id ? `qafrica-subscription-banner:${user.id}:${new Date().toISOString().slice(0, 10)}` : null;
 
-  if (loading) return null;
+  useEffect(() => {
+    setDismissed(false);
+    if (!storageKey) return;
+    try {
+      const stored = localStorage.getItem(storageKey);
+      setDismissed(stored === noticeType);
+    } catch {
+      setDismissed(false);
+    }
+  }, [storageKey, noticeType]);
 
-  // Don't show if subscription is active and not expiring soon
-  if (!isExpired && !isExpiringSoon) return null;
+  const dismissForToday = () => {
+    if (storageKey) {
+      try { localStorage.setItem(storageKey, noticeType); } catch { /* storage may be disabled */ }
+    }
+    setDismissed(true);
+  };
 
-  if (isExpired) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-red-50 border-b border-red-200 px-4 py-3"
-      >
-        <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-red-900">Your plan has expired</h3>
-              <p className="text-sm text-red-700">
-                Renew now to keep your store active and avoid losing access to your products.
-              </p>
-            </div>
-          </div>
-          <Link to="/dashboard/subscription">
-            <Button className="bg-red-600 hover:bg-red-700 text-white">
-              Renew Subscription
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Link>
-        </div>
-      </motion.div>
-    );
-  }
+  if (loading || !user?.id || !subscription || dismissed) return null;
+
+  // This banner is a reminder only: show it once per day during the final
+  // three days before expiry. Expired plans are handled on the Subscription page.
+  if (isExpired || !isExpiringSoon || daysRemaining > 3) return null;
 
   // Expiring soon (3 days or less)
   return (
@@ -56,20 +51,23 @@ export default function SubscriptionBanner() {
           </div>
           <div>
             <h3 className="font-semibold text-orange-900">
-              Your {daysRemaining === 1 ? 'free plan expires' : `free plan expires in ${daysRemaining} days`}
+              Your plan expires {daysRemaining === 1 ? 'tomorrow' : `in ${daysRemaining} days`}
             </h3>
             <p className="text-sm text-orange-700">
-              Upgrade now to avoid interruption and keep selling.
+              Renew within the next 3 days to keep your store active.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <Link to="/dashboard/subscription">
             <Button className="bg-orange-500 hover:bg-orange-600 text-white">
               <Sparkles className="w-4 h-4 mr-2" />
               Upgrade Now
             </Button>
           </Link>
+          <Button aria-label="Dismiss subscription notice for today" variant="ghost" size="icon" onClick={dismissForToday} className="text-orange-700 hover:bg-orange-100">
+            <X className="w-4 h-4" />
+          </Button>
         </div>
       </div>
     </motion.div>
