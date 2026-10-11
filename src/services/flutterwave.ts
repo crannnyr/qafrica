@@ -118,3 +118,13 @@ export function startDomainPayment(req: DomainPaymentRequest) {
 export function checkDomainPayment(reference: string) {
   return call<{ ok: true; status: PaymentStatus; paid: boolean; request_status: string }>('domain-status', { reference });
 }
+
+/** Start the one-time Black storefront theme add-on. The server fixes the price at ₦5,000. */
+export function startThemePayment(req: { store_id: string; theme_id: 'black' }) {
+  return call<StartResult>('theme-start', req) as Promise<StartResult>;
+}
+
+/** Ask the server to verify the transfer and apply the purchased theme. */
+export function checkThemePayment(reference: string) {
+  return call<{ ok: true; status: PaymentStatus; paid: boolean }>('theme-status', { reference });
+}
