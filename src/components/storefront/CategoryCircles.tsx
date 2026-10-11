@@ -25,8 +25,8 @@ export default function CategoryCircles({
   const items: CategoryEntry[] = [{ name: 'All', count: 0 }, ...categories];
 
   return (
-    <nav aria-label="Shop by category" className="-mx-4 px-4 sm:mx-0 sm:px-0">
-      <ul className="flex gap-4 overflow-x-auto pb-2 snap-x scrollbar-hide">
+    <nav aria-label="Shop by category" className="w-full min-w-0 max-w-full overflow-hidden">
+      <ul className="flex w-full min-w-0 max-w-full gap-4 overflow-x-auto overscroll-x-contain touch-pan-x pb-2 snap-x snap-mandatory scrollbar-hide">
         {items.map((c) => {
           const active = selected === c.name;
           return (
