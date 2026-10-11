@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   ShoppingCart, Package, ArrowUpRight,
   DollarSign, Eye, Plus, Store, TrendingUp,
-  ExternalLink, Copy, Link2, Globe, Check,
+  Copy, Link2, Globe, Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
