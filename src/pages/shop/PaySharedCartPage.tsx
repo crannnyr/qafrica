@@ -78,7 +78,7 @@ export default function PaySharedCartPage() {
     <div className="min-h-screen bg-[#F6F6F6] text-gray-900 pb-10">
       <header className="bg-white border-b border-gray-100" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
         <div className="max-w-md mx-auto h-12 px-4 flex items-center gap-2">
-          <img src="/qafrica-bag-logo.svg" alt="" className="w-6 h-6" />
+          <img src="/qafrica-bag-logo.svg" alt="" className="w-6 h-6 rounded-md object-cover" />
           <span className="text-[14px] font-bold">QAFRICA</span>
           <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-gray-500"><Lock className="w-3.5 h-3.5" aria-hidden />Secure</span>
         </div>
