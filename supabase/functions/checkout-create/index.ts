@@ -136,7 +136,7 @@ Deno.serve(async (req) => {
       p_payer_email: payer?.email ?? '',
     });
     if (prepareError || !prepared) {
-      return json(409, { error: prepareError?.message?.replace(/^.*?ERROR:\\s*/, '') ?? 'We could not prepare this payment. Please try again.' });
+      return json(409, { error: prepareError?.message?.replace(/^.*?ERROR:\s*/, '') ?? 'We could not prepare this payment. Please try again.' });
     }
     paymentAmount = Number(prepared.amount);
     if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
