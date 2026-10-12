@@ -120,6 +120,99 @@ function generateOrderCode(): string {
   return out
 }
 
+
+type PickupPackageSize = 'small' | 'medium' | 'large'
+
+function normalizePickupState(value: string) {
+  return value.trim().toLowerCase().replace(/\s+state$/, '').replace(/\s+/g, ' ')
+}
+
+async function calculatePickupDeliveryQuote(supabase: any, stationId: string, items: any[]) {
+  const { data: settings, error: settingsError } = await supabase
+    .from('import_pickup_delivery_settings')
+    .select('enabled, classification_method')
+    .eq('id', 1)
+    .maybeSingle()
+  if (settingsError) throw new Error('Could not load Jumia pickup pricing settings')
+  if (!settings?.enabled) return { enabled: false, configured: false, fee_ngn: 0, package_size: null, state: null, weight_grams: null, volume_cbm: null }
+
+  const { data: station, error: stationError } = await supabase
+    .from('pickup_stations')
+    .select('id, name, address, state, is_active')
+    .eq('id', stationId)
+    .maybeSingle()
+  if (stationError || !station?.is_active) throw new Error('Pickup station is unavailable for pricing')
+
+  const { data: zoneMappings, error: zoneMappingError } = await supabase
+    .from('import_pickup_destination_zones')
+    .select('destination_state, destination_zone')
+    .eq('is_active', true)
+  if (zoneMappingError) throw new Error('Could not load Jumia destination-zone mapping')
+  const stationSearchText = normalizePickupState(`${station.name ?? ''} ${station.address ?? ''}`)
+  const zoneMapping = (zoneMappings ?? [])
+    .filter((row: any) => normalizePickupState(String(row.destination_state ?? '')).length > 0)
+    .sort((a: any, b: any) => normalizePickupState(String(b.destination_state)).length - normalizePickupState(String(a.destination_state)).length)
+    .find((row: any) => stationSearchText.includes(normalizePickupState(String(row.destination_state ?? ''))))
+  if (!zoneMapping?.destination_zone) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, destination_zone: null, weight_grams: null, volume_cbm: null, message: `No Jumia locality match was found in pickup station name/address for ${station.name ?? station.state}. Choose a matching station or update its address.` }
+  }
+
+  const { data: rules, error: rulesError } = await supabase
+    .from('import_pickup_package_rules')
+    .select('package_size, max_weight_grams, max_volume_cbm, is_configured')
+  if (rulesError) throw new Error('Could not load package classification rules')
+  const ruleMap = new Map<string, any>((rules ?? []).map((r: any) => [r.package_size, r] as [string, any]))
+  const sizes: PickupPackageSize[] = ['small', 'medium', 'large']
+  if (sizes.some(size => !ruleMap.get(size)?.is_configured)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, weight_grams: null, volume_cbm: null, message: 'Jumia package-size thresholds have not been configured.' }
+  }
+
+  const normalizedItems = (items ?? []).map((item: any) => ({
+    quantity: Number(item.quantity ?? 0),
+    weight: item.weight_grams == null ? null : Number(item.weight_grams),
+    volume: item.volume_cbm == null ? null : Number(item.volume_cbm),
+  }))
+  if (!normalizedItems.length || normalizedItems.some(i => !Number.isFinite(i.quantity) || i.quantity <= 0)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, weight_grams: null, volume_cbm: null, message: 'The order quantities are incomplete.' }
+  }
+  const method = settings.classification_method ?? 'weight_or_volume'
+  if (method !== 'volume' && normalizedItems.some(i => i.weight == null || !Number.isFinite(i.weight) || i.weight < 0)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, weight_grams: null, volume_cbm: null, message: 'Product weights must be configured before pickup delivery can be priced.' }
+  }
+  if (method !== 'weight' && normalizedItems.some(i => i.volume == null || !Number.isFinite(i.volume) || i.volume < 0)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, weight_grams: null, volume_cbm: null, message: 'Product dimensions/volume must be configured before pickup delivery can be priced.' }
+  }
+
+  const totalWeight = normalizedItems.reduce((sum, i) => sum + (i.weight ?? 0) * i.quantity, 0)
+  const totalVolume = normalizedItems.reduce((sum, i) => sum + (i.volume ?? 0) * i.quantity, 0)
+  const matchesRule = (rule: any) => {
+    const weightMatches = method === 'volume' || rule.max_weight_grams == null || totalWeight <= Number(rule.max_weight_grams)
+    const volumeMatches = method === 'weight' || rule.max_volume_cbm == null || totalVolume <= Number(rule.max_volume_cbm)
+    return weightMatches && volumeMatches
+  }
+  let packageSize: PickupPackageSize | null = null
+  for (const size of ['small', 'medium'] as PickupPackageSize[]) {
+    const rule: any = ruleMap.get(size)
+    if (matchesRule(rule)) { packageSize = size; break }
+  }
+  if (!packageSize) packageSize = 'large'
+  if (method === 'weight' && ruleMap.get('large')?.max_weight_grams != null && totalWeight > Number(ruleMap.get('large').max_weight_grams)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, destination_zone: zoneMapping.destination_zone, weight_grams: round2(totalWeight), volume_cbm: null, message: 'This order exceeds the 35,000 g Jumia package limit and requires a separate delivery quote.' }
+  }
+
+  const { data: stateRates, error: rateError } = await supabase
+    .from('import_pickup_delivery_rates')
+    .select('destination_state, fee_ngn')
+    .eq('package_size', packageSize)
+    .eq('is_active', true)
+  if (rateError) throw new Error('Could not load the Jumia pickup delivery rate')
+  const rate = (stateRates ?? []).find((row: any) => String(row.destination_state ?? '').trim().toLowerCase() === String(zoneMapping.destination_zone).trim().toLowerCase())
+  if (!rate || !Number.isFinite(Number(rate.fee_ngn)) || Number(rate.fee_ngn) < 0) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: packageSize, state: station.state, destination_zone: zoneMapping.destination_zone, weight_grams: totalWeight, volume_cbm: totalVolume, message: `No verified ${packageSize} package rate is configured for ${zoneMapping.destination_zone} (destination: ${station.state}).` }
+  }
+  return { enabled: true, configured: true, fee_ngn: Number(rate.fee_ngn), package_size: packageSize, state: station.state, destination_zone: zoneMapping.destination_zone, origin_zone: 'Zone 1', weight_grams: round2(totalWeight), volume_cbm: round2(totalVolume) }
+}
+
 const ORDER_STATUS_SEQUENCE = ['pending', 'confirmed', 'ordered', 'ordered_and_closed', 'shipped_and_closed', 'clearance_and_closed', 'received']
 
 async function advanceOrderStatus(supabase: any, orderId: string, targetStatus: string) {
@@ -888,6 +981,174 @@ serve(async (req: Request) => {
       })
     }
 
+
+
+    if (req.method === 'POST' && action === 'admin-get-pickup-delivery-pricing') {
+      const { manager_token } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Unauthorized' }, 401)
+      const [settingsRes, rulesRes, ratesRes, zonesRes] = await Promise.all([
+        supabase.from('import_pickup_delivery_settings').select('*').eq('id', 1).maybeSingle(),
+        supabase.from('import_pickup_package_rules').select('*').order('package_size'),
+        supabase.from('import_pickup_delivery_rates').select('*').order('destination_state').order('package_size'),
+        supabase.from('import_pickup_destination_zones').select('*').order('destination_state'),
+      ])
+      if (settingsRes.error || rulesRes.error || ratesRes.error || zonesRes.error) return json({ error: 'Could not load pickup delivery pricing configuration.' }, 500)
+      return json({ settings: settingsRes.data ?? { id: 1, enabled: false, classification_method: 'weight_or_volume' }, rules: rulesRes.data ?? [], rates: ratesRes.data ?? [], destination_zones: zonesRes.data ?? [] })
+    }
+
+    if (req.method === 'POST' && action === 'admin-save-pickup-delivery-pricing') {
+      const body = await req.json().catch(() => ({}))
+      const { manager_token, settings, rules, rates, destination_zones } = body
+      if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!settings || typeof settings.enabled !== 'boolean' || !['weight', 'volume', 'weight_or_volume'].includes(settings.classification_method)) {
+        return json({ error: 'Invalid pickup pricing settings.' }, 400)
+      }
+      if (!Array.isArray(rules) || !Array.isArray(rates) || !Array.isArray(destination_zones)) return json({ error: 'Package rules, destination-zone mappings, and delivery rates are required.' }, 400)
+      const validZones = ['Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7']
+      const seenStates = new Set<string>()
+      for (const mapping of destination_zones) {
+        if (typeof mapping.destination_state !== 'string' || !mapping.destination_state.trim()) return json({ error: 'Each destination-zone mapping needs a state.' }, 400)
+        const stateKey = mapping.destination_state.trim().toLowerCase()
+        if (seenStates.has(stateKey)) return json({ error: `Duplicate destination-zone mapping for ${mapping.destination_state}.` }, 400)
+        seenStates.add(stateKey)
+        if (mapping.is_active !== false && !validZones.includes(mapping.destination_zone)) return json({ error: `Choose a valid Jumia zone for ${mapping.destination_state}.` }, 400)
+      }
+      const expectedSizes = ['small', 'medium', 'large']
+      if (rules.length !== 3 || expectedSizes.some(size => !rules.some((rule: any) => rule.package_size === size))) {
+        return json({ error: 'Exactly one rule for small, medium, and large packages is required.' }, 400)
+      }
+      for (const rule of rules) {
+        for (const key of ['max_weight_grams', 'max_volume_cbm']) {
+          const value = rule[key]
+          if (value != null && (!Number.isFinite(Number(value)) || Number(value) <= 0)) return json({ error: `Invalid ${key} for ${rule.package_size} package.` }, 400)
+        }
+        if (rule.is_configured !== true) return json({ error: 'All three package-size rules must be marked configured before saving.' }, 400)
+        if (settings.classification_method === 'weight' && rule.package_size !== 'large' && rule.max_weight_grams == null) return json({ error: `Weight threshold is required for ${rule.package_size} packages.` }, 400)
+        if (settings.classification_method === 'volume' && rule.package_size !== 'large' && rule.max_volume_cbm == null) return json({ error: `Volume threshold is required for ${rule.package_size} packages.` }, 400)
+        if (settings.classification_method === 'weight_or_volume' && rule.package_size !== 'large' && (rule.max_weight_grams == null || rule.max_volume_cbm == null)) return json({ error: `Both weight and volume thresholds are required for ${rule.package_size} packages.` }, 400)
+      }
+      for (const rate of rates) {
+        if (typeof rate.destination_state !== 'string' || !validZones.includes(rate.destination_state.trim()) || !expectedSizes.includes(rate.package_size) || !Number.isInteger(Number(rate.fee_ngn)) || Number(rate.fee_ngn) < 0) {
+          return json({ error: 'Each rate needs a valid destination zone, package size, and non-negative whole-naira fee.' }, 400)
+        }
+      }
+      if (settings.classification_method !== 'volume') {
+        const small = rules.find((rule: any) => rule.package_size === 'small')
+        const medium = rules.find((rule: any) => rule.package_size === 'medium')
+        if (small?.max_weight_grams != null && medium?.max_weight_grams != null && Number(small.max_weight_grams) >= Number(medium.max_weight_grams)) {
+          return json({ error: 'Small-package maximum weight must be lower than medium-package maximum weight.' }, 400)
+        }
+      }
+      if (settings.classification_method !== 'weight') {
+        const small = rules.find((rule: any) => rule.package_size === 'small')
+        const medium = rules.find((rule: any) => rule.package_size === 'medium')
+        if (small?.max_volume_cbm != null && medium?.max_volume_cbm != null && Number(small.max_volume_cbm) >= Number(medium.max_volume_cbm)) {
+          return json({ error: 'Small-package maximum volume must be lower than medium-package maximum volume.' }, 400)
+        }
+      }
+      if (settings.enabled) {
+        if (destination_zones.length < 1 || destination_zones.some((mapping: any) => mapping.is_active === false || !validZones.includes(mapping.destination_zone))) return json({ error: 'Before enabling pricing, assign an active Jumia zone to every configured city/locality.' }, 400)
+        if (validZones.some(zone => !destination_zones.some((mapping: any) => mapping.is_active !== false && mapping.destination_zone === zone))) return json({ error: 'Every Jumia zone must have at least one active city/locality mapping.' }, 400)
+        if (validZones.some(zone => expectedSizes.some(size => !rates.some((rate: any) => rate.is_active !== false && rate.destination_state === zone && rate.package_size === size)))) {
+          return json({ error: 'Before enabling pickup pricing, every destination zone needs active small, medium, and large rates.' }, 400)
+        }
+      }
+      const { error: settingsError } = await supabase.from('import_pickup_delivery_settings').upsert({
+        id: 1, enabled: false, classification_method: settings.classification_method, updated_at: new Date().toISOString(),
+      })
+      if (settingsError) return json({ error: 'Could not save pickup pricing settings: ' + settingsError.message }, 500)
+      const normalizedRules = rules.map((rule: any) => ({
+        package_size: rule.package_size,
+        max_weight_grams: rule.max_weight_grams == null ? null : Number(rule.max_weight_grams),
+        max_volume_cbm: rule.max_volume_cbm == null ? null : Number(rule.max_volume_cbm),
+        is_configured: true,
+        updated_at: new Date().toISOString(),
+      }))
+      const { error: rulesError } = await supabase.from('import_pickup_package_rules').upsert(normalizedRules, { onConflict: 'package_size' })
+      if (rulesError) return json({ error: 'Settings saved, but package rules failed: ' + rulesError.message }, 500)
+      const normalizedZones = destination_zones.filter((mapping: any) => mapping.is_active !== false).map((mapping: any) => ({
+        destination_state: mapping.destination_state.trim(),
+        destination_zone: mapping.destination_zone,
+        is_active: true,
+        source_note: typeof mapping.source_note === 'string' ? mapping.source_note.trim() : null,
+        updated_at: new Date().toISOString(),
+      }))
+      if (normalizedZones.length) {
+        const { error: zonesError } = await supabase.from('import_pickup_destination_zones').upsert(normalizedZones, { onConflict: 'destination_state' })
+        if (zonesError) return json({ error: 'Package rules saved, but destination-zone mappings failed: ' + zonesError.message }, 500)
+      }
+      const { data: existingZones, error: existingZonesError } = await supabase.from('import_pickup_destination_zones').select('destination_state')
+      if (existingZonesError) return json({ error: 'Mappings saved, but could not reconcile removed mappings.' }, 500)
+      const submittedStates = new Set(normalizedZones.map((mapping: any) => mapping.destination_state.toLowerCase()))
+      const staleStates = (existingZones ?? []).filter((mapping: any) => !submittedStates.has(String(mapping.destination_state).toLowerCase())).map((mapping: any) => mapping.destination_state)
+      if (staleStates.length) {
+        const { error: deactivateZonesError } = await supabase.from('import_pickup_destination_zones').update({ is_active: false, updated_at: new Date().toISOString() }).in('destination_state', staleStates)
+        if (deactivateZonesError) return json({ error: 'Mappings saved, but removed mappings could not be deactivated.' }, 500)
+      }
+      const normalizedRates = rates.map((rate: any) => ({
+        destination_state: rate.destination_state.trim(),
+        package_size: rate.package_size,
+        fee_ngn: Number(rate.fee_ngn),
+        is_active: rate.is_active !== false,
+        source_note: typeof rate.source_note === 'string' ? rate.source_note.trim() : null,
+        updated_at: new Date().toISOString(),
+      }))
+      if (normalizedRates.length) {
+        const { error: ratesError } = await supabase.from('import_pickup_delivery_rates').upsert(normalizedRates, { onConflict: 'destination_state,package_size' })
+        if (ratesError) return json({ error: 'Package rules saved, but delivery rates failed: ' + ratesError.message }, 500)
+      }
+      // Rows removed from the admin form must stop participating in checkout
+      // quotes; otherwise a deleted rate would silently remain active in DB.
+      const { data: existingRates, error: existingRatesError } = await supabase
+        .from('import_pickup_delivery_rates')
+        .select('id, destination_state, package_size')
+      if (existingRatesError) return json({ error: 'Rates saved, but could not reconcile removed rates.' }, 500)
+      const submittedKeys = new Set(normalizedRates.map((rate: any) => `${rate.destination_state.toLowerCase()}|${rate.package_size}`))
+      const staleIds = (existingRates ?? [])
+        .filter((rate: any) => !submittedKeys.has(`${String(rate.destination_state).toLowerCase()}|${rate.package_size}`))
+        .map((rate: any) => rate.id)
+      if (staleIds.length) {
+        const { error: deactivateError } = await supabase
+          .from('import_pickup_delivery_rates')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .in('id', staleIds)
+        if (deactivateError) return json({ error: 'Rates saved, but removed rates could not be deactivated.' }, 500)
+      }
+      const { error: finalSettingsError } = await supabase.from('import_pickup_delivery_settings').upsert({ id: 1, enabled: settings.enabled, classification_method: settings.classification_method, updated_at: new Date().toISOString() })
+      if (finalSettingsError) return json({ error: 'Pricing configuration was saved, but the feature switch could not be updated; pickup pricing remains disabled.' }, 500)
+      return json({ success: true, message: settings.enabled ? 'Pickup pricing saved. Confirm all rates against Jumia before accepting live charges.' : 'Pickup pricing saved and remains disabled.' })
+    }
+
+    if (req.method === 'POST' && action === 'pickup-delivery-quote') {
+      const body = await req.json().catch(() => ({}))
+      if (typeof body.pickup_station_id !== 'string' || !body.pickup_station_id) {
+        return json({ error: 'Select a pickup station.' }, 400)
+      }
+      if (!Array.isArray(body.items) || body.items.length === 0) {
+        return json({ error: 'No order items were provided.' }, 400)
+      }
+      const ids = [...new Set(body.items.map((i: any) => i?.id).filter((id: unknown): id is string => typeof id === 'string'))]
+      if (!ids.length) return json({ error: 'Order products are invalid.' }, 400)
+      const { data: products, error: productsError } = await supabase
+        .from('china_import_products')
+        .select('id, weight_grams, volume_cbm')
+        .in('id', ids)
+        .eq('is_active', true)
+      if (productsError) return json({ error: 'Could not load product package details.' }, 500)
+      const productMap = new Map((products ?? []).map((p: any) => [p.id, p]))
+      if (ids.some((id: string) => !productMap.has(id))) return json({ error: 'One or more products are no longer available.' }, 409)
+      const quoteItems = body.items.map((item: any) => ({
+        ...productMap.get(item.id),
+        quantity: Number(item.quantity),
+      }))
+      try {
+        const quote = await calculatePickupDeliveryQuote(supabase, body.pickup_station_id, quoteItems)
+        return json({ quote })
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : 'Could not calculate pickup delivery.' }, 500)
+      }
+    }
+
     if (req.method === 'GET' && action === 'rates') {
       const settings = await getImportPricingSettings(supabase)
       return json({ rates: { usdToNgn: settings.usdToNgn, cnyToUsd: settings.cnyToUsd } })
@@ -1045,7 +1306,7 @@ serve(async (req: Request) => {
       const itemIds = [...new Set(items.map((i: any) => i.id).filter(Boolean))]
       const { data: itemProducts, error: itemProductsErr } = await supabase
         .from('china_import_products')
-        .select('id, name, price_ngn, variants, ship_only, is_active, sea_shipping_customer_ngn, air_shipping_customer_ngn')
+        .select('id, name, price_ngn, variants, ship_only, is_active, weight_grams, volume_cbm, sea_shipping_customer_ngn, air_shipping_customer_ngn')
         .in('id', itemIds)
         .eq('is_active', true)
       if (itemProductsErr) return json({ error: 'Could not verify item pricing' }, 500)
@@ -1082,6 +1343,8 @@ serve(async (req: Request) => {
         return {
           ...i,
           price_ngn,
+          weight_grams: product.weight_grams ?? null,
+          volume_cbm: product.volume_cbm ?? null,
           shipping_method: method,
           shipping_cost_ngn: round2(Math.max(shippingRateNgn, 0)),
         }
@@ -1119,7 +1382,19 @@ serve(async (req: Request) => {
       const chargeShippingAtCheckout = shippingSettings.charge_shipping_at_checkout === true
       const shippingNgn = chargeShippingAtCheckout ? discountedShippingNgn : 0
       const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
-      const totalBeforePromotionNgn = subtotalNgn + jumiaFeeNgn + shippingNgn
+      let pickupQuote: any = { enabled: false, configured: false, fee_ngn: 0, package_size: null, state: null, weight_grams: null, volume_cbm: null }
+      if (delivery_type === 'to_me' && resolvedDeliveryMode === 'pickup_station') {
+        try {
+          pickupQuote = await calculatePickupDeliveryQuote(supabase, pickup_station_id, pricedItems)
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : 'Could not calculate Jumia pickup delivery.' }, 500)
+        }
+        if (pickupQuote.enabled && !pickupQuote.configured) {
+          return json({ error: pickupQuote.message ?? 'Jumia pickup delivery pricing is not configured for this order yet. Please contact support.' }, 409)
+        }
+      }
+      const jumiaPickupFeeNgn = pickupQuote.enabled ? Number(pickupQuote.fee_ngn) : 0
+      const totalBeforePromotionNgn = subtotalNgn + jumiaFeeNgn + jumiaPickupFeeNgn + shippingNgn
 
       let promotionId: string | null = null
       let promotionCodeApplied: string | null = null
@@ -1215,6 +1490,11 @@ serve(async (req: Request) => {
           pickup_station_id: pickupStationSnapshot?.id ?? null,
           pickup_station_name: pickupStationSnapshot?.name ?? null,
           pickup_station_address: pickupStationSnapshot?.address ?? null,
+          jumia_pickup_fee_ngn: jumiaPickupFeeNgn,
+          pickup_package_size: pickupQuote.package_size,
+          pickup_package_weight_grams: pickupQuote.weight_grams,
+          pickup_package_volume_cbm: pickupQuote.volume_cbm,
+          pickup_delivery_rate_state: pickupQuote.state,
           address_id: resolvedAddressId,
         }).select().single()
         if (!error) { order = data; break }
@@ -1280,11 +1560,12 @@ serve(async (req: Request) => {
           .eq('id', 1).single()
         return json({
           order_id: order.id, code: order.code, total_ngn: totalNgn,
+          jumia_pickup_fee_ngn: jumiaPickupFeeNgn, pickup_package_size: pickupQuote.package_size,
           bank: settings ?? null,
         })
       }
 
-      return json({ order_id: order.id, code: order.code, total_ngn: totalNgn })
+      return json({ order_id: order.id, code: order.code, total_ngn: totalNgn, jumia_pickup_fee_ngn: jumiaPickupFeeNgn, pickup_package_size: pickupQuote.package_size })
     }
 
     if (req.method === 'POST' && action === 'checkout-verify') {

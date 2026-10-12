@@ -15,6 +15,7 @@ export default function UnifiedCheckoutPage() {
   const addOne = useImportCartStore(s => s.addOne);
   const removeOne = useImportCartStore(s => s.removeOne);
   const setQuantity = useImportCartStore(s => s.setQuantity);
+  const clearImportCart = useImportCartStore(s => s.clearCart);
   const { customer, isAuthenticated } = useCustomerAuthStore();
 
   const selectedNormalIds = useMemo(() => {
@@ -58,7 +59,7 @@ export default function UnifiedCheckoutPage() {
         </div>
       );
     }
-    return <ImportCheckoutSheet cart={selectedImports} customer={customer} onClose={() => navigate('/cart')} onAdd={handleImportAdd} onRemove={handleImportRemove} onSetQuantity={handleImportSetQuantity} />;
+    return <ImportCheckoutSheet cart={selectedImports} customer={customer} onClose={() => navigate('/cart')} onAdd={handleImportAdd} onRemove={handleImportRemove} onSetQuantity={handleImportSetQuantity} onClearCart={clearImportCart} />;
   }
 
   if (params.get('source') === 'normal' || (hasNormal && !hasImport)) {

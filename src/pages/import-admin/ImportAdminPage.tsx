@@ -28,6 +28,7 @@ import PaystackTransactions from './PaystackTransactions';
 import CategoryManager from './CategoryManager';
 import AiSupportInbox, { AiSupportAlertMonitor } from './AiSupportInbox';
 import ImportAdminExpenses from './ImportAdminExpenses';
+import JumiaPickupPricingManager from './JumiaPickupPricingManager';
 import ChinaImportFulfillmentManager from './ChinaImportFulfillmentManager';
 import { OrderDetails, type OrderRow as V2OrderRow } from '@/pages/import-admin-v2/ManagementOrdersLegacy';
 
@@ -3482,6 +3483,7 @@ function PricingShippingManager({ token }: { token: string }) {
 
   return (
     <div className="space-y-4">
+      <JumiaPickupPricingManager token={token} />
       <div>
         <h2 className="text-lg font-bold text-gray-900">Pricing & Shipping</h2>
         <p className="text-xs text-gray-400 mt-1">These are the rates and shipping allocation rules used by the import pricing system.</p>
@@ -3586,6 +3588,7 @@ function PricingShippingManager({ token }: { token: string }) {
         {isSaving ? <Loader className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
         {isSaving ? 'Saving…' : saved ? 'Saved' : 'Save pricing & shipping settings'}
       </button>
+
     </div>
   );
 }
