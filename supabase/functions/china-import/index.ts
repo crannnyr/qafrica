@@ -2232,13 +2232,14 @@ serve(async (req: Request) => {
       const originalPriceUsd = Number(body.original_price_usd)
       const volumeCbm = body.volume_cbm == null || body.volume_cbm === '' ? 0 : Number(body.volume_cbm)
       const weightGrams = body.weight_grams == null || body.weight_grams === '' ? 0 : Number(body.weight_grams)
+      const shipOnly = body.ship_only === true
 
       if (!(await requireAdmin(supabase, manager_token, 'import.products.create'))) return json({ error: 'Unauthorized' }, 401)
       if (!name || !Number.isFinite(originalPriceUsd) || originalPriceUsd <= 0 || !image_urls?.length) {
         return json({ error: 'Product name, original USD price and at least one image are required' }, 400)
       }
-      if (!Number.isFinite(volumeCbm) || volumeCbm <= 0 || !Number.isFinite(weightGrams) || weightGrams <= 0) {
-        return json({ error: 'Product volume must be greater than 0 CBM and weight must be greater than 0 grams' }, 400)
+      if (!Number.isFinite(volumeCbm) || volumeCbm <= 0 || (!shipOnly && (!Number.isFinite(weightGrams) || weightGrams <= 0))) {
+        return json({ error: shipOnly ? 'Product volume must be greater than 0 CBM for sea-only shipping' : 'Product volume must be greater than 0 CBM and weight must be greater than 0 grams' }, 400)
       }
       if (!category_id || !subcategory_id) return json({ error: 'Category and subcategory are required' }, 400)
 
@@ -2269,8 +2270,8 @@ serve(async (req: Request) => {
         volumeCbm,
         weightGrams,
       )
-      if (!Number.isFinite(pricing.seaCustomerNgn) || pricing.seaCustomerNgn <= 0 || !Number.isFinite(pricing.airCustomerNgn) || pricing.airCustomerNgn <= 0) {
-        return json({ error: 'Both sea and air customer shipping costs must be greater than ₦0. Check product dimensions and import pricing settings.' }, 400)
+      if (!Number.isFinite(pricing.seaCustomerNgn) || pricing.seaCustomerNgn <= 0 || (!shipOnly && (!Number.isFinite(pricing.airCustomerNgn) || pricing.airCustomerNgn <= 0))) {
+        return json({ error: shipOnly ? 'Sea customer shipping cost must be greater than ₦0. Check product volume and import pricing settings.' : 'Both sea and air customer shipping costs must be greater than ₦0. Check product dimensions and import pricing settings.' }, 400)
       }
 
       const cleanVariants = sanitizeVariants(variants)
@@ -2279,7 +2280,6 @@ serve(async (req: Request) => {
       if (body.source_url && String(body.source_url).trim() && !sourceUrl) {
         return json({ error: 'The 1688 link is not a valid URL. It should start with https://' }, 400)
       }
-      const shipOnly = body.ship_only === true
       const expressAirCargo = body.express_air_cargo === true
       const seedSold = Number(body.units_sold)
       const hasSeedSold = Number.isFinite(seedSold) && seedSold >= 0
