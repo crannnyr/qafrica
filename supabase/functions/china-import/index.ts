@@ -124,7 +124,7 @@ function generateOrderCode(): string {
 type PickupPackageSize = 'small' | 'medium' | 'large'
 
 function normalizePickupState(value: string) {
-  return value.trim().toLowerCase().replace(/\\s+state$/, '').replace(/\\s+/g, ' ')
+  return value.trim().toLowerCase().replace(/\s+state$/, '').replace(/\s+/g, ' ')
 }
 
 async function calculatePickupDeliveryQuote(supabase: any, stationId: string, items: any[]) {
