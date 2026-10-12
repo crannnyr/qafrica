@@ -1045,8 +1045,9 @@ serve(async (req: Request) => {
       const itemIds = [...new Set(items.map((i: any) => i.id).filter(Boolean))]
       const { data: itemProducts, error: itemProductsErr } = await supabase
         .from('china_import_products')
-        .select('id, name, price_ngn, variants, ship_only, sea_shipping_customer_ngn, air_shipping_customer_ngn')
+        .select('id, name, price_ngn, variants, ship_only, is_active, sea_shipping_customer_ngn, air_shipping_customer_ngn')
         .in('id', itemIds)
+        .eq('is_active', true)
       if (itemProductsErr) return json({ error: 'Could not verify item pricing' }, 500)
       const productMap = new Map((itemProducts ?? []).map((p: any) => [p.id, p]))
 
@@ -1081,7 +1082,9 @@ serve(async (req: Request) => {
           shipping_cost_ngn: round2(Math.max(shippingRateNgn, 0)),
         }
       })
-      if (pricedItems.some((i: any) => i === null)) return json({ error: 'One or more items in your cart are no longer available' }, 400)
+      if (pricedItems.some((i: any) => i === null)) return json({ error: 'One or more items in your cart are no longer available or active' }, 400)
+      const invalidShippingItems = pricedItems.filter((i: any) => !Number.isFinite(Number(i.shipping_cost_ngn)) || Number(i.shipping_cost_ngn) <= 0)
+      if (invalidShippingItems.length > 0) return json({ error: `Shipping cost is not configured for: ${invalidShippingItems.map((i: any) => i.name).join(', ')}. Please contact support.` }, 409)
 
       // Shipping is calculated from the product snapshot stored in Supabase,
       // never from the price/shipping amounts supplied by the browser.
@@ -1107,7 +1110,9 @@ serve(async (req: Request) => {
       const discountedShippingNgn = discountActive
         ? Math.round(rawShippingNgn * (1 - effectiveDiscountPercent / 100))
         : rawShippingNgn
-      const shippingNgn = shippingSettings.charge_shipping_at_checkout ? discountedShippingNgn : 0
+      // Recommendations checkout always collects the selected shipping fee upfront.
+      // Do not let a stale admin toggle silently remove shipping from the payment total.
+      const shippingNgn = discountedShippingNgn
       const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
       const totalBeforePromotionNgn = subtotalNgn + jumiaFeeNgn + shippingNgn
 
