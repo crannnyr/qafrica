@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, Check, Loader, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, Check, Loader } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 
@@ -82,10 +82,6 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
   const updateRate = (index: number, patch: Partial<Rate>) => {
     setRates(prev => prev.map((rate, i) => i === index ? { ...rate, ...patch } : rate));
   };
-
-  const addRate = () => setRates(prev => [...prev, {
-    destination_state: 'Zone 1', package_size: 'small', fee_ngn: 0, is_active: false, source_note: '',
-  }]);
 
   const save = async () => {
     setError('');
@@ -198,8 +194,7 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
       </div>
       <div>
         <div className="flex items-center justify-between gap-3 mb-2">
-          <div><h4 className="text-sm font-semibold text-gray-800">Destination rate card</h4><p className="text-[11px] text-gray-500">One row per destination zone and package size.</p></div>
-          <button onClick={addRate} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold"><Plus className="w-3.5 h-3.5" /> Add rate</button>
+          <div><h4 className="text-sm font-semibold text-gray-800">Zone 1 (Lagos) → destination-zone rate card</h4><p className="text-[11px] text-gray-500">Exactly one row per destination zone and package size.</p></div>
         </div>
         {rates.length === 0 && <p className="rounded-xl bg-gray-50 p-3 text-xs text-gray-500">No rates configured. Add only verified Jumia rates.</p>}
         <div className="space-y-2">
@@ -210,7 +205,7 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
               <div className="sm:col-span-2"><label className="block text-[10px] text-gray-500 mb-1">Fee (₦)</label><input type="number" min="0" step="1" value={rate.fee_ngn} onChange={e => updateRate(index, { fee_ngn: Number(e.target.value) })} className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs" /></div>
               <div className="sm:col-span-3"><label className="block text-[10px] text-gray-500 mb-1">Rate source / note</label><input value={rate.source_note} onChange={e => updateRate(index, { source_note: e.target.value })} placeholder="Official rate card / date" className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs" /></div>
               <div className="sm:col-span-1 flex items-center gap-2"><input aria-label="Rate active" type="checkbox" checked={rate.is_active} onChange={e => updateRate(index, { is_active: e.target.checked })} className="accent-orange-500" /><span className="text-[10px] text-gray-500">Active</span></div>
-              <div className="sm:col-span-1 flex justify-end"><button aria-label="Remove rate" onClick={() => setRates(prev => prev.filter((_, i) => i !== index))} className="p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button></div>
+              
             </div>
           ))}
         </div>
