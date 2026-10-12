@@ -275,7 +275,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       return changed ? next : prev;
     });
   }, [seaShippingLocked, shippingMethod, cart]);
-  const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
+  const pickupDeliveryFeeNgn = deliveryMode === 'pickup_station' && pickupPricingStatus === 'ready' ? Number(pickupDeliveryQuote?.fee_ngn ?? 0) : 0;
+  const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0) + pickupDeliveryFeeNgn;
   const promoDiscount = Math.max(0, Math.min(Number(promoQuote?.discount_amount_ngn ?? 0), totalBeforePromo));
   const total = Math.max(0, totalBeforePromo - promoDiscount);
 
@@ -349,6 +350,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [stationSearch, setStationSearch] = useState('');
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [showStationPicker, setShowStationPicker] = useState(false);
+  const [pickupPricingStatus, setPickupPricingStatus] = useState<'loading' | 'disabled' | 'ready' | 'error'>('loading');
+  const [pickupDeliveryQuote, setPickupDeliveryQuote] = useState<{ fee_ngn: number; package_size: 'small' | 'medium' | 'large' | null; message?: string } | null>(null);
 
   useEffect(() => {
     fetch(`${EDGE_URL}?action=my-delivery-prefs`, {
@@ -396,6 +399,60 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     }).slice(0, 25);
   })();
   const selectedStation = stations.find(s => s.id === selectedStationId) ?? null;
+
+  const pickupQuoteItemsKey = cart.map(item => `${item.id}:${item.quantity}`).join('|');
+  useEffect(() => {
+    if (deliveryMode !== 'pickup_station' || !selectedStationId || cart.length === 0) {
+      setPickupDeliveryQuote(null);
+      setPickupPricingStatus('disabled');
+      return;
+    }
+    let cancelled = false;
+    setPickupPricingStatus('loading');
+    fetch(`${EDGE_URL}?action=pickup-delivery-quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pickup_station_id: selectedStationId,
+        items: cart.map(item => ({ id: item.id, quantity: item.quantity })),
+      }),
+    })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'Could not calculate pickup delivery fee.');
+        return data.quote;
+      })
+      .then(quote => {
+        if (cancelled) return;
+        if (!quote?.enabled) {
+          setPickupDeliveryQuote(null);
+          setPickupPricingStatus('disabled');
+        } else if (quote.configured && Number.isFinite(Number(quote.fee_ngn))) {
+          setPickupDeliveryQuote({
+            fee_ngn: Number(quote.fee_ngn),
+            package_size: quote.package_size ?? null,
+          });
+          setPickupPricingStatus('ready');
+        } else {
+          setPickupDeliveryQuote({
+            fee_ngn: 0,
+            package_size: quote.package_size ?? null,
+            message: quote.message ?? 'Jumia pickup delivery pricing is not configured for this order yet.',
+          });
+          setPickupPricingStatus('error');
+        }
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setPickupDeliveryQuote({
+          fee_ngn: 0,
+          package_size: null,
+          message: err instanceof Error ? err.message : 'Could not calculate pickup delivery fee.',
+        });
+        setPickupPricingStatus('error');
+      });
+    return () => { cancelled = true; };
+  }, [deliveryMode, selectedStationId, pickupQuoteItemsKey]);
 
   // Optional GPS — supplements the manual address, never replaces it
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -484,7 +541,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
   const perItemShippingComplete = cart.length <= 1 || cart.every(i => !!shippingMethodFor(i));
   const missingShippingItems = cart.length > 1 ? cart.filter(i => !shippingMethodFor(i)) : [];
-  const canSubmit = whatsapp.trim() && cart.length > 0 && addressComplete && perItemShippingComplete &&
+  const pickupPricingReady = deliveryMode !== 'pickup_station' || pickupPricingStatus === 'disabled' || pickupPricingStatus === 'ready';
+  const canSubmit = whatsapp.trim() && cart.length > 0 && addressComplete && perItemShippingComplete && pickupPricingReady &&
     (cart.length > 1 ? true : !!shippingMethod);
 
   const handleCheckout = async () => {
@@ -1212,6 +1270,18 @@ if (promoQuote?.pending_order?.id) {
               <span>Shipping{discountActive && effectiveDiscountPercent > 0 ? ` (${effectiveDiscountPercent}% off)` : ''}</span>
               <span className="font-medium">{fmt(shippingTotal)}</span>
             </div>
+          )}
+          {pickupDeliveryFeeNgn > 0 && (
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>Jumia pickup delivery{pickupDeliveryQuote?.package_size ? ` (${pickupDeliveryQuote.package_size} package)` : ''}</span>
+              <span className="font-medium">{fmt(pickupDeliveryFeeNgn)}</span>
+            </div>
+          )}
+          {deliveryMode === 'pickup_station' && pickupPricingStatus === 'loading' && selectedStationId && (
+            <p className="text-[10px] text-gray-400">Checking pickup delivery pricing…</p>
+          )}
+          {deliveryMode === 'pickup_station' && pickupPricingStatus === 'error' && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">{pickupDeliveryQuote?.message ?? 'Pickup delivery pricing is not configured. Please try another station or contact support.'}</p>
           )}
           {promoDiscount > 0 && (
             <div className="flex justify-between text-xs text-emerald-600">
