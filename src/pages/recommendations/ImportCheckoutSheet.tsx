@@ -124,7 +124,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   // Delivery mode is declared before the settings effect because the settings load can set it.
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('pickup_station');
   const [shippingSettings, setShippingSettings] = useState({
-    chargeShippingAtCheckout: false,
+    chargeShippingAtCheckout: true,
     shippingDiscountPercent: 0,
     shippingDiscountMinNgn: 1600,
     bulkDiscountTier1Qty: 10,
@@ -150,7 +150,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           if (!data.settings.manual_transfer_enabled) setPaymentMethod('paystack');
         }
         setShippingSettings({
-          chargeShippingAtCheckout: data.settings.charge_shipping_at_checkout === true,
+          chargeShippingAtCheckout: typeof data.settings.charge_shipping_at_checkout === 'boolean' ? data.settings.charge_shipping_at_checkout : true,
           shippingDiscountPercent: Number(data.settings.shipping_discount_percent ?? 0),
           shippingDiscountMinNgn: Number(data.settings.shipping_discount_min_ngn ?? 1600),
           bulkDiscountTier1Qty: Number(data.settings.bulk_discount_tier1_qty ?? 10),

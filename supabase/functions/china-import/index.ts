@@ -1045,8 +1045,9 @@ serve(async (req: Request) => {
       const itemIds = [...new Set(items.map((i: any) => i.id).filter(Boolean))]
       const { data: itemProducts, error: itemProductsErr } = await supabase
         .from('china_import_products')
-        .select('id, name, price_ngn, variants, ship_only, sea_shipping_customer_ngn, air_shipping_customer_ngn')
+        .select('id, name, price_ngn, variants, ship_only, is_active, sea_shipping_customer_ngn, air_shipping_customer_ngn')
         .in('id', itemIds)
+        .eq('is_active', true)
       if (itemProductsErr) return json({ error: 'Could not verify item pricing' }, 500)
       const productMap = new Map((itemProducts ?? []).map((p: any) => [p.id, p]))
 
@@ -1055,14 +1056,18 @@ serve(async (req: Request) => {
       // sea) — enforced server-side as well as in the UI, because the
       // shipping methods arrive from the client and the storefront cache
       // can be up to 30s stale.
-      const blockedByShipOnly = (items as any[])
-        .filter((i: any) => productMap.get(i.id)?.ship_only && (i.shipping_method ?? shipping_method) === 'flight')
+      const blockedByAir = (items as any[])
+        .filter((i: any) => {
+          const product = productMap.get(i.id)
+          return (product?.ship_only || Number(product?.air_shipping_customer_ngn ?? 0) <= 0)
+            && (i.shipping_method ?? shipping_method) === 'flight'
+        })
         .map((i: any) => productMap.get(i.id)?.name)
-      if (blockedByShipOnly.length > 0) {
+      if (blockedByAir.length > 0) {
         return json({
-          error: 'ship_only_requires_sea',
-          message: `${blockedByShipOnly.join(', ')} can only be shipped by sea freight. Please switch ${blockedByShipOnly.length > 1 ? 'these items' : 'this item'} to sea freight.`,
-          blocked_items: blockedByShipOnly,
+          error: 'air_shipping_unavailable',
+          message: `${blockedByAir.join(', ')} cannot be shipped by air because the air shipping fee is unavailable. Please select sea freight or contact support.`,
+          blocked_items: blockedByAir,
         }, 409)
       }
 
@@ -1081,7 +1086,9 @@ serve(async (req: Request) => {
           shipping_cost_ngn: round2(Math.max(shippingRateNgn, 0)),
         }
       })
-      if (pricedItems.some((i: any) => i === null)) return json({ error: 'One or more items in your cart are no longer available' }, 400)
+      if (pricedItems.some((i: any) => i === null)) return json({ error: 'One or more items in your cart are no longer available or active' }, 400)
+      const invalidShippingItems = pricedItems.filter((i: any) => !Number.isFinite(Number(i.shipping_cost_ngn)) || Number(i.shipping_cost_ngn) <= 0)
+      if (invalidShippingItems.length > 0) return json({ error: `Shipping cost is not configured for: ${invalidShippingItems.map((i: any) => i.name).join(', ')}. Please contact support.` }, 409)
 
       // Shipping is calculated from the product snapshot stored in Supabase,
       // never from the price/shipping amounts supplied by the browser.
@@ -1107,7 +1114,10 @@ serve(async (req: Request) => {
       const discountedShippingNgn = discountActive
         ? Math.round(rawShippingNgn * (1 - effectiveDiscountPercent / 100))
         : rawShippingNgn
-      const shippingNgn = shippingSettings.charge_shipping_at_checkout ? discountedShippingNgn : 0
+      // The admin setting controls whether shipping is collected in this checkout.
+      // Shipping rates are still validated and snapshotted even when collection is deferred.
+      const chargeShippingAtCheckout = shippingSettings.charge_shipping_at_checkout === true
+      const shippingNgn = chargeShippingAtCheckout ? discountedShippingNgn : 0
       const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
       const totalBeforePromotionNgn = subtotalNgn + jumiaFeeNgn + shippingNgn
 
@@ -1192,7 +1202,9 @@ serve(async (req: Request) => {
         const code = generateOrderCode()
         const { data, error } = await supabase.from('china_import_orders').insert({
           code, customer_name, customer_whatsapp, items: pricedItems, delivery_type,
-          subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn, total_ngn: totalNgn,
+          subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn,
+          shipping_ngn: shippingNgn, prepaid_shipping_ngn: shippingNgn,
+          total_ngn: totalNgn,
           status: 'pending', user_id: customer_id,
           payment_method, payment_status: 'unpaid',
           shipping_method: orderShippingMethodSummary,
@@ -1210,6 +1222,56 @@ serve(async (req: Request) => {
         if (error.code !== '23505') break
       }
       if (!order) return json({ error: lastError?.message ?? 'Failed to create order' }, 500)
+
+      // Snapshot the upfront shipping charge as its own consolidation bill.
+      // This bill is pending until payment is actually verified/confirmed.
+      // The order's prepaid_shipping_ngn also prevents the later batch close
+      // workflow from charging this same shipping a second time.
+      if (chargeShippingAtCheckout && shippingNgn > 0) {
+        const { data: bankSettings, error: bankSettingsError } = await supabase
+          .from('import_admin_credentials')
+          .select('bank_account_number, bank_name, bank_account_name')
+          .eq('id', 1).single()
+        if (bankSettingsError || !bankSettings) {
+          return json({ error: 'Order was created but upfront shipping bill could not load bank details. Please contact support before paying.', order_id: order.id, code: order.code }, 500)
+        }
+
+        const shippingLineItems = pricedItems.map((item: any) => ({
+          label: `${item.shipping_method === 'flight' ? 'Air' : 'Sea'} shipping fee — ${item.name} × ${Number(item.quantity ?? 0)}`,
+          amount_ngn: rawShippingNgn > 0
+            ? round2((Number(item.shipping_cost_ngn ?? 0) * Number(item.quantity ?? 0)) * shippingNgn / rawShippingNgn)
+            : 0,
+          shipping_method: item.shipping_method,
+          billing_type: 'shipping',
+        }))
+        // Keep the itemized bill exactly equal to the actual checkout charge,
+        // including rounding and any shipping discount.
+        if (shippingLineItems.length > 0) {
+          const itemizedTotal = round2(shippingLineItems.reduce((sum: number, line: any) => sum + line.amount_ngn, 0))
+          shippingLineItems[shippingLineItems.length - 1].amount_ngn = round2(
+            shippingLineItems[shippingLineItems.length - 1].amount_ngn + shippingNgn - itemizedTotal,
+          )
+        }
+
+        const { error: billError } = await supabase
+          .from('china_import_consolidation_bills')
+          .insert({
+            user_id: customer_id,
+            order_id: order.id,
+            amount_ngn: shippingNgn,
+            reason: 'Upfront shipping fee',
+            bank_account_number: bankSettings.bank_account_number,
+            bank_name: bankSettings.bank_name,
+            bank_account_name: bankSettings.bank_account_name,
+            status: 'pending',
+            kind: 'consolidation_shipping',
+            line_items: shippingLineItems,
+          })
+        if (billError) {
+          console.error('[china-import] upfront shipping bill creation failed:', billError)
+          return json({ error: 'Order was created but its upfront shipping bill could not be created. Please contact support before paying.', order_id: order.id, code: order.code }, 500)
+        }
+      }
 
       if (payment_method === 'manual') {
         const { data: settings } = await supabase
@@ -1251,6 +1313,29 @@ serve(async (req: Request) => {
         .select().single()
 
       if (error) return json({ error: error.message }, 500)
+
+      if (ok) {
+        // Mark only the explicit upfront-shipping bill as paid. Other bills
+        // created later for the same order/batch must remain untouched.
+        const { data: paidShippingBill, error: shippingBillError } = await supabase
+          .from('china_import_consolidation_bills')
+          .update({
+            status: 'paid',
+            confirmed_paid_at: new Date().toISOString(),
+            paystack_reference: reference,
+            reminder_count: 0,
+          })
+          .eq('order_id', order_id)
+          .eq('kind', 'consolidation_shipping')
+          .eq('reason', 'Upfront shipping fee')
+          .neq('status', 'cancelled')
+          .select('id')
+          .maybeSingle()
+        if (shippingBillError || !paidShippingBill) {
+          console.error('[china-import] failed to mark upfront shipping bill paid:', shippingBillError ?? 'Matching upfront shipping bill not found')
+          return json({ error: 'Payment was verified, but the upfront shipping bill could not be marked paid. Please contact support.', success: true, order }, 500)
+        }
+      }
 
       if (ok && !wasAlreadyPaid) {
         await incrementUnitsSold(supabase, order.items)
@@ -2232,13 +2317,15 @@ serve(async (req: Request) => {
       const originalPriceUsd = Number(body.original_price_usd)
       const volumeCbm = body.volume_cbm == null || body.volume_cbm === '' ? 0 : Number(body.volume_cbm)
       const weightGrams = body.weight_grams == null || body.weight_grams === '' ? 0 : Number(body.weight_grams)
+      const shipOnly = body.ship_only === true
 
-      if (!(await requireAdmin(supabase, manager_token, 'import.products.create'))) return json({ error: 'Unauthorized' }, 401)
+      const requiredPermission = action === 'add-product' ? 'import.products.create' : 'import.products.update'
+      if (!(await requireAdmin(supabase, manager_token, requiredPermission))) return json({ error: 'Unauthorized: missing permission ' + requiredPermission }, 401)
       if (!name || !Number.isFinite(originalPriceUsd) || originalPriceUsd <= 0 || !image_urls?.length) {
         return json({ error: 'Product name, original USD price and at least one image are required' }, 400)
       }
-      if (!Number.isFinite(volumeCbm) || volumeCbm < 0 || !Number.isFinite(weightGrams) || weightGrams < 0) {
-        return json({ error: 'Volume and weight must be valid non-negative numbers' }, 400)
+      if (!Number.isFinite(volumeCbm) || volumeCbm <= 0 || (!shipOnly && (!Number.isFinite(weightGrams) || weightGrams <= 0))) {
+        return json({ error: shipOnly ? 'Product volume must be greater than 0 CBM for sea-only shipping' : 'Product volume must be greater than 0 CBM and weight must be greater than 0 grams' }, 400)
       }
       if (!category_id || !subcategory_id) return json({ error: 'Category and subcategory are required' }, 400)
 
@@ -2269,13 +2356,16 @@ serve(async (req: Request) => {
         volumeCbm,
         weightGrams,
       )
+      if (!Number.isFinite(pricing.seaCustomerNgn) || pricing.seaCustomerNgn <= 0 || (!shipOnly && (!Number.isFinite(pricing.airCustomerNgn) || pricing.airCustomerNgn <= 0))) {
+        return json({ error: shipOnly ? 'Sea customer shipping cost must be greater than ₦0. Check product volume and import pricing settings.' : 'Both sea and air customer shipping costs must be greater than ₦0. Check product dimensions and import pricing settings.' }, 400)
+      }
+
       const cleanVariants = sanitizeVariants(variants)
 
       const sourceUrl = sanitizeSourceUrl(body.source_url)
       if (body.source_url && String(body.source_url).trim() && !sourceUrl) {
         return json({ error: 'The 1688 link is not a valid URL. It should start with https://' }, 400)
       }
-      const shipOnly = body.ship_only === true
       const expressAirCargo = body.express_air_cargo === true
       const seedSold = Number(body.units_sold)
       const hasSeedSold = Number.isFinite(seedSold) && seedSold >= 0
@@ -2314,6 +2404,7 @@ serve(async (req: Request) => {
         ship_only: shipOnly,
         express_air_cargo: expressAirCargo,
         delivery_time: shipOnly ? 'sea' : 'air',
+        is_active: body.is_active !== false,
         ...(hasSeedSold ? { units_sold: Math.round(seedSold) } : {}),
       }
 
@@ -2322,11 +2413,20 @@ serve(async (req: Request) => {
         if (error) return json({ error: error.message }, 500)
       } else {
         if (!id) return json({ error: 'Missing product id' }, 400)
-        const { error } = await supabase.from('china_import_products').update(row).eq('id', id)
+        const { data: updatedProduct, error } = await supabase
+          .from('china_import_products')
+          .update(row)
+          .eq('id', id)
+          .select('id, is_active')
+          .maybeSingle()
         if (error) return json({ error: error.message }, 500)
+        if (!updatedProduct) return json({ error: 'Product update matched no record. Nothing was saved; refresh the product and try again.' }, 404)
+        if (updatedProduct.is_active !== (body.is_active !== false)) {
+          return json({ error: 'The product was updated, but the saved Active status does not match your selection. Please retry and verify the listing status.' }, 500)
+        }
       }
       memoryCache.delete('products')
-      return json({ success: true, pricing: { ...pricing, markupPercent, originalPriceUsd, usdToNgnRate: pricingSettings.usdToNgn } })
+      return json({ success: true, saved: true, is_active: body.is_active !== false, pricing: { ...pricing, markupPercent, originalPriceUsd, usdToNgnRate: pricingSettings.usdToNgn } })
     }
 
     if (req.method === 'POST' && action === 'delete-product') {
@@ -3137,6 +3237,29 @@ serve(async (req: Request) => {
         .update(updates)
         .eq('id', order_id).select().single()
       if (error) return json({ error: error.message }, 500)
+
+      // The customer has claimed the transfer, but it is not paid until an
+      // admin confirms it. Mirror that claim onto the matching upfront bill.
+      const { data: claimedShippingBill, error: billClaimError } = await supabase
+        .from('china_import_consolidation_bills')
+        .update({
+          status: 'awaiting_confirmation',
+          customer_marked_paid_at: new Date().toISOString(),
+          manual_sender_name: sender_name.trim(),
+          ...(typeof sender_bank_name === 'string' && sender_bank_name.trim()
+            ? { manual_sender_bank: sender_bank_name.trim() }
+            : {}),
+        })
+        .eq('order_id', order_id)
+        .eq('kind', 'consolidation_shipping')
+        .eq('reason', 'Upfront shipping fee')
+        .eq('status', 'pending')
+        .select('id')
+        .maybeSingle()
+      if (billClaimError || !claimedShippingBill) {
+        console.error('[china-import] failed to update upfront shipping bill claim:', billClaimError ?? 'Matching pending upfront shipping bill not found')
+        return json({ error: 'Transfer claim was saved on the order, but the shipping bill needs admin review.', order: data }, 500)
+      }
       return json({ order: data })
     }
 
