@@ -120,6 +120,79 @@ function generateOrderCode(): string {
   return out
 }
 
+
+type PickupPackageSize = 'small' | 'medium' | 'large'
+
+async function calculatePickupDeliveryQuote(supabase: any, stationId: string, items: any[]) {
+  const { data: settings, error: settingsError } = await supabase
+    .from('import_pickup_delivery_settings')
+    .select('enabled, classification_method')
+    .eq('id', 1)
+    .maybeSingle()
+  if (settingsError) throw new Error('Could not load Jumia pickup pricing settings')
+  if (!settings?.enabled) return { enabled: false, configured: false, fee_ngn: 0, package_size: null, state: null, weight_grams: null, volume_cbm: null }
+
+  const { data: station, error: stationError } = await supabase
+    .from('pickup_stations')
+    .select('id, state, is_active')
+    .eq('id', stationId)
+    .maybeSingle()
+  if (stationError || !station?.is_active) throw new Error('Pickup station is unavailable for pricing')
+
+  const { data: rules, error: rulesError } = await supabase
+    .from('import_pickup_package_rules')
+    .select('package_size, max_weight_grams, max_volume_cbm, is_configured')
+  if (rulesError) throw new Error('Could not load package classification rules')
+  const ruleMap = new Map((rules ?? []).map((r: any) => [r.package_size, r]))
+  const sizes: PickupPackageSize[] = ['small', 'medium', 'large']
+  if (sizes.some(size => !ruleMap.get(size)?.is_configured)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, weight_grams: null, volume_cbm: null, message: 'Jumia package-size thresholds have not been configured.' }
+  }
+
+  const normalizedItems = (items ?? []).map((item: any) => ({
+    quantity: Number(item.quantity ?? 0),
+    weight: item.weight_grams == null ? null : Number(item.weight_grams),
+    volume: item.volume_cbm == null ? null : Number(item.volume_cbm),
+  }))
+  if (!normalizedItems.length || normalizedItems.some(i => !Number.isFinite(i.quantity) || i.quantity <= 0)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, weight_grams: null, volume_cbm: null, message: 'The order quantities are incomplete.' }
+  }
+  const method = settings.classification_method ?? 'weight_or_volume'
+  if (method !== 'volume' && normalizedItems.some(i => i.weight == null || !Number.isFinite(i.weight) || i.weight < 0)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, weight_grams: null, volume_cbm: null, message: 'Product weights must be configured before pickup delivery can be priced.' }
+  }
+  if (method !== 'weight' && normalizedItems.some(i => i.volume == null || !Number.isFinite(i.volume) || i.volume < 0)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, weight_grams: null, volume_cbm: null, message: 'Product dimensions/volume must be configured before pickup delivery can be priced.' }
+  }
+
+  const totalWeight = normalizedItems.reduce((sum, i) => sum + (i.weight ?? 0) * i.quantity, 0)
+  const totalVolume = normalizedItems.reduce((sum, i) => sum + (i.volume ?? 0) * i.quantity, 0)
+  const matchesRule = (rule: any) => {
+    const weightMatches = method === 'volume' || rule.max_weight_grams == null || totalWeight <= Number(rule.max_weight_grams)
+    const volumeMatches = method === 'weight' || rule.max_volume_cbm == null || totalVolume <= Number(rule.max_volume_cbm)
+    return weightMatches && volumeMatches
+  }
+  let packageSize: PickupPackageSize | null = null
+  for (const size of ['small', 'medium'] as PickupPackageSize[]) {
+    const rule: any = ruleMap.get(size)
+    if (matchesRule(rule)) { packageSize = size; break }
+  }
+  if (!packageSize) packageSize = 'large'
+
+  const { data: rate, error: rateError } = await supabase
+    .from('import_pickup_delivery_rates')
+    .select('fee_ngn')
+    .ilike('destination_state', station.state)
+    .eq('package_size', packageSize)
+    .eq('is_active', true)
+    .maybeSingle()
+  if (rateError) throw new Error('Could not load the Jumia pickup delivery rate')
+  if (!rate || !Number.isFinite(Number(rate.fee_ngn)) || Number(rate.fee_ngn) < 0) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: packageSize, state: station.state, weight_grams: totalWeight, volume_cbm: totalVolume, message: `No verified ${packageSize} package rate is configured for ${station.state}.` }
+  }
+  return { enabled: true, configured: true, fee_ngn: Number(rate.fee_ngn), package_size: packageSize, state: station.state, weight_grams: round2(totalWeight), volume_cbm: round2(totalVolume) }
+}
+
 const ORDER_STATUS_SEQUENCE = ['pending', 'confirmed', 'ordered', 'ordered_and_closed', 'shipped_and_closed', 'clearance_and_closed', 'received']
 
 async function advanceOrderStatus(supabase: any, orderId: string, targetStatus: string) {
@@ -888,6 +961,37 @@ serve(async (req: Request) => {
       })
     }
 
+
+    if (req.method === 'POST' && action === 'pickup-delivery-quote') {
+      const body = await req.json().catch(() => ({}))
+      if (typeof body.pickup_station_id !== 'string' || !body.pickup_station_id) {
+        return json({ error: 'Select a pickup station.' }, 400)
+      }
+      if (!Array.isArray(body.items) || body.items.length === 0) {
+        return json({ error: 'No order items were provided.' }, 400)
+      }
+      const ids = [...new Set(body.items.map((i: any) => i?.id).filter((id: unknown): id is string => typeof id === 'string'))]
+      if (!ids.length) return json({ error: 'Order products are invalid.' }, 400)
+      const { data: products, error: productsError } = await supabase
+        .from('china_import_products')
+        .select('id, weight_grams, volume_cbm')
+        .in('id', ids)
+        .eq('is_active', true)
+      if (productsError) return json({ error: 'Could not load product package details.' }, 500)
+      const productMap = new Map((products ?? []).map((p: any) => [p.id, p]))
+      if (ids.some((id: string) => !productMap.has(id))) return json({ error: 'One or more products are no longer available.' }, 409)
+      const quoteItems = body.items.map((item: any) => ({
+        ...productMap.get(item.id),
+        quantity: Number(item.quantity),
+      }))
+      try {
+        const quote = await calculatePickupDeliveryQuote(supabase, body.pickup_station_id, quoteItems)
+        return json({ quote })
+      } catch (error) {
+        return json({ error: error instanceof Error ? error.message : 'Could not calculate pickup delivery.' }, 500)
+      }
+    }
+
     if (req.method === 'GET' && action === 'rates') {
       const settings = await getImportPricingSettings(supabase)
       return json({ rates: { usdToNgn: settings.usdToNgn, cnyToUsd: settings.cnyToUsd } })
@@ -1119,7 +1223,19 @@ serve(async (req: Request) => {
       const chargeShippingAtCheckout = shippingSettings.charge_shipping_at_checkout === true
       const shippingNgn = chargeShippingAtCheckout ? discountedShippingNgn : 0
       const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
-      const totalBeforePromotionNgn = subtotalNgn + jumiaFeeNgn + shippingNgn
+      let pickupQuote: any = { enabled: false, configured: false, fee_ngn: 0, package_size: null, state: null, weight_grams: null, volume_cbm: null }
+      if (delivery_type === 'to_me' && resolvedDeliveryMode === 'pickup_station') {
+        try {
+          pickupQuote = await calculatePickupDeliveryQuote(supabase, pickup_station_id, pricedItems)
+        } catch (error) {
+          return json({ error: error instanceof Error ? error.message : 'Could not calculate Jumia pickup delivery.' }, 500)
+        }
+        if (pickupQuote.enabled && !pickupQuote.configured) {
+          return json({ error: pickupQuote.message ?? 'Jumia pickup delivery pricing is not configured for this order yet. Please contact support.' }, 409)
+        }
+      }
+      const jumiaPickupFeeNgn = pickupQuote.enabled ? Number(pickupQuote.fee_ngn) : 0
+      const totalBeforePromotionNgn = subtotalNgn + jumiaFeeNgn + jumiaPickupFeeNgn + shippingNgn
 
       let promotionId: string | null = null
       let promotionCodeApplied: string | null = null
@@ -1215,6 +1331,11 @@ serve(async (req: Request) => {
           pickup_station_id: pickupStationSnapshot?.id ?? null,
           pickup_station_name: pickupStationSnapshot?.name ?? null,
           pickup_station_address: pickupStationSnapshot?.address ?? null,
+          jumia_pickup_fee_ngn: jumiaPickupFeeNgn,
+          pickup_package_size: pickupQuote.package_size,
+          pickup_package_weight_grams: pickupQuote.weight_grams,
+          pickup_package_volume_cbm: pickupQuote.volume_cbm,
+          pickup_delivery_rate_state: pickupQuote.state,
           address_id: resolvedAddressId,
         }).select().single()
         if (!error) { order = data; break }
@@ -1280,11 +1401,12 @@ serve(async (req: Request) => {
           .eq('id', 1).single()
         return json({
           order_id: order.id, code: order.code, total_ngn: totalNgn,
+          jumia_pickup_fee_ngn: jumiaPickupFeeNgn, pickup_package_size: pickupQuote.package_size,
           bank: settings ?? null,
         })
       }
 
-      return json({ order_id: order.id, code: order.code, total_ngn: totalNgn })
+      return json({ order_id: order.id, code: order.code, total_ngn: totalNgn, jumia_pickup_fee_ngn: jumiaPickupFeeNgn, pickup_package_size: pickupQuote.package_size })
     }
 
     if (req.method === 'POST' && action === 'checkout-verify') {
