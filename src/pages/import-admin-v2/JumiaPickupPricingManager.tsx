@@ -50,10 +50,10 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
         source_note: r.source_note ?? '',
       }));
       const rateKeys = new Set(loadedRates.map(r => `${r.destination_state.trim().toLowerCase()}|${r.package_size}`));
-      for (const state of NIGERIAN_STATES) {
+      for (const zone of ['Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7']) {
         for (const package_size of sizes) {
-          const key = `${state.toLowerCase()}|${package_size}`;
-          if (!rateKeys.has(key)) loadedRates.push({ destination_state: state, package_size, fee_ngn: 0, is_active: false, source_note: '' });
+          const key = `${zone.toLowerCase()}|${package_size}`;
+          if (!rateKeys.has(key)) loadedRates.push({ destination_state: zone, package_size, fee_ngn: 0, is_active: false, source_note: 'Official Jumia rate card' });
         }
       }
       setRates(loadedRates);
@@ -135,10 +135,10 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
     <section className="bg-white rounded-2xl border border-gray-100 p-5 space-y-4">
       <div>
         <h3 className="font-bold text-gray-900">Jumia pickup-station delivery pricing</h3>
-        <p className="text-xs text-gray-500 mt-1">Configure parcel classification and delivery fees by destination state. This feature starts disabled because Jumia's exact package thresholds and complete applicable rate card still need verification.</p>
+        <p className="text-xs text-gray-500 mt-1">Origin is fixed at Zone 1 (Lagos). Configure Jumia's official fee by destination zone and package size. Delivery-time estimates are not used.</p>
       </div>
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-        Do not enable live pricing with estimated rates. Record the official source in each rate's source note.
+        Origin: Zone 1 — Lagos. Enter only verified official Jumia prices. Delivery-time estimates are intentionally omitted.
       </div>
       <label className="flex items-center justify-between gap-4 rounded-xl bg-gray-50 p-3">
         <span><span className="block text-sm font-semibold text-gray-900">Enable pickup delivery charges</span><span className="block text-[11px] text-gray-500 mt-0.5">Checkout will reject pickup orders when enabled but no valid quote can be calculated.</span></span>
@@ -175,14 +175,14 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
       </div>
       <div>
         <div className="flex items-center justify-between gap-3 mb-2">
-          <div><h4 className="text-sm font-semibold text-gray-800">Destination rate card</h4><p className="text-[11px] text-gray-500">One row per destination state and package size.</p></div>
+          <div><h4 className="text-sm font-semibold text-gray-800">Zone 1 (Lagos) → destination-zone rate card</h4><p className="text-[11px] text-gray-500">One row per destination zone and package size. Delivery times are not stored.</p></div>
           <button onClick={addRate} className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold"><Plus className="w-3.5 h-3.5" /> Add rate</button>
         </div>
         {rates.length === 0 && <p className="rounded-xl bg-gray-50 p-3 text-xs text-gray-500">No rates configured. Add only verified Jumia rates.</p>}
         <div className="space-y-2">
           {rates.map((rate, index) => (
             <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 rounded-xl border border-gray-100 p-3 items-end">
-              <div className="sm:col-span-3"><label className="block text-[10px] text-gray-500 mb-1">Destination state</label><select value={rate.destination_state} onChange={e => updateRate(index, { destination_state: e.target.value })} className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs"><option value="">Select state</option>{NIGERIAN_STATES.map(state => <option key={state} value={state}>{state}</option>)}</select></div>
+              <div className="sm:col-span-3"><label className="block text-[10px] text-gray-500 mb-1">Destination zone</label><select value={rate.destination_state} onChange={e => updateRate(index, { destination_state: e.target.value })} className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs"><option value="">Select zone</option>{['Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7'].map(zone => <option key={zone} value={zone}>{zone}</option>)}</select></div>
               <div className="sm:col-span-2"><label className="block text-[10px] text-gray-500 mb-1">Package</label><select value={rate.package_size} onChange={e => updateRate(index, { package_size: e.target.value as PackageSize })} className="w-full rounded-lg border border-gray-200 px-2 py-2 text-xs">{sizes.map(size => <option key={size} value={size}>{size}</option>)}</select></div>
               <div className="sm:col-span-2"><label className="block text-[10px] text-gray-500 mb-1">Fee (₦)</label><input type="number" min="0" step="1" value={rate.fee_ngn} onChange={e => updateRate(index, { fee_ngn: Number(e.target.value) })} className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs" /></div>
               <div className="sm:col-span-3"><label className="block text-[10px] text-gray-500 mb-1">Rate source / note</label><input value={rate.source_note} onChange={e => updateRate(index, { source_note: e.target.value })} placeholder="Official rate card / date" className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs" /></div>
