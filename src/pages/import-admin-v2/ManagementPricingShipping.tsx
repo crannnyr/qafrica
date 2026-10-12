@@ -142,7 +142,7 @@ export default function ManagementPricingShipping() {
 
   return (
     <div className="space-y-4 max-w-3xl">
-      <JumiaPickupPricingManager />
+      {getManagementToken() && <JumiaPickupPricingManager token={getManagementToken()!} />}
       <div>
         <h2 className="text-xl font-black text-gray-900">Pricing & Shipping</h2>
         <p className="text-sm text-gray-500 mt-1">Rates and shipping allocation rules used by the import pricing system.</p>
