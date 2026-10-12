@@ -1052,6 +1052,23 @@ serve(async (req: Request) => {
         const { error: ratesError } = await supabase.from('import_pickup_delivery_rates').upsert(normalizedRates, { onConflict: 'destination_state,package_size' })
         if (ratesError) return json({ error: 'Package rules saved, but delivery rates failed: ' + ratesError.message }, 500)
       }
+      // Rows removed from the admin form must stop participating in checkout
+      // quotes; otherwise a deleted rate would silently remain active in DB.
+      const { data: existingRates, error: existingRatesError } = await supabase
+        .from('import_pickup_delivery_rates')
+        .select('id, destination_state, package_size')
+      if (existingRatesError) return json({ error: 'Rates saved, but could not reconcile removed rates.' }, 500)
+      const submittedKeys = new Set(normalizedRates.map((rate: any) => `${rate.destination_state.toLowerCase()}|${rate.package_size}`))
+      const staleIds = (existingRates ?? [])
+        .filter((rate: any) => !submittedKeys.has(`${String(rate.destination_state).toLowerCase()}|${rate.package_size}`))
+        .map((rate: any) => rate.id)
+      if (staleIds.length) {
+        const { error: deactivateError } = await supabase
+          .from('import_pickup_delivery_rates')
+          .update({ is_active: false, updated_at: new Date().toISOString() })
+          .in('id', staleIds)
+        if (deactivateError) return json({ error: 'Rates saved, but removed rates could not be deactivated.' }, 500)
+      }
       return json({ success: true, message: settings.enabled ? 'Pickup pricing saved. Confirm all rates against Jumia before accepting live charges.' : 'Pickup pricing saved and remains disabled.' })
     }
 
