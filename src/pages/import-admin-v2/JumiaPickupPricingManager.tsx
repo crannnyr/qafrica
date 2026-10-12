@@ -48,28 +48,33 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
         { package_size: 'medium', max_weight_grams: 15000, max_volume_cbm: null, is_configured: true },
         { package_size: 'large', max_weight_grams: 35000, max_volume_cbm: null, is_configured: true },
       ]);
-      const loadedRates: Rate[] = (data.rates ?? []).filter((r: any) => ZONES.includes(String(r.destination_state ?? ''))).map((r: any) => ({
-        destination_state: String(r.destination_state ?? ''),
-        package_size: r.package_size,
-        fee_ngn: Number(r.fee_ngn),
-        is_active: r.is_active === true,
-        source_note: r.source_note ?? '',
-      }));
+      const loadedRates: Rate[] = (data.rates ?? [])
+        .filter((r: any) => ZONES.includes(String(r.destination_state ?? '')))
+        .map((r: any) => ({
+          destination_state: String(r.destination_state ?? ''),
+          package_size: r.package_size as PackageSize,
+          fee_ngn: Number(r.fee_ngn ?? 0),
+          is_active: r.is_active === true,
+          source_note: String(r.source_note ?? ''),
+        }));
       const rateKeys = new Set(loadedRates.map(r => `${r.destination_state.trim().toLowerCase()}|${r.package_size}`));
       for (const zone of ZONES) {
         for (const package_size of sizes) {
           const key = `${zone.toLowerCase()}|${package_size}`;
-          if (!rateKeys.has(key)) loadedRates.push({ destination_state: zone, package_size, fee_ngn: SCREENSHOT_RATES[zone][sizes.indexOf(package_size)], is_active: true, source_note: 'Jumia rate-card screenshot supplied by user' });
+          if (!rateKeys.has(key)) {
+            loadedRates.push({
+              destination_state: zone,
+              package_size,
+              fee_ngn: 0,
+              is_active: false,
+              source_note: '',
+            });
+          }
         }
-      }
-      for (const rate of loadedRates) {
-        rate.fee_ngn = SCREENSHOT_RATES[rate.destination_state][sizes.indexOf(rate.package_size)];
-        rate.is_active = true;
-        rate.source_note = 'Jumia rate-card screenshot supplied by user';
       }
       setRates(loadedRates);
       const savedZones: DestinationZone[] = (data.destination_zones ?? []).map((z: any) => ({ destination_state: String(z.destination_state ?? ''), destination_zone: String(z.destination_zone ?? ''), is_active: z.is_active === true, source_note: z.source_note ?? '' }));
-      setDestinationZones(JUMIA_LOCALITIES.map(locality => savedZones.find(z => z.destination_state.toLowerCase() === locality.toLowerCase()) ?? ({ destination_state: locality, destination_zone: LOCALITY_ZONE_HINTS[locality], is_active: true, source_note: 'Jumia delivery-zones screenshot supplied by user' })));
+      setDestinationZones(savedZones);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load pickup pricing');
     } finally {
