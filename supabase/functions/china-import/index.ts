@@ -138,7 +138,7 @@ async function calculatePickupDeliveryQuote(supabase: any, stationId: string, it
 
   const { data: station, error: stationError } = await supabase
     .from('pickup_stations')
-    .select('id, state, is_active')
+    .select('id, name, address, state, is_active')
     .eq('id', stationId)
     .maybeSingle()
   if (stationError || !station?.is_active) throw new Error('Pickup station is unavailable for pricing')
@@ -148,9 +148,13 @@ async function calculatePickupDeliveryQuote(supabase: any, stationId: string, it
     .select('destination_state, destination_zone')
     .eq('is_active', true)
   if (zoneMappingError) throw new Error('Could not load Jumia destination-zone mapping')
-  const zoneMapping = (zoneMappings ?? []).find((row: any) => normalizePickupState(String(row.destination_state ?? '')) === normalizePickupState(String(station.state ?? '')))
+  const stationSearchText = normalizePickupState(`${station.name ?? ''} ${station.address ?? ''} ${station.state ?? ''}`)
+  const zoneMapping = (zoneMappings ?? [])
+    .filter((row: any) => normalizePickupState(String(row.destination_state ?? '')).length > 0)
+    .sort((a: any, b: any) => normalizePickupState(String(b.destination_state)).length - normalizePickupState(String(a.destination_state)).length)
+    .find((row: any) => stationSearchText.includes(normalizePickupState(String(row.destination_state ?? ''))))
   if (!zoneMapping?.destination_zone) {
-    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, destination_zone: null, weight_grams: null, volume_cbm: null, message: `No verified Jumia destination zone is configured for ${station.state}.` }
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, destination_zone: null, weight_grams: null, volume_cbm: null, message: `No Jumia locality match was found in pickup station name/address for ${station.name ?? station.state}. Choose a matching station or update its address.` }
   }
 
   const { data: rules, error: rulesError } = await supabase
@@ -1040,7 +1044,8 @@ serve(async (req: Request) => {
         }
       }
       if (settings.enabled) {
-        if (destination_zones.length !== 37 || destination_zones.some((mapping: any) => mapping.is_active === false || !validZones.includes(mapping.destination_zone))) return json({ error: 'Before enabling pricing, assign a verified Jumia zone to all 37 Nigerian states and the FCT.' }, 400)
+        if (destination_zones.length < 1 || destination_zones.some((mapping: any) => mapping.is_active === false || !validZones.includes(mapping.destination_zone))) return json({ error: 'Before enabling pricing, assign an active Jumia zone to every configured city/locality.' }, 400)
+        if (validZones.some(zone => !destination_zones.some((mapping: any) => mapping.is_active !== false && mapping.destination_zone === zone))) return json({ error: 'Every Jumia zone must have at least one active city/locality mapping.' }, 400)
         if (validZones.some(zone => expectedSizes.some(size => !rates.some((rate: any) => rate.is_active !== false && rate.destination_state === zone && rate.package_size === size)))) {
           return json({ error: 'Before enabling pickup pricing, every destination zone needs active small, medium, and large rates.' }, 400)
         }
