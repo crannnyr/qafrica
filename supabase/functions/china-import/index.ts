@@ -1056,14 +1056,18 @@ serve(async (req: Request) => {
       // sea) — enforced server-side as well as in the UI, because the
       // shipping methods arrive from the client and the storefront cache
       // can be up to 30s stale.
-      const blockedByShipOnly = (items as any[])
-        .filter((i: any) => productMap.get(i.id)?.ship_only && (i.shipping_method ?? shipping_method) === 'flight')
+      const blockedByAir = (items as any[])
+        .filter((i: any) => {
+          const product = productMap.get(i.id)
+          return (product?.ship_only || Number(product?.air_shipping_customer_ngn ?? 0) <= 0)
+            && (i.shipping_method ?? shipping_method) === 'flight'
+        })
         .map((i: any) => productMap.get(i.id)?.name)
-      if (blockedByShipOnly.length > 0) {
+      if (blockedByAir.length > 0) {
         return json({
-          error: 'ship_only_requires_sea',
-          message: `${blockedByShipOnly.join(', ')} can only be shipped by sea freight. Please switch ${blockedByShipOnly.length > 1 ? 'these items' : 'this item'} to sea freight.`,
-          blocked_items: blockedByShipOnly,
+          error: 'air_shipping_unavailable',
+          message: `${blockedByAir.join(', ')} cannot be shipped by air because the air shipping fee is unavailable. Please select sea freight or contact support.`,
+          blocked_items: blockedByAir,
         }, 409)
       }
 
