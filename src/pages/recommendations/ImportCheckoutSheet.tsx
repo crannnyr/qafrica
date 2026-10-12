@@ -152,6 +152,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           setManualTransferEnabled(data.settings.manual_transfer_enabled);
           if (!data.settings.manual_transfer_enabled) setPaymentMethod('paystack');
         }
+        setPickupPricingEnabled(data.settings.jumia_pickup_delivery_pricing_enabled === true || data.settings.pickup_delivery_pricing_enabled === true);
         setShippingSettings({
           chargeShippingAtCheckout: typeof data.settings.charge_shipping_at_checkout === 'boolean' ? data.settings.charge_shipping_at_checkout : true,
           shippingDiscountPercent: Number(data.settings.shipping_discount_percent ?? 0),
@@ -351,6 +352,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [stations, setStations] = useState<PickupStation[]>([]);
   const [stationsLoading, setStationsLoading] = useState(false);
   const [stationSearch, setStationSearch] = useState('');
+  const [selectedPickupArea, setSelectedPickupArea] = useState('');
+  const [pickupPricingEnabled, setPickupPricingEnabled] = useState(false);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [showStationPicker, setShowStationPicker] = useState(false);
 
@@ -391,14 +394,16 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     const q = stationSearch.trim().toLowerCase();
     const city = address.city.trim().toLowerCase();
     const state = address.state.trim().toLowerCase();
-    if (!q && !city && !state) return [];
+    if (!q && !selectedPickupArea && !city && !state) return [];
     return stations.filter(s => {
       const haystack = `${s.name} ${s.address} ${s.landmark ?? ''} ${s.state}`.toLowerCase();
       if (q) return haystack.includes(q);
+      if (selectedPickupArea) return s.state.toLowerCase() === selectedPickupArea.toLowerCase() || haystack.includes(selectedPickupArea.toLowerCase());
       if (city) return haystack.includes(city) || s.state.toLowerCase() === state;
       return s.state.toLowerCase() === state;
     }).slice(0, 25);
   })();
+  const pickupAreas = Array.from(new Set(stations.map(s => s.state.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const selectedStation = stations.find(s => s.id === selectedStationId) ?? null;
 
   const pickupQuoteItemsKey = cart.map(item => `${item.id}:${item.quantity}`).join('|');
@@ -1150,9 +1155,11 @@ if (promoQuote?.pending_order?.id) {
                     onChange={e => setAddressField('phone', e.target.value)}
                     className="px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
                 </div>
-                <input type="text" placeholder="Your city (helps us find nearby stations)" value={address.city}
-                  onChange={e => setAddressField('city', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
+                <select value={selectedPickupArea} onChange={e => { setSelectedPickupArea(e.target.value); setAddressField('city', e.target.value); setSelectedStationId(null); setShowStationPicker(true); }}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" aria-label="Select pickup city or area">
+                  <option value="">{stationsLoading ? 'Loading available pickup areas…' : 'Select your city / area'}</option>
+                  {pickupAreas.map(area => <option key={area} value={area}>{area}</option>)}
+                </select>
 
                 {selectedStation && !showStationPicker ? (
                   <button onClick={() => setShowStationPicker(true)}
@@ -1281,10 +1288,13 @@ if (promoQuote?.pending_order?.id) {
               <span className="font-medium">{fmt(pickupDeliveryFeeNgn)}</span>
             </div>
           )}
-          {deliveryMode === 'pickup_station' && pickupPricingStatus === 'loading' && selectedStationId && (
+          {deliveryMode === 'pickup_station' && !pickupPricingEnabled && selectedStationId && (
+            <p className="text-[11px] text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">Jumia pickup — Free</p>
+          )}
+          {deliveryMode === 'pickup_station' && pickupPricingEnabled && pickupPricingStatus === 'loading' && selectedStationId && (
             <p className="text-[10px] text-gray-400">Checking pickup delivery pricing…</p>
           )}
-          {deliveryMode === 'pickup_station' && pickupPricingStatus === 'error' && (
+          {deliveryMode === 'pickup_station' && pickupPricingEnabled && pickupPricingStatus === 'error' && (
             <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">{pickupDeliveryQuote?.message ?? 'Pickup delivery pricing is not configured. Please try another station or contact support.'}</p>
           )}
           {promoDiscount > 0 && (
