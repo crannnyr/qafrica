@@ -1046,7 +1046,7 @@ serve(async (req: Request) => {
         }
       }
       const { error: settingsError } = await supabase.from('import_pickup_delivery_settings').upsert({
-        id: 1, enabled: settings.enabled, classification_method: settings.classification_method, updated_at: new Date().toISOString(),
+        id: 1, enabled: false, classification_method: settings.classification_method, updated_at: new Date().toISOString(),
       })
       if (settingsError) return json({ error: 'Could not save pickup pricing settings: ' + settingsError.message }, 500)
       const normalizedRules = rules.map((rule: any) => ({
@@ -1106,6 +1106,8 @@ serve(async (req: Request) => {
           .in('id', staleIds)
         if (deactivateError) return json({ error: 'Rates saved, but removed rates could not be deactivated.' }, 500)
       }
+      const { error: finalSettingsError } = await supabase.from('import_pickup_delivery_settings').upsert({ id: 1, enabled: settings.enabled, classification_method: settings.classification_method, updated_at: new Date().toISOString() })
+      if (finalSettingsError) return json({ error: 'Pricing configuration was saved, but the feature switch could not be updated; pickup pricing remains disabled.' }, 500)
       return json({ success: true, message: settings.enabled ? 'Pickup pricing saved. Confirm all rates against Jumia before accepting live charges.' : 'Pickup pricing saved and remains disabled.' })
     }
 
