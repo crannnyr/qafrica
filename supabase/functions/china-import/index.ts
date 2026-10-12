@@ -143,7 +143,7 @@ async function calculatePickupDeliveryQuote(supabase: any, stationId: string, it
     .from('import_pickup_package_rules')
     .select('package_size, max_weight_grams, max_volume_cbm, is_configured')
   if (rulesError) throw new Error('Could not load package classification rules')
-  const ruleMap = new Map((rules ?? []).map((r: any) => [r.package_size, r]))
+  const ruleMap = new Map<string, any>((rules ?? []).map((r: any) => [r.package_size, r] as [string, any]))
   const sizes: PickupPackageSize[] = ['small', 'medium', 'large']
   if (sizes.some(size => !ruleMap.get(size)?.is_configured)) {
     return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, weight_grams: null, volume_cbm: null, message: 'Jumia package-size thresholds have not been configured.' }
@@ -1000,6 +1000,28 @@ serve(async (req: Request) => {
       for (const rate of rates) {
         if (typeof rate.destination_state !== 'string' || !rate.destination_state.trim() || !expectedSizes.includes(rate.package_size) || !Number.isInteger(Number(rate.fee_ngn)) || Number(rate.fee_ngn) < 0) {
           return json({ error: 'Each rate needs a destination state, valid package size, and non-negative whole-naira fee.' }, 400)
+        }
+      }
+      if (settings.classification_method !== 'volume') {
+        const small = rules.find((rule: any) => rule.package_size === 'small')
+        const medium = rules.find((rule: any) => rule.package_size === 'medium')
+        if (small?.max_weight_grams != null && medium?.max_weight_grams != null && Number(small.max_weight_grams) >= Number(medium.max_weight_grams)) {
+          return json({ error: 'Small-package maximum weight must be lower than medium-package maximum weight.' }, 400)
+        }
+      }
+      if (settings.classification_method !== 'weight') {
+        const small = rules.find((rule: any) => rule.package_size === 'small')
+        const medium = rules.find((rule: any) => rule.package_size === 'medium')
+        if (small?.max_volume_cbm != null && medium?.max_volume_cbm != null && Number(small.max_volume_cbm) >= Number(medium.max_volume_cbm)) {
+          return json({ error: 'Small-package maximum volume must be lower than medium-package maximum volume.' }, 400)
+        }
+      }
+      if (settings.enabled) {
+        const activeStates = [...new Set(rates.filter((rate: any) => rate.is_active !== false).map((rate: any) => String(rate.destination_state).trim().toLowerCase()))]
+        if (!activeStates.length || activeStates.some((state: string) => expectedSizes.some(size =>
+          !rates.some((rate: any) => rate.is_active !== false && String(rate.destination_state).trim().toLowerCase() === state && rate.package_size === size)
+        ))) {
+          return json({ error: 'Before enabling pickup pricing, each destination state needs active small, medium, and large rates.' }, 400)
         }
       }
       const { error: settingsError } = await supabase.from('import_pickup_delivery_settings').upsert({
