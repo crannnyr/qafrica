@@ -1114,9 +1114,10 @@ serve(async (req: Request) => {
       const discountedShippingNgn = discountActive
         ? Math.round(rawShippingNgn * (1 - effectiveDiscountPercent / 100))
         : rawShippingNgn
-      // Recommendations checkout always collects the selected shipping fee upfront.
-      // Do not let a stale admin toggle silently remove shipping from the payment total.
-      const shippingNgn = discountedShippingNgn
+      // The admin setting controls whether shipping is collected in this checkout.
+      // Shipping rates are still validated and snapshotted even when collection is deferred.
+      const chargeShippingAtCheckout = shippingSettings.charge_shipping_at_checkout === true
+      const shippingNgn = chargeShippingAtCheckout ? discountedShippingNgn : 0
       const jumiaFeeNgn = delivery_type === 'to_qafrica' ? pricedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
       const totalBeforePromotionNgn = subtotalNgn + jumiaFeeNgn + shippingNgn
 
