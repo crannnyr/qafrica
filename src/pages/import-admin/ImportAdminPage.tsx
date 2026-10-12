@@ -642,6 +642,7 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
 
   return (
     <div className="space-y-4">
+      <JumiaPickupPricingManager token={token} />
       <div className="bg-white rounded-2xl border border-gray-100 p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -3588,7 +3589,6 @@ function PricingShippingManager({ token }: { token: string }) {
         {isSaving ? 'Saving…' : saved ? 'Saved' : 'Save pricing & shipping settings'}
       </button>
 
-      <JumiaPickupPricingManager token={token} />
     </div>
   );
 }
