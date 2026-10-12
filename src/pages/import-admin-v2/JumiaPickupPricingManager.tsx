@@ -42,11 +42,12 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Could not load pickup pricing');
       setEnabled(data.settings?.enabled === true);
-      setMethod(data.settings?.classification_method ?? 'weight');
-      setRules(sizes.map(size => {
-        const row = (data.rules ?? []).find((r: Rule) => r.package_size === size);
-        return row ? { ...row, max_weight_grams: row.max_weight_grams == null ? null : Number(row.max_weight_grams), max_volume_cbm: row.max_volume_cbm == null ? null : Number(row.max_volume_cbm) } : { ...blankRules.find(r => r.package_size === size)!, };
-      }));
+      setMethod('weight');
+      setRules([
+        { package_size: 'small', max_weight_grams: 5000, max_volume_cbm: null, is_configured: true },
+        { package_size: 'medium', max_weight_grams: 15000, max_volume_cbm: null, is_configured: true },
+        { package_size: 'large', max_weight_grams: 35000, max_volume_cbm: null, is_configured: true },
+      ]);
       const loadedRates: Rate[] = (data.rates ?? []).filter((r: any) => ZONES.includes(String(r.destination_state ?? ''))).map((r: any) => ({
         destination_state: String(r.destination_state ?? ''),
         package_size: r.package_size,
