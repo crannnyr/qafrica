@@ -14,6 +14,7 @@ const blankRules: Rule[] = [
   { package_size: 'large', max_weight_grams: null, max_volume_cbm: null, is_configured: false },
 ];
 const sizes: PackageSize[] = ['small', 'medium', 'large'];
+const NIGERIAN_STATES = ["Abia","Adamawa","Akwa Ibom","Anambra","Bauchi","Bayelsa","Benue","Borno","Cross River","Delta","Ebonyi","Edo","Ekiti","Enugu","Federal Capital Territory","Gombe","Imo","Jigawa","Kaduna","Kano","Katsina","Kebbi","Kogi","Kwara","Lagos","Nasarawa","Niger","Ogun","Ondo","Osun","Oyo","Plateau","Rivers","Sokoto","Taraba","Yobe","Zamfara"] as const;
 
 export default function JumiaPickupPricingManager({ token }: { token: string }) {
   const [enabled, setEnabled] = useState(false);
@@ -41,13 +42,21 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
         const row = (data.rules ?? []).find((r: Rule) => r.package_size === size);
         return row ? { ...row, max_weight_grams: row.max_weight_grams == null ? null : Number(row.max_weight_grams), max_volume_cbm: row.max_volume_cbm == null ? null : Number(row.max_volume_cbm) } : { ...blankRules.find(r => r.package_size === size)!, };
       }));
-      setRates((data.rates ?? []).map((r: any) => ({
+      const loadedRates: Rate[] = (data.rates ?? []).map((r: any) => ({
         destination_state: String(r.destination_state ?? ''),
         package_size: r.package_size,
         fee_ngn: Number(r.fee_ngn),
-        is_active: r.is_active !== false,
+        is_active: r.is_active === true,
         source_note: r.source_note ?? '',
-      })));
+      }));
+      const rateKeys = new Set(loadedRates.map(r => `${r.destination_state.trim().toLowerCase()}|${r.package_size}`));
+      for (const state of NIGERIAN_STATES) {
+        for (const package_size of sizes) {
+          const key = `${state.toLowerCase()}|${package_size}`;
+          if (!rateKeys.has(key)) loadedRates.push({ destination_state: state, package_size, fee_ngn: 0, is_active: false, source_note: '' });
+        }
+      }
+      setRates(loadedRates);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load pickup pricing');
     } finally {
@@ -173,7 +182,7 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
         <div className="space-y-2">
           {rates.map((rate, index) => (
             <div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 rounded-xl border border-gray-100 p-3 items-end">
-              <div className="sm:col-span-3"><label className="block text-[10px] text-gray-500 mb-1">Destination state</label><input value={rate.destination_state} onChange={e => updateRate(index, { destination_state: e.target.value })} placeholder="e.g. Rivers" className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs" /></div>
+              <div className="sm:col-span-3"><label className="block text-[10px] text-gray-500 mb-1">Destination state</label><select value={rate.destination_state} onChange={e => updateRate(index, { destination_state: e.target.value })} className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs"><option value="">Select state</option>{NIGERIAN_STATES.map(state => <option key={state} value={state}>{state}</option>)}</select></div>
               <div className="sm:col-span-2"><label className="block text-[10px] text-gray-500 mb-1">Package</label><select value={rate.package_size} onChange={e => updateRate(index, { package_size: e.target.value as PackageSize })} className="w-full rounded-lg border border-gray-200 px-2 py-2 text-xs">{sizes.map(size => <option key={size} value={size}>{size}</option>)}</select></div>
               <div className="sm:col-span-2"><label className="block text-[10px] text-gray-500 mb-1">Fee (₦)</label><input type="number" min="0" step="1" value={rate.fee_ngn} onChange={e => updateRate(index, { fee_ngn: Number(e.target.value) })} className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs" /></div>
               <div className="sm:col-span-3"><label className="block text-[10px] text-gray-500 mb-1">Rate source / note</label><input value={rate.source_note} onChange={e => updateRate(index, { source_note: e.target.value })} placeholder="Official rate card / date" className="w-full rounded-lg border border-gray-200 px-2.5 py-2 text-xs" /></div>
