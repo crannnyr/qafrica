@@ -1329,6 +1329,8 @@ serve(async (req: Request) => {
           .eq('kind', 'consolidation_shipping')
           .eq('reason', 'Upfront shipping fee')
           .neq('status', 'cancelled')
+          .select('id')
+          .maybeSingle()
         if (shippingBillError) {
           console.error('[china-import] failed to mark upfront shipping bill paid:', shippingBillError)
           return json({ error: 'Payment was verified, but the upfront shipping bill could not be marked paid. Please contact support.', success: true, order }, 500)
@@ -3242,6 +3244,8 @@ serve(async (req: Request) => {
         .eq('kind', 'consolidation_shipping')
         .eq('reason', 'Upfront shipping fee')
         .eq('status', 'pending')
+        .select('id')
+        .maybeSingle()
       if (billClaimError) {
         console.error('[china-import] failed to update upfront shipping bill claim:', billClaimError)
         return json({ error: 'Transfer claim was saved on the order, but the shipping bill needs admin review.', order: data }, 500)
