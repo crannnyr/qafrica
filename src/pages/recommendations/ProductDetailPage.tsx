@@ -216,6 +216,7 @@ export default function ProductDetailPage() {
   const storeAddOne = useImportCartStore(s => s.addOne);
   const storeRemoveOne = useImportCartStore(s => s.removeOne);
   const storeSetQuantity = useImportCartStore(s => s.setQuantity);
+  const clearImportCart = useImportCartStore(s => s.clearCart);
   const syncImportCart = useImportCartStore(s => s.syncWithServer);
   const refreshImportCartPrices = useImportCartStore(s => s.refreshPrices);
   // Guests never hit syncWithServer, so re-price their locally stored cart once on load.
@@ -857,6 +858,7 @@ export default function ProductDetailPage() {
               const item = cart.find(i => i.cart_key === cart_key);
               storeSetQuantity(cart_key, n, item?.moq ?? 1);
             }}
+            onClearCart={clearImportCart}
           />
         )}
       </AnimatePresence>

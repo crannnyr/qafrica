@@ -59,6 +59,37 @@ interface PickupStation {
   landmark: string | null;
 }
 
+// Derive city/locality from station name and address without treating an
+// arbitrary street/hotel phrase as the city. State remains separately visible.
+const NIGERIAN_STATES = [
+  'Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','Federal Capital Territory','FCT','Gombe','Imo','Jigawa','Kaduna','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara',
+];
+function getPickupCity(station: PickupStation): string {
+  const state = station.state.trim().toLowerCase().replace(/\\s+state$/, '');
+  const addressParts = station.address.split(',').map(part => part.trim()).filter(Boolean);
+  const cleaned = addressParts.filter(part => {
+    const normalized = part.toLowerCase().replace(/\\s+state$/, '');
+    return normalized !== state && normalized !== 'nigeria' &&
+      !NIGERIAN_STATES.some(s => normalized === s.toLowerCase()) &&
+      !normalized.endsWith(` ${state}`);
+  });
+  // Prefer a known locality in the address; otherwise use the station's
+  // actual locality name rather than a street or nearby landmark.
+  const localityHints = [
+    'Lagos','Abuja','Port Harcourt','Awka','Nnewi','Onitsha','Aba','Umuahia','Enugu','Nsukka','Owerri','Ibadan','Abeokuta','Sagamu','Akure','Benin','Asaba','Warri','Uyo','Calabar','Yenagoa','Jos','Kaduna','Kano','Maiduguri','Minna','Ilorin','Lokoja','Suleja','Gwagwalada','Ikorodu','Ajah','Epe','Badagry','Ojo','Lekki','Eleko Junction','Sango Otta','Mowe','Ibafo','Redeemed Camp','Nnewi','Egor','Ekpoma','Sapele','Ughelli','Abraka','Udu','Bonny Island','Oyigbo','Eleme','Idu','Masaka','Keffi','Lafia','Yola','Zaria','Bauchi','Gombe','Abakaliki','Eket','Ikot Ekpene','Ogbomoso','Osogbo','Ile Ife','Ado Ekiti','Ondo','Ore','Owo','Offa','Okene','Markurdi','Makurdi',
+  ];
+  const source = `${station.name}, ${station.address}`.toLowerCase();
+  const hinted = localityHints.find(locality => source.includes(locality.toLowerCase()));
+  if (hinted) return hinted;
+  const stationName = station.name.replace(/^jumia\\s+pick\\s*up\\s+station\\s*/i, '').trim();
+  if (stationName && !/^(pickup|pick up) station$/i.test(stationName)) return stationName;
+  return cleaned[cleaned.length - 1] || station.state;
+}
+
+function normalizePickupArea(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
 type DeliveryMode = 'home' | 'pickup_station';
 
 interface Props {
@@ -68,9 +99,10 @@ interface Props {
   onAdd: (cart_key: string) => void;
   onRemove: (cart_key: string) => void;
   onSetQuantity: (cart_key: string, quantity: number) => void;
+  onClearCart: () => void;
 }
 
-export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove, onSetQuantity }: Props) {
+export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove, onSetQuantity, onClearCart }: Props) {
   // Flight is the default shipping choice — customer can switch to sea freight.
   const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>('flight');
   // const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
@@ -123,6 +155,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
   // Delivery mode is declared before the settings effect because the settings load can set it.
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('pickup_station');
+  const [pickupPricingStatus, setPickupPricingStatus] = useState<'loading' | 'disabled' | 'ready' | 'error'>('loading');
+  const [pickupDeliveryQuote, setPickupDeliveryQuote] = useState<{ fee_ngn: number; package_size: 'small' | 'medium' | 'large' | null; message?: string } | null>(null);
   const [shippingSettings, setShippingSettings] = useState({
     chargeShippingAtCheckout: true,
     shippingDiscountPercent: 0,
@@ -149,6 +183,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           setManualTransferEnabled(data.settings.manual_transfer_enabled);
           if (!data.settings.manual_transfer_enabled) setPaymentMethod('paystack');
         }
+        setPickupPricingEnabled(data.settings.jumia_pickup_delivery_pricing_enabled === true || data.settings.pickup_delivery_pricing_enabled === true);
         setShippingSettings({
           chargeShippingAtCheckout: typeof data.settings.charge_shipping_at_checkout === 'boolean' ? data.settings.charge_shipping_at_checkout : true,
           shippingDiscountPercent: Number(data.settings.shipping_discount_percent ?? 0),
@@ -275,7 +310,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       return changed ? next : prev;
     });
   }, [seaShippingLocked, shippingMethod, cart]);
-  const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0);
+  const pickupDeliveryFeeNgn = deliveryMode === 'pickup_station' && pickupPricingStatus === 'ready' ? Number(pickupDeliveryQuote?.fee_ngn ?? 0) : 0;
+  const totalBeforePromo = subtotal + (shippingSettings.chargeShippingAtCheckout ? shippingTotal : 0) + pickupDeliveryFeeNgn;
   const promoDiscount = Math.max(0, Math.min(Number(promoQuote?.discount_amount_ngn ?? 0), totalBeforePromo));
   const total = Math.max(0, totalBeforePromo - promoDiscount);
 
@@ -347,6 +383,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [stations, setStations] = useState<PickupStation[]>([]);
   const [stationsLoading, setStationsLoading] = useState(false);
   const [stationSearch, setStationSearch] = useState('');
+  const [selectedPickupArea, setSelectedPickupArea] = useState('');
+  const [pickupPricingEnabled, setPickupPricingEnabled] = useState(false);
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [showStationPicker, setShowStationPicker] = useState(false);
 
@@ -387,15 +425,79 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     const q = stationSearch.trim().toLowerCase();
     const city = address.city.trim().toLowerCase();
     const state = address.state.trim().toLowerCase();
-    if (!q && !city && !state) return [];
+    if (!q && !selectedPickupArea && !city && !state) return [];
     return stations.filter(s => {
       const haystack = `${s.name} ${s.address} ${s.landmark ?? ''} ${s.state}`.toLowerCase();
       if (q) return haystack.includes(q);
+      if (selectedPickupArea) {
+        const [cityKey, stateKey] = selectedPickupArea.split('::');
+        return normalizePickupArea(getPickupCity(s)) === cityKey && normalizePickupArea(s.state) === stateKey;
+      }
       if (city) return haystack.includes(city) || s.state.toLowerCase() === state;
       return s.state.toLowerCase() === state;
     }).slice(0, 25);
   })();
+  const pickupAreas = Array.from(new Map(stations.map(s => {
+    const city = getPickupCity(s);
+    const key = `${normalizePickupArea(city)}::${normalizePickupArea(s.state)}`;
+    return [key, { key, city, state: s.state.trim() }];
+  })).values()).sort((a, b) => a.city.localeCompare(b.city) || a.state.localeCompare(b.state));
   const selectedStation = stations.find(s => s.id === selectedStationId) ?? null;
+
+  const pickupQuoteItemsKey = cart.map(item => `${item.id}:${item.quantity}`).join('|');
+  useEffect(() => {
+    if (deliveryMode !== 'pickup_station' || !selectedStationId || cart.length === 0) {
+      setPickupDeliveryQuote(null);
+      setPickupPricingStatus('disabled');
+      return;
+    }
+    let cancelled = false;
+    setPickupPricingStatus('loading');
+    fetch(`${EDGE_URL}?action=pickup-delivery-quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        pickup_station_id: selectedStationId,
+        items: pickupQuoteItemsKey.split('|').filter(Boolean).map(pair => { const [id, quantity] = pair.split(':'); return { id, quantity: Number(quantity) }; }),
+      }),
+    })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? 'Could not calculate pickup delivery fee.');
+        return data.quote;
+      })
+      .then(quote => {
+        if (cancelled) return;
+        setPickupPricingEnabled(quote?.enabled === true);
+        if (!quote?.enabled) {
+          setPickupDeliveryQuote(null);
+          setPickupPricingStatus('disabled');
+        } else if (quote.configured && Number.isFinite(Number(quote.fee_ngn))) {
+          setPickupDeliveryQuote({
+            fee_ngn: Number(quote.fee_ngn),
+            package_size: quote.package_size ?? null,
+          });
+          setPickupPricingStatus('ready');
+        } else {
+          setPickupDeliveryQuote({
+            fee_ngn: 0,
+            package_size: quote.package_size ?? null,
+            message: quote.message ?? 'Jumia pickup delivery pricing is not configured for this order yet.',
+          });
+          setPickupPricingStatus('error');
+        }
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setPickupDeliveryQuote({
+          fee_ngn: 0,
+          package_size: null,
+          message: err instanceof Error ? err.message : 'Could not calculate pickup delivery fee.',
+        });
+        setPickupPricingStatus('error');
+      });
+    return () => { cancelled = true; };
+  }, [deliveryMode, selectedStationId, pickupQuoteItemsKey]);
 
   // Optional GPS — supplements the manual address, never replaces it
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -484,7 +586,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
   const perItemShippingComplete = cart.length <= 1 || cart.every(i => !!shippingMethodFor(i));
   const missingShippingItems = cart.length > 1 ? cart.filter(i => !shippingMethodFor(i)) : [];
-  const canSubmit = whatsapp.trim() && cart.length > 0 && addressComplete && perItemShippingComplete &&
+  const pickupPricingReady = deliveryMode !== 'pickup_station' || pickupPricingStatus === 'disabled' || pickupPricingStatus === 'ready';
+  const canSubmit = whatsapp.trim() && cart.length > 0 && addressComplete && perItemShippingComplete && pickupPricingReady &&
     (cart.length > 1 ? true : !!shippingMethod);
 
   const handleCheckout = async () => {
@@ -619,8 +722,11 @@ if (promoQuote?.pending_order?.id) {
               if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
             }
           }
-          if (verifyData?.success) setResult({ code: data.code });
-          else setError('Payment could not be verified. If you were charged, contact support with your order code: ' + data.code);
+          if (verifyData?.success) {
+            // Only clear the persisted cart after the server confirms payment.
+            onClearCart();
+            setResult({ code: data.code });
+          } else setError('Payment could not be verified. If you were charged, contact support with your order code: ' + data.code);
           setIsVerifying(false);
           setIsProcessing(false);
         },
@@ -1088,10 +1194,6 @@ if (promoQuote?.pending_order?.id) {
                     onChange={e => setAddressField('phone', e.target.value)}
                     className="px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
                 </div>
-                <input type="text" placeholder="Your city (helps us find nearby stations)" value={address.city}
-                  onChange={e => setAddressField('city', e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
-
                 {selectedStation && !showStationPicker ? (
                   <button onClick={() => setShowStationPicker(true)}
                     className="w-full text-left p-3 rounded-xl border-2 border-gray-900 bg-gray-50 flex items-center gap-2.5">
@@ -1104,9 +1206,30 @@ if (promoQuote?.pending_order?.id) {
                   </button>
                 ) : (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="border-b border-gray-100 bg-orange-50/70 p-3">
+                      <label htmlFor="pickup-city-state" className="mb-1.5 block text-[11px] font-semibold text-gray-600">Filter by city and state</label>
+                      <div className="relative">
+                        <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-500" />
+                        <select id="pickup-city-state" value={selectedPickupArea} onChange={e => {
+                          const value = e.target.value;
+                          setSelectedPickupArea(value);
+                          const area = pickupAreas.find(item => item.key === value);
+                          if (area) { setAddressField('city', area.city); setAddressField('state', area.state); }
+                          setSelectedStationId(null);
+                          setStationSearch('');
+                          setShowStationPicker(true);
+                        }}
+                          className="w-full appearance-none rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-9 text-sm font-semibold text-gray-800 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                          aria-label="Filter pickup stations by city and state" disabled={stationsLoading || pickupAreas.length === 0}>
+                          <option value="">{stationsLoading ? 'Loading cities and states…' : 'All cities and states'}</option>
+                          {pickupAreas.map(area => <option key={area.key} value={area.key}>{area.city} — {area.state}</option>)}
+                        </select>
+                        <Navigation className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-500" />
+                      </div>
+                    </div>
                     <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
                       <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                      <input type="text" placeholder="Search stations by name or area…" value={stationSearch}
+                      <input type="text" placeholder="Search stations by name or address…" value={stationSearch}
                         onChange={e => setStationSearch(e.target.value)}
                         className="flex-1 min-w-0 text-sm outline-none" />
                     </div>
@@ -1212,6 +1335,21 @@ if (promoQuote?.pending_order?.id) {
               <span>Shipping{discountActive && effectiveDiscountPercent > 0 ? ` (${effectiveDiscountPercent}% off)` : ''}</span>
               <span className="font-medium">{fmt(shippingTotal)}</span>
             </div>
+          )}
+          {pickupDeliveryFeeNgn > 0 && (
+            <div className="flex justify-between text-xs text-gray-500">
+              <span>Jumia pickup delivery</span>
+              <span className="font-medium">{fmt(pickupDeliveryFeeNgn)}</span>
+            </div>
+          )}
+          {deliveryMode === 'pickup_station' && !pickupPricingEnabled && selectedStationId && (
+            <p className="text-[11px] text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2">Jumia pickup — Free</p>
+          )}
+          {deliveryMode === 'pickup_station' && pickupPricingEnabled && pickupPricingStatus === 'loading' && selectedStationId && (
+            <p className="text-[10px] text-gray-400">Checking pickup delivery pricing…</p>
+          )}
+          {deliveryMode === 'pickup_station' && pickupPricingEnabled && pickupPricingStatus === 'error' && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 rounded-lg px-3 py-2">{pickupDeliveryQuote?.message ?? 'Pickup delivery pricing is not configured. Please try another station or contact support.'}</p>
           )}
           {promoDiscount > 0 && (
             <div className="flex justify-between text-xs text-emerald-600">

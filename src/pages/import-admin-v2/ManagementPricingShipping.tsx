@@ -5,6 +5,8 @@ import { toast } from 'sonner'
 import CONFIG from '@/lib/config'
 import { getManagementToken } from './ManagementAuth'
 import ChinaImportPromotions from './ChinaImportPromotions'
+import JumiaPickupPricingManager from './JumiaPickupPricingManager'
+import { useState as usePricingTabState } from 'react'
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`
 
@@ -30,6 +32,7 @@ const DEFAULTS: PricingSettings = {
 }
 
 export default function ManagementPricingShipping() {
+  const [activeTab, setActiveTab] = usePricingTabState<'pickup' | 'shipping'>('pickup')
   const [searchParams] = useSearchParams()
   if (searchParams.get('view') === 'promotions') return <ChinaImportPromotions />
 
@@ -141,6 +144,14 @@ export default function ManagementPricingShipping() {
 
   return (
     <div className="space-y-4 max-w-3xl">
+      <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1">
+        <button type="button" onClick={() => setActiveTab('pickup')} className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${activeTab === 'pickup' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Jumia Pickup Pricing</button>
+        <button type="button" onClick={() => setActiveTab('shipping')} className={`rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${activeTab === 'shipping' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>Pricing &amp; Shipping</button>
+      </div>
+      {activeTab === 'pickup' ? (
+        getManagementToken() ? <JumiaPickupPricingManager token={getManagementToken()!} /> : <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">Your management session has expired. Sign in again to configure pickup pricing.</div>
+      ) : (
+        <>
       <div>
         <h2 className="text-xl font-black text-gray-900">Pricing & Shipping</h2>
         <p className="text-sm text-gray-500 mt-1">Rates and shipping allocation rules used by the import pricing system.</p>
@@ -208,6 +219,8 @@ export default function ManagementPricingShipping() {
       <button onClick={() => void load()} disabled={isLoading} className="mx-auto flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700">
         <RefreshCw className="w-3 h-3" /> Refresh settings
       </button>
+        </>
+      )}
     </div>
   )
 }

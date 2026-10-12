@@ -455,6 +455,7 @@ export default function RecommendationsPage() {
   const storeAddOne = useImportCartStore(s => s.addOne);
   const storeRemoveOne = useImportCartStore(s => s.removeOne);
   const storeSetQuantity = useImportCartStore(s => s.setQuantity);
+  const clearImportCart = useImportCartStore(s => s.clearCart);
   const syncImportCart = useImportCartStore(s => s.syncWithServer);
   const saveImportCart = useImportCartStore(s => s.saveToServer);
   const refreshImportCartPrices = useImportCartStore(s => s.refreshPrices);
@@ -911,6 +912,7 @@ export default function RecommendationsPage() {
             onAdd={cart_key => storeAddOne(cart_key)}
             onRemove={removeFromCart}
             onSetQuantity={setCartQuantity}
+            onClearCart={clearImportCart}
           />
         )}
       </AnimatePresence>
