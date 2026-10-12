@@ -59,18 +59,31 @@ interface PickupStation {
   landmark: string | null;
 }
 
-// Pickup station records have no dedicated city column. Derive the locality
-// from the final address segments before the state, while retaining the full
-// station address for customer confirmation.
+// Derive city/locality from station name and address without treating an
+// arbitrary street/hotel phrase as the city. State remains separately visible.
+const NIGERIAN_STATES = [
+  'Abia','Adamawa','Akwa Ibom','Anambra','Bauchi','Bayelsa','Benue','Borno','Cross River','Delta','Ebonyi','Edo','Ekiti','Enugu','Federal Capital Territory','FCT','Gombe','Imo','Jigawa','Kaduna','Kano','Katsina','Kebbi','Kogi','Kwara','Lagos','Nasarawa','Niger','Ogun','Ondo','Osun','Oyo','Plateau','Rivers','Sokoto','Taraba','Yobe','Zamfara',
+];
 function getPickupCity(station: PickupStation): string {
-  const state = station.state.trim().toLowerCase().replace(/\s+state$/, '');
-  const parts = station.address.split(',').map(part => part.trim()).filter(Boolean);
-  const localityParts = parts.filter(part => {
-    const normalized = part.toLowerCase().replace(/\s+state$/, '');
-    return normalized !== state && !normalized.endsWith(` ${state}`) && normalized !== 'nigeria';
+  const state = station.state.trim().toLowerCase().replace(/\\s+state$/, '');
+  const addressParts = station.address.split(',').map(part => part.trim()).filter(Boolean);
+  const cleaned = addressParts.filter(part => {
+    const normalized = part.toLowerCase().replace(/\\s+state$/, '');
+    return normalized !== state && normalized !== 'nigeria' &&
+      !NIGERIAN_STATES.some(s => normalized === s.toLowerCase()) &&
+      !normalized.endsWith(` ${state}`);
   });
-  const candidate = localityParts[localityParts.length - 1];
-  return candidate || station.name.replace(/^jumia\s+pick\s*up\s+station\s*/i, '').trim() || station.state;
+  // Prefer a known locality in the address; otherwise use the station's
+  // actual locality name rather than a street or nearby landmark.
+  const localityHints = [
+    'Lagos','Abuja','Port Harcourt','Awka','Nnewi','Onitsha','Aba','Umuahia','Enugu','Nsukka','Owerri','Ibadan','Abeokuta','Sagamu','Akure','Benin','Asaba','Warri','Uyo','Calabar','Yenagoa','Jos','Kaduna','Kano','Maiduguri','Minna','Ilorin','Lokoja','Suleja','Gwagwalada','Ikorodu','Ajah','Epe','Badagry','Ojo','Lekki','Eleko Junction','Sango Otta','Mowe','Ibafo','Redeemed Camp','Nnewi','Egor','Ekpoma','Sapele','Ughelli','Abraka','Udu','Bonny Island','Oyigbo','Eleme','Idu','Masaka','Keffi','Lafia','Yola','Zaria','Bauchi','Gombe','Abakaliki','Eket','Ikot Ekpene','Ogbomoso','Osogbo','Ile Ife','Ado Ekiti','Ondo','Ore','Owo','Offa','Okene','Markurdi','Makurdi',
+  ];
+  const source = `${station.name}, ${station.address}`.toLowerCase();
+  const hinted = localityHints.find(locality => source.includes(locality.toLowerCase()));
+  if (hinted) return hinted;
+  const stationName = station.name.replace(/^jumia\\s+pick\\s*up\\s+station\\s*/i, '').trim();
+  if (stationName && !/^(pickup|pick up) station$/i.test(stationName)) return stationName;
+  return cleaned[cleaned.length - 1] || station.state;
 }
 
 function normalizePickupArea(value: string): string {
