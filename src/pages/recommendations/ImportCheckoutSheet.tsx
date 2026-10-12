@@ -68,9 +68,10 @@ interface Props {
   onAdd: (cart_key: string) => void;
   onRemove: (cart_key: string) => void;
   onSetQuantity: (cart_key: string, quantity: number) => void;
+  onClearCart: () => void;
 }
 
-export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove, onSetQuantity }: Props) {
+export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, onRemove, onSetQuantity, onClearCart }: Props) {
   // Flight is the default shipping choice — customer can switch to sea freight.
   const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>('flight');
   // const [shippingMethod, setShippingMethod] = useState<'flight' | 'sea_freight' | null>(null);
@@ -677,8 +678,11 @@ if (promoQuote?.pending_order?.id) {
               if (attempt < 2) await new Promise(r => setTimeout(r, 1500));
             }
           }
-          if (verifyData?.success) setResult({ code: data.code });
-          else setError('Payment could not be verified. If you were charged, contact support with your order code: ' + data.code);
+          if (verifyData?.success) {
+            // Only clear the persisted cart after the server confirms payment.
+            onClearCart();
+            setResult({ code: data.code });
+          } else setError('Payment could not be verified. If you were charged, contact support with your order code: ' + data.code);
           setIsVerifying(false);
           setIsProcessing(false);
         },
