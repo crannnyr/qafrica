@@ -2319,7 +2319,8 @@ serve(async (req: Request) => {
       const weightGrams = body.weight_grams == null || body.weight_grams === '' ? 0 : Number(body.weight_grams)
       const shipOnly = body.ship_only === true
 
-      if (!(await requireAdmin(supabase, manager_token, 'import.products.create'))) return json({ error: 'Unauthorized' }, 401)
+      const requiredPermission = action === 'add-product' ? 'import.products.create' : 'import.products.update'
+      if (!(await requireAdmin(supabase, manager_token, requiredPermission))) return json({ error: 'Unauthorized: missing permission ' + requiredPermission }, 401)
       if (!name || !Number.isFinite(originalPriceUsd) || originalPriceUsd <= 0 || !image_urls?.length) {
         return json({ error: 'Product name, original USD price and at least one image are required' }, 400)
       }
@@ -2412,11 +2413,20 @@ serve(async (req: Request) => {
         if (error) return json({ error: error.message }, 500)
       } else {
         if (!id) return json({ error: 'Missing product id' }, 400)
-        const { error } = await supabase.from('china_import_products').update(row).eq('id', id)
+        const { data: updatedProduct, error } = await supabase
+          .from('china_import_products')
+          .update(row)
+          .eq('id', id)
+          .select('id, is_active')
+          .maybeSingle()
         if (error) return json({ error: error.message }, 500)
+        if (!updatedProduct) return json({ error: 'Product update matched no record. Nothing was saved; refresh the product and try again.' }, 404)
+        if (updatedProduct.is_active !== (body.is_active !== false)) {
+          return json({ error: 'The product was updated, but the saved Active status does not match your selection. Please retry and verify the listing status.' }, 500)
+        }
       }
       memoryCache.delete('products')
-      return json({ success: true, pricing: { ...pricing, markupPercent, originalPriceUsd, usdToNgnRate: pricingSettings.usdToNgn } })
+      return json({ success: true, saved: true, is_active: body.is_active !== false, pricing: { ...pricing, markupPercent, originalPriceUsd, usdToNgnRate: pricingSettings.usdToNgn } })
     }
 
     if (req.method === 'POST' && action === 'delete-product') {
