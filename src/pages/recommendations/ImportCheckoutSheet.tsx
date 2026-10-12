@@ -1194,35 +1194,6 @@ if (promoQuote?.pending_order?.id) {
                     onChange={e => setAddressField('phone', e.target.value)}
                     className="px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
                 </div>
-                <div className="relative rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-3 shadow-sm">
-                  <div className="mb-2 flex items-center gap-2">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 text-orange-600"><MapPin className="h-4 w-4" /></span>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-gray-900">Choose pickup city</p>
-                      <p className="text-[11px] text-gray-500">Cities and areas with active Jumia stations</p>
-                    </div>
-                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-orange-700 ring-1 ring-orange-100">{pickupAreas.length} areas</span>
-                  </div>
-                  <div className="relative">
-                    <select value={selectedPickupArea} onChange={e => {
-                      const value = e.target.value;
-                      setSelectedPickupArea(value);
-                      const area = pickupAreas.find(item => item.key === value);
-                      if (area) { setAddressField('city', area.city); setAddressField('state', area.state); }
-                      setSelectedStationId(null);
-                      setStationSearch('');
-                      setShowStationPicker(true);
-                    }}
-                      className="w-full appearance-none rounded-xl border border-gray-200 bg-white py-3 pl-3.5 pr-10 text-sm font-semibold text-gray-800 shadow-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 disabled:cursor-not-allowed disabled:bg-gray-100"
-                      aria-label="Select pickup city or area" disabled={stationsLoading || pickupAreas.length === 0}>
-                      <option value="">{stationsLoading ? 'Loading pickup cities…' : 'Select a city or area'}</option>
-                      {pickupAreas.map(area => <option key={area.key} value={area.key}>{area.city} — {area.state}</option>)}
-                    </select>
-                    <Navigation className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-500" />
-                  </div>
-                  {selectedPickupArea && <p className="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />Showing pickup stations in {pickupAreas.find(item => item.key === selectedPickupArea)?.city}, {pickupAreas.find(item => item.key === selectedPickupArea)?.state}</p>}
-                </div>
-
                 {selectedStation && !showStationPicker ? (
                   <button onClick={() => setShowStationPicker(true)}
                     className="w-full text-left p-3 rounded-xl border-2 border-gray-900 bg-gray-50 flex items-center gap-2.5">
@@ -1235,9 +1206,30 @@ if (promoQuote?.pending_order?.id) {
                   </button>
                 ) : (
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="border-b border-gray-100 bg-orange-50/70 p-3">
+                      <label htmlFor="pickup-city-state" className="mb-1.5 block text-[11px] font-semibold text-gray-600">Filter by city and state</label>
+                      <div className="relative">
+                        <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-500" />
+                        <select id="pickup-city-state" value={selectedPickupArea} onChange={e => {
+                          const value = e.target.value;
+                          setSelectedPickupArea(value);
+                          const area = pickupAreas.find(item => item.key === value);
+                          if (area) { setAddressField('city', area.city); setAddressField('state', area.state); }
+                          setSelectedStationId(null);
+                          setStationSearch('');
+                          setShowStationPicker(true);
+                        }}
+                          className="w-full appearance-none rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-9 text-sm font-semibold text-gray-800 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                          aria-label="Filter pickup stations by city and state" disabled={stationsLoading || pickupAreas.length === 0}>
+                          <option value="">{stationsLoading ? 'Loading cities and states…' : 'All cities and states'}</option>
+                          {pickupAreas.map(area => <option key={area.key} value={area.key}>{area.city} — {area.state}</option>)}
+                        </select>
+                        <Navigation className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-500" />
+                      </div>
+                    </div>
                     <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
                       <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
-                      <input type="text" placeholder="Search stations by name or area…" value={stationSearch}
+                      <input type="text" placeholder="Search stations by name or address…" value={stationSearch}
                         onChange={e => setStationSearch(e.target.value)}
                         className="flex-1 min-w-0 text-sm outline-none" />
                     </div>
