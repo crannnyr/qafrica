@@ -414,7 +414,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         pickup_station_id: selectedStationId,
-        items: cart.map(item => ({ id: item.id, quantity: item.quantity })),
+        items: pickupQuoteItemsKey.split('|').filter(Boolean).map(pair => { const [id, quantity] = pair.split(':'); return { id, quantity: Number(quantity) }; }),
       }),
     })
       .then(async res => {
