@@ -196,6 +196,9 @@ async function calculatePickupDeliveryQuote(supabase: any, stationId: string, it
     if (matchesRule(rule)) { packageSize = size; break }
   }
   if (!packageSize) packageSize = 'large'
+  if (method === 'weight' && ruleMap.get('large')?.max_weight_grams != null && totalWeight > Number(ruleMap.get('large').max_weight_grams)) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, destination_zone: zoneMapping.destination_zone, weight_grams: round2(totalWeight), volume_cbm: null, message: 'This order exceeds the 35,000 g Jumia package limit and requires a separate delivery quote.' }
+  }
 
   const { data: stateRates, error: rateError } = await supabase
     .from('import_pickup_delivery_rates')
