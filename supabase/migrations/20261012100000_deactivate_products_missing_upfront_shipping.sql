@@ -5,8 +5,13 @@ SET is_active = false,
     updated_at = now()
 WHERE is_active = true
   AND (
-    air_shipping_customer_ngn IS NULL
-    OR air_shipping_customer_ngn <= 0
-    OR sea_shipping_customer_ngn IS NULL
+    sea_shipping_customer_ngn IS NULL
     OR sea_shipping_customer_ngn <= 0
+    OR (
+      ship_only IS NOT TRUE
+      AND (
+        air_shipping_customer_ngn IS NULL
+        OR air_shipping_customer_ngn <= 0
+      )
+    )
   );
