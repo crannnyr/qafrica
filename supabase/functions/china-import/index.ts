@@ -4351,33 +4351,3 @@ serve(async (req: Request) => {
     return json({ error: message }, 500)
   }
 })
-
-      const body = await req.json().catch(() => ({}))
-      if (typeof body.pickup_station_id !== 'string' || !body.pickup_station_id) {
-        return json({ error: 'Select a pickup station.' }, 400)
-      }
-      if (!Array.isArray(body.items) || body.items.length === 0) {
-        return json({ error: 'No order items were provided.' }, 400)
-      }
-      const ids = [...new Set(body.items.map((i: any) => i?.id).filter((id: unknown): id is string => typeof id === 'string'))]
-      if (!ids.length) return json({ error: 'Order products are invalid.' }, 400)
-      const { data: products, error: productsError } = await supabase
-        .from('china_import_products')
-        .select('id, weight_grams, volume_cbm')
-        .in('id', ids)
-        .eq('is_active', true)
-      if (productsError) return json({ error: 'Could not load product package details.' }, 500)
-      const productMap = new Map((products ?? []).map((p: any) => [p.id, p]))
-      if (ids.some((id: string) => !productMap.has(id))) return json({ error: 'One or more products are no longer available.' }, 409)
-      const quoteItems = body.items.map((item: any) => ({
-        ...productMap.get(item.id),
-        quantity: Number(item.quantity),
-      }))
-      try {
-        const quote = await calculatePickupDeliveryQuote(supabase, body.pickup_station_id, quoteItems)
-        return json({ quote })
-      } catch (error) {
-        return json({ error: error instanceof Error ? error.message : 'Could not calculate pickup delivery.' }, 500)
-      }
-    }
-
