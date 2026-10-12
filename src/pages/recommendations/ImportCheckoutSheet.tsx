@@ -123,6 +123,8 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
   // Delivery mode is declared before the settings effect because the settings load can set it.
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('pickup_station');
+  const [pickupPricingStatus, setPickupPricingStatus] = useState<'loading' | 'disabled' | 'ready' | 'error'>('loading');
+  const [pickupDeliveryQuote, setPickupDeliveryQuote] = useState<{ fee_ngn: number; package_size: 'small' | 'medium' | 'large' | null; message?: string } | null>(null);
   const [shippingSettings, setShippingSettings] = useState({
     chargeShippingAtCheckout: true,
     shippingDiscountPercent: 0,
@@ -350,8 +352,6 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [stationSearch, setStationSearch] = useState('');
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null);
   const [showStationPicker, setShowStationPicker] = useState(false);
-  const [pickupPricingStatus, setPickupPricingStatus] = useState<'loading' | 'disabled' | 'ready' | 'error'>('loading');
-  const [pickupDeliveryQuote, setPickupDeliveryQuote] = useState<{ fee_ngn: number; package_size: 'small' | 'medium' | 'large' | null; message?: string } | null>(null);
 
   useEffect(() => {
     fetch(`${EDGE_URL}?action=my-delivery-prefs`, {
