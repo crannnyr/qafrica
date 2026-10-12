@@ -148,7 +148,7 @@ async function calculatePickupDeliveryQuote(supabase: any, stationId: string, it
     .select('destination_state, destination_zone')
     .eq('is_active', true)
   if (zoneMappingError) throw new Error('Could not load Jumia destination-zone mapping')
-  const stationSearchText = normalizePickupState(`${station.name ?? ''} ${station.address ?? ''} ${station.state ?? ''}`)
+  const stationSearchText = normalizePickupState(`${station.name ?? ''} ${station.address ?? ''}`)
   const zoneMapping = (zoneMappings ?? [])
     .filter((row: any) => normalizePickupState(String(row.destination_state ?? '')).length > 0)
     .sort((a: any, b: any) => normalizePickupState(String(b.destination_state)).length - normalizePickupState(String(a.destination_state)).length)
