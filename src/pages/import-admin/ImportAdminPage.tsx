@@ -642,7 +642,6 @@ function ImportAdminAccessManager({ token, canManage }: { token: string; canMana
 
   return (
     <div className="space-y-4">
-      <JumiaPickupPricingManager token={token} />
       <div className="bg-white rounded-2xl border border-gray-100 p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -3484,6 +3483,7 @@ function PricingShippingManager({ token }: { token: string }) {
 
   return (
     <div className="space-y-4">
+      <JumiaPickupPricingManager token={token} />
       <div>
         <h2 className="text-lg font-bold text-gray-900">Pricing & Shipping</h2>
         <p className="text-xs text-gray-400 mt-1">These are the rates and shipping allocation rules used by the import pricing system.</p>
