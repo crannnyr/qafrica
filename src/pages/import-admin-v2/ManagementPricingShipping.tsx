@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import CONFIG from '@/lib/config'
 import { getManagementToken } from './ManagementAuth'
 import ChinaImportPromotions from './ChinaImportPromotions'
+import JumiaPickupPricingManager from './JumiaPickupPricingManager'
 
 const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`
 
@@ -141,6 +142,7 @@ export default function ManagementPricingShipping() {
 
   return (
     <div className="space-y-4 max-w-3xl">
+      <JumiaPickupPricingManager />
       <div>
         <h2 className="text-xl font-black text-gray-900">Pricing & Shipping</h2>
         <p className="text-sm text-gray-500 mt-1">Rates and shipping allocation rules used by the import pricing system.</p>
