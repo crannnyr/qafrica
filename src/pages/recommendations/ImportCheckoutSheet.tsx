@@ -1273,7 +1273,7 @@ if (promoQuote?.pending_order?.id) {
           )}
           {pickupDeliveryFeeNgn > 0 && (
             <div className="flex justify-between text-xs text-gray-500">
-              <span>Jumia pickup delivery{pickupDeliveryQuote?.package_size ? ` (${pickupDeliveryQuote.package_size} package)` : ''}</span>
+              <span>Jumia pickup delivery</span>
               <span className="font-medium">{fmt(pickupDeliveryFeeNgn)}</span>
             </div>
           )}
