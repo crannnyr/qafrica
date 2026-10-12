@@ -430,6 +430,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
       })
       .then(quote => {
         if (cancelled) return;
+        setPickupPricingEnabled(quote?.enabled === true);
         if (!quote?.enabled) {
           setPickupDeliveryQuote(null);
           setPickupPricingStatus('disabled');
