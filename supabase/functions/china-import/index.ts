@@ -1202,7 +1202,9 @@ serve(async (req: Request) => {
         const code = generateOrderCode()
         const { data, error } = await supabase.from('china_import_orders').insert({
           code, customer_name, customer_whatsapp, items: pricedItems, delivery_type,
-          subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn, total_ngn: totalNgn,
+          subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn,
+          shipping_ngn: shippingNgn, prepaid_shipping_ngn: shippingNgn,
+          total_ngn: totalNgn,
           status: 'pending', user_id: customer_id,
           payment_method, payment_status: 'unpaid',
           shipping_method: orderShippingMethodSummary,
@@ -1220,6 +1222,46 @@ serve(async (req: Request) => {
         if (error.code !== '23505') break
       }
       if (!order) return json({ error: lastError?.message ?? 'Failed to create order' }, 500)
+
+      // Snapshot the upfront shipping charge as its own consolidation bill.
+      // This bill is pending until payment is actually verified/confirmed.
+      // The order's prepaid_shipping_ngn also prevents the later batch close
+      // workflow from charging this same shipping a second time.
+      if (chargeShippingAtCheckout && shippingNgn > 0) {
+        const { data: bankSettings, error: bankSettingsError } = await supabase
+          .from('import_admin_credentials')
+          .select('bank_account_number, bank_name, bank_account_name')
+          .eq('id', 1).single()
+        if (bankSettingsError || !bankSettings) {
+          return json({ error: 'Order was created but upfront shipping bill could not load bank details. Please contact support before paying.', order_id: order.id, code: order.code }, 500)
+        }
+
+        const shippingLineItems = pricedItems.map((item: any) => ({
+          label: `${item.shipping_method === 'flight' ? 'Air' : 'Sea'} shipping fee — ${item.name} × ${Number(item.quantity ?? 0)}`,
+          amount_ngn: round2(Number(item.shipping_cost_ngn ?? 0) * Number(item.quantity ?? 0)),
+          shipping_method: item.shipping_method,
+          billing_type: 'shipping',
+        }))
+
+        const { error: billError } = await supabase
+          .from('china_import_consolidation_bills')
+          .insert({
+            user_id: customer_id,
+            order_id: order.id,
+            amount_ngn: shippingNgn,
+            reason: 'Upfront shipping fee',
+            bank_account_number: bankSettings.bank_account_number,
+            bank_name: bankSettings.bank_name,
+            bank_account_name: bankSettings.bank_account_name,
+            status: 'pending',
+            kind: 'consolidation_shipping',
+            line_items: shippingLineItems,
+          })
+        if (billError) {
+          console.error('[china-import] upfront shipping bill creation failed:', billError)
+          return json({ error: 'Order was created but its upfront shipping bill could not be created. Please contact support before paying.', order_id: order.id, code: order.code }, 500)
+        }
+      }
 
       if (payment_method === 'manual') {
         const { data: settings } = await supabase
@@ -1261,6 +1303,27 @@ serve(async (req: Request) => {
         .select().single()
 
       if (error) return json({ error: error.message }, 500)
+
+      if (ok) {
+        // Mark only the explicit upfront-shipping bill as paid. Other bills
+        // created later for the same order/batch must remain untouched.
+        const { error: shippingBillError } = await supabase
+          .from('china_import_consolidation_bills')
+          .update({
+            status: 'paid',
+            confirmed_paid_at: new Date().toISOString(),
+            paystack_reference: reference,
+            reminder_count: 0,
+          })
+          .eq('order_id', order_id)
+          .eq('kind', 'consolidation_shipping')
+          .eq('reason', 'Upfront shipping fee')
+          .neq('status', 'cancelled')
+        if (shippingBillError) {
+          console.error('[china-import] failed to mark upfront shipping bill paid:', shippingBillError)
+          return json({ error: 'Payment was verified, but the upfront shipping bill could not be marked paid. Please contact support.', success: true, order }, 500)
+        }
+      }
 
       if (ok && !wasAlreadyPaid) {
         await incrementUnitsSold(supabase, order.items)
@@ -3152,6 +3215,27 @@ serve(async (req: Request) => {
         .update(updates)
         .eq('id', order_id).select().single()
       if (error) return json({ error: error.message }, 500)
+
+      // The customer has claimed the transfer, but it is not paid until an
+      // admin confirms it. Mirror that claim onto the matching upfront bill.
+      const { error: billClaimError } = await supabase
+        .from('china_import_consolidation_bills')
+        .update({
+          status: 'awaiting_confirmation',
+          customer_marked_paid_at: new Date().toISOString(),
+          manual_sender_name: sender_name.trim(),
+          ...(typeof sender_bank_name === 'string' && sender_bank_name.trim()
+            ? { manual_sender_bank: sender_bank_name.trim() }
+            : {}),
+        })
+        .eq('order_id', order_id)
+        .eq('kind', 'consolidation_shipping')
+        .eq('reason', 'Upfront shipping fee')
+        .eq('status', 'pending')
+      if (billClaimError) {
+        console.error('[china-import] failed to update upfront shipping bill claim:', billClaimError)
+        return json({ error: 'Transfer claim was saved on the order, but the shipping bill needs admin review.', order: data }, 500)
+      }
       return json({ order: data })
     }
 
