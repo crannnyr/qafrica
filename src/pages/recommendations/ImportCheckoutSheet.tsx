@@ -150,7 +150,7 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
           if (!data.settings.manual_transfer_enabled) setPaymentMethod('paystack');
         }
         setShippingSettings({
-          chargeShippingAtCheckout: true, // Recommendations checkout always collects shipping upfront.
+          chargeShippingAtCheckout: typeof data.settings.charge_shipping_at_checkout === 'boolean' ? data.settings.charge_shipping_at_checkout : true,
           shippingDiscountPercent: Number(data.settings.shipping_discount_percent ?? 0),
           shippingDiscountMinNgn: Number(data.settings.shipping_discount_min_ngn ?? 1600),
           bulkDiscountTier1Qty: Number(data.settings.bulk_discount_tier1_qty ?? 10),
