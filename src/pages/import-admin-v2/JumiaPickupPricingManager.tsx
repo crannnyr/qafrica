@@ -154,7 +154,7 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
       </div>
       <div>
         <h4 className="text-sm font-semibold text-gray-800 mb-1">Package-size thresholds</h4>
-        <p className="text-[11px] text-gray-500 mb-3">Set maximum values for small and medium packages. Large is the fallback category. Values must come from Jumia; empty values are not inferred.</p>
+        <p className="text-[11px] text-gray-500 mb-3">Volume uses the same numeric values stored on QAfrica products; no CBM conversion is applied. Current limits are test thresholds based on existing product values, not Jumia-confirmed parcel limits. Large is the fallback category.</p>
         <div className="space-y-3">
           {rules.map(rule => (
             <div key={rule.package_size} className="rounded-xl border border-gray-100 p-3">
@@ -165,8 +165,8 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
                   <input type="number" min="0" value={rule.max_weight_grams ?? ''} placeholder={rule.package_size === 'large' ? 'No upper limit' : 'Jumia-confirmed threshold'} onChange={e => updateRule(rule.package_size, 'max_weight_grams', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-gray-500 mb-1">Maximum volume (CBM)</label>
-                  <input type="number" min="0" step="0.0001" value={rule.max_volume_cbm ?? ''} placeholder={rule.package_size === 'large' ? 'No upper limit' : 'Jumia-confirmed threshold'} onChange={e => updateRule(rule.package_size, 'max_volume_cbm', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
+                  <label className="block text-[11px] text-gray-500 mb-1">Maximum volume (QAfrica volume units)</label>
+                  <input type="number" min="0" step="1" value={rule.max_volume_cbm ?? ''} placeholder={rule.package_size === 'large' ? 'No upper limit' : 'Test threshold; verify with Jumia'} onChange={e => updateRule(rule.package_size, 'max_volume_cbm', e.target.value)} className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm" />
                 </div>
               </div>
             </div>
