@@ -1279,6 +1279,8 @@ serve(async (req: Request) => {
         return {
           ...i,
           price_ngn,
+          weight_grams: product.weight_grams ?? null,
+          volume_cbm: product.volume_cbm ?? null,
           shipping_method: method,
           shipping_cost_ngn: round2(Math.max(shippingRateNgn, 0)),
         }
