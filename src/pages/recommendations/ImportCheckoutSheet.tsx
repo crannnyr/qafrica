@@ -59,6 +59,24 @@ interface PickupStation {
   landmark: string | null;
 }
 
+// Pickup station records have no dedicated city column. Derive the locality
+// from the final address segments before the state, while retaining the full
+// station address for customer confirmation.
+function getPickupCity(station: PickupStation): string {
+  const state = station.state.trim().toLowerCase().replace(/\s+state$/, '');
+  const parts = station.address.split(',').map(part => part.trim()).filter(Boolean);
+  const localityParts = parts.filter(part => {
+    const normalized = part.toLowerCase().replace(/\s+state$/, '');
+    return normalized !== state && !normalized.endsWith(` ${state}`) && normalized !== 'nigeria';
+  });
+  const candidate = localityParts[localityParts.length - 1];
+  return candidate || station.name.replace(/^jumia\s+pick\s*up\s+station\s*/i, '').trim() || station.state;
+}
+
+function normalizePickupArea(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
 type DeliveryMode = 'home' | 'pickup_station';
 
 interface Props {
@@ -398,12 +416,19 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
     return stations.filter(s => {
       const haystack = `${s.name} ${s.address} ${s.landmark ?? ''} ${s.state}`.toLowerCase();
       if (q) return haystack.includes(q);
-      if (selectedPickupArea) return s.state.toLowerCase() === selectedPickupArea.toLowerCase() || haystack.includes(selectedPickupArea.toLowerCase());
+      if (selectedPickupArea) {
+        const [cityKey, stateKey] = selectedPickupArea.split('::');
+        return normalizePickupArea(getPickupCity(s)) === cityKey && normalizePickupArea(s.state) === stateKey;
+      }
       if (city) return haystack.includes(city) || s.state.toLowerCase() === state;
       return s.state.toLowerCase() === state;
     }).slice(0, 25);
   })();
-  const pickupAreas = Array.from(new Set(stations.map(s => s.state.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const pickupAreas = Array.from(new Map(stations.map(s => {
+    const city = getPickupCity(s);
+    const key = `${normalizePickupArea(city)}::${normalizePickupArea(s.state)}`;
+    return [key, { key, city, state: s.state.trim() }];
+  })).values()).sort((a, b) => a.city.localeCompare(b.city) || a.state.localeCompare(b.state));
   const selectedStation = stations.find(s => s.id === selectedStationId) ?? null;
 
   const pickupQuoteItemsKey = cart.map(item => `${item.id}:${item.quantity}`).join('|');
@@ -1156,11 +1181,34 @@ if (promoQuote?.pending_order?.id) {
                     onChange={e => setAddressField('phone', e.target.value)}
                     className="px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" />
                 </div>
-                <select value={selectedPickupArea} onChange={e => { setSelectedPickupArea(e.target.value); setAddressField('city', e.target.value); setSelectedStationId(null); setShowStationPicker(true); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:border-gray-400" aria-label="Select pickup city or area">
-                  <option value="">{stationsLoading ? 'Loading available pickup areas…' : 'Select your city / area'}</option>
-                  {pickupAreas.map(area => <option key={area} value={area}>{area}</option>)}
-                </select>
+                <div className="relative rounded-2xl border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-amber-50 p-3 shadow-sm">
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-100 text-orange-600"><MapPin className="h-4 w-4" /></span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-gray-900">Choose pickup city</p>
+                      <p className="text-[11px] text-gray-500">Cities and areas with active Jumia stations</p>
+                    </div>
+                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-orange-700 ring-1 ring-orange-100">{pickupAreas.length} areas</span>
+                  </div>
+                  <div className="relative">
+                    <select value={selectedPickupArea} onChange={e => {
+                      const value = e.target.value;
+                      setSelectedPickupArea(value);
+                      const area = pickupAreas.find(item => item.key === value);
+                      if (area) { setAddressField('city', area.city); setAddressField('state', area.state); }
+                      setSelectedStationId(null);
+                      setStationSearch('');
+                      setShowStationPicker(true);
+                    }}
+                      className="w-full appearance-none rounded-xl border border-gray-200 bg-white py-3 pl-3.5 pr-10 text-sm font-semibold text-gray-800 shadow-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 disabled:cursor-not-allowed disabled:bg-gray-100"
+                      aria-label="Select pickup city or area" disabled={stationsLoading || pickupAreas.length === 0}>
+                      <option value="">{stationsLoading ? 'Loading pickup cities…' : 'Select a city or area'}</option>
+                      {pickupAreas.map(area => <option key={area.key} value={area.key}>{area.city} — {area.state}</option>)}
+                    </select>
+                    <Navigation className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-500" />
+                  </div>
+                  {selectedPickupArea && <p className="mt-2 flex items-center gap-1.5 text-[11px] text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />Showing pickup stations in {pickupAreas.find(item => item.key === selectedPickupArea)?.city}, {pickupAreas.find(item => item.key === selectedPickupArea)?.state}</p>}
+                </div>
 
                 {selectedStation && !showStationPicker ? (
                   <button onClick={() => setShowStationPicker(true)}
