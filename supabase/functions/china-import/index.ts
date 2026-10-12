@@ -123,6 +123,10 @@ function generateOrderCode(): string {
 
 type PickupPackageSize = 'small' | 'medium' | 'large'
 
+function normalizePickupState(value: string) {
+  return value.trim().toLowerCase().replace(/\\s+state$/, '').replace(/\\s+/g, ' ')
+}
+
 async function calculatePickupDeliveryQuote(supabase: any, stationId: string, items: any[]) {
   const { data: settings, error: settingsError } = await supabase
     .from('import_pickup_delivery_settings')
@@ -179,14 +183,13 @@ async function calculatePickupDeliveryQuote(supabase: any, stationId: string, it
   }
   if (!packageSize) packageSize = 'large'
 
-  const { data: rate, error: rateError } = await supabase
+  const { data: stateRates, error: rateError } = await supabase
     .from('import_pickup_delivery_rates')
-    .select('fee_ngn')
-    .ilike('destination_state', station.state)
+    .select('destination_state, fee_ngn')
     .eq('package_size', packageSize)
     .eq('is_active', true)
-    .maybeSingle()
   if (rateError) throw new Error('Could not load the Jumia pickup delivery rate')
+  const rate = (stateRates ?? []).find((row: any) => normalizePickupState(String(row.destination_state ?? '')) === normalizePickupState(String(station.state ?? '')))
   if (!rate || !Number.isFinite(Number(rate.fee_ngn)) || Number(rate.fee_ngn) < 0) {
     return { enabled: true, configured: false, fee_ngn: 0, package_size: packageSize, state: station.state, weight_grams: totalWeight, volume_cbm: totalVolume, message: `No verified ${packageSize} package rate is configured for ${station.state}.` }
   }
