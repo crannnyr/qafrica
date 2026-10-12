@@ -7,6 +7,7 @@ const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`;
 type PackageSize = 'small' | 'medium' | 'large';
 type Rule = { package_size: PackageSize; max_weight_grams: number | null; max_volume_cbm: number | null; is_configured: boolean };
 type Rate = { destination_state: string; package_size: PackageSize; fee_ngn: number; is_active: boolean; source_note: string };
+type DestinationZone = { destination_state: string; destination_zone: string; is_active: boolean; source_note: string };
 
 const blankRules: Rule[] = [
   { package_size: 'small', max_weight_grams: null, max_volume_cbm: null, is_configured: false },
@@ -14,6 +15,7 @@ const blankRules: Rule[] = [
   { package_size: 'large', max_weight_grams: null, max_volume_cbm: null, is_configured: false },
 ];
 const sizes: PackageSize[] = ['small', 'medium', 'large'];
+const ZONES = ['Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7'];
 const NIGERIAN_STATES = ["Abia","Adamawa","Akwa Ibom","Anambra","Bauchi","Bayelsa","Benue","Borno","Cross River","Delta","Ebonyi","Edo","Ekiti","Enugu","Federal Capital Territory","Gombe","Imo","Jigawa","Kaduna","Kano","Katsina","Kebbi","Kogi","Kwara","Lagos","Nasarawa","Niger","Ogun","Ondo","Osun","Oyo","Plateau","Rivers","Sokoto","Taraba","Yobe","Zamfara"] as const;
 
 export default function JumiaPickupPricingManager({ token }: { token: string }) {
@@ -21,6 +23,7 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
   const [method, setMethod] = useState<'weight' | 'volume' | 'weight_or_volume'>('weight_or_volume');
   const [rules, setRules] = useState<Rule[]>(blankRules);
   const [rates, setRates] = useState<Rate[]>([]);
+  const [destinationZones, setDestinationZones] = useState<DestinationZone[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -42,7 +45,7 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
         const row = (data.rules ?? []).find((r: Rule) => r.package_size === size);
         return row ? { ...row, max_weight_grams: row.max_weight_grams == null ? null : Number(row.max_weight_grams), max_volume_cbm: row.max_volume_cbm == null ? null : Number(row.max_volume_cbm) } : { ...blankRules.find(r => r.package_size === size)!, };
       }));
-      const loadedRates: Rate[] = (data.rates ?? []).map((r: any) => ({
+      const loadedRates: Rate[] = (data.rates ?? []).filter((r: any) => ZONES.includes(String(r.destination_state ?? ''))).map((r: any) => ({
         destination_state: String(r.destination_state ?? ''),
         package_size: r.package_size,
         fee_ngn: Number(r.fee_ngn),
@@ -50,13 +53,15 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
         source_note: r.source_note ?? '',
       }));
       const rateKeys = new Set(loadedRates.map(r => `${r.destination_state.trim().toLowerCase()}|${r.package_size}`));
-      for (const state of NIGERIAN_STATES) {
+      for (const zone of ZONES) {
         for (const package_size of sizes) {
-          const key = `${state.toLowerCase()}|${package_size}`;
-          if (!rateKeys.has(key)) loadedRates.push({ destination_state: state, package_size, fee_ngn: 0, is_active: false, source_note: '' });
+          const key = `${zone.toLowerCase()}|${package_size}`;
+          if (!rateKeys.has(key)) loadedRates.push({ destination_state: zone, package_size, fee_ngn: 0, is_active: false, source_note: '' });
         }
       }
       setRates(loadedRates);
+      const savedZones: DestinationZone[] = (data.destination_zones ?? []).map((z: any) => ({ destination_state: String(z.destination_state ?? ''), destination_zone: String(z.destination_zone ?? ''), is_active: z.is_active === true, source_note: z.source_note ?? '' }));
+      setDestinationZones(NIGERIAN_STATES.map(state => savedZones.find(z => z.destination_state.toLowerCase() === state.toLowerCase()) ?? ({ destination_state: state, destination_zone: '', is_active: false, source_note: '' })));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load pickup pricing');
     } finally {
@@ -72,6 +77,8 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
     } : rule));
   };
 
+  const updateDestinationZone = (state: string, patch: Partial<DestinationZone>) => setDestinationZones(prev => prev.map(row => row.destination_state === state ? { ...row, ...patch } : row));
+
   const updateRate = (index: number, patch: Partial<Rate>) => {
     setRates(prev => prev.map((rate, i) => i === index ? { ...rate, ...patch } : rate));
   };
@@ -82,6 +89,10 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
 
   const save = async () => {
     setError('');
+    if (enabled && destinationZones.some(row => !row.is_active || !ZONES.includes(row.destination_zone))) {
+      setError('Before enabling pricing, assign and activate an official Jumia destination zone for every listed state.');
+      return;
+    }
     if (enabled && rates.length === 0) {
       setError('Add verified destination rates before enabling pickup pricing.');
       return;
@@ -100,6 +111,10 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
           return;
         }
       }
+      if (ZONES.some(zone => sizes.some(size => !rates.some(rate => rate.is_active && rate.destination_state === zone && rate.package_size === size)))) {
+        setError('The official rate card must have active small, medium, and large rates for all seven destination zones.');
+        return;
+      }
       if (sizes.some(size => !rules.find(r => r.package_size === size)?.is_configured)) {
         setError('Configure and save the small, medium, and large classification rules before enabling pricing.');
         return;
@@ -116,6 +131,7 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
           settings: { enabled, classification_method: method },
           rules: rules.map(rule => ({ ...rule, is_configured: true })),
           rates: rates.map(rate => ({ ...rate, destination_state: rate.destination_state.trim() })),
+          destination_zones: destinationZones.map(row => ({ ...row, destination_state: row.destination_state.trim(), destination_zone: row.destination_zone.trim() })),
         }),
       });
       const data = await res.json();
@@ -171,6 +187,13 @@ export default function JumiaPickupPricingManager({ token }: { token: string }) 
               </div>
             </div>
           ))}
+        </div>
+      </div>
+      <div>
+        <h4 className="text-sm font-semibold text-gray-800 mb-1">Destination state → Jumia zone mapping</h4>
+        <p className="text-[11px] text-gray-500 mb-3">Assign each state to the zone shown on the official Jumia rate card. Unverified mappings remain inactive.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
+          {destinationZones.map(row => <div key={row.destination_state} className="grid grid-cols-12 gap-2 items-center rounded-lg border border-gray-100 p-2"><span className="col-span-5 text-xs text-gray-700">{row.destination_state}</span><select aria-label={row.destination_state + ' destination zone'} value={row.destination_zone} onChange={e => updateDestinationZone(row.destination_state, { destination_zone: e.target.value, is_active: e.target.value !== '' })} className="col-span-5 rounded-lg border border-gray-200 px-2 py-2 text-xs"><option value="">Select zone</option>{ZONES.map(zone => <option key={zone} value={zone}>{zone}</option>)}</select><input aria-label={row.destination_state + ' mapping active'} type="checkbox" checked={row.is_active} disabled={!row.destination_zone} onChange={e => updateDestinationZone(row.destination_state, { is_active: e.target.checked })} className="col-span-2 justify-self-center accent-orange-500" /></div>)}
         </div>
       </div>
       <div>
