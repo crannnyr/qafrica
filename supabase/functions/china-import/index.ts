@@ -143,6 +143,17 @@ async function calculatePickupDeliveryQuote(supabase: any, stationId: string, it
     .maybeSingle()
   if (stationError || !station?.is_active) throw new Error('Pickup station is unavailable for pricing')
 
+  const { data: zoneMapping, error: zoneMappingError } = await supabase
+    .from('import_pickup_destination_zones')
+    .select('destination_zone')
+    .eq('is_active', true)
+    .ilike('destination_state', String(station.state ?? '').trim())
+    .maybeSingle()
+  if (zoneMappingError) throw new Error('Could not load Jumia destination-zone mapping')
+  if (!zoneMapping?.destination_zone) {
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, destination_zone: null, weight_grams: null, volume_cbm: null, message: `No verified Jumia destination zone is configured for ${station.state}.` }
+  }
+
   const { data: rules, error: rulesError } = await supabase
     .from('import_pickup_package_rules')
     .select('package_size, max_weight_grams, max_volume_cbm, is_configured')
@@ -189,11 +200,11 @@ async function calculatePickupDeliveryQuote(supabase: any, stationId: string, it
     .eq('package_size', packageSize)
     .eq('is_active', true)
   if (rateError) throw new Error('Could not load the Jumia pickup delivery rate')
-  const rate = (stateRates ?? []).find((row: any) => normalizePickupState(String(row.destination_state ?? '')) === normalizePickupState(String(station.state ?? '')))
+  const rate = (stateRates ?? []).find((row: any) => String(row.destination_state ?? '').trim().toLowerCase() === String(zoneMapping.destination_zone).trim().toLowerCase())
   if (!rate || !Number.isFinite(Number(rate.fee_ngn)) || Number(rate.fee_ngn) < 0) {
-    return { enabled: true, configured: false, fee_ngn: 0, package_size: packageSize, state: station.state, weight_grams: totalWeight, volume_cbm: totalVolume, message: `No verified ${packageSize} package rate is configured for ${station.state}.` }
+    return { enabled: true, configured: false, fee_ngn: 0, package_size: packageSize, state: station.state, destination_zone: zoneMapping.destination_zone, weight_grams: totalWeight, volume_cbm: totalVolume, message: `No verified ${packageSize} package rate is configured for ${zoneMapping.destination_zone} (destination: ${station.state}).` }
   }
-  return { enabled: true, configured: true, fee_ngn: Number(rate.fee_ngn), package_size: packageSize, state: station.state, weight_grams: round2(totalWeight), volume_cbm: round2(totalVolume) }
+  return { enabled: true, configured: true, fee_ngn: Number(rate.fee_ngn), package_size: packageSize, state: station.state, destination_zone: zoneMapping.destination_zone, origin_zone: 'Zone 1', weight_grams: round2(totalWeight), volume_cbm: round2(totalVolume) }
 }
 
 const ORDER_STATUS_SEQUENCE = ['pending', 'confirmed', 'ordered', 'ordered_and_closed', 'shipped_and_closed', 'clearance_and_closed', 'received']
@@ -969,23 +980,33 @@ serve(async (req: Request) => {
     if (req.method === 'POST' && action === 'admin-get-pickup-delivery-pricing') {
       const { manager_token } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Unauthorized' }, 401)
-      const [settingsRes, rulesRes, ratesRes] = await Promise.all([
+      const [settingsRes, rulesRes, ratesRes, zonesRes] = await Promise.all([
         supabase.from('import_pickup_delivery_settings').select('*').eq('id', 1).maybeSingle(),
         supabase.from('import_pickup_package_rules').select('*').order('package_size'),
         supabase.from('import_pickup_delivery_rates').select('*').order('destination_state').order('package_size'),
+        supabase.from('import_pickup_destination_zones').select('*').order('destination_state'),
       ])
-      if (settingsRes.error || rulesRes.error || ratesRes.error) return json({ error: 'Could not load pickup delivery pricing configuration.' }, 500)
-      return json({ settings: settingsRes.data ?? { id: 1, enabled: false, classification_method: 'weight_or_volume' }, rules: rulesRes.data ?? [], rates: ratesRes.data ?? [] })
+      if (settingsRes.error || rulesRes.error || ratesRes.error || zonesRes.error) return json({ error: 'Could not load pickup delivery pricing configuration.' }, 500)
+      return json({ settings: settingsRes.data ?? { id: 1, enabled: false, classification_method: 'weight_or_volume' }, rules: rulesRes.data ?? [], rates: ratesRes.data ?? [], destination_zones: zonesRes.data ?? [] })
     }
 
     if (req.method === 'POST' && action === 'admin-save-pickup-delivery-pricing') {
       const body = await req.json().catch(() => ({}))
-      const { manager_token, settings, rules, rates } = body
+      const { manager_token, settings, rules, rates, destination_zones } = body
       if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Unauthorized' }, 401)
       if (!settings || typeof settings.enabled !== 'boolean' || !['weight', 'volume', 'weight_or_volume'].includes(settings.classification_method)) {
         return json({ error: 'Invalid pickup pricing settings.' }, 400)
       }
-      if (!Array.isArray(rules) || !Array.isArray(rates)) return json({ error: 'Package rules and delivery rates are required.' }, 400)
+      if (!Array.isArray(rules) || !Array.isArray(rates) || !Array.isArray(destination_zones)) return json({ error: 'Package rules, destination-zone mappings, and delivery rates are required.' }, 400)
+      const validZones = ['Zone 1', 'Zone 2', 'Zone 3', 'Zone 4', 'Zone 5', 'Zone 6', 'Zone 7']
+      const seenStates = new Set<string>()
+      for (const mapping of destination_zones) {
+        if (typeof mapping.destination_state !== 'string' || !mapping.destination_state.trim()) return json({ error: 'Each destination-zone mapping needs a state.' }, 400)
+        const stateKey = mapping.destination_state.trim().toLowerCase()
+        if (seenStates.has(stateKey)) return json({ error: `Duplicate destination-zone mapping for ${mapping.destination_state}.` }, 400)
+        seenStates.add(stateKey)
+        if (mapping.is_active !== false && !validZones.includes(mapping.destination_zone)) return json({ error: `Choose a valid Jumia zone for ${mapping.destination_state}.` }, 400)
+      }
       const expectedSizes = ['small', 'medium', 'large']
       if (rules.length !== 3 || expectedSizes.some(size => !rules.some((rule: any) => rule.package_size === size))) {
         return json({ error: 'Exactly one rule for small, medium, and large packages is required.' }, 400)
@@ -1001,8 +1022,8 @@ serve(async (req: Request) => {
         if (settings.classification_method === 'weight_or_volume' && rule.package_size !== 'large' && (rule.max_weight_grams == null || rule.max_volume_cbm == null)) return json({ error: `Both weight and volume thresholds are required for ${rule.package_size} packages.` }, 400)
       }
       for (const rate of rates) {
-        if (typeof rate.destination_state !== 'string' || !rate.destination_state.trim() || !expectedSizes.includes(rate.package_size) || !Number.isInteger(Number(rate.fee_ngn)) || Number(rate.fee_ngn) < 0) {
-          return json({ error: 'Each rate needs a destination state, valid package size, and non-negative whole-naira fee.' }, 400)
+        if (typeof rate.destination_state !== 'string' || !validZones.includes(rate.destination_state.trim()) || !expectedSizes.includes(rate.package_size) || !Number.isInteger(Number(rate.fee_ngn)) || Number(rate.fee_ngn) < 0) {
+          return json({ error: 'Each rate needs a valid destination zone, package size, and non-negative whole-naira fee.' }, 400)
         }
       }
       if (settings.classification_method !== 'volume') {
@@ -1020,11 +1041,9 @@ serve(async (req: Request) => {
         }
       }
       if (settings.enabled) {
-        const activeStates = [...new Set(rates.filter((rate: any) => rate.is_active !== false).map((rate: any) => String(rate.destination_state).trim().toLowerCase()))]
-        if (!activeStates.length || activeStates.some((state: string) => expectedSizes.some(size =>
-          !rates.some((rate: any) => rate.is_active !== false && String(rate.destination_state).trim().toLowerCase() === state && rate.package_size === size)
-        ))) {
-          return json({ error: 'Before enabling pickup pricing, each destination state needs active small, medium, and large rates.' }, 400)
+        if (destination_zones.some((mapping: any) => mapping.is_active !== false && !validZones.includes(mapping.destination_zone))) return json({ error: 'Every active destination state must have a valid Jumia zone.' }, 400)
+        if (destination_zones.length === 0 || validZones.some(zone => expectedSizes.some(size => !rates.some((rate: any) => rate.is_active !== false && rate.destination_state === zone && rate.package_size === size)))) {
+          return json({ error: 'Before enabling pickup pricing, every destination zone needs active small, medium, and large rates.' }, 400)
         }
       }
       const { error: settingsError } = await supabase.from('import_pickup_delivery_settings').upsert({
@@ -1040,6 +1059,25 @@ serve(async (req: Request) => {
       }))
       const { error: rulesError } = await supabase.from('import_pickup_package_rules').upsert(normalizedRules, { onConflict: 'package_size' })
       if (rulesError) return json({ error: 'Settings saved, but package rules failed: ' + rulesError.message }, 500)
+      const normalizedZones = destination_zones.filter((mapping: any) => mapping.is_active !== false).map((mapping: any) => ({
+        destination_state: mapping.destination_state.trim(),
+        destination_zone: mapping.destination_zone,
+        is_active: true,
+        source_note: typeof mapping.source_note === 'string' ? mapping.source_note.trim() : null,
+        updated_at: new Date().toISOString(),
+      }))
+      if (normalizedZones.length) {
+        const { error: zonesError } = await supabase.from('import_pickup_destination_zones').upsert(normalizedZones, { onConflict: 'destination_state' })
+        if (zonesError) return json({ error: 'Package rules saved, but destination-zone mappings failed: ' + zonesError.message }, 500)
+      }
+      const { data: existingZones, error: existingZonesError } = await supabase.from('import_pickup_destination_zones').select('destination_state')
+      if (existingZonesError) return json({ error: 'Mappings saved, but could not reconcile removed mappings.' }, 500)
+      const submittedStates = new Set(normalizedZones.map((mapping: any) => mapping.destination_state.toLowerCase()))
+      const staleStates = (existingZones ?? []).filter((mapping: any) => !submittedStates.has(String(mapping.destination_state).toLowerCase())).map((mapping: any) => mapping.destination_state)
+      if (staleStates.length) {
+        const { error: deactivateZonesError } = await supabase.from('import_pickup_destination_zones').update({ is_active: false, updated_at: new Date().toISOString() }).in('destination_state', staleStates)
+        if (deactivateZonesError) return json({ error: 'Mappings saved, but removed mappings could not be deactivated.' }, 500)
+      }
       const normalizedRates = rates.map((rate: any) => ({
         destination_state: rate.destination_state.trim(),
         package_size: rate.package_size,
