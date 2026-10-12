@@ -1317,7 +1317,7 @@ serve(async (req: Request) => {
       if (ok) {
         // Mark only the explicit upfront-shipping bill as paid. Other bills
         // created later for the same order/batch must remain untouched.
-        const { error: shippingBillError } = await supabase
+        const { data: paidShippingBill, error: shippingBillError } = await supabase
           .from('china_import_consolidation_bills')
           .update({
             status: 'paid',
@@ -1331,8 +1331,8 @@ serve(async (req: Request) => {
           .neq('status', 'cancelled')
           .select('id')
           .maybeSingle()
-        if (shippingBillError) {
-          console.error('[china-import] failed to mark upfront shipping bill paid:', shippingBillError)
+        if (shippingBillError || !paidShippingBill) {
+          console.error('[china-import] failed to mark upfront shipping bill paid:', shippingBillError ?? 'Matching upfront shipping bill not found')
           return json({ error: 'Payment was verified, but the upfront shipping bill could not be marked paid. Please contact support.', success: true, order }, 500)
         }
       }
@@ -3230,7 +3230,7 @@ serve(async (req: Request) => {
 
       // The customer has claimed the transfer, but it is not paid until an
       // admin confirms it. Mirror that claim onto the matching upfront bill.
-      const { error: billClaimError } = await supabase
+      const { data: claimedShippingBill, error: billClaimError } = await supabase
         .from('china_import_consolidation_bills')
         .update({
           status: 'awaiting_confirmation',
@@ -3246,8 +3246,8 @@ serve(async (req: Request) => {
         .eq('status', 'pending')
         .select('id')
         .maybeSingle()
-      if (billClaimError) {
-        console.error('[china-import] failed to update upfront shipping bill claim:', billClaimError)
+      if (billClaimError || !claimedShippingBill) {
+        console.error('[china-import] failed to update upfront shipping bill claim:', billClaimError ?? 'Matching pending upfront shipping bill not found')
         return json({ error: 'Transfer claim was saved on the order, but the shipping bill needs admin review.', order: data }, 500)
       }
       return json({ order: data })
