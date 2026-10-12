@@ -143,13 +143,12 @@ async function calculatePickupDeliveryQuote(supabase: any, stationId: string, it
     .maybeSingle()
   if (stationError || !station?.is_active) throw new Error('Pickup station is unavailable for pricing')
 
-  const { data: zoneMapping, error: zoneMappingError } = await supabase
+  const { data: zoneMappings, error: zoneMappingError } = await supabase
     .from('import_pickup_destination_zones')
-    .select('destination_zone')
+    .select('destination_state, destination_zone')
     .eq('is_active', true)
-    .ilike('destination_state', String(station.state ?? '').trim())
-    .maybeSingle()
   if (zoneMappingError) throw new Error('Could not load Jumia destination-zone mapping')
+  const zoneMapping = (zoneMappings ?? []).find((row: any) => normalizePickupState(String(row.destination_state ?? '')) === normalizePickupState(String(station.state ?? '')))
   if (!zoneMapping?.destination_zone) {
     return { enabled: true, configured: false, fee_ngn: 0, package_size: null, state: station.state, destination_zone: null, weight_grams: null, volume_cbm: null, message: `No verified Jumia destination zone is configured for ${station.state}.` }
   }
@@ -1041,8 +1040,8 @@ serve(async (req: Request) => {
         }
       }
       if (settings.enabled) {
-        if (destination_zones.some((mapping: any) => mapping.is_active !== false && !validZones.includes(mapping.destination_zone))) return json({ error: 'Every active destination state must have a valid Jumia zone.' }, 400)
-        if (destination_zones.length === 0 || validZones.some(zone => expectedSizes.some(size => !rates.some((rate: any) => rate.is_active !== false && rate.destination_state === zone && rate.package_size === size)))) {
+        if (destination_zones.length !== 37 || destination_zones.some((mapping: any) => mapping.is_active === false || !validZones.includes(mapping.destination_zone))) return json({ error: 'Before enabling pricing, assign a verified Jumia zone to all 37 Nigerian states and the FCT.' }, 400)
+        if (validZones.some(zone => expectedSizes.some(size => !rates.some((rate: any) => rate.is_active !== false && rate.destination_state === zone && rate.package_size === size)))) {
           return json({ error: 'Before enabling pickup pricing, every destination zone needs active small, medium, and large rates.' }, 400)
         }
       }
