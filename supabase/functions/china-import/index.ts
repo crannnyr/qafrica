@@ -2237,8 +2237,8 @@ serve(async (req: Request) => {
       if (!name || !Number.isFinite(originalPriceUsd) || originalPriceUsd <= 0 || !image_urls?.length) {
         return json({ error: 'Product name, original USD price and at least one image are required' }, 400)
       }
-      if (!Number.isFinite(volumeCbm) || volumeCbm < 0 || !Number.isFinite(weightGrams) || weightGrams < 0) {
-        return json({ error: 'Volume and weight must be valid non-negative numbers' }, 400)
+      if (!Number.isFinite(volumeCbm) || volumeCbm <= 0 || !Number.isFinite(weightGrams) || weightGrams <= 0) {
+        return json({ error: 'Product volume must be greater than 0 CBM and weight must be greater than 0 grams' }, 400)
       }
       if (!category_id || !subcategory_id) return json({ error: 'Category and subcategory are required' }, 400)
 
@@ -2269,6 +2269,10 @@ serve(async (req: Request) => {
         volumeCbm,
         weightGrams,
       )
+      if (!Number.isFinite(pricing.seaCustomerNgn) || pricing.seaCustomerNgn <= 0 || !Number.isFinite(pricing.airCustomerNgn) || pricing.airCustomerNgn <= 0) {
+        return json({ error: 'Both sea and air customer shipping costs must be greater than ₦0. Check product dimensions and import pricing settings.' }, 400)
+      }
+
       const cleanVariants = sanitizeVariants(variants)
 
       const sourceUrl = sanitizeSourceUrl(body.source_url)
@@ -2314,6 +2318,7 @@ serve(async (req: Request) => {
         ship_only: shipOnly,
         express_air_cargo: expressAirCargo,
         delivery_time: shipOnly ? 'sea' : 'air',
+        is_active: body.is_active !== false,
         ...(hasSeedSold ? { units_sold: Math.round(seedSold) } : {}),
       }
 
