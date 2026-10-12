@@ -204,7 +204,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   useEffect(() => {
     let cancelled = false;
     const loadPickupStations = async () => {
-      if (order.delivery_mode !== 'pickup_station') return;
+      if (order.delivery_mode !== 'pickup_station' && !order.pickup_station_id && !order.pickup_station_name) return;
       setPickupStationsLoading(true);
       try {
         const res = await fetch(STATIONS_REST_URL + '?select=id,name,address,state,is_active&is_active=eq.true&order=state.asc,name.asc', {
@@ -220,7 +220,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     };
     void loadPickupStations();
     return () => { cancelled = true; };
-  }, [order.id, order.delivery_mode]);
+  }, [order.id, order.delivery_mode, order.pickup_station_id, order.pickup_station_name]);
 
   useEffect(() => {
     let cancelled = false;
@@ -385,7 +385,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
 
           <section className="rounded-2xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-3"><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Delivery address</p>{canEditDeliveryDetails && <button onClick={() => setAddressEditing(v => !v)} className="text-[10px] font-bold text-orange-600 flex items-center gap-1"><Pencil className="w-3 h-3"/> {addressEditing ? 'Close edit' : 'Edit address'}</button>}</div>
-             {!addressEditing ? <div className="text-xs text-gray-600 space-y-1"><div className="flex gap-2"><MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5"/><div><p className="font-semibold text-gray-800">{order.delivery_address?.name ?? order.customer_name} · {order.delivery_address?.phone ?? order.customer_whatsapp}</p>{(order.delivery_address?.email || order.customer_email) && <p className="text-gray-500">{order.delivery_address?.email ?? order.customer_email}</p>}{order.delivery_mode === 'pickup_station' ? <><p className="font-semibold text-gray-800 mt-1">Jumia pickup station</p><p>{order.pickup_station_name ?? 'No pickup station selected'}</p>{order.pickup_station_address && <p>{order.pickup_station_address}</p>}</> : <><p>{order.delivery_address?.address_line1 || 'No street address saved'}</p>{order.delivery_address?.address_line2 && <p>{order.delivery_address.address_line2}</p>}<p>{[order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ')}</p>{order.delivery_address?.landmark && <p>Landmark: {order.delivery_address.landmark}</p>}</>}</div></div></div> : <div className="space-y-3">{isPickupOrder && <div className="rounded-xl border border-orange-100 bg-orange-50/50 p-3 space-y-3">
+             {!addressEditing ? <div className="text-xs text-gray-600 space-y-1"><div className="flex gap-2"><MapPin className="w-3.5 h-3.5 text-gray-400 mt-0.5"/><div><p className="font-semibold text-gray-800">{order.delivery_address?.name ?? order.customer_name} · {order.delivery_address?.phone ?? order.customer_whatsapp}</p>{(order.delivery_address?.email || order.customer_email) && <p className="text-gray-500">{order.delivery_address?.email ?? order.customer_email}</p>}{isPickupOrder ? <><p className="font-semibold text-gray-800 mt-1">Jumia pickup station</p><p>{order.pickup_station_name ?? 'No pickup station selected'}</p>{order.pickup_station_address && <p>{order.pickup_station_address}</p>}</> : <><p>{order.delivery_address?.address_line1 || 'No street address saved'}</p>{order.delivery_address?.address_line2 && <p>{order.delivery_address.address_line2}</p>}<p>{[order.delivery_address?.city, order.delivery_address?.state].filter(Boolean).join(', ')}</p>{order.delivery_address?.landmark && <p>Landmark: {order.delivery_address.landmark}</p>}</>}</div></div></div> : <div className="space-y-3">{isPickupOrder && <div className="rounded-xl border border-orange-100 bg-orange-50/50 p-3 space-y-3">
                 <div className="flex items-center gap-2"><Store className="w-4 h-4 text-orange-600"/><div><p className="text-xs font-bold text-gray-800">Change Jumia pickup station</p><p className="text-[10px] text-gray-500">Filter by state, search, then choose the correct station.</p></div></div>
                 <div>
                   <label className="text-[9px] font-bold text-gray-500 uppercase">State</label>
