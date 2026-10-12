@@ -1238,10 +1238,20 @@ serve(async (req: Request) => {
 
         const shippingLineItems = pricedItems.map((item: any) => ({
           label: `${item.shipping_method === 'flight' ? 'Air' : 'Sea'} shipping fee — ${item.name} × ${Number(item.quantity ?? 0)}`,
-          amount_ngn: round2(Number(item.shipping_cost_ngn ?? 0) * Number(item.quantity ?? 0)),
+          amount_ngn: rawShippingNgn > 0
+            ? round2((Number(item.shipping_cost_ngn ?? 0) * Number(item.quantity ?? 0)) * shippingNgn / rawShippingNgn)
+            : 0,
           shipping_method: item.shipping_method,
           billing_type: 'shipping',
         }))
+        // Keep the itemized bill exactly equal to the actual checkout charge,
+        // including rounding and any shipping discount.
+        if (shippingLineItems.length > 0) {
+          const itemizedTotal = round2(shippingLineItems.reduce((sum: number, line: any) => sum + line.amount_ngn, 0))
+          shippingLineItems[shippingLineItems.length - 1].amount_ngn = round2(
+            shippingLineItems[shippingLineItems.length - 1].amount_ngn + shippingNgn - itemizedTotal,
+          )
+        }
 
         const { error: billError } = await supabase
           .from('china_import_consolidation_bills')
