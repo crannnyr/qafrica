@@ -47,7 +47,10 @@ Deno.serve(async (req: Request) => {
     .eq('order_id', orderId).order('order_item_index', { ascending: true })
   if (itemsError) return json({ error: 'Could not load fulfillment items.' }, 500)
 
-  const items = (rows ?? []).map((item: any) => ({
+  const selectedRows = (rows ?? []).filter((item: any) => selectedItemIds.includes(item.id));
+  if (selectedRows.length !== selectedItemIds.length) return json({ error: 'One or more selected items do not belong to this order.' }, 400);
+
+  const items = selectedRows.map((item: any) => ({
     product_name: item.product_name,
     image_url: item.image_url ?? null,
     variant_options: variantObject(item.variant_options),
@@ -56,10 +59,8 @@ Deno.serve(async (req: Request) => {
     remaining_quantity: Math.max(0, Number(item.ordered_quantity ?? 0) - Number(item.received_quantity ?? 0)),
   })).filter((item: any) => item.remaining_quantity > 0)
 
-  const totalOrdered = (rows ?? []).reduce((sum: number, item: any) => sum + Number(item.ordered_quantity ?? 0), 0)
-  const totalReceived = (rows ?? []).reduce((sum: number, item: any) => sum + Number(item.received_quantity ?? 0), 0)
-  if (!items.length || totalReceived <= 0 || totalReceived >= totalOrdered) {
-    return json({ error: 'A shareable list can only be created for an order that is partially received and still has outstanding quantities.' }, 400)
+  if (!items.length || items.length !== selectedItemIds.length || items.some((item: any) => item.remaining_quantity <= 0)) {
+    return json({ error: 'Select only items that still have outstanding quantities.' }, 400)
   }
 
   const { data: created, error: createError } = await db.from('china_import_partial_receiving_shares')
