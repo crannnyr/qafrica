@@ -150,6 +150,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   token: string; order: OrderRow; onClose: () => void; onReload: () => Promise<void>; onOpenClient: (customerId: string) => void;
 }) {
   const [addressEditing, setAddressEditing] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [address, setAddress] = useState<DeliveryAddress>(() => {
     const existing: Partial<DeliveryAddress> = order.delivery_address ?? {};
     return {
@@ -200,6 +201,25 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     setEditingItem(null);
     setVariantDraft({});
   }, [order.id, order.delivery_address, order.customer_name, order.customer_whatsapp, order.customer_email]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const checkSuperAdmin = async () => {
+      try {
+        const res = await fetch(EDGE_URL + '?action=admin-check-super-admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ manager_token: token }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled) setIsSuperAdmin(res.ok && data.is_super_admin === true);
+      } catch {
+        if (!cancelled) setIsSuperAdmin(false);
+      }
+    };
+    void checkSuperAdmin();
+    return () => { cancelled = true; };
+  }, [token]);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,10 +288,10 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   }, [token]);
 
   const canEditAddress = !order.shipped_at && !['shipped_and_closed', 'clearance_and_closed', 'received', 'delivered'].includes(order.status ?? '');
-  // Pickup station corrections need to remain accessible from Order Details,
-  // including older records whose status metadata would otherwise hide Edit.
   const isPickupOrder = order.delivery_mode === 'pickup_station' || Boolean(order.pickup_station_id || order.pickup_station_name);
-  const canEditDeliveryDetails = canEditAddress || isPickupOrder;
+  // Fulfillment locks remain in force for staff; verified Super Admins can
+  // override them for corrections through the server-side role check.
+  const canEditDeliveryDetails = canEditAddress || isSuperAdmin;
   const pickupStates = Array.from(new Set(pickupStations.map(station => station.state?.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
   const filteredPickupStations = pickupStations.filter(station => {
     const matchesState = !selectedPickupState || station.state.trim() === selectedPickupState;
