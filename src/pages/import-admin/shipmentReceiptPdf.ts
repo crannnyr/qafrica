@@ -41,7 +41,7 @@ const PAGE_HEIGHT = 297;
 const CARD_W = 148;
 const CARD_X = (PAGE_WIDTH - CARD_W) / 2;
 const CARD_Y = 18;
-const CARD_H = 150;
+const MIN_CARD_H = 150;
 const INNER_X = CARD_X + 8;
 const INNER_W = CARD_W - 16;
 const QR_SIZE = 32;
@@ -139,7 +139,7 @@ async function addReceiptPage(
 
   doc.setDrawColor(224, 228, 234);
   doc.setLineWidth(0.35);
-  doc.roundedRect(CARD_X, CARD_Y, CARD_W, CARD_H, 5, 5, 'S');
+  // Draw the outer receipt border after measuring all content so it can grow with item rows.
 
   // Header — matches the supplied receipt design.
   doc.setFont('helvetica', 'bold');
@@ -289,7 +289,13 @@ async function addReceiptPage(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(209, 213, 219);
-  doc.text('Scan the QR code to track the order.', PAGE_WIDTH / 2, CARD_Y + CARD_H - 6, { align: 'center' });
+  const receiptHeight = Math.max(MIN_CARD_H, y - CARD_Y + 15);
+  doc.text('Scan the QR code to track the order.', PAGE_WIDTH / 2, CARD_Y + receiptHeight - 6, { align: 'center' });
+
+  // Keep the same receipt design; only extend its border to enclose all content.
+  doc.setDrawColor(224, 228, 234);
+  doc.setLineWidth(0.35);
+  doc.roundedRect(CARD_X, CARD_Y, CARD_W, receiptHeight, 5, 5, 'S');
 }
 
 export async function createShipmentReceiptsPdf(
