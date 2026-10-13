@@ -93,6 +93,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [bulkReceiptAction, setBulkReceiptAction] = useState<'download' | 'print' | null>(null);
   const [sharingOrderId, setSharingOrderId] = useState<string | null>(null);
   const [selectedShareItems, setSelectedShareItems] = useState<string[]>([]);
+  const [createdShareUrl, setCreatedShareUrl] = useState<string | null>(null);
 
   const loadShipments = useCallback(async () => {
     setShipmentsLoading(true);
@@ -408,9 +409,16 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.token) throw new Error(data.error ?? 'Could not create shareable list');
       const shareUrl = `${window.location.origin}/importations/partial-receiving/${data.token}`;
-      await navigator.clipboard.writeText(shareUrl);
+      setCreatedShareUrl(shareUrl);
       setSelectedShareItems([]);
-      toast.success('Public list created and link copied');
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard access unavailable');
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success('Public list created and link copied');
+      } catch {
+        // iOS Safari and embedded previews can block clipboard access. Keep the link visible for manual copying.
+        toast.success('Public list created. Copy the link from the dialog.');
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not create shareable list');
     } finally {
@@ -958,6 +966,42 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
               {sharingOrderId === 'selected' ? 'Creating…' : 'Create share link'}
             </button>
             <button type="button" aria-label="Clear selected items" onClick={() => setSelectedShareItems([])} className="rounded-lg px-2 py-2 text-gray-500 hover:bg-gray-100">×</button>
+          </div>
+        </div>
+      )}
+
+      {createdShareUrl && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-black text-gray-900">Shareable list created</h3>
+                <p className="mt-1 text-sm text-gray-500">Copy this public link and send it to the recipient.</p>
+              </div>
+              <button type="button" onClick={() => setCreatedShareUrl(null)} aria-label="Close share link dialog" className="rounded-lg px-2 py-1 text-xl text-gray-500">×</button>
+            </div>
+            <input
+              aria-label="Public share link"
+              readOnly
+              value={createdShareUrl}
+              onFocus={event => event.currentTarget.select()}
+              className="mt-4 w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-3 text-sm text-gray-800"
+            />
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={async () => {
+                try {
+                  if (!navigator.clipboard?.writeText) throw new Error('Clipboard access unavailable');
+                  await navigator.clipboard.writeText(createdShareUrl);
+                  toast.success('Link copied');
+                } catch {
+                  const input = document.querySelector<HTMLInputElement>('input[aria-label="Public share link"]');
+                  input?.focus();
+                  input?.select();
+                  toast.error('Automatic copying is blocked by this browser. Press and hold the selected link, then choose Copy.');
+                }
+              }} className="flex-1 rounded-xl bg-orange-500 px-4 py-3 text-sm font-bold text-white">Copy link</button>
+              <button type="button" onClick={() => setCreatedShareUrl(null)} className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700">Done</button>
+            </div>
           </div>
         </div>
       )}
