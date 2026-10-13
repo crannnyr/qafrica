@@ -528,14 +528,25 @@ serve(async (req) => {
       return json({ error: 'Unauthorized' }, 401)
     }
 
-    const { data: fulfillment, error: fulfillmentError } = await supabase
-      .from('china_import_fulfillment_items')
-      .select('id, order_id, order_item_index, product_id, product_name, image_url, variant_options, ordered_quantity, received_quantity, allocated_quantity, shipped_quantity, delivered_quantity, status, received_at')
-      .order('created_at', { ascending: false })
+    // Supabase applies a default maximum row limit to select queries. Fulfillment
+    // has grown beyond that limit, so fetch every page explicitly or older orders
+    // silently disappear from Receiving and Received.
+    const fulfillmentPageSize = 1000
+    const fulfillmentRows: any[] = []
+    for (let offset = 0; ; offset += fulfillmentPageSize) {
+      const { data: page, error: fulfillmentError } = await supabase
+        .from('china_import_fulfillment_items')
+        .select('id, order_id, order_item_index, product_id, product_name, image_url, variant_options, ordered_quantity, received_quantity, allocated_quantity, shipped_quantity, delivered_quantity, status, received_at, created_at')
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: true })
+        .range(offset, offset + fulfillmentPageSize - 1)
 
-    if (fulfillmentError) return json({ error: fulfillmentError.message }, 500)
+      if (fulfillmentError) return json({ error: fulfillmentError.message }, 500)
+      fulfillmentRows.push(...(page ?? []))
+      if (!page || page.length < fulfillmentPageSize) break
+    }
 
-    const rows = fulfillment ?? []
+    const rows = fulfillmentRows
     if (rows.length === 0) return json({ items: [] })
 
     const orderIds = Array.from(new Set(rows.map((row: any) => row.order_id).filter(Boolean)))
