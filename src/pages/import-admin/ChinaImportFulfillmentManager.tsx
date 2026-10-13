@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, Download, Loader2, PackageCheck, Printer, RefreshCw, Search, Truck, X, Plus } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Download, Loader2, PackageCheck, Printer, RefreshCw, Search, Truck, X, Plus, Share2, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import ShipmentReceiptSheet, { type ShipmentReceiptData } from './ShipmentReceiptSheet';
@@ -90,7 +90,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [shipmentsLoading, setShipmentsLoading] = useState(false);
   const [shipmentQuery, setShipmentQuery] = useState('');
   const [shipmentStatusFilter, setShipmentStatusFilter] = useState('all');
-  const [bulkReceiptAction, setBulkReceiptAction] = useState<'download' | 'print' | null>(null);
+  const [bulkReceiptAction, setBulkReceiptAction] = useState<'download' | 'print' | null>(null);\n  const [sharingOrderId, setSharingOrderId] = useState<string | null>(null);
 
   const loadShipments = useCallback(async () => {
     setShipmentsLoading(true);
@@ -390,6 +390,26 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     return map;
   }, [items]);
 
+  const createPartialReceivingShare = async (orderId: string) => {
+    setSharingOrderId(orderId);
+    try {
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/partial-receiving-share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_id: orderId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token) throw new Error(data.error ?? 'Could not create shareable list');
+      const shareUrl = `${window.location.origin}/importations/partial-receiving/${data.token}`;
+      await navigator.clipboard.writeText(shareUrl);
+      toast.success('Public list created and link copied');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not create shareable list');
+    } finally {
+      setSharingOrderId(null);
+    }
+  };
+
   const runBulkReceiptAction = async (action: 'download' | 'print') => {
     if (!filteredShipments.length) {
       toast.error('There are no matching shipments to include');
@@ -599,6 +619,17 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                       </button>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {order.status === 'partially_received' && order.items.some(item => item.received_quantity < item.ordered_quantity) && (
+                          <button
+                            type="button"
+                            onClick={() => void createPartialReceivingShare(order.id)}
+                            disabled={sharingOrderId === order.id}
+                            className="px-3 py-2 rounded-lg border border-orange-200 bg-white hover:bg-orange-50 text-orange-700 text-[10px] font-bold flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {sharingOrderId === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
+                            {sharingOrderId === order.id ? 'Creating…' : 'Share remaining'}
+                          </button>
+                        )}
                         {available > 0 && (
                           <button
                             type="button"
