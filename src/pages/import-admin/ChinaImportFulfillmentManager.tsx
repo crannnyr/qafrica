@@ -946,9 +946,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       )}
     </div>
 
-      {fulfillmentTab === 'received' && selectedShareItems.length > 0 && (
-        <div className="fixed bottom-5 left-1/2 z-[70] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-orange-200 bg-white p-3 shadow-2xl">
+      {selectedShareItems.length > 0 && (
+        <div className="fixed inset-x-0 z-[9999] px-4 pointer-events-none" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+          <div className="mx-auto flex w-full max-w-lg items-center justify-between gap-3 rounded-2xl border border-orange-200 bg-white p-3 shadow-2xl pointer-events-auto">
             <div className="min-w-0">
               <p className="text-sm font-black text-gray-900">{selectedShareItems.length} item{selectedShareItems.length === 1 ? '' : 's'} selected</p>
               <p className="text-[11px] text-gray-500">Across any partially received orders</p>
