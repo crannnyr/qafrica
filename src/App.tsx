@@ -40,6 +40,7 @@ const BlogPostPage = lazy(() => import('@/pages/blog/BlogPostPage'));
 // const ImportPage = lazy(() => import('@/pages/import/ImportPage'));
 const ImportAdminPage = lazy(() => import('@/pages/import-admin/ImportAdminPage'));
 const ImportSourcingSharePage = lazy(() => import('@/pages/import-admin/ImportSourcingSharePage'));
+const PartialReceivingSharePage = lazy(() => import('@/pages/import-admin/PartialReceivingSharePage'));
 const ManagementLogin = lazy(() => import('@/pages/management/ManagementLogin'));
 const ManagementLogout = lazy(() => import('@/pages/management/ManagementLogout'));
 const ManagementLayout = lazy(() => import('@/pages/management/ManagementLayout'));
@@ -483,6 +484,7 @@ function App() {
           <Route path="/importations/admin" element={<ImportAdminRouteBridge />} />
           {/* Legacy source remains in src/pages/import-admin for rollback/QR compatibility. */}
           <Route path="/importations/sourcing/:token" element={<ImportSourcingSharePage />} />
+          <Route path="/importations/partial-receiving/:token" element={<PartialReceivingSharePage />} />
           <Route path="/management/login" element={<ManagementLogin />} />
           <Route path="/management/logout" element={<ManagementLogout />} />
           <Route path="/management" element={<ManagementLayout />}>
