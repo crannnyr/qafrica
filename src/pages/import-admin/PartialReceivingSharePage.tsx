@@ -3,6 +3,7 @@ import { AlertCircle, PackageCheck } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
 type SharedItem = {
+  order_code?: string;
   product_name: string;
   image_url: string | null;
   variant_options: Record<string, unknown> | null;
@@ -75,7 +76,7 @@ export default function PartialReceivingSharePage() {
                 <article key={`${item.product_name}-${index}`} className="flex gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
                   {item.image_url ? <img src={item.image_url} alt={item.product_name} loading="lazy" className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 object-cover sm:h-24 sm:w-24" /> : <div className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 sm:h-24 sm:w-24" />}
                   <div className="min-w-0 flex-1">
-                    <h2 className="text-sm font-bold text-gray-900 sm:text-base">{item.product_name}</h2>
+                    {item.order_code && <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-orange-600">Order {item.order_code}</p>}<h2 className="text-sm font-bold text-gray-900 sm:text-base">{item.product_name}</h2>
                     {variantLabel(item.variant_options) && <p className="mt-1 text-xs text-gray-500">{variantLabel(item.variant_options)}</p>}
                     <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
                       <div><p className="text-gray-400">Ordered</p><p className="mt-1 font-bold text-gray-800">{item.ordered_quantity}</p></div>
