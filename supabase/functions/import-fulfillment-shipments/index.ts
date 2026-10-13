@@ -318,7 +318,9 @@ serve(async (req) => {
             pickup_station_id: order?.pickup_station_id ?? null,
             pickup_station_name: order?.pickup_station_name ?? null,
             pickup_station_address: order?.pickup_station_address ?? null,
-            delivery_address: shipment.delivery_address ?? order?.delivery_address ?? (
+            // The order record is the source of truth for the latest admin-corrected
+            // delivery destination. Shipment delivery_address is only a creation-time snapshot.
+            delivery_address: order?.delivery_address ?? shipment.delivery_address ?? (
               order?.delivery_mode === 'pickup_station' && order?.pickup_station_name
                 ? { name: order.pickup_station_name, address: order.pickup_station_address ?? '' }
                 : null
