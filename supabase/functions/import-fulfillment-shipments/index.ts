@@ -270,14 +270,21 @@ serve(async (req) => {
       const orderId = typeof body.order_id === 'string' ? body.order_id : null
       let query = db.from('china_import_shipments')
         .select('id,shipment_code,order_id,customer_id,batch_id,status,delivery_mode,carrier_name,tracking_number,tracking_url,waybill_url,delivery_address,notes,shipped_at,delivered_at,created_at,updated_at')
-        .order('created_at', { ascending: false }).limit(200)
+        .order('created_at', { ascending: false })
       if (orderId) query = query.eq('order_id', orderId)
 
-      const { data: shipments, error } = await query
-      if (error) return json({ error: error.message }, 500)
+      const shipmentRows: any[] = []
+      const shipmentPageSize = 500
+      for (let offset = 0; ; offset += shipmentPageSize) {
+        const { data: page, error } = await query.range(offset, offset + shipmentPageSize - 1)
+        if (error) return json({ error: error.message }, 500)
+        shipmentRows.push(...(page ?? []))
+        if (!page || page.length < shipmentPageSize) break
+      }
+      const shipments = shipmentRows
       const orderIds = Array.from(new Set((shipments ?? []).map((s: any) => s.order_id).filter(Boolean)))
       const { data: orders, error: ordersError } = orderIds.length
-        ? await db.from('china_import_orders').select('id,user_id,delivery_mode,delivery_address,pickup_station_id,pickup_station_name,pickup_station_address').in('id', orderIds)
+        ? await db.from('china_import_orders').select('id,code,user_id,customer_name,customer_whatsapp,delivery_mode,delivery_address,pickup_station_id,pickup_station_name,pickup_station_address').in('id', orderIds)
         : { data: [], error: null }
       if (ordersError) return json({ error: ordersError.message }, 500)
       const orderById = new Map((orders ?? []).map((o: any) => [o.id, o]))
@@ -311,8 +318,9 @@ serve(async (req) => {
           const customer = customerById.get(shipment.customer_id) ?? (order?.user_id ? customerById.get(order.user_id) : null)
           return {
             ...shipment,
-            customer_name: customer?.full_name ?? null,
-            customer_whatsapp: customer?.phone ?? null,
+            order_code: order?.code ?? null,
+            customer_name: customer?.full_name ?? order?.customer_name ?? null,
+            customer_whatsapp: customer?.phone ?? order?.customer_whatsapp ?? null,
             customer_email: customer?.email ?? null,
             delivery_mode: shipment.delivery_mode ?? order?.delivery_mode ?? null,
             pickup_station_id: order?.pickup_station_id ?? null,
