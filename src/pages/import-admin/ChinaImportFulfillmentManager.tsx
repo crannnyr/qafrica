@@ -418,6 +418,33 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     }
   };
 
+  const createSelectedShareLists = async () => {
+    const selections = Object.entries(selectedShareItems).filter(([, ids]) => ids.length > 0);
+    if (!selections.length) return;
+    setSharingOrderId('__all__');
+    const links: string[] = [];
+    try {
+      for (const [orderId, selectedItemIds] of selections) {
+        const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/partial-receiving-share`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ manager_token: token, order_id: orderId, selected_item_ids: selectedItemIds }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.token) throw new Error(data.error ?? 'Could not create shareable list');
+        links.push(`${window.location.origin}/importations/partial-receiving/${data.token}`);
+      }
+      await navigator.clipboard.writeText(links.join('\n'));
+      setSelectedShareItems({});
+      toast.success(links.length === 1 ? 'Share link created and copied' : `${links.length} share links created and copied`);
+    } catch (e) {
+      if (links.length) await navigator.clipboard.writeText(links.join('\n')).catch(() => undefined);
+      toast.error(e instanceof Error ? e.message : 'Could not create all share links');
+    } finally {
+      setSharingOrderId(null);
+    }
+  };
+
   const runBulkReceiptAction = async (action: 'download' | 'print') => {
     if (!filteredShipments.length) {
       toast.error('There are no matching shipments to include');
@@ -927,7 +954,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                     })}
                                   </div>
                                   <div className="border-t border-gray-100 p-3 flex items-center justify-between gap-3 bg-white">
-                                    <div className="flex flex-wrap items-center gap-2"><p className="text-[10px] text-gray-400">{available} unit{available === 1 ? '' : 's'} available to allocate</p>{(selectedShareItems[order.id] ?? []).length > 0 && <button type="button" onClick={() => void createPartialReceivingShare(order.id)} disabled={sharingOrderId === order.id} className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5 disabled:opacity-50">{sharingOrderId === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}{sharingOrderId === order.id ? 'Creating link…' : `Share selected (${(selectedShareItems[order.id] ?? []).length})`}</button>}</div>
+                                    <p className="text-[10px] text-gray-400">{available} unit{available === 1 ? '' : 's'} available to allocate</p>
                                     {available > 0 && <button type="button" onClick={() => void openShipment(order.id)} className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" /> Create shipment</button>}
                                   </div>
                                 </>
@@ -946,6 +973,19 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       )}
     </div>
 
+      {Object.values(selectedShareItems).some(ids => ids.length > 0) && (
+        <div className="fixed bottom-5 left-1/2 z-[70] w-[calc(100%-2rem)] max-w-xl -translate-x-1/2">
+          <button
+            type="button"
+            onClick={() => void createSelectedShareLists()}
+            disabled={sharingOrderId !== null}
+            className="w-full rounded-2xl bg-orange-600 px-5 py-4 text-sm font-black text-white shadow-2xl flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {sharingOrderId ? <Loader2 className="h-5 w-5 animate-spin" /> : <Share2 className="h-5 w-5" />}
+            {sharingOrderId ? 'Creating share link…' : `Create share link · ${Object.values(selectedShareItems).reduce((sum, ids) => sum + ids.length, 0)} selected`}
+          </button>
+        </div>
+      )}
       {shipmentOrderId && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3">
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
