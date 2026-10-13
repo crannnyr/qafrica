@@ -267,12 +267,24 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return items.filter(item => {
-      if (!needle) return true;
-      return [item.order_code, item.customer_name, item.product_name, variantLabel(item.variant_options)]
-        .join(' ').toLowerCase().includes(needle);
-    });
-  }, [items, query, statusFilter]);
+    if (!needle) return items;
+
+    // Match orders by code, customer, product or variant, then keep every
+    // line belonging to those orders so totals and order details stay correct.
+    const matchingOrderIds = new Set(
+      items
+        .filter(item =>
+          [item.order_code, item.customer_name, item.customer_whatsapp, item.customer_email, item.product_name, variantLabel(item.variant_options)]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase()
+            .includes(needle)
+        )
+        .map(item => item.order_id)
+    );
+
+    return items.filter(item => matchingOrderIds.has(item.order_id));
+  }, [items, query]);
 
   const orders = useMemo<OrderGroup[]>(() => {
     const map = new Map<string, OrderGroup>();
