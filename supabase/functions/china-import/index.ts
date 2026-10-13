@@ -481,6 +481,53 @@ async function hasImportPermission(supabase: any, userId: string, permissionKey:
   return !permissionError && !!permission
 }
 
+async function isSuperAdminSession(supabase: any, token: unknown): Promise<boolean> {
+  if (!token || typeof token !== 'string') return false
+  const { data: session, error: sessionError } = await supabase
+    .from('import_admin_sessions')
+    .select('manager_id, user_id')
+    .eq('token', token)
+    .gt('expires_at', new Date().toISOString())
+    .maybeSingle()
+  if (sessionError || !session) return false
+
+  if (session.manager_id) {
+    const { data: assignments, error } = await supabase
+      .from('import_admin_manager_roles')
+      .select('role_id')
+      .eq('manager_id', session.manager_id)
+    if (error || !assignments?.length) return false
+    const roleIds = assignments.map((row: any) => row.role_id).filter(Boolean)
+    const { data: role } = await supabase
+      .from('import_admin_roles')
+      .select('id')
+      .in('id', roleIds)
+      .eq('key', 'super_admin')
+      .limit(1)
+      .maybeSingle()
+    return !!role
+  }
+
+  if (session.user_id) {
+    const { data: assignments, error } = await supabase
+      .from('import_admin_user_roles')
+      .select('role_id')
+      .eq('user_id', session.user_id)
+    if (error || !assignments?.length) return false
+    const roleIds = assignments.map((row: any) => row.role_id).filter(Boolean)
+    const { data: role } = await supabase
+      .from('import_admin_roles')
+      .select('id')
+      .in('id', roleIds)
+      .eq('key', 'super_admin')
+      .limit(1)
+      .maybeSingle()
+    return !!role
+  }
+
+  return false
+}
+
 async function requireAdmin(supabase: any, token: unknown, permissionKey?: string): Promise<boolean> {
   if (!token || typeof token !== 'string') return false
 
@@ -2758,8 +2805,14 @@ serve(async (req: Request) => {
       })
     }
 
-    // Admin order-detail address editor. Kept separate from the generic update-order
-    // action so address edits can be validated and audited independently.
+    if (req.method === 'POST' && action === 'admin-check-super-admin') {
+      const { manager_token } = await req.json().catch(() => ({}))
+      if (!(await requireAdmin(supabase, manager_token, 'import.orders.view'))) return json({ error: 'Unauthorized' }, 401)
+      return json({ is_super_admin: await isSuperAdminSession(supabase, manager_token) })
+    }
+
+    // Admin order-detail address editor. Super Admins may correct delivery
+    // details after fulfillment has started; other admins remain blocked.
     if (req.method === 'POST' && action === 'admin-update-order-address') {
       const { manager_token, order_id, delivery_address, delivery_mode, pickup_station_id, pickup_station_name, pickup_station_address } = await req.json().catch(() => ({}))
       if (!(await requireAdmin(supabase, manager_token, 'import.orders.update'))) return json({ error: 'Unauthorized' }, 401)
@@ -2771,8 +2824,9 @@ serve(async (req: Request) => {
         .eq('id', order_id)
         .single()
       if (orderErr || !order) return json({ error: 'Order not found' }, 404)
-      if (order.shipped_at || ['shipped_and_closed', 'clearance_and_closed', 'received', 'delivered'].includes(order.status)) {
-        return json({ error: 'This order has already entered fulfillment and its delivery address can no longer be changed.' }, 409)
+      const fulfillmentStarted = !!order.shipped_at || ['shipped_and_closed', 'clearance_and_closed', 'received', 'delivered'].includes(order.status)
+      if (fulfillmentStarted && !(await isSuperAdminSession(supabase, manager_token))) {
+        return json({ error: 'Only a Super Admin can change delivery details after fulfillment has started.' }, 403)
       }
 
       const address = {
