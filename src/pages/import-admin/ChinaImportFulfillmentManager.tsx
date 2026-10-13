@@ -363,6 +363,10 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       const customer = items.find(item => item.order_id === shipment.order_id);
       return [
         shipment.shipment_code,
+        shipment.order_code,
+        shipment.customer_name,
+        shipment.customer_whatsapp,
+        shipment.customer_email,
         customer?.order_code,
         customer?.customer_name,
         shipment.carrier_name,
@@ -746,8 +750,8 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                             {shipment.tracking_number && <p className="text-[10px] text-gray-400 mt-1 whitespace-nowrap">Tracking: {shipment.tracking_number}</p>}
                           </td>
                           <td className="px-4 py-3.5 align-top">
-                            <p className="text-xs font-bold text-gray-800 whitespace-nowrap">{customer?.order_code ?? '—'}</p>
-                            <p className="text-[10px] text-gray-500 mt-0.5 max-w-[180px] truncate">{customer?.customer_name ?? 'Customer'}</p>
+                            <p className="text-xs font-bold text-gray-800 whitespace-nowrap">{shipment.order_code ?? customer?.order_code ?? '—'}</p>
+                            <p className="text-[10px] text-gray-500 mt-0.5 max-w-[180px] truncate">{shipment.customer_name ?? customer?.customer_name ?? 'Customer'}</p>
                           </td>
                           <td className="px-4 py-3.5 align-top">
                             <p className="text-xs font-bold text-gray-800">{shipment.items?.length ?? 0} line{(shipment.items?.length ?? 0) === 1 ? '' : 's'}</p>
