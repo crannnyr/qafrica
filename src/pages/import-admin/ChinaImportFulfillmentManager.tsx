@@ -435,7 +435,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
         links.push(`${window.location.origin}/importations/partial-receiving/${data.token}`);
       }
       await navigator.clipboard.writeText(links.join('\n'));
-      setSelectedShareItems({});
+      setSelectedShareItems([]);
       toast.success(links.length === 1 ? 'Share link created and copied' : `${links.length} share links created and copied`);
     } catch (e) {
       if (links.length) await navigator.clipboard.writeText(links.join('\n')).catch(() => undefined);
