@@ -92,6 +92,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [shipmentStatusFilter, setShipmentStatusFilter] = useState('all');
   const [bulkReceiptAction, setBulkReceiptAction] = useState<'download' | 'print' | null>(null);
   const [sharingOrderId, setSharingOrderId] = useState<string | null>(null);
+  const [selectedShareItems, setSelectedShareItems] = useState<Record<string, string[]>>({});
 
   const loadShipments = useCallback(async () => {
     setShipmentsLoading(true);
@@ -156,7 +157,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/import-fulfillment-shipments?action=admin-fulfillment-shipments-list`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, order_id: orderId }),
+        body: JSON.stringify({ manager_token: token, order_id: orderId, selected_item_ids: selectedItemIds }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? 'Could not load shipments');
@@ -392,6 +393,11 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   }, [items]);
 
   const createPartialReceivingShare = async (orderId: string) => {
+    const selectedItemIds = selectedShareItems[orderId] ?? [];
+    if (!selectedItemIds.length) {
+      toast.error('Select at least one outstanding item first');
+      return;
+    }
     setSharingOrderId(orderId);
     try {
       const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/partial-receiving-share`, {
@@ -403,6 +409,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       if (!res.ok || !data.token) throw new Error(data.error ?? 'Could not create shareable list');
       const shareUrl = `${window.location.origin}/importations/partial-receiving/${data.token}`;
       await navigator.clipboard.writeText(shareUrl);
+      setSelectedShareItems(current => ({ ...current, [orderId]: [] }));
       toast.success('Public list created and link copied');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not create shareable list');
@@ -620,17 +627,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                       </button>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        {order.status === 'partially_received' && order.items.some(item => item.received_quantity < item.ordered_quantity) && (
-                          <button
-                            type="button"
-                            onClick={() => void createPartialReceivingShare(order.id)}
-                            disabled={sharingOrderId === order.id}
-                            className="px-3 py-2 rounded-lg border border-orange-200 bg-white hover:bg-orange-50 text-orange-700 text-[10px] font-bold flex items-center gap-1.5 disabled:opacity-50"
-                          >
-                            {sharingOrderId === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
-                            {sharingOrderId === order.id ? 'Creating…' : 'Share remaining'}
-                          </button>
-                        )}
                         {available > 0 && (
                           <button
                             type="button"
@@ -901,6 +897,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                   <div className="border-t border-gray-100 divide-y divide-gray-100 bg-white">
                                     {order.items.map(item => {
                                       const complete = item.received_quantity >= item.ordered_quantity;
+                                      const selectedForShare = (selectedShareItems[order.id] ?? []).includes(item.id);
                                       return (
                                         <div key={item.id} className="p-4">
                                           <div className="flex gap-3">
@@ -910,6 +907,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                               <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
                                               {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
                                               <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {item.received_quantity} · Remaining {Math.max(0, item.ordered_quantity - item.received_quantity)}</p>
+                                              {!complete && <button type="button" onClick={() => setSelectedShareItems(current => { const ids = current[order.id] ?? []; return { ...current, [order.id]: selectedForShare ? ids.filter(id => id !== item.id) : [...ids, item.id] }; })} className={"mt-2 px-3 py-1.5 rounded-lg text-[10px] font-bold border " + (selectedForShare ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white border-orange-200 text-orange-700')}>{selectedForShare ? '✓ Added to share list' : '＋ Add to share list'}</button>}
                                               {(sellerLabel(item) || item.seller_order_number) && <p className="text-[10px] text-gray-500 mt-1">{sellerLabel(item) ? `Seller store: ${sellerLabel(item)}` : ''}{item.seller_order_number ? `${sellerLabel(item) ? ' · ' : ''}Seller order: ${item.seller_order_number}` : ''}</p>}
                                             </div>
                                           </div>
@@ -929,7 +927,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                     })}
                                   </div>
                                   <div className="border-t border-gray-100 p-3 flex items-center justify-between gap-3 bg-white">
-                                    <p className="text-[10px] text-gray-400">{available} unit{available === 1 ? '' : 's'} available to allocate</p>
+                                    <div className="flex flex-wrap items-center gap-2"><p className="text-[10px] text-gray-400">{available} unit{available === 1 ? '' : 's'} available to allocate</p>{(selectedShareItems[order.id] ?? []).length > 0 && <button type="button" onClick={() => void createPartialReceivingShare(order.id)} disabled={sharingOrderId === order.id} className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5 disabled:opacity-50">{sharingOrderId === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}{sharingOrderId === order.id ? 'Creating link…' : `Share selected (${(selectedShareItems[order.id] ?? []).length})`}</button>}</div>
                                     {available > 0 && <button type="button" onClick={() => void openShipment(order.id)} className="px-3 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold flex items-center gap-1.5"><Truck className="w-3.5 h-3.5" /> Create shipment</button>}
                                   </div>
                                 </>
