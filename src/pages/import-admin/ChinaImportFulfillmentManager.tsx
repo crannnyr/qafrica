@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, Download, Loader2, PackageCheck, Printer, RefreshCw, Search, Truck, X, Plus } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Download, Loader2, PackageCheck, Printer, RefreshCw, Search, Truck, X, Plus, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import ShipmentReceiptSheet, { type ShipmentReceiptData } from './ShipmentReceiptSheet';
@@ -91,6 +91,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [shipmentQuery, setShipmentQuery] = useState('');
   const [shipmentStatusFilter, setShipmentStatusFilter] = useState('all');
   const [bulkReceiptAction, setBulkReceiptAction] = useState<'download' | 'print' | null>(null);
+  const [sharingOrderId, setSharingOrderId] = useState<string | null>(null);
+  const [selectedShareItems, setSelectedShareItems] = useState<string[]>([]);
+  const [createdShareUrl, setCreatedShareUrl] = useState<string | null>(null);
 
   const loadShipments = useCallback(async () => {
     setShipmentsLoading(true);
@@ -389,6 +392,39 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     }
     return map;
   }, [items]);
+
+  const createPartialReceivingShare = async () => {
+    const selectedItemIds = selectedShareItems;
+    if (!selectedItemIds.length) {
+      toast.error('Select at least one outstanding item first');
+      return;
+    }
+    setSharingOrderId('selected');
+    try {
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/partial-receiving-share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, selected_item_ids: selectedItemIds }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token) throw new Error(data.error ?? 'Could not create shareable list');
+      const shareUrl = `${window.location.origin}/importations/partial-receiving/${data.token}`;
+      setCreatedShareUrl(shareUrl);
+      setSelectedShareItems([]);
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard access unavailable');
+        await navigator.clipboard.writeText(shareUrl);
+        toast.success('Public list created and link copied');
+      } catch {
+        // iOS Safari and embedded previews can block clipboard access. Keep the link visible for manual copying.
+        toast.success('Public list created. Copy the link from the dialog.');
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not create shareable list');
+    } finally {
+      setSharingOrderId(null);
+    }
+  };
 
   const runBulkReceiptAction = async (action: 'download' | 'print') => {
     if (!filteredShipments.length) {
@@ -869,6 +905,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                   <div className="border-t border-gray-100 divide-y divide-gray-100 bg-white">
                                     {order.items.map(item => {
                                       const complete = item.received_quantity >= item.ordered_quantity;
+                                      const selectedForShare = selectedShareItems.includes(item.id);
                                       return (
                                         <div key={item.id} className="p-4">
                                           <div className="flex gap-3">
@@ -878,6 +915,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                               <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
                                               {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
                                               <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {item.received_quantity} · Remaining {Math.max(0, item.ordered_quantity - item.received_quantity)}</p>
+                                              {!complete && <button type="button" onClick={() => setSelectedShareItems(current => selectedForShare ? current.filter(id => id !== item.id) : [...current, item.id])} className={"mt-2 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border " + (selectedForShare ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white border-orange-200 text-orange-700')}>{selectedForShare ? '✓ Selected for sharing' : '＋ Add to share list'}</button>}
                                               {(sellerLabel(item) || item.seller_order_number) && <p className="text-[10px] text-gray-500 mt-1">{sellerLabel(item) ? `Seller store: ${sellerLabel(item)}` : ''}{item.seller_order_number ? `${sellerLabel(item) ? ' · ' : ''}Seller order: ${item.seller_order_number}` : ''}</p>}
                                             </div>
                                           </div>
@@ -915,6 +953,58 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
         </div>
       )}
     </div>
+
+      {selectedShareItems.length > 0 && (
+        <div className="fixed inset-x-0 z-[9999] px-4 pointer-events-none" style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 1rem)' }}>
+          <div className="mx-auto flex w-full max-w-lg items-center justify-between gap-3 rounded-2xl border border-orange-200 bg-white p-3 shadow-2xl pointer-events-auto">
+            <div className="min-w-0">
+              <p className="text-sm font-black text-gray-900">{selectedShareItems.length} item{selectedShareItems.length === 1 ? '' : 's'} selected</p>
+              <p className="text-[11px] text-gray-500">Across any partially received orders</p>
+            </div>
+            <button type="button" onClick={() => void createPartialReceivingShare()} disabled={sharingOrderId === 'selected'} className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50">
+              {sharingOrderId === 'selected' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+              {sharingOrderId === 'selected' ? 'Creating…' : 'Create share link'}
+            </button>
+            <button type="button" aria-label="Clear selected items" onClick={() => setSelectedShareItems([])} className="rounded-lg px-2 py-2 text-gray-500 hover:bg-gray-100">×</button>
+          </div>
+        </div>
+      )}
+
+      {createdShareUrl && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-black text-gray-900">Shareable list created</h3>
+                <p className="mt-1 text-sm text-gray-500">Copy this public link and send it to the recipient.</p>
+              </div>
+              <button type="button" onClick={() => setCreatedShareUrl(null)} aria-label="Close share link dialog" className="rounded-lg px-2 py-1 text-xl text-gray-500">×</button>
+            </div>
+            <input
+              aria-label="Public share link"
+              readOnly
+              value={createdShareUrl}
+              onFocus={event => event.currentTarget.select()}
+              className="mt-4 w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-3 text-sm text-gray-800"
+            />
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={async () => {
+                try {
+                  if (!navigator.clipboard?.writeText) throw new Error('Clipboard access unavailable');
+                  await navigator.clipboard.writeText(createdShareUrl);
+                  toast.success('Link copied');
+                } catch {
+                  const input = document.querySelector<HTMLInputElement>('input[aria-label="Public share link"]');
+                  input?.focus();
+                  input?.select();
+                  toast.error('Automatic copying is blocked by this browser. Press and hold the selected link, then choose Copy.');
+                }
+              }} className="flex-1 rounded-xl bg-orange-500 px-4 py-3 text-sm font-bold text-white">Copy link</button>
+              <button type="button" onClick={() => setCreatedShareUrl(null)} className="rounded-xl border border-gray-200 px-4 py-3 text-sm font-bold text-gray-700">Done</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {shipmentOrderId && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3">
