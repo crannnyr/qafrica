@@ -934,7 +934,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                               <p className="text-xs font-bold text-gray-900 mt-1 leading-snug">{item.product_name}</p>
                                               {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
                                               <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {item.received_quantity} · Remaining {Math.max(0, item.ordered_quantity - item.received_quantity)}</p>
-                                              {!complete && <button type="button" onClick={() => setSelectedShareItems(current => { const ids = current[order.id] ?? []; return { ...current, [order.id]: selectedForShare ? ids.filter(id => id !== item.id) : [...ids, item.id] }; })} className={"mt-2 px-3 py-1.5 rounded-lg text-[10px] font-bold border " + (selectedForShare ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white border-orange-200 text-orange-700')}>{selectedForShare ? '✓ Added to share list' : '＋ Add to share list'}</button>}
+                                              {!complete && <button type="button" onClick={() => setSelectedShareItems(current => { const otherSelected = Object.entries(current).some(([id, ids]) => id !== order.id && ids.length > 0); if (!selectedForShare && otherSelected) { toast.error('Select items from one order at a time'); return current; } const ids = current[order.id] ?? []; return { ...current, [order.id]: selectedForShare ? ids.filter(id => id !== item.id) : [...ids, item.id] }; })} className={"mt-2 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold border " + (selectedForShare ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white border-orange-200 text-orange-700')}>{selectedForShare ? '✓ Selected for sharing' : '＋ Add to share list'}</button>}
                                               {(sellerLabel(item) || item.seller_order_number) && <p className="text-[10px] text-gray-500 mt-1">{sellerLabel(item) ? `Seller store: ${sellerLabel(item)}` : ''}{item.seller_order_number ? `${sellerLabel(item) ? ' · ' : ''}Seller order: ${item.seller_order_number}` : ''}</p>}
                                             </div>
                                           </div>
@@ -986,6 +986,26 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
           </button>
         </div>
       )}
+
+      {fulfillmentTab === 'received' && Object.entries(selectedShareItems).some(([, ids]) => ids.length > 0) && (() => {
+        const [selectedOrderId, selectedIds] = Object.entries(selectedShareItems).find(([, ids]) => ids.length > 0)!;
+        return (
+          <div className="fixed bottom-5 left-1/2 z-[70] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2">
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-orange-200 bg-white p-3 shadow-2xl">
+              <div className="min-w-0">
+                <p className="text-sm font-black text-gray-900">{selectedIds.length} item{selectedIds.length === 1 ? '' : 's'} selected</p>
+                <p className="text-[11px] text-gray-500">Ready to create a shareable list</p>
+              </div>
+              <button type="button" onClick={() => void createPartialReceivingShare(selectedOrderId)} disabled={sharingOrderId === selectedOrderId} className="shrink-0 inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-sm disabled:opacity-50">
+                {sharingOrderId === selectedOrderId ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+                {sharingOrderId === selectedOrderId ? 'Creating…' : 'Create share link'}
+              </button>
+              <button type="button" aria-label="Clear selected items" onClick={() => setSelectedShareItems(current => ({ ...current, [selectedOrderId]: [] }))} className="rounded-lg px-2 py-2 text-gray-500 hover:bg-gray-100">×</button>
+            </div>
+          </div>
+        );
+      })()}
+
       {shipmentOrderId && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-3">
           <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
