@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, ChevronDown, ChevronUp, Download, Loader2, PackageCheck, Printer, RefreshCw, Search, Truck, X, Plus, Share2, Copy } from 'lucide-react';
+import { CheckCircle2, ChevronDown, ChevronUp, Download, Loader2, PackageCheck, Printer, RefreshCw, Search, Truck, X, Plus, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import CONFIG from '@/lib/config';
 import ShipmentReceiptSheet, { type ShipmentReceiptData } from './ShipmentReceiptSheet';
@@ -90,7 +90,8 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [shipmentsLoading, setShipmentsLoading] = useState(false);
   const [shipmentQuery, setShipmentQuery] = useState('');
   const [shipmentStatusFilter, setShipmentStatusFilter] = useState('all');
-  const [bulkReceiptAction, setBulkReceiptAction] = useState<'download' | 'print' | null>(null);\n  const [sharingOrderId, setSharingOrderId] = useState<string | null>(null);
+  const [bulkReceiptAction, setBulkReceiptAction] = useState<'download' | 'print' | null>(null);
+  const [sharingOrderId, setSharingOrderId] = useState<string | null>(null);
 
   const loadShipments = useCallback(async () => {
     setShipmentsLoading(true);
