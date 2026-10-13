@@ -157,7 +157,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/import-fulfillment-shipments?action=admin-fulfillment-shipments-list`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, order_id: orderId, selected_item_ids: selectedItemIds }),
+        body: JSON.stringify({ manager_token: token, order_id: orderId }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? 'Could not load shipments');
@@ -403,7 +403,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/partial-receiving-share`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_token: token, order_id: orderId }),
+        body: JSON.stringify({ manager_token: token, order_id: orderId, selected_item_ids: selectedItemIds }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.token) throw new Error(data.error ?? 'Could not create shareable list');
