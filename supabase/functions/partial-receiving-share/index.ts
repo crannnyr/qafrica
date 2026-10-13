@@ -31,7 +31,10 @@ Deno.serve(async (req: Request) => {
   const body = await req.json().catch(() => ({}))
   const managerToken = typeof body.manager_token === 'string' ? body.manager_token : ''
   const orderId = typeof body.order_id === 'string' ? body.order_id : ''
-  if (!managerToken || !orderId) return json({ error: 'Manager session and order are required.' }, 400)
+  const selectedItemIds = Array.isArray(body.selected_item_ids)
+    ? [...new Set(body.selected_item_ids.filter((id: unknown): id is string => typeof id === 'string'))]
+    : []
+  if (!managerToken || !orderId || selectedItemIds.length === 0) return json({ error: 'Manager session, order, and selected items are required.' }, 400)
 
   const { data: session, error: sessionError } = await db.from('import_admin_sessions')
     .select('token,manager_id,expires_at').eq('token', managerToken)
