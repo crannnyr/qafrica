@@ -10,7 +10,7 @@ type Reviewer = { id:string; display_name:string; is_username:boolean };
 type Review = {
   id:string; product_id:string; product_name:string|null; customer_name:string; is_username:boolean;
   customer_avatar_url:string|null; rating:number; title:string|null; content:string|null; images:string[];
-  is_verified_purchase:boolean; helpful_count:number; created_at:string;
+  is_verified_purchase:boolean; helpful_count:number; created_at:string; moderation_status:string;
 };
 
 const FN = `${CONFIG.SUPABASE_URL}/functions/v1/import-review-admin`;
@@ -155,6 +155,14 @@ export default function ImportReviewsManager() {
     finally { setSaving(false); }
   };
 
+  const moderateReview = async (id:string, status:'approved'|'rejected'|'pending') => {
+    try {
+      await call('moderate-review',{id,status});
+      toast.success(status === 'approved' ? 'Review approved and published' : status === 'rejected' ? 'Review rejected' : 'Review returned to pending');
+      await loadReviews(selectedProduct);
+    } catch(e) { toast.error(e instanceof Error ? e.message : 'Could not update review status'); }
+  };
+
   const deleteReview = async (id:string) => {
     if(!confirm('Delete this review? This cannot be undone.')) return;
     try { await call('delete-review',{id}); toast.success('Review deleted'); await loadReviews(selectedProduct); }
@@ -215,7 +223,12 @@ export default function ImportReviewsManager() {
               <div className="flex gap-3">
                 {r.customer_avatar_url ? <img src={r.customer_avatar_url} className="w-9 h-9 rounded-full object-cover bg-gray-100" alt=""/> : <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-400">{r.customer_name.slice(0,1).toUpperCase()}</div>}
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-gray-900">{r.customer_name}</span>{r.is_username&&<span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">username</span>}{r.is_verified_purchase&&<span className="flex items-center gap-0.5 text-[9px] text-emerald-600"><Check className="w-2.5 h-2.5"/> Verified</span>}</div>
+                  <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-gray-900">{r.customer_name}</span>{r.is_username&&<span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">username</span>}{r.is_verified_purchase&&<span className="flex items-center gap-0.5 text-[9px] text-emerald-600"><Check className="w-2.5 h-2.5"/> Verified</span>}</div><span className={`text-[9px] px-2 py-0.5 rounded-full ${r.moderation_status==='approved'?'bg-emerald-50 text-emerald-700':r.moderation_status==='rejected'?'bg-red-50 text-red-700':'bg-amber-50 text-amber-700'}`}>{r.moderation_status || 'pending'}</span></div>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {r.moderation_status !== 'approved' && <button onClick={()=>void moderateReview(r.id,'approved')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white disabled:opacity-40">Approve &amp; publish</button>}
+                    {r.moderation_status !== 'rejected' && <button onClick={()=>void moderateReview(r.id,'rejected')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-50 text-red-700 disabled:opacity-40">Reject</button>}
+                    {r.moderation_status !== 'pending' && <button onClick={()=>void moderateReview(r.id,'pending')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40">Set pending</button>}
+                  </div>
                   <div className="flex items-center gap-2 mt-1"><Stars value={r.rating}/><span className="text-[10px] text-gray-400">{new Date(r.created_at).toLocaleDateString()}</span></div>
                   {r.title&&<p className="text-xs font-bold text-gray-800 mt-3">{r.title}</p>}<p className="text-xs text-gray-600 leading-relaxed mt-1">{r.content}</p>
                   {!!r.images?.length&&<div className="flex gap-2 mt-3 overflow-x-auto">{r.images.map((im,i)=><img key={i} src={im} className="w-16 h-16 rounded-lg object-cover" alt=""/>)}</div>}
