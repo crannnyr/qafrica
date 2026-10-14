@@ -66,6 +66,20 @@ async function queueFulfillmentNotification(
     .maybeSingle()
   if (!template) return
 
+  if (templateKey === 'fulfillment_order_complete') {
+    const bytes = crypto.getRandomValues(new Uint8Array(32))
+    const reviewToken = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
+    const tokenHashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(reviewToken))
+    const tokenHash = Array.from(new Uint8Array(tokenHashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('')
+    const { error: linkError } = await db.from('china_import_review_links').insert({
+      order_id: orderId,
+      customer_id: order.user_id,
+      token_hash: tokenHash,
+    })
+    if (linkError) return
+    tokens.review_link = escapeHtml(`https://qafrica.store/importations/review-order/${reviewToken}`)
+  }
+
   const render = (value: string) => {
     let output = value
     for (const [key, token] of Object.entries(tokens)) {
