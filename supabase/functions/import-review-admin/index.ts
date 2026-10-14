@@ -149,6 +149,14 @@ Deno.serve(async (req: Request) => {
       return json({ review: data });
     }
 
+    if (action === "moderate-review") {
+      if (typeof body.id !== "string" || !body.id) return json({ error: "Review ID is required." }, 400);
+      if (!["approved", "rejected", "pending"].includes(body.status)) return json({ error: "Invalid moderation status." }, 400);
+      const { data, error } = await supabase.from("mock_reviews").update({ moderation_status: body.status }).eq("id", body.id).select("id, moderation_status").single();
+      if (error) return json({ error: error.message }, 400);
+      return json({ review: data });
+    }
+
     if (action === "delete-review") {
       if (!body.id) return json({ error: "Review ID is required." }, 400);
       const { error } = await supabase.from("mock_reviews").delete().eq("id", body.id);
