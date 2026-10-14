@@ -53,6 +53,8 @@ export default function ImportReviewsManager() {
   const [productPage,setProductPage] = useState(1);
   const [productPageCount,setProductPageCount] = useState(1);
   const [productsLoading,setProductsLoading] = useState(false);
+  const [pendingProductCounts,setPendingProductCounts] = useState<Record<string,number>>({});
+  const [pendingTotal,setPendingTotal] = useState(0);
 
   const call = async (action:string, extra:Record<string,unknown>={}) => {
     const res = await fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,manager_token:token,...extra})});
@@ -84,6 +86,17 @@ export default function ImportReviewsManager() {
     }
   };
 
+  const loadPendingCounts = async () => {
+    if (!token) return;
+    try {
+      const data = await call('pending-product-counts');
+      setPendingProductCounts(data.counts ?? {});
+      setPendingTotal(Number(data.total ?? 0));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load pending customer review counts');
+    }
+  };
+
   const loadReviews = async (productId:string) => {
     setReviewsLoading(true);
     try {
@@ -94,7 +107,7 @@ export default function ImportReviewsManager() {
     } finally { setReviewsLoading(false); }
   };
 
-  useEffect(()=>{ void load(1,'',true); },[]);
+  useEffect(()=>{ void load(1,'',true); void loadPendingCounts(); },[]);
   useEffect(()=>{ if(selectedProduct) void loadReviews(selectedProduct); else setReviews([]); },[selectedProduct]);
 
   const filteredProducts = products;
@@ -190,7 +203,7 @@ export default function ImportReviewsManager() {
 
   return <div className="space-y-5">
     <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
-      <div><h1 className="text-lg font-bold text-gray-900">Product Reviews</h1><p className="text-xs text-gray-500 mt-1">Create and manage reviews shown on China-import product pages.</p></div>
+      <div><div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-gray-900">Product Reviews</h1>{pendingTotal > 0 && <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-bold text-red-700"><span className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />{pendingTotal} pending customer review{pendingTotal === 1 ? '' : 's'}</span>}</div><p className="text-xs text-gray-500 mt-1">Customer reviews and mock reviews are separated. Red indicators mark products with customer reviews awaiting approval.</p></div>
       <button onClick={openCreate} disabled={!selectedProduct || !canManage} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold disabled:opacity-40"><Plus className="w-4 h-4"/> Add review</button>
     </div>
 
@@ -203,7 +216,7 @@ export default function ImportReviewsManager() {
         <div className="max-h-[60vh] overflow-y-auto p-2">
           {filteredProducts.map(p=><button key={p.id} onClick={()=>{setSelectedProduct(p.id);setSelectedProductData(p);}} className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left ${selectedProduct===p.id?'bg-orange-50 border border-orange-200':'hover:bg-gray-50'}`}>
             <img src={p.image_url || p.image_urls?.[0] || '/qafrica-bag-logo.svg'} className="w-11 h-11 rounded-lg object-cover bg-gray-100" alt=""/>
-            <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p><p className="text-[10px] text-gray-400 mt-0.5">{p.category || 'Uncategorized'}</p></div>
+            <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p><p className="text-[10px] text-gray-400 mt-0.5">{p.category || 'Uncategorized'}</p></div>{(pendingProductCounts[p.id] ?? 0) > 0 && <span title={`${pendingProductCounts[p.id]} pending customer review(s)`} className="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-extrabold text-white">{pendingProductCounts[p.id]}</span>}
           </button>)}
           {!filteredProducts.length && <p className="p-6 text-center text-xs text-gray-400">No products found.</p>}
         </div>
