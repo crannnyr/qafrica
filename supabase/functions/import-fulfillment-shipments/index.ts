@@ -66,6 +66,23 @@ async function queueFulfillmentNotification(
     .maybeSingle()
   if (!template) return
 
+  const { data: claimed, error: claimError } = await db
+    .from('china_import_customer_notification_log')
+    .insert({
+      notification_key: notificationKey,
+      order_id: orderId,
+      shipment_id: shipmentId,
+      notification_type: notificationType,
+    })
+    .select('id')
+    .maybeSingle()
+
+  if (claimError) {
+    if (claimError.code === '23505') return
+    return
+  }
+  if (!claimed) return
+
   if (templateKey === 'fulfillment_order_complete') {
     const bytes = crypto.getRandomValues(new Uint8Array(32))
     const reviewToken = Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('')
@@ -82,7 +99,6 @@ async function queueFulfillmentNotification(
     }
     tokens.review_link = escapeHtml(`https://qafrica.store/importations/review-order/${reviewToken}`)
   }
-
   const render = (value: string) => {
     let output = value
     for (const [key, token] of Object.entries(tokens)) {
