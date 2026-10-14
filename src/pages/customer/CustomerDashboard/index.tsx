@@ -27,7 +27,8 @@ const TAB_META: Record<Tab, { title: string; subtitle: string }> = {
 export default function CustomerDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('orders');
   const { customer, isAuthenticated } = useCustomerAuthStore();
-  const { getItemCount } = useCartStore();
+  const cartItems = useCartStore(state => state.items);
+  const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -60,9 +61,9 @@ export default function CustomerDashboard() {
             <Link to="/cart"
               className="relative p-2 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
               <ShoppingCart className="w-4 h-4" />
-              {getItemCount() > 0 && (
+              {cartCount > 0 && (
                 <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                  {getItemCount()}
+                  {cartCount}
                 </span>
               )}
             </Link>
