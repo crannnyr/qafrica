@@ -107,23 +107,6 @@ async function queueFulfillmentNotification(
     return output.replace(/\{\{[a-z_]+\}\}/g, '')
   }
 
-  const { data: claimed, error: claimError } = await db
-    .from('china_import_customer_notification_log')
-    .insert({
-      notification_key: notificationKey,
-      order_id: orderId,
-      shipment_id: shipmentId,
-      notification_type: notificationType,
-    })
-    .select('id')
-    .maybeSingle()
-
-  if (claimError) {
-    if (claimError.code === '23505') return
-    return
-  }
-  if (!claimed) return
-
   const subject = render(template.subject)
   const html = `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
     <div style="background:#F97316;border-radius:12px;padding:16px 20px;margin-bottom:24px;display:inline-block;">
