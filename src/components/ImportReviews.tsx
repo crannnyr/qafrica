@@ -137,6 +137,7 @@ export default function ImportReviews({ productId }: { productId: string }) {
       .from('mock_reviews')
       .select('id, customer_name, customer_avatar_url, rating, title, content, is_verified_purchase, created_at')
       .eq('product_id', productId)
+      .eq('moderation_status', 'approved')
       .order('helpful_count', { ascending: false })
       .then(({ data, error }) => {
         if (cancelled) return;
