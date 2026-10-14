@@ -80,6 +80,7 @@ function validateReview(body: any) {
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error("Rating must be between 1 and 5.");
   if (!body.content || typeof body.content !== "string" || !body.content.trim()) throw new Error("Review content is required.");
   return {
+    review_source: "admin_mock",
     product_id: body.product_id,
     product_name: typeof body.product_name === "string" ? body.product_name.trim() : null,
     customer_name: body.customer_name.trim(),
