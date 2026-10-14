@@ -10,7 +10,7 @@ type Reviewer = { id:string; display_name:string; is_username:boolean };
 type Review = {
   id:string; product_id:string; product_name:string|null; customer_name:string; is_username:boolean;
   customer_avatar_url:string|null; rating:number; title:string|null; content:string|null; images:string[];
-  is_verified_purchase:boolean; helpful_count:number; created_at:string; moderation_status:string; review_source:string;
+  is_verified_purchase:boolean; helpful_count:number; created_at:string; moderation_status:string; review_source:string; order_id?:string|null;
 };
 
 const FN = `${CONFIG.SUPABASE_URL}/functions/v1/import-review-admin`;
@@ -217,18 +217,28 @@ export default function ImportReviewsManager() {
       <section className="min-w-0">
         {!selected ? <div className="h-full min-h-[360px] bg-white border border-dashed border-gray-200 rounded-2xl flex items-center justify-center text-center p-8"><div><MessageSquare className="w-8 h-8 mx-auto text-gray-200"/><p className="text-sm font-semibold text-gray-600 mt-3">Select a product</p><p className="text-xs text-gray-400 mt-1">Its existing reviews will appear here.</p></div></div> :
         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-3 min-w-0 flex-1"><img src={selected.image_url || selected.image_urls?.[0] || '/qafrica-bag-logo.svg'} className="w-12 h-12 rounded-xl object-cover bg-gray-100" alt=""/><div className="min-w-0"><h2 className="font-bold text-sm text-gray-900 truncate">{selected.name}</h2><p className="text-[10px] text-gray-400">{reviews.length} review{reviews.length===1?'':'s'}</p></div>
-          <div className="px-4 pt-3 flex flex-wrap gap-2">
-            <button onClick={()=>setReviewView('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='all'?'bg-gray-900 text-white':'bg-gray-100 text-gray-600'}`}>All ({reviews.length})</button>
-            <button onClick={()=>setReviewView('customer')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='customer'?'bg-gray-900 text-white':'bg-gray-100 text-gray-600'}`}>Customer ({customerCount})</button>
-            <button onClick={()=>setReviewView('mock')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='mock'?'bg-gray-900 text-white':'bg-gray-100 text-gray-600'}`}>Mock ({mockCount})</button>
-            <button onClick={()=>setReviewView('pending')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='pending'?'bg-amber-600 text-white':'bg-amber-50 text-amber-800'}`}>Pending ({pendingCount})</button>
-            <button onClick={()=>setReviewView('approved')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='approved'?'bg-emerald-700 text-white':'bg-emerald-50 text-emerald-800'}`}>Approved ({reviews.filter(r=>(r.moderation_status||'approved')==='approved').length})</button>
-            <button onClick={()=>setReviewView('rejected')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='rejected'?'bg-red-700 text-white':'bg-red-50 text-red-800'}`}>Rejected ({reviews.filter(r=>r.moderation_status==='rejected').length})</button>
-          </div>
-</div>
-            <div className="relative"><Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400"/><input value={reviewSearch} onChange={e=>setReviewSearch(e.target.value)} placeholder="Search reviews..." className="w-full sm:w-56 pl-9 pr-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs outline-none"/></div>
+          <div className="p-4 border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <img src={selected.image_url || selected.image_urls?.[0] || '/qafrica-bag-logo.svg'} className="w-12 h-12 rounded-xl object-cover bg-gray-100" alt="" />
+                <div className="min-w-0">
+                  <h2 className="font-bold text-sm text-gray-900 truncate">{selected.name}</h2>
+                  <p className="text-[10px] text-gray-400">{reviews.length} review{reviews.length === 1 ? '' : 's'}</p>
+                </div>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" />
+                <input value={reviewSearch} onChange={e => setReviewSearch(e.target.value)} placeholder="Search reviews..." className="w-full sm:w-56 pl-9 pr-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs outline-none" />
+              </div>
+            </div>
+            <div className="pt-3 flex flex-wrap gap-2">
+              <button onClick={() => setReviewView('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>All ({reviews.length})</button>
+              <button onClick={() => setReviewView('customer')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'customer' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>Customer ({customerCount})</button>
+              <button onClick={() => setReviewView('mock')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'mock' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>Mock ({mockCount})</button>
+              <button onClick={() => setReviewView('pending')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'pending' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800'}`}>Pending ({pendingCount})</button>
+              <button onClick={() => setReviewView('approved')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'approved' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800'}`}>Approved ({reviews.filter(r => (r.moderation_status || 'approved') === 'approved').length})</button>
+              <button onClick={() => setReviewView('rejected')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'rejected' ? 'bg-red-700 text-white' : 'bg-red-50 text-red-800'}`}>Rejected ({reviews.filter(r => r.moderation_status === 'rejected').length})</button>
+            </div>
           </div>
           <div className="p-4">
             {reviewsLoading ? <div className="py-16 flex justify-center"><div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"/></div> :
