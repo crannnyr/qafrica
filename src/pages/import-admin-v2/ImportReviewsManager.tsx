@@ -10,7 +10,7 @@ type Reviewer = { id:string; display_name:string; is_username:boolean };
 type Review = {
   id:string; product_id:string; product_name:string|null; customer_name:string; is_username:boolean;
   customer_avatar_url:string|null; rating:number; title:string|null; content:string|null; images:string[];
-  is_verified_purchase:boolean; helpful_count:number; created_at:string;
+  is_verified_purchase:boolean; helpful_count:number; created_at:string; moderation_status:string; review_source:string; order_id?:string|null;
 };
 
 const FN = `${CONFIG.SUPABASE_URL}/functions/v1/import-review-admin`;
@@ -40,6 +40,7 @@ export default function ImportReviewsManager() {
   const [selectedProductData,setSelectedProductData] = useState<Product|null>(null);
   const [search,setSearch] = useState('');
   const [reviewSearch,setReviewSearch] = useState('');
+  const [reviewView,setReviewView] = useState<'all'|'customer'|'mock'|'pending'|'approved'|'rejected'>('all');
   const [loading,setLoading] = useState(true);
   const [reviewsLoading,setReviewsLoading] = useState(false);
   const [showForm,setShowForm] = useState(false);
@@ -52,6 +53,8 @@ export default function ImportReviewsManager() {
   const [productPage,setProductPage] = useState(1);
   const [productPageCount,setProductPageCount] = useState(1);
   const [productsLoading,setProductsLoading] = useState(false);
+  const [pendingProductCounts,setPendingProductCounts] = useState<Record<string,number>>({});
+  const [pendingTotal,setPendingTotal] = useState(0);
 
   const call = async (action:string, extra:Record<string,unknown>={}) => {
     const res = await fetch(FN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,manager_token:token,...extra})});
@@ -83,6 +86,17 @@ export default function ImportReviewsManager() {
     }
   };
 
+  const loadPendingCounts = async () => {
+    if (!token) return;
+    try {
+      const data = await call('pending-product-counts');
+      setPendingProductCounts(data.counts ?? {});
+      setPendingTotal(Number(data.total ?? 0));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not load pending customer review counts');
+    }
+  };
+
   const loadReviews = async (productId:string) => {
     setReviewsLoading(true);
     try {
@@ -93,7 +107,7 @@ export default function ImportReviewsManager() {
     } finally { setReviewsLoading(false); }
   };
 
-  useEffect(()=>{ void load(1,'',true); },[]);
+  useEffect(()=>{ void load(1,'',true); void loadPendingCounts(); },[]);
   useEffect(()=>{ if(selectedProduct) void loadReviews(selectedProduct); else setReviews([]); },[selectedProduct]);
 
   const filteredProducts = products;
@@ -104,10 +118,14 @@ export default function ImportReviewsManager() {
     void load(page, search.trim());
   };
 
+  const pendingCount = reviews.filter(r => (r.moderation_status || 'approved') === 'pending').length;
+  const customerCount = reviews.filter(r => (r.review_source || (r.order_id ? 'customer' : 'admin_mock')) === 'customer').length;
+  const mockCount = reviews.length - customerCount;
+
   const visibleReviews = useMemo(()=>{
     const q=reviewSearch.trim().toLowerCase();
-    return reviews.filter(r=>!q || r.customer_name.toLowerCase().includes(q) || (r.title??'').toLowerCase().includes(q) || (r.content??'').toLowerCase().includes(q));
-  },[reviews,reviewSearch]);
+    return reviews.filter(r=>{ const source=(r.review_source || (r.order_id ? 'customer' : 'admin_mock')); const status=r.moderation_status || 'approved'; const viewMatch=reviewView==='all' || (reviewView==='customer' && source==='customer') || (reviewView==='mock' && source==='admin_mock') || status===reviewView; return viewMatch && (!q || r.customer_name.toLowerCase().includes(q) || (r.title??'').toLowerCase().includes(q) || (r.content??'').toLowerCase().includes(q)); });
+  },[reviews,reviewSearch,reviewView]);
 
   const selected = products.find(p=>p.id===selectedProduct) ?? selectedProductData;
 
@@ -155,6 +173,14 @@ export default function ImportReviewsManager() {
     finally { setSaving(false); }
   };
 
+  const moderateReview = async (id:string, status:'approved'|'rejected'|'pending') => {
+    try {
+      await call('moderate-review',{id,status});
+      toast.success(status === 'approved' ? 'Review approved and published' : status === 'rejected' ? 'Review rejected' : 'Review returned to pending');
+      await loadReviews(selectedProduct);
+    } catch(e) { toast.error(e instanceof Error ? e.message : 'Could not update review status'); }
+  };
+
   const deleteReview = async (id:string) => {
     if(!confirm('Delete this review? This cannot be undone.')) return;
     try { await call('delete-review',{id}); toast.success('Review deleted'); await loadReviews(selectedProduct); }
@@ -177,7 +203,7 @@ export default function ImportReviewsManager() {
 
   return <div className="space-y-5">
     <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3">
-      <div><h1 className="text-lg font-bold text-gray-900">Product Reviews</h1><p className="text-xs text-gray-500 mt-1">Create and manage reviews shown on China-import product pages.</p></div>
+      <div><div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-gray-900">Product Reviews</h1>{pendingTotal > 0 && <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-bold text-red-700"><span className="h-2 w-2 rounded-full bg-red-600 animate-pulse" />{pendingTotal} pending customer review{pendingTotal === 1 ? '' : 's'}</span>}</div><p className="text-xs text-gray-500 mt-1">Customer reviews and mock reviews are separated. Red indicators mark products with customer reviews awaiting approval.</p></div>
       <button onClick={openCreate} disabled={!selectedProduct || !canManage} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-900 text-white text-xs font-bold disabled:opacity-40"><Plus className="w-4 h-4"/> Add review</button>
     </div>
 
@@ -190,7 +216,7 @@ export default function ImportReviewsManager() {
         <div className="max-h-[60vh] overflow-y-auto p-2">
           {filteredProducts.map(p=><button key={p.id} onClick={()=>{setSelectedProduct(p.id);setSelectedProductData(p);}} className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left ${selectedProduct===p.id?'bg-orange-50 border border-orange-200':'hover:bg-gray-50'}`}>
             <img src={p.image_url || p.image_urls?.[0] || '/qafrica-bag-logo.svg'} className="w-11 h-11 rounded-lg object-cover bg-gray-100" alt=""/>
-            <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p><p className="text-[10px] text-gray-400 mt-0.5">{p.category || 'Uncategorized'}</p></div>
+            <div className="min-w-0 flex-1"><p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p><p className="text-[10px] text-gray-400 mt-0.5">{p.category || 'Uncategorized'}</p></div>{(pendingProductCounts[p.id] ?? 0) > 0 && <span title={`${pendingProductCounts[p.id]} pending customer review(s)`} className="inline-flex min-w-5 h-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-extrabold text-white">{pendingProductCounts[p.id]}</span>}
           </button>)}
           {!filteredProducts.length && <p className="p-6 text-center text-xs text-gray-400">No products found.</p>}
         </div>
@@ -204,25 +230,72 @@ export default function ImportReviewsManager() {
       <section className="min-w-0">
         {!selected ? <div className="h-full min-h-[360px] bg-white border border-dashed border-gray-200 rounded-2xl flex items-center justify-center text-center p-8"><div><MessageSquare className="w-8 h-8 mx-auto text-gray-200"/><p className="text-sm font-semibold text-gray-600 mt-3">Select a product</p><p className="text-xs text-gray-400 mt-1">Its existing reviews will appear here.</p></div></div> :
         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-          <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-3 min-w-0 flex-1"><img src={selected.image_url || selected.image_urls?.[0] || '/qafrica-bag-logo.svg'} className="w-12 h-12 rounded-xl object-cover bg-gray-100" alt=""/><div className="min-w-0"><h2 className="font-bold text-sm text-gray-900 truncate">{selected.name}</h2><p className="text-[10px] text-gray-400">{reviews.length} review{reviews.length===1?'':'s'}</p></div></div>
-            <div className="relative"><Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400"/><input value={reviewSearch} onChange={e=>setReviewSearch(e.target.value)} placeholder="Search reviews..." className="w-full sm:w-56 pl-9 pr-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs outline-none"/></div>
+          <div className="p-4 border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex items-center gap-3 min-w-0 flex-1">
+                <img src={selected.image_url || selected.image_urls?.[0] || '/qafrica-bag-logo.svg'} className="w-12 h-12 rounded-xl object-cover bg-gray-100" alt="" />
+                <div className="min-w-0">
+                  <h2 className="font-bold text-sm text-gray-900 truncate">{selected.name}</h2>
+                  <p className="text-[10px] text-gray-400">{reviews.length} review{reviews.length === 1 ? '' : 's'}</p>
+                </div>
+              </div>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" />
+                <input value={reviewSearch} onChange={e => setReviewSearch(e.target.value)} placeholder="Search reviews..." className="w-full sm:w-56 pl-9 pr-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs outline-none" />
+              </div>
+            </div>
+            <div className="pt-3 flex flex-wrap gap-2">
+              <button onClick={() => setReviewView('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>All ({reviews.length})</button>
+              <button onClick={() => setReviewView('customer')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'customer' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>Customer ({customerCount})</button>
+              <button onClick={() => setReviewView('mock')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'mock' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'}`}>Mock ({mockCount})</button>
+              <button onClick={() => setReviewView('pending')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'pending' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800'}`}>Pending ({pendingCount})</button>
+              <button onClick={() => setReviewView('approved')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'approved' ? 'bg-emerald-700 text-white' : 'bg-emerald-50 text-emerald-800'}`}>Approved ({reviews.filter(r => (r.moderation_status || 'approved') === 'approved').length})</button>
+              <button onClick={() => setReviewView('rejected')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView === 'rejected' ? 'bg-red-700 text-white' : 'bg-red-50 text-red-800'}`}>Rejected ({reviews.filter(r => r.moderation_status === 'rejected').length})</button>
+            </div>
           </div>
           <div className="p-4">
             {reviewsLoading ? <div className="py-16 flex justify-center"><div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"/></div> :
             !visibleReviews.length ? <div className="py-16 text-center"><MessageSquare className="w-8 h-8 mx-auto text-gray-200"/><p className="text-xs text-gray-400 mt-2">No reviews for this product yet.</p><button onClick={openCreate} disabled={!canManage} className="mt-3 text-xs font-bold text-orange-500 disabled:opacity-40">Add the first review</button></div> :
-            <div className="space-y-3">{visibleReviews.map(r=><div key={r.id} className="border border-gray-100 rounded-2xl p-4">
-              <div className="flex gap-3">
-                {r.customer_avatar_url ? <img src={r.customer_avatar_url} className="w-9 h-9 rounded-full object-cover bg-gray-100" alt=""/> : <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-400">{r.customer_name.slice(0,1).toUpperCase()}</div>}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-gray-900">{r.customer_name}</span>{r.is_username&&<span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">username</span>}{r.is_verified_purchase&&<span className="flex items-center gap-0.5 text-[9px] text-emerald-600"><Check className="w-2.5 h-2.5"/> Verified</span>}</div>
-                  <div className="flex items-center gap-2 mt-1"><Stars value={r.rating}/><span className="text-[10px] text-gray-400">{new Date(r.created_at).toLocaleDateString()}</span></div>
-                  {r.title&&<p className="text-xs font-bold text-gray-800 mt-3">{r.title}</p>}<p className="text-xs text-gray-600 leading-relaxed mt-1">{r.content}</p>
-                  {!!r.images?.length&&<div className="flex gap-2 mt-3 overflow-x-auto">{r.images.map((im,i)=><img key={i} src={im} className="w-16 h-16 rounded-lg object-cover" alt=""/>)}</div>}
-                  <div className="flex items-center justify-between mt-3"><span className="text-[10px] text-gray-400">{r.helpful_count} found helpful</span><div className="flex gap-1"><button onClick={()=>openEdit(r)} disabled={!canManage} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Edit"><Edit3 className="w-3.5 h-3.5"/></button><button onClick={()=>void deleteReview(r.id)} disabled={!canManage} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5"/></button></div></div>
-                </div>
-              </div>
-            </div>)}</div>}
+            <div className="space-y-3">
+              {visibleReviews.map(r => {
+                const source = r.review_source || (r.order_id ? 'customer' : 'admin_mock');
+                const status = r.moderation_status || 'pending';
+                return (
+                  <div key={r.id} className="border border-gray-100 rounded-2xl p-4">
+                    <div className="flex gap-3">
+                      {r.customer_avatar_url
+                        ? <img src={r.customer_avatar_url} className="w-9 h-9 rounded-full object-cover bg-gray-100" alt="" />
+                        : <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-400">{r.customer_name.slice(0, 1).toUpperCase()}</div>}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-bold text-gray-900">{r.customer_name}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded ${source === 'customer' ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700'}`}>{source === 'customer' ? 'Customer review' : 'Mock review'}</span>
+                          {r.is_username && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">username</span>}
+                          {r.is_verified_purchase && <span className="flex items-center gap-0.5 text-[9px] text-emerald-600"><Check className="w-2.5 h-2.5" /> Verified</span>}
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full ${status === 'approved' ? 'bg-emerald-50 text-emerald-700' : status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{status}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {status !== 'approved' && <button onClick={() => void moderateReview(r.id, 'approved')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white disabled:opacity-40">Approve &amp; publish</button>}
+                          {status !== 'rejected' && <button onClick={() => void moderateReview(r.id, 'rejected')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-50 text-red-700 disabled:opacity-40">Reject</button>}
+                          {status !== 'pending' && <button onClick={() => void moderateReview(r.id, 'pending')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40">Set pending</button>}
+                        </div>
+                        <div className="flex items-center gap-2 mt-2"><Stars value={r.rating} /><span className="text-[10px] text-gray-400">{new Date(r.created_at).toLocaleDateString()}</span></div>
+                        {r.title && <p className="text-xs font-bold text-gray-800 mt-3">{r.title}</p>}
+                        <p className="text-xs text-gray-600 leading-relaxed mt-1">{r.content}</p>
+                        {!!r.images?.length && <div className="flex gap-2 mt-3 overflow-x-auto">{r.images.map((im, i) => <img key={i} src={im} className="w-16 h-16 rounded-lg object-cover" alt="" />)}</div>}
+                        <div className="flex items-center justify-between mt-3">
+                          <span className="text-[10px] text-gray-400">{r.helpful_count} found helpful</span>
+                          <div className="flex gap-1">
+                            <button onClick={() => openEdit(r)} disabled={!canManage} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Edit"><Edit3 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => void deleteReview(r.id)} disabled={!canManage} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>}
           </div>
         </div>}
       </section>

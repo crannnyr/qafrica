@@ -80,6 +80,7 @@ function validateReview(body: any) {
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new Error("Rating must be between 1 and 5.");
   if (!body.content || typeof body.content !== "string" || !body.content.trim()) throw new Error("Review content is required.");
   return {
+    review_source: "admin_mock",
     product_id: body.product_id,
     product_name: typeof body.product_name === "string" ? body.product_name.trim() : null,
     customer_name: body.customer_name.trim(),
@@ -111,7 +112,7 @@ Deno.serve(async (req: Request) => {
     const manager = await authorize(
       supabase,
       managerToken,
-      action === "list" || action === "reviewers" ? "import.reviews.view" : "import.reviews.manage",
+      action === "list" || action === "reviewers" || action === "pending-product-counts" ? "import.reviews.view" : "import.reviews.manage",
     );
     if (!manager) return json({ error: "You do not have permission to manage import reviews." }, 403);
 
@@ -119,6 +120,21 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await supabase.from("mock_review_users").select("*").order("display_name", { ascending: true });
       if (error) return json({ error: error.message }, 500);
       return json({ reviewers: data ?? [] });
+    }
+
+    if (action === "pending-product-counts") {
+      const { data, error } = await supabase
+        .from("mock_reviews")
+        .select("product_id")
+        .eq("review_source", "customer")
+        .eq("moderation_status", "pending")
+        .limit(10000);
+      if (error) return json({ error: error.message }, 500);
+      const counts: Record<string, number> = {};
+      for (const row of data ?? []) {
+        if (row.product_id) counts[row.product_id] = (counts[row.product_id] ?? 0) + 1;
+      }
+      return json({ counts, total: Object.values(counts).reduce((sum, count) => sum + count, 0) });
     }
 
     if (action === "list") {
@@ -145,6 +161,14 @@ Deno.serve(async (req: Request) => {
       const review = validateReview(body);
       delete (review as any).created_at;
       const { data, error } = await supabase.from("mock_reviews").update(review).eq("id", body.id).select("*").single();
+      if (error) return json({ error: error.message }, 400);
+      return json({ review: data });
+    }
+
+    if (action === "moderate-review") {
+      if (typeof body.id !== "string" || !body.id) return json({ error: "Review ID is required." }, 400);
+      if (!["approved", "rejected", "pending"].includes(body.status)) return json({ error: "Invalid moderation status." }, 400);
+      const { data, error } = await supabase.from("mock_reviews").update({ moderation_status: body.status }).eq("id", body.id).select("id, moderation_status").single();
       if (error) return json({ error: error.message }, 400);
       return json({ review: data });
     }

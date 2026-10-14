@@ -41,6 +41,7 @@ const BlogPostPage = lazy(() => import('@/pages/blog/BlogPostPage'));
 const ImportAdminPage = lazy(() => import('@/pages/import-admin/ImportAdminPage'));
 const ImportSourcingSharePage = lazy(() => import('@/pages/import-admin/ImportSourcingSharePage'));
 const PartialReceivingSharePage = lazy(() => import('@/pages/import-admin/PartialReceivingSharePage'));
+const ChinaImportProductReviewPage = lazy(() => import('@/pages/recommendations/ChinaImportProductReviewPage'));
 const ManagementLogin = lazy(() => import('@/pages/management/ManagementLogin'));
 const ManagementLogout = lazy(() => import('@/pages/management/ManagementLogout'));
 const ManagementLayout = lazy(() => import('@/pages/management/ManagementLayout'));
@@ -468,6 +469,7 @@ function App() {
           <Route path="/terms-of-service" element={<TermsOfServicePage />} />
           <Route path="/import-terms" element={<ImportTermsPage />} />
           <Route path="/track" element={<ImportTrackingPage />} />
+          <Route path="/importations/review-order/:token" element={<ChinaImportProductReviewPage />} />
           <Route path="/track-order" element={<OrderTrackingPage />} />
 
           {/* ── Blog ── */}
