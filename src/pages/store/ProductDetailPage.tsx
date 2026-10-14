@@ -85,7 +85,7 @@ function DropshipModal({
   onCopyCode: () => void;
 }) {
   if (!product) return null;
-  const productCode = product.sku || product.barcode || product.id;
+  const productCode = product.product_code || product.sku || product.barcode || product.id;
   const wholesalePrice = Number(product.dropship_price || product.wholesale_price || product.cost_price || 0);
   return (
     <AnimatePresence>
