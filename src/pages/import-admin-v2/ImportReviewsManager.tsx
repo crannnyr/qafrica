@@ -243,23 +243,46 @@ export default function ImportReviewsManager() {
           <div className="p-4">
             {reviewsLoading ? <div className="py-16 flex justify-center"><div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"/></div> :
             !visibleReviews.length ? <div className="py-16 text-center"><MessageSquare className="w-8 h-8 mx-auto text-gray-200"/><p className="text-xs text-gray-400 mt-2">No reviews for this product yet.</p><button onClick={openCreate} disabled={!canManage} className="mt-3 text-xs font-bold text-orange-500 disabled:opacity-40">Add the first review</button></div> :
-            <div className="space-y-3">{visibleReviews.map(r=><div key={r.id} className="border border-gray-100 rounded-2xl p-4">
-              <div className="flex gap-3">
-                {r.customer_avatar_url ? <img src={r.customer_avatar_url} className="w-9 h-9 rounded-full object-cover bg-gray-100" alt=""/> : <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-400">{r.customer_name.slice(0,1).toUpperCase()}</div>}
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-gray-900">{r.customer_name}</span><span className={`text-[9px] px-1.5 py-0.5 rounded ${(r.review_source || (r.order_id ? 'customer' : 'admin_mock'))==='customer'?'bg-blue-50 text-blue-700':'bg-violet-50 text-violet-700'}`}>{(r.review_source || (r.order_id ? 'customer' : 'admin_mock'))==='customer'?'Customer review':'Mock review'}</span>{r.is_username&&<span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">username</span>}{r.is_verified_purchase&&<span className="flex items-center gap-0.5 text-[9px] text-emerald-600"><Check className="w-2.5 h-2.5"/> Verified</span>}</div><span className={`text-[9px] px-2 py-0.5 rounded-full ${r.moderation_status==='approved'?'bg-emerald-50 text-emerald-700':r.moderation_status==='rejected'?'bg-red-50 text-red-700':'bg-amber-50 text-amber-700'}`}>{r.moderation_status || 'pending'}</span></div>
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {r.moderation_status !== 'approved' && <button onClick={()=>void moderateReview(r.id,'approved')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white disabled:opacity-40">Approve &amp; publish</button>}
-                    {r.moderation_status !== 'rejected' && <button onClick={()=>void moderateReview(r.id,'rejected')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-50 text-red-700 disabled:opacity-40">Reject</button>}
-                    {r.moderation_status !== 'pending' && <button onClick={()=>void moderateReview(r.id,'pending')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40">Set pending</button>}
+            <div className="space-y-3">
+              {visibleReviews.map(r => {
+                const source = r.review_source || (r.order_id ? 'customer' : 'admin_mock');
+                const status = r.moderation_status || 'pending';
+                return (
+                  <div key={r.id} className="border border-gray-100 rounded-2xl p-4">
+                    <div className="flex gap-3">
+                      {r.customer_avatar_url
+                        ? <img src={r.customer_avatar_url} className="w-9 h-9 rounded-full object-cover bg-gray-100" alt="" />
+                        : <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-400">{r.customer_name.slice(0, 1).toUpperCase()}</div>}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-bold text-gray-900">{r.customer_name}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded ${source === 'customer' ? 'bg-blue-50 text-blue-700' : 'bg-violet-50 text-violet-700'}`}>{source === 'customer' ? 'Customer review' : 'Mock review'}</span>
+                          {r.is_username && <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">username</span>}
+                          {r.is_verified_purchase && <span className="flex items-center gap-0.5 text-[9px] text-emerald-600"><Check className="w-2.5 h-2.5" /> Verified</span>}
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full ${status === 'approved' ? 'bg-emerald-50 text-emerald-700' : status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>{status}</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {status !== 'approved' && <button onClick={() => void moderateReview(r.id, 'approved')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white disabled:opacity-40">Approve &amp; publish</button>}
+                          {status !== 'rejected' && <button onClick={() => void moderateReview(r.id, 'rejected')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-50 text-red-700 disabled:opacity-40">Reject</button>}
+                          {status !== 'pending' && <button onClick={() => void moderateReview(r.id, 'pending')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40">Set pending</button>}
+                        </div>
+                        <div className="flex items-center gap-2 mt-2"><Stars value={r.rating} /><span className="text-[10px] text-gray-400">{new Date(r.created_at).toLocaleDateString()}</span></div>
+                        {r.title && <p className="text-xs font-bold text-gray-800 mt-3">{r.title}</p>}
+                        <p className="text-xs text-gray-600 leading-relaxed mt-1">{r.content}</p>
+                        {!!r.images?.length && <div className="flex gap-2 mt-3 overflow-x-auto">{r.images.map((im, i) => <img key={i} src={im} className="w-16 h-16 rounded-lg object-cover" alt="" />)}</div>}
+                        <div className="flex items-center justify-between mt-3">
+                          <span className="text-[10px] text-gray-400">{r.helpful_count} found helpful</span>
+                          <div className="flex gap-1">
+                            <button onClick={() => openEdit(r)} disabled={!canManage} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Edit"><Edit3 className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => void deleteReview(r.id)} disabled={!canManage} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-1"><Stars value={r.rating}/><span className="text-[10px] text-gray-400">{new Date(r.created_at).toLocaleDateString()}</span></div>
-                  {r.title&&<p className="text-xs font-bold text-gray-800 mt-3">{r.title}</p>}<p className="text-xs text-gray-600 leading-relaxed mt-1">{r.content}</p>
-                  {!!r.images?.length&&<div className="flex gap-2 mt-3 overflow-x-auto">{r.images.map((im,i)=><img key={i} src={im} className="w-16 h-16 rounded-lg object-cover" alt=""/>)}</div>}
-                  <div className="flex items-center justify-between mt-3"><span className="text-[10px] text-gray-400">{r.helpful_count} found helpful</span><div className="flex gap-1"><button onClick={()=>openEdit(r)} disabled={!canManage} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" title="Edit"><Edit3 className="w-3.5 h-3.5"/></button><button onClick={()=>void deleteReview(r.id)} disabled={!canManage} className="p-2 rounded-lg hover:bg-red-50 text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5"/></button></div></div>
-                </div>
-              </div>
-            </div>)}</div>}
+                );
+              })}
+            </div>}
           </div>
         </div>}
       </section>
