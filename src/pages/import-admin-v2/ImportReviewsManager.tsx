@@ -10,7 +10,7 @@ type Reviewer = { id:string; display_name:string; is_username:boolean };
 type Review = {
   id:string; product_id:string; product_name:string|null; customer_name:string; is_username:boolean;
   customer_avatar_url:string|null; rating:number; title:string|null; content:string|null; images:string[];
-  is_verified_purchase:boolean; helpful_count:number; created_at:string; moderation_status:string;
+  is_verified_purchase:boolean; helpful_count:number; created_at:string; moderation_status:string; review_source:string;
 };
 
 const FN = `${CONFIG.SUPABASE_URL}/functions/v1/import-review-admin`;
@@ -40,6 +40,7 @@ export default function ImportReviewsManager() {
   const [selectedProductData,setSelectedProductData] = useState<Product|null>(null);
   const [search,setSearch] = useState('');
   const [reviewSearch,setReviewSearch] = useState('');
+  const [reviewView,setReviewView] = useState<'all'|'customer'|'mock'|'pending'|'approved'|'rejected'>('all');
   const [loading,setLoading] = useState(true);
   const [reviewsLoading,setReviewsLoading] = useState(false);
   const [showForm,setShowForm] = useState(false);
@@ -104,10 +105,14 @@ export default function ImportReviewsManager() {
     void load(page, search.trim());
   };
 
+  const pendingCount = reviews.filter(r => (r.moderation_status || 'approved') === 'pending').length;
+  const customerCount = reviews.filter(r => (r.review_source || (r.order_id ? 'customer' : 'admin_mock')) === 'customer').length;
+  const mockCount = reviews.length - customerCount;
+
   const visibleReviews = useMemo(()=>{
     const q=reviewSearch.trim().toLowerCase();
-    return reviews.filter(r=>!q || r.customer_name.toLowerCase().includes(q) || (r.title??'').toLowerCase().includes(q) || (r.content??'').toLowerCase().includes(q));
-  },[reviews,reviewSearch]);
+    return reviews.filter(r=>{ const source=(r.review_source || (r.order_id ? 'customer' : 'admin_mock')); const status=r.moderation_status || 'approved'; const viewMatch=reviewView==='all' || (reviewView==='customer' && source==='customer') || (reviewView==='mock' && source==='admin_mock') || status===reviewView; return viewMatch && (!q || r.customer_name.toLowerCase().includes(q) || (r.title??'').toLowerCase().includes(q) || (r.content??'').toLowerCase().includes(q)); });
+  },[reviews,reviewSearch,reviewView]);
 
   const selected = products.find(p=>p.id===selectedProduct) ?? selectedProductData;
 
@@ -213,7 +218,16 @@ export default function ImportReviewsManager() {
         {!selected ? <div className="h-full min-h-[360px] bg-white border border-dashed border-gray-200 rounded-2xl flex items-center justify-center text-center p-8"><div><MessageSquare className="w-8 h-8 mx-auto text-gray-200"/><p className="text-sm font-semibold text-gray-600 mt-3">Select a product</p><p className="text-xs text-gray-400 mt-1">Its existing reviews will appear here.</p></div></div> :
         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
           <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-3 min-w-0 flex-1"><img src={selected.image_url || selected.image_urls?.[0] || '/qafrica-bag-logo.svg'} className="w-12 h-12 rounded-xl object-cover bg-gray-100" alt=""/><div className="min-w-0"><h2 className="font-bold text-sm text-gray-900 truncate">{selected.name}</h2><p className="text-[10px] text-gray-400">{reviews.length} review{reviews.length===1?'':'s'}</p></div></div>
+            <div className="flex items-center gap-3 min-w-0 flex-1"><img src={selected.image_url || selected.image_urls?.[0] || '/qafrica-bag-logo.svg'} className="w-12 h-12 rounded-xl object-cover bg-gray-100" alt=""/><div className="min-w-0"><h2 className="font-bold text-sm text-gray-900 truncate">{selected.name}</h2><p className="text-[10px] text-gray-400">{reviews.length} review{reviews.length===1?'':'s'}</p></div>
+          <div className="px-4 pt-3 flex flex-wrap gap-2">
+            <button onClick={()=>setReviewView('all')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='all'?'bg-gray-900 text-white':'bg-gray-100 text-gray-600'}`}>All ({reviews.length})</button>
+            <button onClick={()=>setReviewView('customer')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='customer'?'bg-gray-900 text-white':'bg-gray-100 text-gray-600'}`}>Customer ({customerCount})</button>
+            <button onClick={()=>setReviewView('mock')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='mock'?'bg-gray-900 text-white':'bg-gray-100 text-gray-600'}`}>Mock ({mockCount})</button>
+            <button onClick={()=>setReviewView('pending')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='pending'?'bg-amber-600 text-white':'bg-amber-50 text-amber-800'}`}>Pending ({pendingCount})</button>
+            <button onClick={()=>setReviewView('approved')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='approved'?'bg-emerald-700 text-white':'bg-emerald-50 text-emerald-800'}`}>Approved ({reviews.filter(r=>(r.moderation_status||'approved')==='approved').length})</button>
+            <button onClick={()=>setReviewView('rejected')} className={`px-3 py-1.5 rounded-lg text-[10px] font-bold ${reviewView==='rejected'?'bg-red-700 text-white':'bg-red-50 text-red-800'}`}>Rejected ({reviews.filter(r=>r.moderation_status==='rejected').length})</button>
+          </div>
+</div>
             <div className="relative"><Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400"/><input value={reviewSearch} onChange={e=>setReviewSearch(e.target.value)} placeholder="Search reviews..." className="w-full sm:w-56 pl-9 pr-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs outline-none"/></div>
           </div>
           <div className="p-4">
@@ -223,7 +237,7 @@ export default function ImportReviewsManager() {
               <div className="flex gap-3">
                 {r.customer_avatar_url ? <img src={r.customer_avatar_url} className="w-9 h-9 rounded-full object-cover bg-gray-100" alt=""/> : <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-400">{r.customer_name.slice(0,1).toUpperCase()}</div>}
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-gray-900">{r.customer_name}</span>{r.is_username&&<span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">username</span>}{r.is_verified_purchase&&<span className="flex items-center gap-0.5 text-[9px] text-emerald-600"><Check className="w-2.5 h-2.5"/> Verified</span>}</div><span className={`text-[9px] px-2 py-0.5 rounded-full ${r.moderation_status==='approved'?'bg-emerald-50 text-emerald-700':r.moderation_status==='rejected'?'bg-red-50 text-red-700':'bg-amber-50 text-amber-700'}`}>{r.moderation_status || 'pending'}</span></div>
+                  <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-gray-900">{r.customer_name}</span><span className={`text-[9px] px-1.5 py-0.5 rounded ${(r.review_source || (r.order_id ? 'customer' : 'admin_mock'))==='customer'?'bg-blue-50 text-blue-700':'bg-violet-50 text-violet-700'}`}>{(r.review_source || (r.order_id ? 'customer' : 'admin_mock'))==='customer'?'Customer review':'Mock review'}</span>{r.is_username&&<span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">username</span>}{r.is_verified_purchase&&<span className="flex items-center gap-0.5 text-[9px] text-emerald-600"><Check className="w-2.5 h-2.5"/> Verified</span>}</div><span className={`text-[9px] px-2 py-0.5 rounded-full ${r.moderation_status==='approved'?'bg-emerald-50 text-emerald-700':r.moderation_status==='rejected'?'bg-red-50 text-red-700':'bg-amber-50 text-amber-700'}`}>{r.moderation_status || 'pending'}</span></div>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {r.moderation_status !== 'approved' && <button onClick={()=>void moderateReview(r.id,'approved')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-600 text-white disabled:opacity-40">Approve &amp; publish</button>}
                     {r.moderation_status !== 'rejected' && <button onClick={()=>void moderateReview(r.id,'rejected')} disabled={!canManage} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-50 text-red-700 disabled:opacity-40">Reject</button>}
