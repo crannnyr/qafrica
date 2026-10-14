@@ -462,7 +462,10 @@ export default function ProductDetailPage() {
   };
 
   // ── Loading ───────────────────────────────────────────────────────────────
-  if (isLoading) {
+  // Keep the existing product view mounted when switching to another product
+  // within the same storefront. Replacing the entire page with a spinner on
+  // every route-param change caused the visible flicker between products.
+  if (isLoading && (!product || !store)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div
