@@ -311,6 +311,11 @@ export default function UnifiedProductPage() {
 
   const addToastGuard = useRef(false);
 
+  useEffect(() => {
+    addToastGuard.current = false;
+    return () => { addToastGuard.current = false; };
+  }, [sourceType, sourceId]);
+
   const handleAddToCart = () => {
     if (addToastGuard.current) return;
     if (!product) return;
