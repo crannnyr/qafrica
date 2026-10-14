@@ -93,6 +93,7 @@ Deno.serve(async (req: Request) => {
     uploadedPaths = uploaded.paths;
     const review={
       order_id:order.id,
+      review_source:"customer",
       product_id:productId,
       product_name:item.product_name,
       customer_name:order.customer_name || "Verified customer",
