@@ -112,7 +112,7 @@ Deno.serve(async (req: Request) => {
     const manager = await authorize(
       supabase,
       managerToken,
-      action === "list" || action === "reviewers" ? "import.reviews.view" : "import.reviews.manage",
+      action === "list" || action === "reviewers" || action === "pending-product-counts" ? "import.reviews.view" : "import.reviews.manage",
     );
     if (!manager) return json({ error: "You do not have permission to manage import reviews." }, 403);
 
