@@ -122,6 +122,21 @@ Deno.serve(async (req: Request) => {
       return json({ reviewers: data ?? [] });
     }
 
+    if (action === "pending-product-counts") {
+      const { data, error } = await supabase
+        .from("mock_reviews")
+        .select("product_id")
+        .eq("review_source", "customer")
+        .eq("moderation_status", "pending")
+        .limit(10000);
+      if (error) return json({ error: error.message }, 500);
+      const counts: Record<string, number> = {};
+      for (const row of data ?? []) {
+        if (row.product_id) counts[row.product_id] = (counts[row.product_id] ?? 0) + 1;
+      }
+      return json({ counts, total: Object.values(counts).reduce((sum, count) => sum + count, 0) });
+    }
+
     if (action === "list") {
       let query = supabase
         .from("mock_reviews")
