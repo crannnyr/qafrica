@@ -103,6 +103,7 @@ Deno.serve(async (req: Request) => {
       content,
       images:uploaded.urls,
       is_verified_purchase:true,
+      moderation_status:"pending",
       helpful_count:0,
       created_at:new Date().toISOString()
     };
