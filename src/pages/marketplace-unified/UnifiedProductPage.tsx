@@ -309,7 +309,10 @@ export default function UnifiedProductPage() {
 
   const sellerLogo = store?.logo_url;
 
+  const addToastGuard = useRef(false);
+
   const handleAddToCart = () => {
+    if (addToastGuard.current) return;
     if (!product) return;
     if (!available) {
       toast.error('This product is out of stock');
@@ -320,9 +323,13 @@ export default function UnifiedProductPage() {
       return;
     }
 
+    addToastGuard.current = true;
+    window.setTimeout(() => { addToastGuard.current = false; }, 800);
+
     if (china && product.seller_id) {
       const sellerStore = store;
       if (!sellerStore) {
+        addToastGuard.current = false;
         toast.error('Store information is unavailable');
         return;
       }
@@ -371,6 +378,7 @@ export default function UnifiedProductPage() {
     }
 
     if (!store) {
+      addToastGuard.current = false;
       toast.error('Store information is unavailable');
       return;
     }
