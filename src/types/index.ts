@@ -231,6 +231,7 @@ export interface Product {
   stock_quantity: number;
   low_stock_threshold: number;
   sku?: string;
+  product_code?: string;
   compare_at_price?: number | null;
   barcode?: string;
   is_out_of_stock: boolean;
@@ -272,6 +273,7 @@ export interface ProductVariant {
 
 export interface ImportCatalogItem {
   id: string;
+  product_code?: string;
   original_product_id: string;
   original_store_id: string;
   original_owner_id: string;
