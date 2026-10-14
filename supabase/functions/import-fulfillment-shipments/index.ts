@@ -76,7 +76,10 @@ async function queueFulfillmentNotification(
       customer_id: order.user_id,
       token_hash: tokenHash,
     })
-    if (linkError) return
+    if (linkError) {
+      await db.from('china_import_customer_notification_log').delete().eq('id', claimed.id)
+      return
+    }
     tokens.review_link = escapeHtml(`https://qafrica.store/importations/review-order/${reviewToken}`)
   }
 
