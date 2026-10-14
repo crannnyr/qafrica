@@ -160,6 +160,11 @@ export default function UnifiedProductPage() {
   }, [isAuthenticated, customer?.id, loadWishlist]);
 
   useEffect(() => {
+    addToastGuard.current = false;
+    return () => { addToastGuard.current = false; };
+  }, [sourceType, sourceId]);
+
+  useEffect(() => {
     let active = true;
 
     async function load() {
@@ -310,11 +315,6 @@ export default function UnifiedProductPage() {
   const sellerLogo = store?.logo_url;
 
   const addToastGuard = useRef(false);
-
-  useEffect(() => {
-    addToastGuard.current = false;
-    return () => { addToastGuard.current = false; };
-  }, [sourceType, sourceId]);
 
   const handleAddToCart = () => {
     if (addToastGuard.current) return;
