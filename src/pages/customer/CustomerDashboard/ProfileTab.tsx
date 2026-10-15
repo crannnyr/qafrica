@@ -39,7 +39,7 @@ export default function ProfileTab() {
         setProfileInfo(next);
         setAvatarUrl(next.avatar_url);
         setFormData({ full_name: next.full_name, phone: next.phone });
-      })();
+    })();
     return () => { active = false; };
   }, [customer?.id, customer?.full_name, customer?.phone]);
 
