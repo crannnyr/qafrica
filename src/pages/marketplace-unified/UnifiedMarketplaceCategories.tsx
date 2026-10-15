@@ -19,8 +19,8 @@ export default function UnifiedMarketplaceCategories() {
   return (
     <MarketplaceLayout basePath="/stores-v2">
       <div className="flex bg-white min-h-[calc(100vh-56px-64px)]">
-        <nav aria-label="Departments" className="w-[34%] max-w-[180px] shrink-0 self-start bg-[#F6F6F6]">
-          <ul>
+        <nav aria-label="Departments" className="w-[34%] max-w-[180px] shrink-0 self-start h-fit max-h-none overflow-visible bg-[#F6F6F6]">
+          <ul className="h-fit max-h-none overflow-visible">
             {departments.map((d) => {
               const on = active === d.id;
               return (
