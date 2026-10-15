@@ -38,10 +38,17 @@ export default function DropshipOrderDetailPage() {
 
     setIsUpdating(true);
     try {
-      const result = await updateDropshipOrderStatus(order.order_id, currentStore.id, newStatus as any);
+      const now = new Date().toISOString();
+      const trackingData: Record<string, unknown> = {};
+      if (newStatus === 'shipped') {
+        trackingData.tracking_number = trackingNumber.trim();
+        trackingData.shipped_at = now;
+      }
+      if (newStatus === 'delivered') trackingData.delivered_at = now;
+      const result = await updateDropshipOrderStatus(order.order_id, currentStore.id, newStatus as any, trackingData);
       if (result.success) {
         toast.success(`Order marked as ${newStatus}`);
-        setOrder((prev) => prev ? { ...prev, status: newStatus as any } : prev);
+        setOrder((prev) => prev ? { ...prev, status: newStatus as any, ...trackingData } : prev);
       } else {
         toast.error(result.error || 'Failed to update status');
       }
