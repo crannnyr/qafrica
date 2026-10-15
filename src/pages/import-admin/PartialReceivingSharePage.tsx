@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, PackageCheck } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
@@ -26,11 +26,40 @@ function variantLabel(options: Record<string, unknown> | null) {
     .join(' · ');
 }
 
+type ProductGroup = {
+  product_name: string;
+  image_url: string | null;
+  variants: Array<{ label: string; remaining_quantity: number }>;
+  total_remaining: number;
+};
+
+function groupItemsByProduct(items: SharedItem[]): ProductGroup[] {
+  const products = new Map<string, ProductGroup>();
+  for (const item of items) {
+    const productKey = item.product_name.trim().toLocaleLowerCase();
+    let product = products.get(productKey);
+    if (!product) {
+      product = { product_name: item.product_name, image_url: item.image_url, variants: [], total_remaining: 0 };
+      products.set(productKey, product);
+    } else if (!product.image_url && item.image_url) {
+      product.image_url = item.image_url;
+    }
+
+    const label = variantLabel(item.variant_options) || 'Standard';
+    const existingVariant = product.variants.find(variant => variant.label === label);
+    if (existingVariant) existingVariant.remaining_quantity += Math.max(0, item.remaining_quantity);
+    else product.variants.push({ label, remaining_quantity: Math.max(0, item.remaining_quantity) });
+    product.total_remaining += Math.max(0, item.remaining_quantity);
+  }
+  return Array.from(products.values()).sort((a, b) => a.product_name.localeCompare(b.product_name));
+}
+
 export default function PartialReceivingSharePage() {
   const token = window.location.pathname.split('/').filter(Boolean).at(-1) ?? '';
   const [list, setList] = useState<SharedList | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const products = useMemo(() => groupItemsByProduct(list?.items ?? []), [list]);
 
   useEffect(() => {
     let active = true;
@@ -54,9 +83,9 @@ export default function PartialReceivingSharePage() {
             <PackageCheck className="h-6 w-6" />
             <span className="text-sm font-bold uppercase tracking-wide">QAfrica · Fulfillment</span>
           </div>
-          <h1 className="mt-3 text-2xl font-black text-gray-900 sm:text-3xl">Items still awaiting receipt</h1>
-          <p className="mt-2 text-sm text-gray-500">This public list contains only the outstanding quantities from a partially received order.</p>
-          {list && <p className="mt-3 text-xs font-semibold text-gray-500">Order {list.order_code} · Created {new Date(list.created_at).toLocaleDateString()}</p>}
+          <h1 className="mt-3 text-2xl font-black text-gray-900 sm:text-3xl">Custom sourcing · Product requirements</h1>
+          <p className="mt-2 text-sm text-gray-500">Products are grouped together with each variant and the total quantity still needed across the selected orders.</p>
+          {list && <p className="mt-3 text-xs font-semibold text-gray-500">{products.length} products · {new Date(list.created_at).toLocaleDateString()}</p>}
         </header>
 
         {loading ? (
@@ -68,20 +97,32 @@ export default function PartialReceivingSharePage() {
         ) : (
           <>
             <div className="mb-4 flex items-center justify-between rounded-xl border border-orange-100 bg-orange-50 px-4 py-3">
-              <span className="text-sm font-semibold text-orange-900">Outstanding product lines</span>
-              <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-orange-700">{list.items.length}</span>
+              <span className="text-sm font-semibold text-orange-900">Products needed</span>
+              <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-orange-700">{products.length}</span>
             </div>
             <div className="space-y-3">
-              {list.items.map((item, index) => (
-                <article key={`${item.product_name}-${index}`} className="flex gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
-                  {item.image_url ? <img src={item.image_url} alt={item.product_name} loading="lazy" className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 object-cover sm:h-24 sm:w-24" /> : <div className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 sm:h-24 sm:w-24" />}
+              {products.map(product => (
+                <article key={product.product_name} className="flex gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
+                  {product.image_url ? <img src={product.image_url} alt={product.product_name} loading="lazy" className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 object-cover sm:h-24 sm:w-24" /> : <div className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 sm:h-24 sm:w-24" />}
                   <div className="min-w-0 flex-1">
-                    {item.order_code && <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-orange-600">Order {item.order_code}</p>}<h2 className="text-sm font-bold text-gray-900 sm:text-base">{item.product_name}</h2>
-                    {variantLabel(item.variant_options) && <p className="mt-1 text-xs text-gray-500">{variantLabel(item.variant_options)}</p>}
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                      <div><p className="text-gray-400">Ordered</p><p className="mt-1 font-bold text-gray-800">{item.ordered_quantity}</p></div>
-                      <div><p className="text-gray-400">Received</p><p className="mt-1 font-bold text-emerald-700">{item.received_quantity}</p></div>
-                      <div><p className="text-gray-400">Still needed</p><p className="mt-1 font-black text-orange-700">{item.remaining_quantity}</p></div>
+                    <h2 className="text-sm font-bold text-gray-900 sm:text-base">{product.product_name}</h2>
+                    <div className="mt-3 space-y-2">
+                      {product.variants.map(variant => (
+                        <div key={variant.label} className="flex items-start justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Variant</p>
+                            <p className="mt-0.5 text-xs font-medium text-gray-700">{variant.label}</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Quantity needed</p>
+                            <p className="mt-0.5 text-sm font-black text-orange-700">{variant.remaining_quantity}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
+                      <span className="text-xs font-semibold text-gray-500">Total needed for this product</span>
+                      <span className="text-sm font-black text-gray-900">{product.total_remaining}</span>
                     </div>
                   </div>
                 </article>
