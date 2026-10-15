@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, LogOut, Store, X, Check, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,18 +18,36 @@ export default function ProfileTab() {
   const [showAvatarPresets, setShowAvatarPresets] = useState(false);
   const [showSellerModal, setShowSellerModal] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(customer?.avatar_url || '');
-  const [formData, setFormData] = useState({
-    full_name: customer?.full_name || '',
-    phone: customer?.phone || '',
-  });
+  const [profileInfo, setProfileInfo] = useState({ full_name: customer?.full_name || '', phone: customer?.phone || '', avatar_url: customer?.avatar_url || '', created_at: customer?.created_at || '' });
+  const [formData, setFormData] = useState({ full_name: customer?.full_name || '', phone: customer?.phone || '' });
+
+  useEffect(() => {
+    if (!customer?.id) return;
+    let active = true;
+    void supabase.from('profiles').select('full_name, phone, avatar_url, created_at').eq('id', customer.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (!active || error || !data) return;
+        const next = {
+          full_name: data.full_name || '',
+          phone: data.phone || '',
+          avatar_url: data.avatar_url || '',
+          created_at: data.created_at || '',
+        };
+        setProfileInfo(next);
+        setAvatarUrl(next.avatar_url);
+        setFormData({ full_name: next.full_name, phone: next.phone });
+      });
+    return () => { active = false; };
+  }, [customer?.id]);
 
   const saveAvatarPreset = async (url: string) => {
     if (!customer) return;
     setUploadingAvatar(true);
     try {
-      const { error } = await supabase.from('customers').update({ avatar_url: url }).eq('id', customer.id);
+      const { error } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', customer.id);
       if (error) throw error;
       setAvatarUrl(url);
+      setProfileInfo(p => ({ ...p, avatar_url: url }));
       setShowAvatarPresets(false);
       toast.success('Profile photo updated');
     } catch (err: any) {
@@ -52,9 +70,10 @@ export default function ProfileTab() {
         .from('avatars').upload(filePath, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
-      const { error: profileUpdateError } = await supabase.from('customers').update({ avatar_url: publicUrl }).eq('id', customer.id);
+      const { error: profileUpdateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', customer.id);
       if (profileUpdateError) throw profileUpdateError;
       setAvatarUrl(publicUrl);
+      setProfileInfo(p => ({ ...p, avatar_url: publicUrl }));
       toast.success('Photo updated');
     } catch (err: any) {
       toast.error(err.message || 'Upload failed');
@@ -64,9 +83,12 @@ export default function ProfileTab() {
   };
 
   const handleSave = async () => {
-    const result = await updateProfile(formData);
-    if (result.success) { toast.success('Profile updated'); setIsEditing(false); }
-    else toast.error(result.error || 'Update failed');
+    if (!customer) return;
+    const { error } = await supabase.from('profiles').update({ full_name: formData.full_name.trim(), phone: formData.phone.trim() }).eq('id', customer.id);
+    if (error) { toast.error(error.message || 'Update failed'); return; }
+    setProfileInfo(p => ({ ...p, full_name: formData.full_name.trim(), phone: formData.phone.trim() }));
+    toast.success('Profile updated');
+    setIsEditing(false);
   };
 
   if (!customer) return null;
@@ -81,7 +103,7 @@ export default function ProfileTab() {
               <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-xl font-bold text-orange-500">
-                {customer.full_name?.charAt(0) ?? '?'}
+                {profileInfo.full_name?.charAt(0) ?? '?'}
               </div>
             )}
           </div>
@@ -93,7 +115,7 @@ export default function ProfileTab() {
           </div>
         </div>
         <div>
-          <p className="font-semibold text-gray-900">{customer.full_name}</p>
+          <p className="font-semibold text-gray-900">{profileInfo.full_name}</p>
           <p className="text-sm text-gray-400">{customer.email}</p>
           <button onClick={() => setShowAvatarPresets(true)}
             className="text-xs text-orange-500 hover:text-orange-600 font-medium mt-0.5">
@@ -155,10 +177,10 @@ export default function ProfileTab() {
         ) : (
           <div className="space-y-3 text-sm">
             {[
-              ['Name',         customer.full_name],
+              ['Name',         profileInfo.full_name],
               ['Email',        customer.email],
-              ['Phone',        customer.phone || 'Not set'],
-              ['Member since', customer.created_at ? new Date(customer.created_at).getFullYear().toString() : '—'],
+              ['Phone',        profileInfo.phone || 'Not set'],
+              ['Member since', profileInfo.created_at ? new Date(profileInfo.created_at).getFullYear().toString() : '—'],
             ].map(([label, value]) => (
               <div key={String(label)} className="flex justify-between">
                 <span className="text-gray-400">{label}</span>
