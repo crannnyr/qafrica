@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart, ArrowLeft, Heart, Store as StoreIcon, ChevronRight,
   Minus, Plus, Check, AlertCircle, Clock, ChevronDown, ChevronUp,
@@ -135,6 +135,7 @@ function RelatedProductCard({ item }: { item: UnifiedMarketplaceProduct }) {
 
 export default function UnifiedProductPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { sourceType, sourceId } = useParams<{ sourceType: string; sourceId: string }>();
   const [searchParams] = useSearchParams();
   const sellerStoreId = searchParams.get('store');
@@ -447,6 +448,12 @@ export default function UnifiedProductPage() {
     }
   };
 
+  const handleBuyNow = () => {
+    if (!product || !available || (variantNames.length > 0 && !selectedAll)) return;
+    handleAddToCart();
+    navigate('/stores-v2/checkout');
+  };
+
   const sellerCard = (
     <div className="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2.5 hover:border-gray-300 hover:bg-gray-50 transition">
       {china ? (
@@ -681,7 +688,7 @@ export default function UnifiedProductPage() {
                 type="button"
                 disabled={!available || (variantNames.length > 0 && !selectedAll)}
                 className="flex-1 h-12 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition"
-                title="Checkout integration is completed in Step 7"
+                onClick={handleBuyNow}
               >
                 Buy now
               </button>
