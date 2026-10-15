@@ -100,7 +100,7 @@ export default function CustomerSignupPage() {
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
-            <img src="/qafrica-bag-logo.svg" alt="QAFRICA official logo" className="w-16 h-16 object-contain mx-auto mb-4" />
+            <img src="/qafrica-bag-logo.svg" alt="QAFRICA official logo" className="w-16 h-16 object-contain mx-auto mb-4 rounded-xl" />
             <h1 className="text-2xl font-bold text-gray-900">Create Account</h1>
             <p className="text-gray-500 mt-1">Join QAfrica shoppers</p>
           </div>
