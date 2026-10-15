@@ -77,7 +77,7 @@ export default function LoginPage() {
         >
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
-            <img src="/qafrica-bag-logo.svg" alt="QAFRICA official logo" className="w-12 h-12 object-contain" />
+            <img src="/qafrica-bag-logo.svg" alt="QAFRICA official logo" className="w-12 h-12 object-contain rounded-xl" />
             <span className="text-2xl font-bold text-gray-900 dark:text-white">QAFRICA</span>
           </Link>
         </div>
