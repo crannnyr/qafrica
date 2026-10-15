@@ -1,7 +1,7 @@
 // /pay/:code  Someone asked you to pay for their cart. No account needed.
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Gift, Lock, ShieldCheck, MapPin, AlertTriangle } from 'lucide-react';
+import { Gift, Lock, ShieldCheck, MapPin, AlertTriangle, CheckCircle2, Circle } from 'lucide-react';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { EscrowExplainer, Field, InfoButton } from './ui';
 import { naira } from './format';
@@ -74,6 +74,25 @@ export default function PaySharedCartPage() {
   const remainingAmount = Math.max(Number(cart.remaining_amount ?? q.amount), 0);
   const paymentLabelAmount = cart.is_marketplace && contributionAmount.trim() && Number(contributionAmount) > 0 ? Number(contributionAmount) : remainingAmount;
 
+  // Allocate pooled contributions to the lowest-priced cart lines first.
+  // This is a deterministic display rule; the underlying payment total remains unchanged.
+  const progressLines = q.stores.flatMap((store) =>
+    store.items.map((item, index) => ({
+      key: `${store.store_id}:${item.product_id}:${index}`,
+      name: item.name,
+      image: item.image,
+      quantity: item.quantity,
+      total: Math.max(0, Number(item.total_price) || 0),
+      variant_options: item.variant_options,
+    })),
+  ).sort((a, b) => a.total - b.total);
+  let fundsToAllocate = amountRaised;
+  const itemProgress = progressLines.map((item) => {
+    const funded = Math.min(item.total, fundsToAllocate);
+    fundsToAllocate = Math.max(0, fundsToAllocate - funded);
+    return { ...item, funded, complete: item.total > 0 && funded >= item.total, percent: item.total > 0 ? Math.min(100, funded / item.total * 100) : 0 };
+  });
+
   return (
     <div className="min-h-screen bg-[#F6F6F6] text-gray-900 pb-10">
       <header className="bg-white border-b border-gray-100" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
@@ -117,8 +136,28 @@ export default function PaySharedCartPage() {
         {cart.is_marketplace && (
           <section className="bg-white px-4 py-4">
             <div className="flex items-center justify-between text-[13px] font-semibold"><span>Help Pay progress</span><span>{naira(amountRaised)} of {naira(targetAmount)}</span></div>
-            <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={targetAmount} aria-valuenow={Math.min(amountRaised, targetAmount)}><div className="h-full rounded-full bg-[#FA6338]" style={{ width: (targetAmount > 0 ? Math.min(100, amountRaised / targetAmount * 100) : 0) + '%' }} /></div>
-            <p className="mt-2 text-[12px] text-gray-500">Remaining: {naira(remainingAmount)}. You can contribute part of the balance; the order is placed when the full amount is raised.</p>
+            <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={targetAmount} aria-valuenow={Math.min(amountRaised, targetAmount)}><div className="h-full bg-[#FA6338] transition-all duration-300" style={{ width: (targetAmount > 0 ? Math.min(100, amountRaised / targetAmount * 100) : 0) + '%' }} /></div>
+            <p className="mt-2 text-[12px] text-gray-500">Remaining: {naira(remainingAmount)}. Contributions cover the lowest-priced items first; an item is marked complete once its full amount is covered.</p>
+            <ul className="mt-4 space-y-3" aria-label="Item funding progress">
+              {itemProgress.map((item) => (
+                <li key={item.key} className="flex items-center gap-3">
+                  <div className="h-11 w-11 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+                    {item.image && <img src={item.image} alt="" className="h-full w-full object-cover" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[12px] font-medium text-gray-800 line-clamp-1">{item.name}{item.quantity > 1 ? ` × ${item.quantity}` : ''}</p>
+                      <span className="shrink-0 text-[11px] font-semibold tabular-nums">{item.complete ? 'Completed' : `${Math.round(item.percent)}%`}</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-label={`${item.name} funding progress`} aria-valuemin={0} aria-valuemax={item.total} aria-valuenow={item.funded}>
+                      <div className="h-full rounded-full bg-[#FA6338] transition-all duration-300" style={{ width: `${item.percent}%` }} />
+                    </div>
+                    <p className="mt-1 text-[10px] text-gray-500 tabular-nums">{naira(item.funded)} of {naira(item.total)}</p>
+                  </div>
+                  {item.complete ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-label="Item fully funded" /> : <Circle className="h-5 w-5 shrink-0 text-gray-300" aria-hidden />}
+                </li>
+              ))}
+            </ul>
           </section>
         )}
 
