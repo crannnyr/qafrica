@@ -10,7 +10,7 @@ import { PRESET_AVATARS } from '@/lib/presetAvatars';
 const ic = "w-full px-3 py-2.5 rounded-lg border border-gray-200 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-none text-sm transition-colors";
 
 export default function ProfileTab() {
-  const { customer, updateProfile, logout } = useCustomerAuthStore();
+  const { customer, logout } = useCustomerAuthStore();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
