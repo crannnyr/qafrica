@@ -144,10 +144,11 @@ export default function ProfileTab() {
           </div>
         </div>
         <div>
-          <p className="font-semibold text-gray-900">{profileInfo.full_name}</p>
-          <p className="text-sm text-gray-400">{customer.email}</p>
+          {profileInfo.full_name?.trim()
+            ? <p className="font-semibold text-gray-900">{profileInfo.full_name}</p>
+            : <p className="font-semibold text-gray-900">{customer.email}</p>}
           <button onClick={() => setShowAvatarPresets(true)}
-            className="text-xs text-orange-500 hover:text-orange-600 font-medium mt-0.5">
+            className="text-sm text-orange-500 hover:text-orange-600 font-medium mt-1">
             Change photo
           </button>
         </div>
