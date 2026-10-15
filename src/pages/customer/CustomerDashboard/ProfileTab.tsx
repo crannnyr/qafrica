@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, LogOut, Store, X, Check, ExternalLink } from 'lucide-react';
+import { Camera, LogOut, X, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/services';
 import { useCustomerAuthStore } from '@/stores';
@@ -16,7 +16,6 @@ export default function ProfileTab() {
   const [isEditing, setIsEditing] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [showAvatarPresets, setShowAvatarPresets] = useState(false);
-  const [showSellerModal, setShowSellerModal] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(customer?.avatar_url || '');
   const [profileInfo, setProfileInfo] = useState({ full_name: customer?.full_name || '', phone: customer?.phone || '', avatar_url: customer?.avatar_url || '', created_at: customer?.created_at || '' });
   const [formData, setFormData] = useState({ full_name: customer?.full_name || '', phone: customer?.phone || '' });
@@ -225,43 +224,6 @@ export default function ProfileTab() {
           </div>
         )}
       </div>
-
-      {/* Seller / dropship onboarding */ }
-      <button type="button" onClick={() => setShowSellerModal(true)} className="group flex w-full items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-left transition hover:bg-orange-100" style={{ animation: 'qafrica-seller-pulse 1.6s ease-in-out infinite' }}>
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-500 text-white"><Store className="h-5 w-5" /></span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-bold text-orange-900">Become a Seller</span>
-          <span className="block text-xs text-orange-700">Get your own store and start dropshipping</span>
-        </span>
-        <ExternalLink className="h-4 w-4 text-orange-700" />
-      </button>
-
-      {showSellerModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 px-4 py-6" role="dialog" aria-modal="true" aria-labelledby="seller-onboarding-title">
-          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-start justify-between gap-4 bg-orange-500 p-5 text-white">
-              <div>
-                <h2 id="seller-onboarding-title" className="text-lg font-bold">Your store starts here</h2>
-                <p className="mt-1 text-sm text-white/90">Become a seller or dropship products.</p>
-              </div>
-              <button type="button" onClick={() => setShowSellerModal(false)} aria-label="Close seller details" className="rounded-lg p-1 hover:bg-white/15"><X className="h-5 w-5" /></button>
-            </div>
-            <div className="space-y-4 p-5">
-              <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
-                <p className="text-2xl font-black text-gray-900">₦5,000 <span className="text-sm font-semibold text-gray-500">/ 3 months</span></p>
-                <p className="mt-1 text-sm text-gray-700">One subscription includes your personal online store, selling training, marketplace features and dropshipping access.</p>
-              </div>
-              <p className="text-sm leading-relaxed text-gray-600">You will get your own store. After signing up, open the <strong className="text-gray-900">Marketplace</strong> section in the sidebar and complete the verification steps to activate your seller access.</p>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => setShowSellerModal(false)} className="h-11 flex-1 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50">Maybe later</button>
-                <a href="https://qafrica.store" className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-orange-500 px-3 text-sm font-bold text-white hover:bg-orange-600" onClick={() => setShowSellerModal(false)}>Route me, I'm ready</a>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <style>{`@keyframes qafrica-seller-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); } 50% { box-shadow: 0 0 0 4px rgba(249,115,22,.2); } }`}</style>
 
       {/* Sign out */}
       <button
