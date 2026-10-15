@@ -1,8 +1,9 @@
 // /customer/dashboard  "Me": profile, order shortcuts, services, recommendations.
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Package, Truck, CheckCircle2, AlertTriangle, Search, Link2, HandHeart, Crown, Heart, MapPin, Headphones, ShieldCheck, LogOut, ChevronRight, Settings } from 'lucide-react';
 import { useCustomerAuthStore } from '@/stores';
+import { supabase } from '@/services';
 import CONFIG from '@/lib/config';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
 import BottomNav from '../BottomNav';
@@ -15,7 +16,19 @@ export default function MePage() {
   useForceLightMode();
   const navigate = useNavigate();
   const { customer, isAuthenticated, logout } = useCustomerAuthStore();
+  const [marketplaceProfile, setMarketplaceProfile] = useState<{ full_name: string | null; phone: string | null; avatar_url: string | null } | null>(null);
   const { orders } = useMyOrders();
+
+  useEffect(() => {
+    if (!customer?.id) return;
+    let active = true;
+    void supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', customer.id).maybeSingle()
+      .then(({ data, error }) => {
+        if (!active || error || !data) return;
+        setMarketplaceProfile(data);
+      });
+    return () => { active = false; };
+  }, [customer?.id]);
   if (!isAuthenticated || !customer) return <Navigate to={`/customer/login?return=${encodeURIComponent('/customer/dashboard')}`} replace />;
 
   const count = (b: string) => (orders ?? []).filter((o) => bucketOf(o) === b).length;
@@ -35,15 +48,19 @@ export default function MePage() {
     { to: `mailto:${CONFIG.PLATFORM_EMAIL}`, label: 'Customer service', icon: Headphones, external: true },
     { to: '/customer/profile', label: 'Account settings', icon: Settings },
   ];
-  const initial = (customer.full_name || customer.email || '?').charAt(0).toUpperCase();
+  const displayName = marketplaceProfile?.full_name?.trim() || customer.full_name || '';
+  const displayPhone = marketplaceProfile?.phone?.trim() || '';
+  const displayAvatar = marketplaceProfile?.avatar_url || customer.avatar_url || '';
+  const initial = (displayName || customer.email || '?').charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen bg-[#F6F6F6] text-gray-900 pb-24">
       <header className="bg-white px-4 pt-5 pb-4" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top))' }}>
         <div className="max-w-2xl mx-auto flex items-center gap-3">
-          <span className="w-12 h-12 rounded-full bg-gray-900 text-white text-[18px] font-bold flex items-center justify-center shrink-0" aria-hidden>{initial}</span>
+          <span className="w-12 h-12 rounded-full overflow-hidden bg-gray-900 text-white text-[18px] font-bold flex items-center justify-center shrink-0" aria-hidden>{displayAvatar ? <img src={displayAvatar} alt="" className="h-full w-full object-cover" /> : initial}</span>
           <div className="flex-1 min-w-0">
-            <p className="text-[16px] font-bold truncate">{customer.full_name || 'My account'}</p>
+            <p className="text-[16px] font-bold truncate">{displayName || 'My account'}</p>
+            {displayPhone && <p className="text-[12px] text-gray-500 truncate">{displayPhone}</p>}
             <p className="text-[12px] text-gray-500 truncate">{customer.email}</p>
           </div>
           <button type="button" onClick={async () => { await logout(); navigate('/stores'); }} aria-label="Sign out" className="p-2 rounded-full hover:bg-gray-100 text-gray-600">
