@@ -94,7 +94,8 @@ export const orderService = {
   async updateDropshipOrderStatus(
     orderId: string,
     originalStoreId: string,
-    status: Order['status']
+    status: Order['status'],
+    additionalData?: Record<string, unknown>
   ) {
     const { data: items, error: verifyError } = await supabase
       .from('order_items')
@@ -110,7 +111,7 @@ export const orderService = {
 
     const { data, error } = await supabase
       .from('orders')
-      .update({ status, updated_at: new Date().toISOString() })
+      .update({ status, updated_at: new Date().toISOString(), ...additionalData })
       .eq('id', orderId)
       .select()
       .single();
