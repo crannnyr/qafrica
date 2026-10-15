@@ -67,6 +67,8 @@ export default function PremiumStorefront(props: Props) {
   useEffect(() => loadLookFonts(look), [look]);
 
   const collections = useMemo(() => liveCollections(store), [store]);
+  const returnTo = (location.state as { returnTo?: unknown } | null)?.returnTo;
+  const hasProductReturn = typeof returnTo === 'string' && returnTo.startsWith('/') && !returnTo.startsWith('//');
   const params = new URLSearchParams(location.search);
   const activeId = params.get('c');
   const active = activeId ? collections.find((c) => c.id === activeId) ?? null : null;
@@ -255,7 +257,7 @@ function Header(p: {
 
   return (
     <header
-      className={`${p.overlay ? 'fixed' : 'sticky'} top-0 inset-x-0 z-40 transition-[background-color,box-shadow,backdrop-filter] duration-300`}
+      className={`${p.overlay ? 'fixed' : 'sticky'} ${hasProductReturn ? 'top-9' : 'top-0'} inset-x-0 z-40 transition-[background-color,box-shadow,backdrop-filter] duration-300`}
       style={{ backgroundColor: bg, backdropFilter: clear ? 'none' : 'saturate(160%) blur(14px)', WebkitBackdropFilter: clear ? 'none' : 'saturate(160%) blur(14px)', boxShadow: clear ? 'none' : `0 1px 0 ${p.pal.line}` }}
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center gap-4" style={{ color: ink }}>
