@@ -64,11 +64,13 @@ export default function MePage() {
     <div className="min-h-screen bg-[#F6F6F6] text-gray-900 pb-24">
       <header className="bg-white px-4 pt-5 pb-4" style={{ paddingTop: 'calc(1.25rem + env(safe-area-inset-top))' }}>
         <div className="max-w-2xl mx-auto flex items-center gap-3">
-          <span className="w-12 h-12 rounded-full overflow-hidden bg-gray-900 text-white text-[18px] font-bold flex items-center justify-center shrink-0" aria-hidden>{displayAvatar ? <img src={displayAvatar} alt="" className="h-full w-full object-cover" /> : initial}</span>
-          <div className="flex-1 min-w-0">
-            <p className="text-[16px] font-bold truncate">{displayName || 'My account'}</p>
-            <p className="text-[12px] text-gray-500 truncate">{customer.email || ''}</p>
-          </div>
+          <Link to="/customer/profile" aria-label="Open account settings" className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500">
+            <span className="w-12 h-12 rounded-full overflow-hidden bg-gray-900 text-white text-[18px] font-bold flex items-center justify-center shrink-0" aria-hidden>{displayAvatar ? <img src={displayAvatar} alt="" className="h-full w-full object-cover" /> : initial}</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[16px] font-bold truncate">{displayName || 'My account'}</p>
+              <p className="text-[12px] text-gray-500 truncate">{customer.email || ''}</p>
+            </div>
+          </Link>
           <button type="button" onClick={async () => { await logout(); navigate('/stores'); }} aria-label="Sign out" className="p-2 rounded-full hover:bg-gray-100 text-gray-600">
             <LogOut className="w-5 h-5" />
           </button>
