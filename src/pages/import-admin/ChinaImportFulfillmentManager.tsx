@@ -92,7 +92,22 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [shipmentStatusFilter, setShipmentStatusFilter] = useState('all');
   const [bulkReceiptAction, setBulkReceiptAction] = useState<'download' | 'print' | null>(null);
   const [sharingOrderId, setSharingOrderId] = useState<string | null>(null);
-  const [selectedShareItems, setSelectedShareItems] = useState<string[]>([]);
+  const [selectedShareItems, setSelectedShareItems] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('qafrica_fulfillment_selected_share_items');
+      const parsed: unknown = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('qafrica_fulfillment_selected_share_items', JSON.stringify(selectedShareItems));
+    } catch {
+      // Keep selection usable for this session if browser storage is unavailable.
+    }
+  }, [selectedShareItems]);
   const [createdShareUrl, setCreatedShareUrl] = useState<string | null>(null);
 
   const loadShipments = useCallback(async () => {
