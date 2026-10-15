@@ -70,9 +70,21 @@ export default function StoreCard({ store, index }: Props) {
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-1 text-sm">
-              <Star className="w-4 h-4 text-yellow-400 fill-current" />
-              <span className="font-medium">{store.rating || 4.5}</span>
+            <div
+              className="flex items-center gap-1 text-sm"
+              aria-label={store.review_count > 0
+                ? `${store.rating.toFixed(1)} out of 5 from ${store.review_count} reviews`
+                : 'No reviews yet'}
+            >
+              {store.review_count > 0 ? (
+                <>
+                  <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                  <span className="font-medium">{store.rating.toFixed(1)}</span>
+                  <span className="text-gray-400">({store.review_count})</span>
+                </>
+              ) : (
+                <span className="text-xs text-gray-500">No reviews yet</span>
+              )}
             </div>
           </div>
 
