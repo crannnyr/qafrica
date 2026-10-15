@@ -746,7 +746,7 @@ export default function UnifiedProductPage() {
               </span>
             </div>
 
-            {product.seller_type === 'store' && (
+            {(product.seller_type === 'store' || (china && Boolean(product.seller_id))) && (
               <button
                 type="button"
                 onClick={() => setDropshipModalOpen(true)}
@@ -842,9 +842,7 @@ export default function UnifiedProductPage() {
               Copy this code so you can find and import the item from the catalog after signing up.
             </p>
             <a
-              href="https://qafrica.store"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/signup"
               className="mt-5 flex h-12 w-full items-center justify-center rounded-xl bg-[#E8590C] px-4 text-sm font-bold text-white transition hover:bg-[#cf4f0b]"
             >
               Start now
