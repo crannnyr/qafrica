@@ -106,26 +106,9 @@ export default function MePage() {
           </p>
         </section>
 
-        <section className="bg-white px-4 py-3" aria-label="Services">
-          <ul className="grid grid-cols-4 gap-y-4">
-            {services.map((s) => {
-              const inner = (<><s.icon className="w-6 h-6" strokeWidth={1.6} aria-hidden /><span className="text-[11px] text-center text-gray-700 leading-tight">{s.label}</span></>);
-              return (
-                <li key={s.label}>
-                  {s.external ? (
-                    <a href={s.to} className="flex flex-col items-center gap-1.5 px-1">{inner}</a>
-                  ) : (
-                    <Link to={s.to} className="flex flex-col items-center gap-1.5 px-1">{inner}</Link>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-
-        <section className="px-4 pt-1" aria-label="Seller signup">
-          <button type="button" onClick={() => setShowSellerModal(true)} className="group flex w-full items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-left transition hover:bg-orange-100">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-500 text-white"><Store className="h-5 w-5" /></span>
+        <section className="px-4 pt-3" aria-label="Seller signup">
+          <button type="button" onClick={() => setShowSellerModal(true)} className="group flex w-full items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-left transition hover:bg-orange-100" style={{ animation: "qafrica-seller-pulse 1.6s ease-in-out infinite" }}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-500 p-1.5"><img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="h-full w-full rounded-md object-cover" /></span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-bold text-orange-900">Become a Seller</span>
               <span className="block text-xs text-orange-700">Get your own store and start dropshipping</span>
@@ -159,8 +142,28 @@ export default function MePage() {
           </div>
         )}
 
+        <section className="bg-white px-4 py-3" aria-label="Services">
+          <ul className="grid grid-cols-4 gap-y-4">
+            {services.map((s) => {
+              const inner = (<><s.icon className="w-6 h-6" strokeWidth={1.6} aria-hidden /><span className="text-[11px] text-center text-gray-700 leading-tight">{s.label}</span></>);
+              return (
+                <li key={s.label}>
+                  {s.external ? (
+                    <a href={s.to} className="flex flex-col items-center gap-1.5 px-1">{inner}</a>
+                  ) : (
+                    <Link to={s.to} className="flex flex-col items-center gap-1.5 px-1">{inner}</Link>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+
+
         <Recommendations />
       </div>
+      <style>{`@keyframes qafrica-seller-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); } 50% { box-shadow: 0 0 0 4px rgba(249,115,22,.2); } }`}</style>
       <BottomNav />
     </div>
   );
