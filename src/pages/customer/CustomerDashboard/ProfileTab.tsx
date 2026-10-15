@@ -52,7 +52,8 @@ export default function ProfileTab() {
         .from('avatars').upload(filePath, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
-      await supabase.from('customers').update({ avatar_url: publicUrl }).eq('id', customer.id);
+      const { error: profileUpdateError } = await supabase.from('customers').update({ avatar_url: publicUrl }).eq('id', customer.id);
+      if (profileUpdateError) throw profileUpdateError;
       setAvatarUrl(publicUrl);
       toast.success('Photo updated');
     } catch (err: any) {
