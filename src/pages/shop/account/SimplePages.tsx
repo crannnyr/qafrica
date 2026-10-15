@@ -152,7 +152,7 @@ export function MyLinksPage() {
             )}
             {l.status === 'expired' && (
               <div className="mt-3 space-y-2">
-                <button type="button" onClick={() => extending === l.code ? setExtending(null) : startExtend(l)} className="h-10 w-full rounded-lg bg-gray-900 text-white text-[13px] font-semibold inline-flex items-center justify-center gap-2">
+                <button type="button" onClick={() => extending === l.code ? setExtending(null) : startExtend(l)} className="h-10 w-full rounded-lg bg-[#FA6338] hover:bg-[#E8590C] text-white text-[13px] font-semibold inline-flex items-center justify-center gap-2 transition-colors">
                   <CalendarClock className="w-4 h-4" /> Extend link
                 </button>
                 {extending === l.code && (
@@ -161,7 +161,7 @@ export function MyLinksPage() {
                     <input id={`expiry-${l.code}`} type="date" min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)} value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-[13px]" />
                     <div className="mt-2 flex gap-2">
                       <button type="button" onClick={() => setExtending(null)} className="h-9 flex-1 rounded-lg border border-gray-300 text-[12px] font-semibold">Cancel</button>
-                      <button type="button" disabled={savingExpiry} onClick={() => saveExtension(l)} className="h-9 flex-1 rounded-lg bg-gray-900 text-white text-[12px] font-semibold disabled:opacity-50">{savingExpiry ? 'Saving…' : 'Save new date'}</button>
+                      <button type="button" disabled={savingExpiry} onClick={() => saveExtension(l)} className="h-9 flex-1 rounded-lg bg-[#FA6338] hover:bg-[#E8590C] text-white text-[12px] font-semibold disabled:opacity-50 transition-colors">{savingExpiry ? 'Saving…' : 'Save new date'}</button>
                     </div>
                   </div>
                 )}
