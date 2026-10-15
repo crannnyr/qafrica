@@ -15,7 +15,7 @@ export default function MarketplaceReturnBar({ fallback }: { fallback: string })
   if (!fromMarketplace && !safeReturnTo) return null;
   const handleBack = () => safeReturnTo ? navigate(safeReturnTo) : goBack();
   return (
-    <div className="bg-gray-900 text-white">
+    <div className="sticky top-0 z-[60] bg-gray-900 text-white shadow-sm">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-9 flex items-center">
         <button
           type="button"
