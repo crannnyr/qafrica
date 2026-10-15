@@ -1,7 +1,7 @@
 // Small account pages. Wishlist / addresses / settings reuse the existing, working components.
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { Copy, Check, HandHeart, Link2 } from 'lucide-react';
+import { Copy, Check, HandHeart, Link2, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/services';
 import { useCustomerAuthStore } from '@/stores';
@@ -35,6 +35,9 @@ type HelpPayDetails = { amount_raised?: number; target_amount?: number; remainin
 export function MyLinksPage() {
   const [links, setLinks] = useState<MyLink[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [extending, setExtending] = useState<string | null>(null);
+  const [newExpiry, setNewExpiry] = useState('');
+  const [savingExpiry, setSavingExpiry] = useState(false);
   const load = useCallback(async () => {
     const { data, error } = await supabase.rpc('my_shared_carts');
     if (error) { toast.error('Could not load your payment links.'); return; }
@@ -69,6 +72,23 @@ export function MyLinksPage() {
     toast.success(l.is_public ? 'Removed from Help Pay' : 'Posted on Help Pay');
     load();
   };
+  const startExtend = (l: MyLink) => {
+    const base = new Date(Math.max(Date.now(), new Date(l.expires_at).getTime()));
+    base.setDate(base.getDate() + 7);
+    setNewExpiry(`${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`);
+    setExtending(l.code);
+  };
+  const saveExtension = async (l: MyLink) => {
+    if (!newExpiry || new Date(`${newExpiry}T23:59:59`) <= new Date()) return toast.error('Choose a future expiry date.');
+    setSavingExpiry(true);
+    const { error } = await supabase.rpc('extend_shared_cart', { p_code: l.code, p_expires_at: new Date(`${newExpiry}T23:59:59`).toISOString() });
+    setSavingExpiry(false);
+    if (error) return toast.error(error.message || 'Could not extend this link.');
+    toast.success('Payment link extended successfully.');
+    setExtending(null);
+    await load();
+  };
+
   const copy = async (code: string) => {
     try {
       await navigator.clipboard.writeText(shareUrl(code));
@@ -128,6 +148,23 @@ export function MyLinksPage() {
                 <button type="button" onClick={() => togglePublic(l)} className={`h-9 flex-1 rounded-lg text-[12px] font-semibold inline-flex items-center justify-center gap-1.5 ${l.is_public ? 'border border-gray-900' : 'bg-gray-900 text-white'}`}>
                   <HandHeart className="w-4 h-4" />{l.is_public ? 'Remove from Help Pay' : 'Post on Help Pay'}
                 </button>
+              </div>
+            )}
+            {l.status === 'expired' && (
+              <div className="mt-3 space-y-2">
+                <button type="button" onClick={() => extending === l.code ? setExtending(null) : startExtend(l)} className="h-10 w-full rounded-lg bg-gray-900 text-white text-[13px] font-semibold inline-flex items-center justify-center gap-2">
+                  <CalendarClock className="w-4 h-4" /> Extend link
+                </button>
+                {extending === l.code && (
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <label htmlFor={`expiry-${l.code}`} className="block text-[12px] font-semibold text-gray-700 mb-1.5">New expiry date</label>
+                    <input id={`expiry-${l.code}`} type="date" min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)} value={newExpiry} onChange={(e) => setNewExpiry(e.target.value)} className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-[13px]" />
+                    <div className="mt-2 flex gap-2">
+                      <button type="button" onClick={() => setExtending(null)} className="h-9 flex-1 rounded-lg border border-gray-300 text-[12px] font-semibold">Cancel</button>
+                      <button type="button" disabled={savingExpiry} onClick={() => saveExtension(l)} className="h-9 flex-1 rounded-lg bg-gray-900 text-white text-[12px] font-semibold disabled:opacity-50">{savingExpiry ? 'Saving…' : 'Save new date'}</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {l.status === 'expired' && (l.amount_raised ?? 0) > 0 && (
