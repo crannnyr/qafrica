@@ -10,7 +10,7 @@ export default function UnifiedMarketplaceCategories() {
   const cats = useUnifiedMarketplaceCategories();
   const [active, setActive] = useState<string>('');
 
-  const shown = (cats?.categories ?? []).filter((c) => !active || c.niches?.includes(active) || c.niches?.length === 0);
+  const shown = (cats?.categories ?? []).filter((category) => !active || category.niches?.includes(active));
   const departments = [
     { id: '', label: 'Just for You' },
     ...(cats?.niches ?? []).map((n) => ({ id: n.id, label: nicheLabel(n.id) })),
@@ -19,7 +19,7 @@ export default function UnifiedMarketplaceCategories() {
   return (
     <MarketplaceLayout basePath="/stores-v2">
       <div className="flex bg-white min-h-[calc(100vh-56px-64px)]">
-        <nav aria-label="Departments" className="w-[34%] max-w-[180px] shrink-0 bg-[#F6F6F6]">
+        <nav aria-label="Departments" className="w-[34%] max-w-[180px] shrink-0 self-start bg-[#F6F6F6]">
           <ul>
             {departments.map((d) => {
               const on = active === d.id;
