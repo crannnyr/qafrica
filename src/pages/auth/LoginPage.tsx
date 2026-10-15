@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, ShoppingBag, ArrowRight, Loader as Loader2 } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, Loader as Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores';
 import { toast } from 'sonner';
@@ -77,9 +77,7 @@ export default function LoginPage() {
         >
         <div className="text-center mb-8">
           <Link to="/" className="inline-flex items-center gap-2">
-            <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
-              <ShoppingBag className="w-7 h-7 text-white" />
-            </div>
+            <img src="/qafrica-bag-logo.svg" alt="QAFRICA official logo" className="w-12 h-12 object-contain" />
             <span className="text-2xl font-bold text-gray-900 dark:text-white">QAFRICA</span>
           </Link>
         </div>
