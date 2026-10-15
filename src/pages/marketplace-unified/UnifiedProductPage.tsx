@@ -509,8 +509,13 @@ export default function UnifiedProductPage() {
             />
           </Link>
 
-          <Link to="/stores-v2/cart" className="p-2 rounded-full hover:bg-gray-100 transition" aria-label="Cart">
-            <ShoppingCart className="w-4 h-4 text-gray-700" />
+          <Link to="/stores-v2/cart" className="relative p-2 rounded-full hover:bg-gray-100 transition" aria-label={`Cart${cartCount > 0 ? `, ${cartCount} items` : ""}`}>
+            <ShoppingCart className="w-5 h-5 text-gray-700" />
+            {cartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-[#FA6338] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                {cartCount > 99 ? "99+" : cartCount}
+              </span>
+            )}
           </Link>
         </div>
       </header>
