@@ -8,6 +8,7 @@ import { useStoreStore, useAuthStore } from '@/stores';
 
 type ChinaProduct = {
   id: string;
+  product_code: string | null;
   name: string;
   description: string | null;
   image_url: string | null;
@@ -102,7 +103,7 @@ export default function ChinaImportCatalogSection() {
 
     const { data: productRows, error: productError } = await supabase
       .from('china_import_products')
-      .select('id,name,description,image_url,image_urls,price_ngn,cost_ngn,air_shipping_customer_ngn,category,has_variants,variants,is_active,category_id')
+      .select('id,product_code,name,description,image_url,image_urls,price_ngn,cost_ngn,air_shipping_customer_ngn,category,has_variants,variants,is_active,category_id')
       .eq('is_active', true)
       .in('category_id', categoryIds)
       .not('air_shipping_customer_ngn', 'is', null)
@@ -136,6 +137,7 @@ export default function ChinaImportCatalogSection() {
     const q = search.trim().toLowerCase();
     return !q ||
       product.name.toLowerCase().includes(q) ||
+      product.product_code?.toLowerCase().includes(q) ||
       product.category?.toLowerCase().includes(q) ||
       product.description?.toLowerCase().includes(q);
   });
