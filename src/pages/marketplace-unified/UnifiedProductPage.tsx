@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart, ArrowLeft, Heart, Store as StoreIcon, ChevronRight,
   Minus, Plus, Check, AlertCircle, Clock, ChevronDown, ChevronUp,
@@ -134,6 +134,7 @@ function RelatedProductCard({ item }: { item: UnifiedMarketplaceProduct }) {
 }
 
 export default function UnifiedProductPage() {
+  const location = useLocation();
   const { sourceType, sourceId } = useParams<{ sourceType: string; sourceId: string }>();
   const [searchParams] = useSearchParams();
   const sellerStoreId = searchParams.get('store');
@@ -480,6 +481,7 @@ export default function UnifiedProductPage() {
       ) : product.seller_type === 'store' && product.seller_slug ? (
         <Link
           to={`/${product.seller_slug}`}
+          state={{ returnTo: `${location.pathname}${location.search}` }}
           className="inline-flex items-center gap-1 text-sm font-medium text-gray-700"
         >
           <StoreIcon className="w-4 h-4" /> View store <ChevronRight className="w-4 h-4" />
