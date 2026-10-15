@@ -142,7 +142,7 @@ export default function MePage() {
           </div>
         )}
 
-        <section className="bg-white px-4 py-3" aria-label="Services">
+        <section className="bg-white px-4 pt-1 pb-3" aria-label="Services">
           <ul className="grid grid-cols-4 gap-y-4">
             {services.map((s) => {
               const inner = (<><s.icon className="w-6 h-6" strokeWidth={1.6} aria-hidden /><span className="text-[11px] text-center text-gray-700 leading-tight">{s.label}</span></>);
