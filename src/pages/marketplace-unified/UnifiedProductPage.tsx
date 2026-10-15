@@ -746,7 +746,7 @@ export default function UnifiedProductPage() {
               </span>
             </div>
 
-            {(product.seller_type === 'store' || (china && Boolean(product.seller_id))) && (
+            {(product.seller_type === 'store' || china) && (
               <button
                 type="button"
                 onClick={() => setDropshipModalOpen(true)}
