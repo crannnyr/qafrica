@@ -106,7 +106,7 @@ export default function MePage() {
           </p>
         </section>
 
-        <section className="mb-8 px-4 pt-3 pb-8" aria-label="Seller signup">
+        <section className="px-4 pt-3" aria-label="Seller signup">
           <button type="button" onClick={() => setShowSellerModal(true)} className="group flex w-full items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-left transition hover:bg-orange-100" style={{ animation: "qafrica-seller-pulse 1.6s ease-in-out infinite" }}>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-500 p-1.5"><img src="/qafrica-bag-logo.svg" alt="QAFRICA" className="h-full w-full rounded-md object-cover" /></span>
             <span className="min-w-0 flex-1">
