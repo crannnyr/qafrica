@@ -29,20 +29,38 @@ export const WishlistPage = () => <Shell title="Wishlist" path="/customer/wishli
 export const AddressesPage = () => <Shell title="Addresses" path="/customer/addresses"><div className="bg-white rounded-xl p-3"><AddressesTab /></div></Shell>;
 export const ProfilePage = () => <Shell title="Account settings" path="/customer/profile"><div className="bg-white rounded-xl p-3"><ProfileTab /></div></Shell>;
 
-type MyLink = { code: string; status: string; is_public: boolean; amount: number | null; note: string | null; created_at: string; expires_at: string; preview_images: string[] | null };
+type MyLink = { code: string; status: string; is_public: boolean; amount: number | null; note: string | null; created_at: string; expires_at: string; preview_images: string[] | null; amount_raised?: number; target_amount?: number; remaining_amount?: number; is_marketplace?: boolean; };
+type HelpPayDetails = { amount_raised?: number; target_amount?: number; remaining_amount?: number; is_marketplace?: boolean; status?: string };
 
 export function MyLinksPage() {
   const [links, setLinks] = useState<MyLink[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const load = useCallback(() => {
-    supabase.rpc('my_shared_carts').then(({ data }) => setLinks((data as MyLink[]) ?? []));
+  const load = useCallback(async () => {
+    const { data, error } = await supabase.rpc('my_shared_carts');
+    if (error) { toast.error('Could not load your payment links.'); return; }
+    const rows = ((data as MyLink[]) ?? []);
+    const enriched = await Promise.all(rows.map(async (link) => {
+      const { data: details } = await supabase.rpc('get_shared_cart', { p_code: link.code });
+      const d = (details ?? {}) as HelpPayDetails;
+      return { ...link, amount_raised: Number(d.amount_raised ?? 0), target_amount: Number(d.target_amount ?? link.amount ?? 0), remaining_amount: Number(d.remaining_amount ?? link.amount ?? 0), is_marketplace: Boolean(d.is_marketplace), status: d.status === 'expired' ? 'expired' : link.status };
+    }));
+    setLinks(enriched);
   }, []);
   useEffect(() => {
     let alive = true;
-    supabase.rpc('my_shared_carts').then(({ data }) => alive && setLinks((data as MyLink[]) ?? []));
-    return () => {
-      alive = false;
-    };
+    void (async () => {
+      const { data, error } = await supabase.rpc('my_shared_carts');
+      if (!alive) return;
+      if (error) { setLinks([]); toast.error('Could not load your payment links.'); return; }
+      const rows = ((data as MyLink[]) ?? []);
+      const enriched = await Promise.all(rows.map(async (link) => {
+        const { data: details } = await supabase.rpc('get_shared_cart', { p_code: link.code });
+        const d = (details ?? {}) as HelpPayDetails;
+        return { ...link, amount_raised: Number(d.amount_raised ?? 0), target_amount: Number(d.target_amount ?? link.amount ?? 0), remaining_amount: Number(d.remaining_amount ?? link.amount ?? 0), is_marketplace: Boolean(d.is_marketplace), status: d.status === 'expired' ? 'expired' : link.status };
+      }));
+      if (alive) setLinks(enriched);
+    })();
+    return () => { alive = false; };
   }, []);
 
   const togglePublic = async (l: MyLink) => {
@@ -90,6 +108,18 @@ export function MyLinksPage() {
               </div>
             </div>
             {l.note && <p className="mt-2 text-[12px] text-gray-600 line-clamp-2">“{l.note}”</p>}
+            {l.is_marketplace && (
+              <div className="mt-3 rounded-lg bg-gray-50 p-3">
+                <div className="flex items-center justify-between gap-2 text-[12px]">
+                  <span className="text-gray-600">Help Pay progress</span>
+                  <span className="font-semibold tabular-nums">{naira(l.amount_raised ?? 0)} / {naira(l.target_amount ?? l.amount ?? 0)}</span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-gray-200 overflow-hidden" role="progressbar" aria-label="Help Pay funding progress" aria-valuemin={0} aria-valuemax={l.target_amount ?? l.amount ?? 0} aria-valuenow={Math.min(l.amount_raised ?? 0, l.target_amount ?? l.amount ?? 0)}>
+                  <div className="h-full rounded-full bg-[#FA6338]" style={{ width: `${(l.target_amount ?? l.amount ?? 0) > 0 ? Math.min(100, (l.amount_raised ?? 0) / (l.target_amount ?? l.amount ?? 0) * 100) : 0}%` }} />
+                </div>
+                <p className="mt-1.5 text-[11px] text-gray-500">{l.status === 'paid' ? 'Fully paid' : l.status === 'expired' ? `Expired with ${naira(l.amount_raised ?? 0)} contributed; ${naira(l.remaining_amount ?? 0)} remained.` : `${naira(l.remaining_amount ?? 0)} remaining`}</p>
+              </div>
+            )}
             {l.status === 'active' && (
               <div className="mt-3 flex gap-2">
                 <button type="button" onClick={() => copy(l.code)} className="h-9 flex-1 rounded-lg border border-gray-300 text-[12px] font-semibold inline-flex items-center justify-center gap-1.5">
@@ -99,6 +129,9 @@ export function MyLinksPage() {
                   <HandHeart className="w-4 h-4" />{l.is_public ? 'Remove from Help Pay' : 'Post on Help Pay'}
                 </button>
               </div>
+            )}
+            {l.status === 'expired' && (l.amount_raised ?? 0) > 0 && (
+              <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-[11px] leading-relaxed text-amber-900">This link expired before the cart was fully funded. Contributions are recorded; no order should be assumed created. Contact QAFRICA support if you need help resolving this request.</p>
             )}
           </li>
         ))}
