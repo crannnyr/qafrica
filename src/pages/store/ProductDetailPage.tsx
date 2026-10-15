@@ -145,7 +145,9 @@ export default function ProductDetailPage() {
   const { goBack, fromMarketplace } = useSmartBack(`/${slug}${previewSearch()}`);
   const storeHref = fromMarketplace ? marketplaceLink(`/${slug}`) : `/${slug}${previewSearch()}`;
   const chainState = fromMarketplace ? MARKETPLACE_STATE : undefined;
-  const { addItem, addToWishlist, removeFromWishlist, isInWishlist, getTotalItems } = useCartStore();
+  const { addItem, addToWishlist, removeFromWishlist, isInWishlist } = useCartStore();
+  const cartItems = useCartStore(state => state.items);
+  const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const { customer } = useCustomerAuthStore();
 
   const [store, setStore] = useState<StoreType | null>(null);
@@ -487,7 +489,7 @@ export default function ProductDetailPage() {
 
       {/* ── Header ── */}
       {look ? (
-        <LookPageHeader store={viewStore ?? store} look={look} primary={primary} slug={slug ?? store.slug} cartCount={getTotalItems()} onBack={goBack} backLabel={fromMarketplace ? 'Back to marketplace' : undefined} storeHref={storeHref} storeState={chainState} />
+        <LookPageHeader store={viewStore ?? store} look={look} primary={primary} slug={slug ?? store.slug} cartCount={cartCount} onBack={goBack} backLabel={fromMarketplace ? 'Back to marketplace' : undefined} storeHref={storeHref} storeState={chainState} />
       ) : (
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
@@ -514,8 +516,13 @@ export default function ProductDetailPage() {
             <span className="text-sm font-semibold text-gray-900 hidden sm:block">{store.name}</span>
           </Link>
 
-          <Link to="/cart" className="p-2 rounded-full hover:bg-gray-100 transition" aria-label="Cart">
+          <Link to="/cart" className="relative p-2 rounded-full hover:bg-gray-100 transition" aria-label={`Cart${cartCount > 0 ? `, ${cartCount} items` : ""}`}>
             <ShoppingCart className="w-4 h-4 text-gray-700" />
+            {cartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                {cartCount}
+              </span>
+            )}
           </Link>
         </div>
       </header>
