@@ -213,7 +213,7 @@ function Recommendations() {
 
   return (
     <section aria-labelledby="h-recs" className="pt-2">
-      <h2 id="h-recs" className="px-4 pb-2 text-[14px] font-semibold text-center">You might like</h2>
+      <h2 id="h-recs" className="px-4 pb-2 text-[14px] font-semibold text-left">You might like</h2>
       <ul className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 px-1.5">
         {orderedItems.map((p) => <li key={p.id}><ProductCard p={p} /></li>)}
         {feed.status === 'loading' && Array.from({ length: 4 }).map((_, i) => <li key={`s${i}`}><ProductCardSkeleton /></li>)}
