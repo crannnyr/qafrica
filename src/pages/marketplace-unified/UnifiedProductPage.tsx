@@ -470,9 +470,16 @@ export default function UnifiedProductPage() {
         <span className="block text-sm font-semibold text-gray-900 truncate">{product.seller_name}</span>
       </span>
 
-      {product.seller_type === 'store' && product.seller_slug ? (
+      {china ? (
         <Link
-          to="/stores-v2"
+          to="/recommendations"
+          className="inline-flex items-center gap-1 text-sm font-medium text-gray-700"
+        >
+          <StoreIcon className="w-4 h-4" /> View products <ChevronRight className="w-4 h-4" />
+        </Link>
+      ) : product.seller_type === 'store' && product.seller_slug ? (
+        <Link
+          to={`/${product.seller_slug}`}
           className="inline-flex items-center gap-1 text-sm font-medium text-gray-700"
         >
           <StoreIcon className="w-4 h-4" /> View store <ChevronRight className="w-4 h-4" />
