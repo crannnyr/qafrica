@@ -18,9 +18,9 @@ export default function UnifiedMarketplaceCategories() {
 
   return (
     <MarketplaceLayout basePath="/stores-v2">
-      <div className="flex bg-white min-h-[calc(100vh-56px-64px)]">
-        <nav aria-label="Departments" className="w-[34%] max-w-[180px] shrink-0 self-start h-fit max-h-none overflow-visible bg-[#F6F6F6]">
-          <ul className="h-fit max-h-none overflow-visible">
+      <div className="flex h-[calc(100dvh-56px-64px-env(safe-area-inset-top))] min-h-0 overflow-hidden bg-white">
+        <nav aria-label="Departments" className="w-[34%] max-w-[180px] shrink-0 h-full min-h-0 overflow-y-auto overscroll-contain bg-[#F6F6F6]">
+          <ul className="h-fit">
             {departments.map((d) => {
               const on = active === d.id;
               return (
@@ -40,7 +40,7 @@ export default function UnifiedMarketplaceCategories() {
           </ul>
         </nav>
 
-        <section className="flex-1 min-w-0 px-3 py-4">
+        <section className="flex-1 min-w-0 h-full min-h-0 overflow-y-auto overscroll-contain px-3 py-4">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-base font-bold">{active ? nicheLabel(active) : 'Picks for You'}</h1>
             {active && (
