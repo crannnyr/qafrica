@@ -229,10 +229,13 @@ export default function ImportCatalogPage() {
     }
   };
 
-  const filteredProducts = availableProducts.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    product.description?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredProducts = availableProducts.filter((product) => {
+    const query = searchQuery.trim().toLowerCase();
+    return !query ||
+      product.name?.toLowerCase().includes(query) ||
+      product.description?.toLowerCase().includes(query) ||
+      product.product_code?.toLowerCase().includes(query);
+  });
 
   // Build a set of already-imported product IDs for O(1) lookup
   const importedProductIds = new Set(imports.map(i => i.original_product_id));
