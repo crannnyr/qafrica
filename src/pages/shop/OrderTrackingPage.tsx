@@ -124,17 +124,17 @@ function OrderView({ o }: { o: Tracked }) {
           <ol className="mt-5 relative" aria-label="Order progress">
             {steps.map((s, i) => (
               <li key={s.label} className="flex gap-3 pb-5 last:pb-0 relative">
-                {i < steps.length - 1 && <span className={`absolute left-[11px] top-6 bottom-0 w-px ${s.done ? 'bg-gray-900' : 'bg-gray-200'}`} aria-hidden />}
+                {i < steps.length - 1 && <span className={`absolute left-[11px] top-6 bottom-0 w-px ${s.done ? (i === 0 ? 'bg-emerald-500' : i === 1 ? 'bg-sky-500' : i === 2 ? 'bg-violet-500' : i === 3 ? 'bg-teal-500' : 'bg-emerald-500') : 'bg-gray-200'}`} aria-hidden />}
                 <span
-                  className={`relative z-10 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                    s.done ? 'bg-gray-900 text-white' : i === current ? 'border-2 border-gray-900 bg-white' : 'border-2 border-gray-200 bg-white'
+                  className={`relative z-10 w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm transition-colors ${
+                    s.done ? (i === 0 ? 'bg-emerald-500 text-white' : i === 1 ? 'bg-sky-500 text-white' : i === 2 ? 'bg-violet-500 text-white' : i === 3 ? 'bg-teal-500 text-white' : 'bg-emerald-600 text-white') : i === current ? (i === 0 ? 'border-2 border-emerald-500 bg-emerald-50' : i === 1 ? 'border-2 border-sky-500 bg-sky-50' : i === 2 ? 'border-2 border-violet-500 bg-violet-50' : i === 3 ? 'border-2 border-teal-500 bg-teal-50' : 'border-2 border-emerald-600 bg-emerald-50') : 'border-2 border-gray-200 bg-white'
                   }`}
                   aria-hidden
                 >
                   {s.done && <Check className="w-3.5 h-3.5" strokeWidth={3} />}
                 </span>
                 <div className="flex-1 -mt-0.5">
-                  <p className={`text-[13px] flex items-center gap-1 ${s.done || i === current ? 'font-semibold' : 'text-gray-400'}`}>
+                  <p className={`text-[13px] flex items-center gap-1 ${s.done || i === current ? 'font-semibold' : 'text-gray-400'} ${i === 0 ? 'text-emerald-700' : i === 1 ? 'text-sky-700' : i === 2 ? 'text-violet-700' : i === 3 ? 'text-teal-700' : 'text-emerald-800'}`}>
                     {s.label}
                     {i === current && <span className="sr-only">(current step)</span>}
                     <InfoButton title={s.label}><p>{s.info}</p></InfoButton>
