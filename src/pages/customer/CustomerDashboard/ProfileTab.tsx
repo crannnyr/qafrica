@@ -24,27 +24,32 @@ export default function ProfileTab() {
   useEffect(() => {
     if (!customer?.id) return;
     let active = true;
-    void supabase.from('profiles').select('full_name, phone, avatar_url, created_at').eq('id', customer.id).maybeSingle()
-      .then(({ data, error }) => {
-        if (!active || error || !data) return;
+    void (async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData.user?.id;
+      if (!active || !userId) return;
+      const { data, error } = await supabase.from('profiles').select('full_name, phone, avatar_url, created_at, email').eq('id', userId).maybeSingle();
+      if (!active || error || !data) return;
         const next = {
-          full_name: data.full_name || '',
-          phone: data.phone || '',
+          full_name: data.full_name || customer.full_name || '',
+          phone: data.phone || customer.phone || '',
           avatar_url: data.avatar_url || '',
           created_at: data.created_at || '',
         };
         setProfileInfo(next);
         setAvatarUrl(next.avatar_url);
         setFormData({ full_name: next.full_name, phone: next.phone });
-      });
+      })();
     return () => { active = false; };
-  }, [customer?.id]);
+  }, [customer?.id, customer?.full_name, customer?.phone]);
 
   const saveAvatarPreset = async (url: string) => {
     if (!customer) return;
     setUploadingAvatar(true);
     try {
-      const { error } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', customer.id);
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) throw authError || new Error('Please sign in again.');
+      const { error } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', authData.user.id);
       if (error) throw error;
       setAvatarUrl(url);
       setProfileInfo(p => ({ ...p, avatar_url: url }));
@@ -70,7 +75,9 @@ export default function ProfileTab() {
         .from('avatars').upload(filePath, file, { upsert: true });
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
-      const { error: profileUpdateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', customer.id);
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError || !authData.user) throw authError || new Error('Please sign in again.');
+      const { error: profileUpdateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', authData.user.id);
       if (profileUpdateError) throw profileUpdateError;
       setAvatarUrl(publicUrl);
       setProfileInfo(p => ({ ...p, avatar_url: publicUrl }));
@@ -84,7 +91,9 @@ export default function ProfileTab() {
 
   const handleSave = async () => {
     if (!customer) return;
-    const { error } = await supabase.from('profiles').update({ full_name: formData.full_name.trim(), phone: formData.phone.trim() }).eq('id', customer.id);
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) { toast.error('Please sign in again.'); return; }
+    const { error } = await supabase.from('profiles').update({ full_name: formData.full_name.trim(), phone: formData.phone.trim() }).eq('id', authData.user.id);
     if (error) { toast.error(error.message || 'Update failed'); return; }
     setProfileInfo(p => ({ ...p, full_name: formData.full_name.trim(), phone: formData.phone.trim() }));
     toast.success('Profile updated');
