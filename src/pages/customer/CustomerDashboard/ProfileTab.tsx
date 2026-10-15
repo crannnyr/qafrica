@@ -158,24 +158,24 @@ export default function ProfileTab() {
             <button type="button" aria-label="Close profile photo selector" className="absolute inset-0 h-full w-full cursor-default" onClick={() => setShowAvatarPresets(false)} />
             <div className="relative w-full max-w-2xl rounded-t-[28px] bg-white px-6 pt-6 pb-8 shadow-2xl" style={{ paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}>
               <div className="mb-6 flex items-center justify-between">
-                <h2 id="avatar-presets-title" className="text-xl font-extrabold text-gray-900">Profile Picture</h2>
+                <h2 id="avatar-presets-title" className="text-lg font-bold text-gray-900">Profile Picture</h2>
                 <button type="button" onClick={() => setShowAvatarPresets(false)} aria-label="Close photo options" className="rounded-full p-2 text-gray-500 hover:bg-gray-100"><X className="h-6 w-6" /></button>
               </div>
               <div className="mb-8 flex justify-center">
-                <div className="relative h-48 w-48 overflow-visible rounded-full border-8 border-white shadow-lg">
+                <div className="relative h-40 w-40 overflow-visible rounded-full border-4 border-white shadow-md">
                   <img src={avatarUrl || PRESET_AVATARS[0]} alt="Current profile photo" className="h-full w-full rounded-full object-cover" />
-                  <span className="absolute bottom-0 right-0 flex h-16 w-16 items-center justify-center rounded-full border-4 border-white bg-orange-500 text-white"><Camera className="h-7 w-7" /></span>
+                  <span className="absolute bottom-0 right-0 flex h-12 w-12 items-center justify-center rounded-full border-4 border-white bg-orange-500 text-white"><Camera className="h-5 w-5" /></span>
                 </div>
               </div>
-              <button type="button" disabled={uploadingAvatar} onClick={() => fileInputRef.current?.click()} className="mb-8 flex h-20 w-full items-center justify-center gap-3 rounded-2xl bg-orange-600 text-lg font-bold text-white hover:bg-orange-700 disabled:opacity-50">
+              <button type="button" disabled={uploadingAvatar} onClick={() => fileInputRef.current?.click()} className="mb-8 flex h-16 w-full items-center justify-center gap-3 rounded-2xl bg-orange-600 text-base font-semibold text-white hover:bg-orange-700 disabled:opacity-50">
                 <Camera className="h-7 w-7" /> {uploadingAvatar ? 'Saving photo…' : 'Upload a Photo'}
               </button>
-              <p className="mb-5 text-base font-semibold text-gray-500">Or choose one of these</p>
-              <div className="grid grid-cols-4 gap-4 sm:grid-cols-5">
+              <p className="mb-5 text-sm font-semibold text-gray-500">Or choose one of these</p>
+              <div className="grid grid-cols-5 gap-3">
                 {PRESET_AVATARS.map((url, index) => (
-                  <button key={url} type="button" disabled={uploadingAvatar} onClick={() => void saveAvatarPreset(url)} aria-label={`Choose preset photo ${index + 1}`} className={`relative mx-auto aspect-square w-full max-w-[112px] overflow-hidden rounded-full border-4 transition ${avatarUrl === url ? 'border-orange-500 ring-4 ring-orange-100' : 'border-gray-100 hover:border-orange-300'} disabled:opacity-60`}>
+                  <button key={url} type="button" disabled={uploadingAvatar} onClick={() => void saveAvatarPreset(url)} aria-label={`Choose preset photo ${index + 1}`} className={`relative mx-auto aspect-square w-full max-w-[112px] overflow-hidden rounded-full border-2 transition ${avatarUrl === url ? 'border-orange-500 ring-2 ring-orange-100' : 'border-gray-100 hover:border-orange-300'} disabled:opacity-60`}>
                     <img src={url} alt="" className="h-full w-full object-cover" />
-                    {avatarUrl === url && <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/20"><Check className="h-7 w-7 text-white" /></span>}
+                    {avatarUrl === url && <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/20"><Check className="h-5 w-5 text-white" /></span>}
                   </button>
                 ))}
               </div>
