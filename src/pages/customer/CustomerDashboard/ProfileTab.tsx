@@ -25,20 +25,20 @@ export default function ProfileTab() {
     if (!customer?.id) return;
     let active = true;
     void (async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const userId = authData.user?.id;
-      if (!active || !userId) return;
-      const { data, error } = await supabase.from('profiles').select('full_name, phone, avatar_url, created_at, email').eq('id', userId).maybeSingle();
-      if (!active || error || !data) return;
-        const next = {
-          full_name: data.full_name || customer.full_name || '',
-          phone: data.phone || customer.phone || '',
-          avatar_url: data.avatar_url || '',
-          created_at: data.created_at || '',
-        };
-        setProfileInfo(next);
-        setAvatarUrl(next.avatar_url);
-        setFormData({ full_name: next.full_name, phone: next.phone });
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      const user = authData.user;
+      if (!active || authError || !user) return;
+      const { data, error } = await supabase.from('profiles').select('full_name, phone, avatar_url, created_at, email').eq('id', user.id).maybeSingle();
+      if (!active || error) return;
+      const next = {
+        full_name: data?.full_name?.trim() || user.user_metadata?.full_name || customer.full_name || '',
+        phone: data?.phone?.trim() || user.user_metadata?.phone || customer.phone || '',
+        avatar_url: data?.avatar_url || customer.avatar_url || '',
+        created_at: data?.created_at || customer.created_at || '',
+      };
+      setProfileInfo(next);
+      setAvatarUrl(next.avatar_url);
+      setFormData({ full_name: next.full_name, phone: next.phone });
     })();
     return () => { active = false; };
   }, [customer?.id, customer?.full_name, customer?.phone]);
@@ -49,7 +49,14 @@ export default function ProfileTab() {
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData.user) throw authError || new Error('Please sign in again.');
-      const { error } = await supabase.from('profiles').update({ avatar_url: url }).eq('id', authData.user.id);
+      const user = authData.user;
+      const { error } = await supabase.from('profiles').upsert({
+        id: user.id,
+        email: user.email || customer.email,
+        full_name: profileInfo.full_name || user.user_metadata?.full_name || customer.full_name || '',
+        phone: profileInfo.phone || user.user_metadata?.phone || customer.phone || null,
+        avatar_url: url,
+      }, { onConflict: 'id' });
       if (error) throw error;
       setAvatarUrl(url);
       setProfileInfo(p => ({ ...p, avatar_url: url }));
@@ -77,7 +84,14 @@ export default function ProfileTab() {
       const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(filePath);
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError || !authData.user) throw authError || new Error('Please sign in again.');
-      const { error: profileUpdateError } = await supabase.from('profiles').update({ avatar_url: publicUrl }).eq('id', authData.user.id);
+      const user = authData.user;
+      const { error: profileUpdateError } = await supabase.from('profiles').upsert({
+        id: user.id,
+        email: user.email || customer.email,
+        full_name: profileInfo.full_name || user.user_metadata?.full_name || customer.full_name || '',
+        phone: profileInfo.phone || user.user_metadata?.phone || customer.phone || null,
+        avatar_url: publicUrl,
+      }, { onConflict: 'id' });
       if (profileUpdateError) throw profileUpdateError;
       setAvatarUrl(publicUrl);
       setProfileInfo(p => ({ ...p, avatar_url: publicUrl }));
@@ -93,7 +107,13 @@ export default function ProfileTab() {
     if (!customer) return;
     const { data: authData, error: authError } = await supabase.auth.getUser();
     if (authError || !authData.user) { toast.error('Please sign in again.'); return; }
-    const { error } = await supabase.from('profiles').update({ full_name: formData.full_name.trim(), phone: formData.phone.trim() }).eq('id', authData.user.id);
+    const { error } = await supabase.from('profiles').upsert({
+      id: authData.user.id,
+      email: authData.user.email || customer.email,
+      full_name: formData.full_name.trim(),
+      phone: formData.phone.trim() || null,
+      avatar_url: profileInfo.avatar_url || null,
+    }, { onConflict: 'id' });
     if (error) { toast.error(error.message || 'Update failed'); return; }
     setProfileInfo(p => ({ ...p, full_name: formData.full_name.trim(), phone: formData.phone.trim() }));
     toast.success('Profile updated');
