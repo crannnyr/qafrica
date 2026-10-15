@@ -22,13 +22,20 @@ export default function MePage() {
   useEffect(() => {
     if (!customer?.id) return;
     let active = true;
-    void supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', customer.id).maybeSingle()
-      .then(({ data, error }) => {
-        if (!active || error || !data) return;
-        setMarketplaceProfile(data);
+    void (async () => {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData.user;
+      if (!active || !user) return;
+      const { data, error } = await supabase.from('profiles').select('full_name, phone, avatar_url').eq('id', user.id).maybeSingle();
+      if (!active || error) return;
+      setMarketplaceProfile({
+        full_name: data?.full_name || user.user_metadata?.full_name || customer.full_name || null,
+        phone: data?.phone || user.user_metadata?.phone || customer.phone || null,
+        avatar_url: data?.avatar_url || null,
       });
+    })();
     return () => { active = false; };
-  }, [customer?.id]);
+  }, [customer?.id, customer?.full_name, customer?.phone]);
   if (!isAuthenticated || !customer) return <Navigate to={`/customer/login?return=${encodeURIComponent('/customer/dashboard')}`} replace />;
 
   const count = (b: string) => (orders ?? []).filter((o) => bucketOf(o) === b).length;
