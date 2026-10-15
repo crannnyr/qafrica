@@ -183,6 +183,12 @@ export default function UnifiedProductPage() {
       }
 
       setLoading(true);
+      setError(null);
+      setProduct(null);
+      setStore(null);
+      setRelatedProducts([]);
+      setSelectedVariants({});
+      setQuantity(1);
 
       const rpcName = sourceType === 'china_import' && sellerStoreId
         ? 'marketplace_unified_product'
@@ -224,6 +230,10 @@ export default function UnifiedProductPage() {
 
         if (active && storeData) setStore(storeData as StoreMeta);
       }
+
+      // The main product is ready; don't keep the whole page behind a spinner
+      // while secondary related-product queries run.
+      if (active) setLoading(false);
 
       const viewerSeed = typeof window !== 'undefined'
         ? window.localStorage.getItem('qafrica_unified_marketplace_seed') || ''
@@ -277,10 +287,7 @@ export default function UnifiedProductPage() {
         }
       }
 
-      if (active) {
-        setRelatedProducts(candidates.slice(0, 4));
-        setLoading(false);
-      }
+      if (active) setRelatedProducts(candidates.slice(0, 4));
     }
 
     void load();
