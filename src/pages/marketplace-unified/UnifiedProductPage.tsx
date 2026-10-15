@@ -145,6 +145,11 @@ export default function UnifiedProductPage() {
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [relatedProducts, setRelatedProducts] = useState<UnifiedMarketplaceProduct[]>([]);
   const addToastGuard = useRef(false);
+  const cartItems = useCartStore(s => s.items);
+  const storeCartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const importCart = useImportCartStore(s => s.cart);
+  const importCartCount = importCart.reduce((sum, item) => sum + item.quantity, 0);
+  const cartCount = storeCartCount + importCartCount;
   const addItem = useCartStore(s => s.addItem);
   const addToWishlist = useCartStore(s => s.addToWishlist);
   const removeFromWishlist = useCartStore(s => s.removeFromWishlist);
