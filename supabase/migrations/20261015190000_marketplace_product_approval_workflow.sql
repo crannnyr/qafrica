@@ -287,7 +287,6 @@ as $$
     and coalesce(s.is_active, false)
     and not coalesce(s.is_blocked, false)
     and coalesce(s.marketplace_enabled, false)
-    and cip.marketplace_approval_status = 'approved'
   limit 1;
 $$;
 
