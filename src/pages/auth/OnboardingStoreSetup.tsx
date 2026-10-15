@@ -8,7 +8,7 @@ import { useAuthStore } from '@/stores';
 import { storeService } from '@/services/store.service';
 import { supabase } from '@/services/supabase';
 import { toast } from 'sonner';
-import { sendStoreCreatedEmail } from '@/services/email';
+import { sendStoreCreatedEmail, sendDeliveryGuidanceEmail } from '@/services/email';
 import QbotGuide from '@/components/QbotGuide';
 
 import OnboardingProgress from './NicheSelection/OnboardingProgress';
@@ -164,6 +164,11 @@ export default function OnboardingStoreSetup() {
         store.name,
         store.slug,
       );
+      // Send delivery guidance separately so new sellers can configure their delivery coverage.
+      // Keep this non-blocking: an email failure must not interrupt store creation.
+      void sendDeliveryGuidanceEmail(user.email, user.full_name || 'there').catch((emailError) => {
+        console.error('[Email] Delivery guidance email failed:', emailError);
+      });
 
       toast.success('Store created! Now choose your plan.');
       navigate('/onboarding/choice');
