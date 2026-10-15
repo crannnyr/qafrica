@@ -56,6 +56,7 @@ export default function MePage() {
     { to: '/customer/profile', label: 'Account settings', icon: Settings },
   ];
   const displayName = marketplaceProfile?.full_name?.trim() || customer.full_name || '';
+  const displayEmail = customer.email || '';
   const displayPhone = marketplaceProfile?.phone?.trim() || '';
   const displayAvatar = marketplaceProfile?.avatar_url || customer.avatar_url || '';
   const initial = (displayName || customer.email || '?').charAt(0).toUpperCase();
@@ -68,7 +69,7 @@ export default function MePage() {
           <div className="flex-1 min-w-0">
             <p className="text-[16px] font-bold truncate">{displayName || 'My account'}</p>
             {displayPhone && <p className="text-[12px] text-gray-500 truncate">{displayPhone}</p>}
-            <p className="text-[12px] text-gray-500 truncate">{customer.email}</p>
+            <p className="text-[12px] text-gray-500 truncate">{displayEmail}</p>
           </div>
           <button type="button" onClick={async () => { await logout(); navigate('/stores'); }} aria-label="Sign out" className="p-2 rounded-full hover:bg-gray-100 text-gray-600">
             <LogOut className="w-5 h-5" />
