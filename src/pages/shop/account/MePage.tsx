@@ -135,7 +135,7 @@ export default function MePage() {
                 <p className="text-sm leading-relaxed text-gray-600">You will get your own store. After signing up, open the <strong className="text-gray-900">Marketplace</strong> section in the sidebar and complete the verification steps to activate your seller access.</p>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setShowSellerModal(false)} className="h-11 flex-1 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50">Maybe later</button>
-                  <a href="https://qafrica.store" className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-orange-500 px-3 text-sm font-bold text-white hover:bg-orange-600" onClick={() => setShowSellerModal(false)}>Route me, I'm ready</a>
+                  <a href="https://qafrica.store/signup" className="inline-flex h-11 flex-1 items-center justify-center rounded-xl bg-orange-500 px-3 text-sm font-bold text-white hover:bg-orange-600" onClick={() => setShowSellerModal(false)}>Route me, I'm ready</a>
                 </div>
               </div>
             </div>
