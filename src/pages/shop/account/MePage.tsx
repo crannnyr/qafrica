@@ -56,7 +56,6 @@ export default function MePage() {
     { to: '/customer/profile', label: 'Account settings', icon: Settings },
   ];
   const displayName = marketplaceProfile?.full_name?.trim() || customer.full_name || '';
-  const displayEmail = customer.email || '';
   const displayPhone = marketplaceProfile?.phone?.trim() || '';
   const displayAvatar = marketplaceProfile?.avatar_url || customer.avatar_url || '';
   const initial = (displayName || customer.email || '?').charAt(0).toUpperCase();
@@ -68,8 +67,7 @@ export default function MePage() {
           <span className="w-12 h-12 rounded-full overflow-hidden bg-gray-900 text-white text-[18px] font-bold flex items-center justify-center shrink-0" aria-hidden>{displayAvatar ? <img src={displayAvatar} alt="" className="h-full w-full object-cover" /> : initial}</span>
           <div className="flex-1 min-w-0">
             <p className="text-[16px] font-bold truncate">{displayName || 'My account'}</p>
-            {displayPhone && <p className="text-[12px] text-gray-500 truncate">{displayPhone}</p>}
-            <p className="text-[12px] text-gray-500 truncate">{displayEmail}</p>
+            {displayName ? (displayPhone && <p className="text-[12px] text-gray-500 truncate">{displayPhone}</p>) : <p className="text-[12px] text-gray-500 truncate">{customer.email || ''}</p>}
           </div>
           <button type="button" onClick={async () => { await logout(); navigate('/stores'); }} aria-label="Sign out" className="p-2 rounded-full hover:bg-gray-100 text-gray-600">
             <LogOut className="w-5 h-5" />
