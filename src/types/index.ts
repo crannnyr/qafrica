@@ -244,6 +244,7 @@ export interface Product {
     height: number;
   };
   is_active: boolean;
+  marketplace_approval_status?: 'pending' | 'approved' | 'rejected';
   is_importable: boolean;
   import_count: number;
   seo_title?: string;
