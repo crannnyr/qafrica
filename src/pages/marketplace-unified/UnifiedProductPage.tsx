@@ -224,7 +224,7 @@ export default function UnifiedProductPage() {
       setProduct(resolvedProduct);
       setCodeLoading(true);
       const codeTable = sourceType === 'china_import' ? 'china_import_products' : 'products';
-      const codeColumn = sourceType === 'china_import' ? 'china_import_barcode' : 'product_code';
+      const codeColumn = 'product_code';
       const { data: codeRow, error: codeError } = await supabase
         .from(codeTable)
         .select(codeColumn)
