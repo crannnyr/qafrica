@@ -1,5 +1,5 @@
 // /customer/dashboard  "Me": profile, order shortcuts, services, recommendations.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { Package, Truck, CheckCircle2, AlertTriangle, Search, Link2, HandHeart, Crown, Heart, MapPin, Headphones, ShieldCheck, LogOut, ChevronRight, Settings } from 'lucide-react';
 import { useCustomerAuthStore } from '@/stores';
@@ -129,10 +129,46 @@ export default function MePage() {
   );
 }
 
+const RECOMMENDATION_SHUFFLE_INTERVAL_MS = 30 * 60 * 1000;
+const RECOMMENDATION_SHUFFLE_STORAGE_KEY = 'qafrica:account-recommendations-shuffle:v1';
+
+type ShuffleSnapshot = { shuffledAt: number; ids: string[] };
+
+function shuffleProducts<T extends { id: string }>(items: T[]): T[] {
+  const shuffled = [...items];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+function readShuffleSnapshot(): ShuffleSnapshot | null {
+  try {
+    const raw = window.localStorage.getItem(RECOMMENDATION_SHUFFLE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ShuffleSnapshot;
+    return Number.isFinite(parsed.shuffledAt) && Array.isArray(parsed.ids) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveShuffleSnapshot(snapshot: ShuffleSnapshot) {
+  try {
+    window.localStorage.setItem(RECOMMENDATION_SHUFFLE_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Recommendations still work when browser storage is unavailable.
+  }
+}
+
 function Recommendations() {
   const feed = useMarketFeed({ tab: 'for_you', niche: null, category: null, search: null });
   const sentinel = useRef<HTMLDivElement>(null);
   const { loadMore } = feed;
+  const [shuffleSnapshot, setShuffleSnapshot] = useState<ShuffleSnapshot | null>(() => readShuffleSnapshot());
+  const [now, setNow] = useState(() => Date.now());
+
   useEffect(() => {
     const el = sentinel.current;
     if (!el) return;
@@ -140,11 +176,46 @@ function Recommendations() {
     io.observe(el);
     return () => io.disconnect();
   }, [loadMore]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!feed.items.length) return;
+    const current = readShuffleSnapshot();
+    const expired = !current || now - current.shuffledAt >= RECOMMENDATION_SHUFFLE_INTERVAL_MS;
+    if (expired) {
+      const next = { shuffledAt: now, ids: shuffleProducts(feed.items).map((item) => item.id) };
+      saveShuffleSnapshot(next);
+      setShuffleSnapshot(next);
+      return;
+    }
+
+    const availableIds = new Set(feed.items.map((item) => item.id));
+    const retainedIds = current.ids.filter((id) => availableIds.has(id));
+    const missingItems = feed.items.filter((item) => !retainedIds.includes(item.id)).map((item) => item.id);
+    if (missingItems.length) {
+      const next = { ...current, ids: [...retainedIds, ...missingItems] };
+      saveShuffleSnapshot(next);
+      setShuffleSnapshot(next);
+    } else if (!shuffleSnapshot || shuffleSnapshot.shuffledAt !== current.shuffledAt || shuffleSnapshot.ids.join('|') !== current.ids.join('|')) {
+      setShuffleSnapshot(current);
+    }
+  }, [feed.items, now, shuffleSnapshot]);
+
+  const orderedItems = useMemo(() => {
+    if (!shuffleSnapshot || !feed.items.length) return feed.items;
+    const rank = new Map(shuffleSnapshot.ids.map((id, index) => [id, index]));
+    return [...feed.items].sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+  }, [feed.items, shuffleSnapshot]);
+
   return (
     <section aria-labelledby="h-recs" className="pt-2">
       <h2 id="h-recs" className="px-4 pb-2 text-[14px] font-semibold text-center">You might like</h2>
       <ul className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 px-1.5">
-        {feed.items.map((p) => <li key={p.id}><ProductCard p={p} /></li>)}
+        {orderedItems.map((p) => <li key={p.id}><ProductCard p={p} /></li>)}
         {feed.status === 'loading' && Array.from({ length: 4 }).map((_, i) => <li key={`s${i}`}><ProductCardSkeleton /></li>)}
       </ul>
       <div ref={sentinel} className="h-1" aria-hidden />
