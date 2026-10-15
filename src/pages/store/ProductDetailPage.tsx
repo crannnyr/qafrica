@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -155,6 +155,7 @@ export default function ProductDetailPage() {
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const addToCartInFlight = useRef(false);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   // selectedVariantData is only used for Format B (legacy) products that have per-variant price/stock
   const [selectedVariantData, setSelectedVariantData] = useState<ProductVariant | null>(null);
@@ -374,7 +375,10 @@ export default function ProductDetailPage() {
   };
 
   const handleAddToCart = (variantOverride?: Record<string, string>, qtyOverride?: number): boolean => {
+    if (addToCartInFlight.current) return false;
     if (!product || !store) return false;
+    addToCartInFlight.current = true;
+    window.setTimeout(() => { addToCartInFlight.current = false; }, 800);
     const qty = qtyOverride ?? quantity;
     const variants = variantOverride ?? selectedVariants;
     const v = product.variants as any[] | undefined;
