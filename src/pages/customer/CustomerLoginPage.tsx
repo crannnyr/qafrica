@@ -69,7 +69,7 @@ export default function CustomerLoginPage() {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           {/* Logo */}
           <div className="text-center mb-8">
-            <img src="/qafrica-bag-logo.svg" alt="QAFRICA official logo" className="w-16 h-16 object-contain mx-auto mb-4" />
+            <img src="/qafrica-bag-logo.svg" alt="QAFRICA official logo" className="w-16 h-16 object-contain mx-auto mb-4 rounded-xl" />
             <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
             <p className="text-gray-500 mt-1">Sign in to your shopper account</p>
           </div>
