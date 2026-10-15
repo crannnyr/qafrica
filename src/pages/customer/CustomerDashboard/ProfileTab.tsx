@@ -181,7 +181,7 @@ export default function ProfileTab() {
               </div>
             </div>
           </div>
-        )}}
+        )}
       </div>
 
       {/* Info card */}
