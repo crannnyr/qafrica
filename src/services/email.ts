@@ -667,3 +667,47 @@ export const triggerPriceChangeEmails = async () => processEmailQueue();
 
 // Call after stock update
 export const triggerStockEmails = async () => processEmailQueue();
+
+// Dedicated delivery-setup guidance for sellers.
+// Link directly to the existing Delivery Zones page; does not change delivery settings.
+export const deliveryGuidanceEmailTemplate = (name: string, appUrl: string) => ({
+  subject: 'QAFRICA — Set up your store delivery states and fees',
+  body: `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Set up store delivery</title></head>
+<body style="margin:0;padding:0;background:#F9FAFB;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#F9FAFB;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;">
+        <tr><td align="center" style="padding-bottom:24px;">
+          <span style="display:inline-block;background:#F97316;border-radius:12px;padding:12px 18px;color:#fff;font-size:21px;font-weight:800;">QAFRICA</span>
+        </td></tr>
+        <tr><td style="background:#fff;border-radius:18px;padding:32px 28px;box-shadow:0 4px 24px rgba(0,0,0,.06);">
+          <h1 style="margin:0 0 12px;font-size:24px;line-height:1.3;color:#111827;">Hi ${name}, set up your delivery options 🚚</h1>
+          <p style="margin:0 0 22px;font-size:15px;line-height:1.7;color:#4B5563;">Make sure customers know where you deliver and what delivery costs before they place an order.</p>
+          <div style="padding:16px 18px;background:#FFF7ED;border-left:4px solid #F97316;border-radius:0 10px 10px 0;margin-bottom:22px;">
+            <p style="margin:0 0 10px;font-size:15px;font-weight:700;color:#111827;">What to do in your dashboard</p>
+            <ol style="margin:0;padding-left:20px;color:#374151;font-size:14px;line-height:1.8;">
+              <li>Open <strong>Dashboard → Store Setup → Delivery Zones</strong>.</li>
+              <li>Choose your available delivery method.</li>
+              <li>If you use manual delivery, add the states you serve and set the fee for each delivery zone.</li>
+              <li>Review your active zones and keep the fees up to date.</li>
+            </ol>
+          </div>
+          <p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#4B5563;">Only enable locations you can serve. Customers can only use delivery options available for their order.</p>
+          <table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="background:#F97316;border-radius:10px;">
+            <a href="${appUrl}/dashboard/delivery-zones" style="display:block;padding:14px 20px;color:#fff;font-size:15px;font-weight:700;text-decoration:none;">Open Delivery Settings →</a>
+          </td></tr></table>
+        </td></tr>
+        <tr><td align="center" style="padding-top:22px;font-size:12px;color:#9CA3AF;">QAFRICA · support@qafrica.store</td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`,
+});
+
+export const sendDeliveryGuidanceEmail = async (email: string, name: string) => {
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://qafrica.store';
+  const template = deliveryGuidanceEmailTemplate(name || 'there', appUrl);
+  return sendEmail({ to: email, subject: template.subject, html: template.body, emailType: 'delivery_guidance', priority: 5 });
+};
