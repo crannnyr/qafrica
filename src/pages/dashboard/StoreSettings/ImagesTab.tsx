@@ -13,6 +13,7 @@ export default function ImagesTab() {
     banner_url: currentStore?.banner_url || '',
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [bannerReviewMessage, setBannerReviewMessage] = useState('');
 
   useEffect(() => {
     if (!currentStore) return;
@@ -25,8 +26,15 @@ export default function ImagesTab() {
   const handleSave = async () => {
     if (!currentStore?.id) return;
     setIsLoading(true);
+    const bannerChanged = formData.banner_url !== (currentStore.banner_url || '');
     const result = await updateStore(currentStore.id, formData);
-    if (result.success) toast.success('Images saved');
+    if (result.success) {
+      if (bannerChanged) {
+        setBannerReviewMessage('Your banner has been submitted for admin review. Your current approved banner will remain visible until the new one is approved.');
+        setFormData(previous => ({ ...previous, banner_url: currentStore.banner_url || '' }));
+        toast.success('Images saved. Banner submitted for review.');
+      } else toast.success('Images saved');
+    }
     else toast.error(result.error || 'Failed to save');
     setIsLoading(false);
   };
@@ -61,7 +69,8 @@ export default function ImagesTab() {
             onChange={url => setFormData({ ...formData, banner_url: url as string })}
             placeholder="Upload Banner"
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Recommended: 1200×400px</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Recommended: 1200×400px. New banners appear after admin approval.</p>
+          {bannerReviewMessage && <p role="status" className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">{bannerReviewMessage}</p>}
         </div>
       </div>
 
