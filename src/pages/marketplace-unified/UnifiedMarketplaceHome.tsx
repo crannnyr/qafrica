@@ -7,6 +7,7 @@ import { marketplaceLink } from '@/lib/marketplaceAttribution';
 import { nicheLabel } from '@/pages/marketplace/useMarketplace';
 import { useMarketplaceStores } from '@/pages/customer/StoreDiscovery/useMarketplaceStores';
 import UnifiedProductCard from './UnifiedProductCard';
+import PlacementAds from './PlacementAds';
 import { useUnifiedMarketplaceMixed } from './useUnifiedMarketplaceMixed';
 import { useUnifiedMarketplaceCategories } from './useUnifiedMarketplaceCategories';
 import type { UnifiedFeedTab } from './types';
@@ -149,6 +150,7 @@ function UnifiedMarketplaceFeedPage() {
         ))}
       </div>
 
+      <PlacementAds niche={niche} category={category} search={query || null} />
       <UnifiedFeed feed={feed} filtered={!browsing} onClear={() => setParams(new URLSearchParams())} />
     </MarketplaceLayout>
   );
