@@ -211,7 +211,7 @@ export default function NotificationDropdown({
             className="fixed inset-0 z-40 cursor-default"
             onClick={onToggle}
           />
-          <div className="fixed left-2 right-2 top-[5.5rem] w-auto sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[min(24rem,calc(100vw-2rem))] bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+          <div className="fixed left-2 right-2 top-[4.5rem] w-auto sm:absolute sm:left-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[min(24rem,calc(100vw-2rem))] bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-3">
               <div>
                 <h3 className="font-semibold text-gray-900 dark:text-white">Notifications</h3>
