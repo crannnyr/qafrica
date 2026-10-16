@@ -1222,6 +1222,116 @@ async function domainStatus(req: Request) {
   return json({ ok: true, reference, status, paid: p?.payment_status === 'paid', request_status: p?.status })
 }
 
+
+async function adCampaignStart(req: Request) {
+  const userId = await callerId(req)
+  if (!userId) return json({ ok: false, message: 'Please sign in again.' }, 401)
+  if (!FLW_ID || !FLW_SECRET) return json({ ok: false, message: 'Payments are not set up yet. Contact support.' }, 500)
+  let body: Record<string, unknown> = {}
+  try { body = await req.json() } catch { /* empty */ }
+  const campaignId = String(body.campaign_id ?? '')
+  if (!campaignId) return json({ ok: false, message: 'Choose a campaign to pay for.' }, 400)
+
+  const { data: campaign } = await admin.from('ad_campaigns')
+    .select('id,store_id,campaign_name,budget,approval_status,payment_status')
+    .eq('id', campaignId).maybeSingle()
+  if (!campaign) return json({ ok: false, message: 'Campaign not found.' }, 404)
+  const { data: store } = await admin.from('stores').select('id,owner_id,name').eq('id', campaign.store_id).maybeSingle()
+  if (!store || store.owner_id !== userId) return json({ ok: false, message: 'This campaign is not on your store.' }, 403)
+  if (campaign.approval_status !== 'approved') return json({ ok: false, message: 'Your campaign must be approved before payment.' }, 409)
+  if (campaign.payment_status === 'paid') return json({ ok: false, message: 'This campaign budget has already been paid.' }, 409)
+  const amount = Number(campaign.budget)
+  if (!Number.isFinite(amount) || amount <= 0) return json({ ok: false, message: 'The campaign budget is invalid.' }, 400)
+
+  const { data: recent } = await admin.from('ad_campaign_payments').select('*')
+    .eq('campaign_id', campaignId).eq('user_id', userId).eq('status', 'pending')
+    .gt('payment_expires_at', new Date(Date.now() + 60 * 1000).toISOString())
+    .order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (recent?.payment_account) {
+    const account = toAccount(recent.payment_account as Record<string, unknown>, Number(recent.amount))
+    if (account) return json({ ok: true, reference: recent.reference, amount: Number(recent.amount), account, reused: true })
+  }
+
+  const reference = `QAD${Date.now().toString(36)}${randomId(10)}`.toUpperCase()
+  const { data: payment, error: insertError } = await admin.from('ad_campaign_payments').insert({
+    campaign_id: campaignId, store_id: store.id, user_id: userId, amount, currency: 'NGN',
+    provider: 'flutterwave', reference, status: 'pending',
+  }).select('id').single()
+  if (insertError || !payment) {
+    console.error('[flutterwave] ad payment insert failed', insertError?.message)
+    return json({ ok: false, message: 'Could not start campaign payment. Please try again.' }, 500)
+  }
+  await admin.from('ad_campaigns').update({ payment_status: 'pending' }).eq('id', campaignId).neq('payment_status', 'paid')
+
+  try {
+    const { data: profile } = await admin.from('profiles').select('full_name,email').eq('id', userId).maybeSingle()
+    const { data: authUser } = await admin.auth.admin.getUserById(userId)
+    const email = authUser?.user?.email ?? profile?.email
+    if (!email) throw new Error('Add an email address to your account first.')
+    const parts = String(profile?.full_name || store.name || 'QAFRICA Seller').trim().split(/\s+/)
+    const cus = await customerId(email, (parts[0] || 'QAFRICA').slice(0, 50), (parts.slice(1).join(' ') || 'Seller').slice(0, 50), userId)
+    const r = await flw('POST', '/virtual-accounts', {
+      reference, customer_id: cus, amount, currency: 'NGN', account_type: 'dynamic',
+      expiry: ACCOUNT_MINUTES * 60, narration: 'QAFRICA AD CAMPAIGN',
+    }, reference)
+    const va = r.data?.data as Record<string, unknown> | undefined
+    const account = toAccount(va ?? null, amount)
+    if (!r.ok || !account) throw new Error(flwError(r.data))
+    await admin.from('ad_campaign_payments').update({
+      payment_account: va,
+      payment_expires_at: account.expires_at ?? new Date(Date.now() + ACCOUNT_MINUTES * 60 * 1000).toISOString(),
+      metadata: { provider_customer_id: cus },
+    }).eq('id', payment.id)
+    return json({ ok: true, reference, amount, account })
+  } catch (e) {
+    const message = (e as Error).message || 'Payment could not start.'
+    await admin.from('ad_campaign_payments').update({ status: 'failed', metadata: { error: message } }).eq('id', payment.id)
+    await admin.from('ad_campaigns').update({ payment_status: 'failed' }).eq('id', campaignId).neq('payment_status', 'paid')
+    return json({ ok: false, message: `Payment could not start: ${message}` }, 502)
+  }
+}
+
+async function adCampaignStatus(req: Request) {
+  const userId = await callerId(req)
+  if (!userId) return json({ ok: false, message: 'Please sign in again.' }, 401)
+  let body: Record<string, unknown> = {}
+  try { body = await req.json() } catch { /* empty */ }
+  const reference = String(body.reference ?? '')
+  if (!reference) return json({ ok: false, message: 'Payment reference is missing.' }, 400)
+  const { data: row } = await admin.from('ad_campaign_payments').select('*').eq('reference', reference).maybeSingle()
+  if (!row || row.user_id !== userId) return json({ ok: false, message: 'Payment not found.' }, 404)
+
+  if (['pending', 'failed'].includes(row.status)) {
+    const charge = row.provider_charge_id
+      ? await chargeById(row.provider_charge_id)
+      : (await chargesByReference(row.reference)).find(succeeded) ?? null
+    if (charge && succeeded(charge)) {
+      const paid = Number(charge.amount ?? 0)
+      const currency = String(charge.currency ?? 'NGN').toUpperCase()
+      if (currency !== 'NGN' || paid + 0.5 < Number(row.amount)) {
+        await admin.from('ad_campaign_payments').update({
+          status: 'review', provider_charge_id: String(charge.id ?? ''), paid_amount: paid,
+          metadata: { charge, issue: `Paid ${paid} ${currency}, campaign costs ${row.amount} NGN` },
+        }).eq('id', row.id).in('status', ['pending', 'failed'])
+        await admin.from('ad_campaigns').update({ payment_status: 'review' }).eq('id', row.campaign_id).neq('payment_status', 'paid')
+      } else {
+        const { data: claimed } = await admin.from('ad_campaign_payments').update({
+          status: 'paid', paid_amount: paid, paid_at: now(),
+          provider_charge_id: String(charge.id ?? ''), metadata: { charge },
+        }).eq('id', row.id).in('status', ['pending', 'failed']).select('id').maybeSingle()
+        if (claimed) {
+          await admin.from('ad_campaigns').update({ payment_status: 'paid', paid_at: now() })
+            .eq('id', row.campaign_id).eq('approval_status', 'approved')
+        }
+      }
+    }
+  }
+  const { data: latest } = await admin.from('ad_campaign_payments').select('status,payment_expires_at').eq('id', row.id).single()
+  const expired = latest?.status === 'pending' && latest.payment_expires_at && Date.parse(latest.payment_expires_at) < Date.now()
+  const status = latest?.status === 'paid' ? 'paid' : latest?.status === 'review' ? 'review' : expired ? 'expired' : latest?.status
+  return json({ ok: true, reference, status, paid: latest?.status === 'paid' })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -1237,6 +1347,8 @@ Deno.serve(async (req) => {
     if (action === 'status') return await status(req)
     if (action === 'theme-start') return await themeStart(req)
     if (action === 'theme-status') return await themeStatus(req)
+    if (action === 'ad-start') return await adCampaignStart(req)
+    if (action === 'ad-status') return await adCampaignStatus(req)
     if (action === 'domain-start') return await domainStart(req)
     if (action === 'domain-status') return await domainStatus(req)
     if (action === 'webhook') return await webhook(req)
