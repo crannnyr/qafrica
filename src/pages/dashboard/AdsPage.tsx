@@ -68,7 +68,7 @@ export default function AdsPage() {
       <div>
         <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-100 text-orange-600"><Megaphone className="h-5 w-5" /></div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ads</h1>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">Submit QAFRICA Banner Ads or Placement Ads for review. Placement Ads use one flat CPC rate across categories; Banner Ads are not charged per click.</p>
+        <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">Submit QAFRICA Banner Ads or Placement Ads for review. Placement Ads and Banner Ads each use a separately configured CPC rate. Clicks are billed only after admin approval and while the campaign is active.</p>
       </div>
 
       <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -81,11 +81,11 @@ export default function AdsPage() {
           {type==='placement' ? <>
             <label className="block text-sm font-medium">Marketplace product<select value={productId} onChange={e=>{setProductId(e.target.value);const p=products.find(x=>x.id===e.target.value);setCategory(p?.category||'');}} required className="mt-1 w-full rounded-lg border px-3 py-2"><option value="">Choose approved product</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
             <label className="block text-sm font-medium">Category targeting (optional)<input value={category} onChange={e=>setCategory(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="Default: product category"/></label>
-            <div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">The configured flat CPC rate will be charged only for eligible Placement Ad clicks. Your campaign stops serving when its budget is exhausted.</div>
+            <div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">The configured Placement Ads CPC rate is charged for eligible clicks. Your campaign stops serving when its budget is exhausted.</div>
           </> : <>
             <label className="block text-sm font-medium md:col-span-2">Public banner image URL<input type="url" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} required className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="https://…"/></label>
             <label className="block text-sm font-medium md:col-span-2">Destination URL (optional)<input type="url" value={targetUrl} onChange={e=>setTargetUrl(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="https://your-store-or-product…"/></label>
-            {imageUrl && <img src={imageUrl} alt="Banner preview" className="md:col-span-2 max-h-48 w-full rounded-lg bg-gray-100 object-contain"/>}
+            {imageUrl && <img src={imageUrl} alt="Banner preview" className="md:col-span-2 max-h-48 w-full rounded-lg bg-gray-100 object-contain"/>}<div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">The configured Banner Ads CPC rate is charged for eligible clicks on your approved banner. Your campaign stops serving when its budget is exhausted.</div>
           </>}
           <div className="md:col-span-2"><button type="submit" disabled={saving || !currentStore?.id} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving?<Loader2 className="h-4 w-4 animate-spin"/>:<Plus className="h-4 w-4"/>}Submit for approval</button></div>
         </form>
