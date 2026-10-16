@@ -4,7 +4,7 @@ import { supabase } from '@/services/supabase';
 import { toast } from 'sonner';
 
 type BannerSubmission = { id: string; name: string; slug: string; banner_url: string | null; pending_banner_url: string | null; banner_submitted_at: string | null; banner_rejection_reason: string | null };
-type Campaign = { id: string; campaign_name: string; campaign_type: 'banner' | 'placement'; store_id: string; product_id: string | null; image_url: string | null; target_url: string | null; budget: number; spent: number; clicks: number; status: string; approval_status: string; start_date: string; end_date: string | null };
+type Campaign = { id: string; campaign_name: string; campaign_type: 'banner' | 'placement'; store_id: string; product_id: string | null; image_url: string | null; target_url: string | null; budget: number; spent: number; clicks: number; status: string; approval_status: string; payment_status: string; start_date: string; end_date: string | null };
 const money = (value: number) => '₦' + Number(value || 0).toLocaleString('en-NG', { maximumFractionDigits: 2 });
 
 export default function AdminBannerAds() {
@@ -20,7 +20,7 @@ export default function AdminBannerAds() {
     setLoading(true);
     const [bannerResult, campaignResult, rateResult] = await Promise.all([
       supabase.from('stores').select('id,name,slug,banner_url,pending_banner_url,banner_submitted_at,banner_rejection_reason').not('pending_banner_url', 'is', null).order('banner_submitted_at', { ascending: true }),
-      supabase.from('ad_campaigns').select('id,campaign_name,campaign_type,store_id,product_id,image_url,target_url,budget,spent,clicks,status,approval_status,start_date,end_date').order('created_at', { ascending: false }),
+      supabase.from('ad_campaigns').select('id,campaign_name,campaign_type,store_id,product_id,image_url,target_url,budget,spent,clicks,status,approval_status,payment_status,start_date,end_date').order('created_at', { ascending: false }),
       supabase.from('placement_ad_settings').select('flat_cpc_ngn,banner_cpc_ngn').eq('id', true).maybeSingle(),
     ]);
     if (bannerResult.error) toast.error('Could not load pending banners: ' + bannerResult.error.message);
@@ -47,7 +47,7 @@ export default function AdminBannerAds() {
 
   const reviewCampaign = async (campaign: Campaign, decision: 'approved' | 'rejected') => {
     setBusy(campaign.id);
-    const { error } = await supabase.from('ad_campaigns').update({ approval_status: decision, reviewed_at: new Date().toISOString(), reviewed_by: (await supabase.auth.getUser()).data.user?.id ?? null }).eq('id', campaign.id);
+    const { error } = await supabase.rpc('admin_review_ad_campaign', { p_campaign_id: campaign.id, p_decision: decision });
     if (error) toast.error(error.message);
     else { toast.success('Campaign ' + decision); await load(); }
     setBusy(null);
