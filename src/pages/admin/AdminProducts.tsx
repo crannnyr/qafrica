@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Package, Search, Store, Eye, Trash2, CheckCircle2, XCircle, Clock, RefreshCw } from 'lucide-react';
-import { productService } from '@/services';
+import { productService, supabase } from '@/services';
 import { toast } from 'sonner';
 
 export default function AdminProducts() {
@@ -18,8 +18,18 @@ export default function AdminProducts() {
   const loadProducts = async () => {
     setLoading(true);
     const { data, error } = await productService.getAllProducts();
-    if (error) toast.error('Could not load products: ' + error.message);
-    else setProducts(data ?? []);
+    if (error) {
+      toast.error('Could not load products: ' + error.message);
+    } else {
+      const rows = data ?? [];
+      const storeIds = [...new Set(rows.map((p: any) => p.store_id).filter(Boolean))];
+      const { data: stores, error: storesError } = storeIds.length
+        ? await supabase.from('stores').select('id,name').in('id', storeIds)
+        : { data: [], error: null };
+      if (storesError) toast.error('Could not load store names: ' + storesError.message);
+      const storeNames = new Map((stores ?? []).map((store: any) => [store.id, store.name]));
+      setProducts(rows.map((p: any) => ({ ...p, store_name: storeNames.get(p.store_id) || 'Unknown store' })));
+    }
     setLoading(false);
   };
 
@@ -72,17 +82,16 @@ export default function AdminProducts() {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product title</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Store</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Price</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stock</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marketplace status</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Review</th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {!loading && filteredProducts.length === 0 && <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">{searchQuery ? 'No products match your search.' : 'No products in this review category.'}</td></tr>}
+              {!loading && filteredProducts.length === 0 && <tr><td colSpan={6} className="px-6 py-12 text-center text-sm text-gray-500">{searchQuery ? 'No products match your search.' : 'No products in this review category.'}</td></tr>}
               {loading && <tr><td colSpan={7} className="px-6 py-12 text-center text-sm text-gray-500">Loading products…</td></tr>}
               {filteredProducts.map((product) => (
                 <tr key={product.id} className="hover:bg-gray-50">
@@ -91,13 +100,13 @@ export default function AdminProducts() {
                       <button type="button" onClick={() => setSelectedProduct(product)} className="w-14 h-14 shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center" aria-label="View product images">
                         {productImages(product)[0] ? <img src={productImages(product)[0]} alt={product.name} loading="lazy" className="h-full w-full object-cover" /> : <Package className="w-5 h-5 text-gray-400" />}
                       </button>
-                      <div className="min-w-0"><button type="button" onClick={() => setSelectedProduct(product)} className="text-left font-semibold text-gray-900 hover:text-orange-600">{product.name}</button><p className="mt-1 text-xs text-gray-400">{productImages(product).length} image(s) · ID {String(product.id).slice(0,8)}</p></div>
+                      <div className="min-w-0 max-w-[260px]"><button type="button" onClick={() => setSelectedProduct(product)} title={product.name} className="line-clamp-2 max-h-10 overflow-hidden text-left font-semibold leading-5 text-gray-900 hover:text-orange-600">{product.name}</button><p className="mt-1 text-xs text-gray-400">{productImages(product).length} image(s) · ID {String(product.id).slice(0,8)}</p></div>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">
                     <div className="flex items-center gap-2">
                       <Store className="w-4 h-4" />
-                      {product.store_id?.slice(0, 8)}...
+                      <span className="line-clamp-2 max-w-[180px] break-words leading-5" title={product.store_name}>{product.store_name}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">
@@ -105,8 +114,7 @@ export default function AdminProducts() {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">{product.stock_quantity}</td>
                   <td className="px-6 py-4"><span className={'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold capitalize ' + ((product.marketplace_approval_status ?? 'approved') === 'approved' ? 'bg-emerald-100 text-emerald-700' : (product.marketplace_approval_status ?? 'approved') === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800')}>{(product.marketplace_approval_status ?? 'approved') === 'pending' ? <Clock className="w-3 h-3"/> : (product.marketplace_approval_status ?? 'approved') === 'approved' ? <CheckCircle2 className="w-3 h-3"/> : <XCircle className="w-3 h-3"/>}{product.marketplace_approval_status ?? 'approved'}</span></td>
-                  <td className="px-6 py-4 text-right"><div className="inline-flex gap-1"><button disabled={busyId === product.id} onClick={() => void reviewProduct(product.id, 'approved')} className="px-2.5 py-1.5 rounded-md bg-emerald-600 text-white text-xs font-bold disabled:opacity-50">Approve</button><button disabled={busyId === product.id} onClick={() => void reviewProduct(product.id, 'rejected')} className="px-2.5 py-1.5 rounded-md bg-red-600 text-white text-xs font-bold disabled:opacity-50">Reject</button>{(product.marketplace_approval_status ?? 'approved') !== 'pending' && <button disabled={busyId === product.id} onClick={() => void reviewProduct(product.id, 'pending')} className="px-2.5 py-1.5 rounded-md border text-xs font-bold disabled:opacity-50">Reset</button>}</div></td>
-                  <td className="px-6 py-4 text-right">
+                                    <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button onClick={() => setSelectedProduct(product)} aria-label="View product details" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Eye className="w-5 h-5" /></button>
                       <button
