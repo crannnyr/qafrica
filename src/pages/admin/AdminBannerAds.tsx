@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Check, X, RefreshCw, Megaphone, Image as ImageIcon, Save, Loader2 } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { toast } from 'sonner';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type BannerSubmission = { id: string; name: string; slug: string; banner_url: string | null; pending_banner_url: string | null; banner_submitted_at: string | null; banner_rejection_reason: string | null };
 type Campaign = { id: string; campaign_name: string; campaign_type: 'banner' | 'placement'; store_id: string; product_id: string | null; image_url: string | null; target_url: string | null; budget: number; spent: number; clicks: number; status: string; approval_status: string; payment_status: string; start_date: string; end_date: string | null };
@@ -15,6 +16,8 @@ export default function AdminBannerAds() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [savingRate, setSavingRate] = useState(false);
+  const [rateDialog, setRateDialog] = useState<'placement' | 'banner' | null>(null);
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,16 +84,19 @@ export default function AdminBannerAds() {
       <button onClick={() => void load()} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><RefreshCw className="h-4 w-4"/>Refresh</button>
     </header>
 
-    <section className="rounded-xl border bg-white p-5 space-y-4">
-      <div className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-orange-600"/><h2 className="text-lg font-bold">Placement Ads CPC</h2></div>
-      <p className="text-sm text-gray-500">One flat rate across every category. Billing remains disabled until you configure a rate.</p>
-      <div className="flex flex-wrap items-end gap-3"><label className="block"><span className="mb-1 block text-sm font-medium">Cost per click (NGN)</span><input type="number" min="0.01" step="0.01" value={cpc} onChange={e => setCpc(e.target.value)} placeholder="Enter flat CPC" className="w-56 rounded-lg border px-3 py-2"/></label><button onClick={() => void saveRate()} disabled={savingRate} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingRate ? <Loader2 className="h-4 w-4 animate-spin"/> : <Save className="h-4 w-4"/>}Save CPC</button></div>
-    </section>
-
-    <section className="rounded-xl border bg-white p-5 space-y-4">
-      <div className="flex items-center gap-2"><ImageIcon className="h-5 w-5 text-orange-600"/><h2 className="text-lg font-bold">Banner Ads CPC</h2></div>
-      <p className="text-sm text-gray-500">This rate is charged for eligible clicks on approved, active homepage banner campaigns. It is separate from Placement Ads CPC. Billing remains disabled until you configure a rate.</p>
-      <div className="flex flex-wrap items-end gap-3"><label className="block"><span className="mb-1 block text-sm font-medium">Cost per click (NGN)</span><input type="number" min="0.01" step="0.01" value={bannerCpc} onChange={e => setBannerCpc(e.target.value)} placeholder="Enter banner CPC" className="w-56 rounded-lg border px-3 py-2"/></label><button onClick={() => void saveBannerRate()} disabled={savingRate} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingRate ? <Loader2 className="h-4 w-4 animate-spin"/> : <Save className="h-4 w-4"/>}Save Banner CPC</button></div>
+    <section className="grid gap-3 sm:grid-cols-2">
+      <button type="button" onClick={() => setRateDialog('placement')} className="rounded-xl border bg-white p-5 text-left transition hover:border-orange-300 hover:shadow-sm">
+        <div className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-orange-600"/><h2 className="font-bold">Placement Ads CPC</h2></div>
+        <p className="mt-2 text-sm text-gray-500">Configure the click rate for sponsored product placements.</p>
+        <p className="mt-3 text-sm font-semibold">{cpc ? money(Number(cpc)) + ' per click' : 'Not configured'}</p>
+        <span className="mt-3 inline-flex rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white">Configure rate</span>
+      </button>
+      <button type="button" onClick={() => setRateDialog('banner')} className="rounded-xl border bg-white p-5 text-left transition hover:border-orange-300 hover:shadow-sm">
+        <div className="flex items-center gap-2"><ImageIcon className="h-5 w-5 text-orange-600"/><h2 className="font-bold">Banner Ads CPC</h2></div>
+        <p className="mt-2 text-sm text-gray-500">Configure the click rate for approved homepage banner campaigns.</p>
+        <p className="mt-3 text-sm font-semibold">{bannerCpc ? money(Number(bannerCpc)) + ' per click' : 'Not configured'}</p>
+        <span className="mt-3 inline-flex rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white">Configure rate</span>
+      </button>
     </section>
 
     <section className="space-y-3">
@@ -103,7 +109,35 @@ export default function AdminBannerAds() {
 
     <section className="space-y-3">
       <div className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-orange-600"/><h2 className="text-lg font-bold">Ad campaigns</h2></div>
-      {loading ? <p className="text-sm text-gray-500">Loading…</p> : campaigns.length === 0 ? <div className="rounded-xl border bg-white p-5 text-sm text-gray-500">No ad campaigns have been submitted yet.</div> : <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full text-sm"><thead className="bg-gray-50 text-left text-xs uppercase text-gray-500"><tr><th className="p-3">Campaign</th><th className="p-3">Type</th><th className="p-3">Where it appears</th><th className="p-3">Budget / spent</th><th className="p-3">Clicks</th><th className="p-3">Approval</th><th className="p-3">Payment</th><th className="p-3">Review</th></tr></thead><tbody className="divide-y">{campaigns.map(c => <tr key={c.id}><td className="p-3"><div className="font-semibold">{c.campaign_name}</div><div className="text-xs text-gray-500">{c.store_id.slice(0,8)}…</div></td><td className="p-3 capitalize">{c.campaign_type}</td><td className="p-3 text-xs text-gray-600">{c.campaign_type === 'banner' ? 'Homepage banner carousel' : 'Sponsored product slots near marketplace results'}</td><td className="p-3">{money(c.budget)} / {money(c.spent)}</td><td className="p-3">{c.clicks ?? 0}</td><td className="p-3 capitalize">{c.approval_status}</td><td className="p-3 capitalize">{c.payment_status || 'unpaid'}</td><td className="p-3"><div className="flex gap-1"><button disabled={busy===c.id || c.approval_status==='approved'} onClick={() => void reviewCampaign(c,'approved')} className="rounded bg-emerald-600 px-2 py-1 text-xs font-bold text-white disabled:opacity-40">Approve</button><button disabled={busy===c.id || c.approval_status==='rejected'} onClick={() => void reviewCampaign(c,'rejected')} className="rounded bg-red-600 px-2 py-1 text-xs font-bold text-white disabled:opacity-40">Reject</button></div></td></tr>)}</tbody></table></div>}
+      {loading ? <p className="text-sm text-gray-500">Loading…</p> : campaigns.length === 0 ? <div className="rounded-xl border bg-white p-5 text-sm text-gray-500">No ad campaigns have been submitted yet.</div> : <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full text-sm"><thead className="bg-gray-50 text-left text-xs uppercase text-gray-500"><tr><th className="p-3">Campaign</th><th className="p-3">Type</th><th className="p-3">Where it appears</th><th className="p-3">Budget / spent</th><th className="p-3">Clicks</th><th className="p-3">Approval</th><th className="p-3">Payment</th><th className="p-3">Review</th></tr></thead><tbody className="divide-y">{campaigns.map(c => <tr key={c.id}><td className="p-3"><button type="button" onClick={() => setSelectedCampaign(c)} className="block max-w-[12rem] text-left font-semibold leading-snug hover:text-orange-700"><span className="line-clamp-2 break-words">{c.campaign_name}</span></button><div className="mt-1 text-xs text-gray-500">{c.store_id.slice(0,8)}…</div></td><td className="p-3 capitalize">{c.campaign_type}</td><td className="p-3 text-xs text-gray-600">{c.campaign_type === 'banner' ? 'Homepage banner carousel' : 'Sponsored product slots near marketplace results'}</td><td className="p-3">{money(c.budget)} / {money(c.spent)}</td><td className="p-3">{c.clicks ?? 0}</td><td className="p-3"><span className={'inline-flex rounded-full px-2.5 py-1 text-xs font-bold capitalize '+(c.approval_status==='approved'?'bg-emerald-100 text-emerald-800':c.approval_status==='rejected'?'bg-red-100 text-red-800':'bg-amber-100 text-amber-800')}>{c.approval_status}</span></td><td className="p-3"><span className={'inline-flex rounded-full px-2.5 py-1 text-xs font-bold capitalize '+(c.payment_status==='paid'?'bg-emerald-100 text-emerald-800':c.payment_status==='review'||c.payment_status==='failed'?'bg-red-100 text-red-800':c.payment_status==='pending'?'bg-blue-100 text-blue-800':'bg-gray-100 text-gray-700')}>{c.payment_status || 'unpaid'}</span></td><td className="p-3">{c.approval_status==='pending' ? <div className="flex flex-wrap gap-1"><button disabled={busy===c.id} onClick={() => void reviewCampaign(c,'approved')} className="rounded bg-emerald-600 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-50">{busy===c.id ? 'Saving…' : 'Approve'}</button><button disabled={busy===c.id} onClick={() => void reviewCampaign(c,'rejected')} className="rounded bg-red-600 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-50">Reject</button></div> : <span className={'text-xs font-semibold '+(c.approval_status==='approved'?'text-emerald-700':'text-red-700')}>{c.approval_status==='approved'?'Decision: Approved':'Decision: Rejected'}</span>}</td></tr>)}</tbody></table></div>}
     </section>
+    <Dialog open={rateDialog !== null} onOpenChange={(open) => { if (!open) setRateDialog(null); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{rateDialog === 'placement' ? 'Placement Ads CPC' : 'Banner Ads CPC'}</DialogTitle>
+          <DialogDescription>{rateDialog === 'placement' ? 'Set one cost-per-click rate for sponsored product placements.' : 'Set the cost per eligible click on approved, active homepage banner campaigns.'} Billing stays disabled until a valid rate is saved.</DialogDescription>
+        </DialogHeader>
+        {rateDialog === 'placement' ? <div className="space-y-3"><label className="block text-sm font-medium">Cost per click (NGN)<input type="number" min="0.01" step="0.01" value={cpc} onChange={e => setCpc(e.target.value)} placeholder="Enter flat CPC" className="mt-1 w-full rounded-lg border px-3 py-2"/></label><button onClick={async () => { await saveRate(); }} disabled={savingRate} className="rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingRate ? 'Saving…' : 'Save Placement CPC'}</button></div> : <div className="space-y-3"><label className="block text-sm font-medium">Cost per click (NGN)<input type="number" min="0.01" step="0.01" value={bannerCpc} onChange={e => setBannerCpc(e.target.value)} placeholder="Enter banner CPC" className="mt-1 w-full rounded-lg border px-3 py-2"/></label><button onClick={async () => { await saveBannerRate(); }} disabled={savingRate} className="rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingRate ? 'Saving…' : 'Save Banner CPC'}</button></div>}
+      </DialogContent>
+    </Dialog>
+    <Dialog open={selectedCampaign !== null} onOpenChange={(open) => { if (!open) setSelectedCampaign(null); }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader><DialogTitle className="break-words">{selectedCampaign?.campaign_name}</DialogTitle><DialogDescription>Submitted campaign details for admin review.</DialogDescription></DialogHeader>
+        {selectedCampaign && <div className="space-y-4 text-sm">
+          {selectedCampaign.image_url && <img src={selectedCampaign.image_url} alt={selectedCampaign.campaign_name} className="max-h-56 w-full rounded-lg border bg-gray-50 object-contain"/>}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">Campaign type</p><p className="mt-1 font-semibold capitalize">{selectedCampaign.campaign_type}</p></div>
+            <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">Budget</p><p className="mt-1 font-semibold">{money(selectedCampaign.budget)}</p></div>
+            <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">Spent</p><p className="mt-1 font-semibold">{money(selectedCampaign.spent)}</p></div>
+            <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">Clicks</p><p className="mt-1 font-semibold">{selectedCampaign.clicks ?? 0}</p></div>
+          </div>
+          <div><p className="text-xs text-gray-500">Store ID</p><p className="break-all font-medium">{selectedCampaign.store_id}</p></div>
+          <div><p className="text-xs text-gray-500">Product ID</p><p className="break-all font-medium">{selectedCampaign.product_id || 'Not linked to a product'}</p></div>
+          <div><p className="text-xs text-gray-500">Destination URL</p>{selectedCampaign.target_url ? <a className="break-all font-medium text-orange-700 underline" href={selectedCampaign.target_url} target="_blank" rel="noreferrer">{selectedCampaign.target_url}</a> : <p>Not provided</p>}</div>
+          <div className="flex flex-wrap gap-2"><span className={'rounded-full px-2.5 py-1 text-xs font-bold capitalize '+(selectedCampaign.approval_status==='approved'?'bg-emerald-100 text-emerald-800':selectedCampaign.approval_status==='rejected'?'bg-red-100 text-red-800':'bg-amber-100 text-amber-800')}>Review: {selectedCampaign.approval_status}</span><span className={'rounded-full px-2.5 py-1 text-xs font-bold capitalize '+(selectedCampaign.payment_status==='paid'?'bg-emerald-100 text-emerald-800':selectedCampaign.payment_status==='review'||selectedCampaign.payment_status==='failed'?'bg-red-100 text-red-800':'bg-gray-100 text-gray-700')}>Payment: {selectedCampaign.payment_status || 'unpaid'}</span></div>
+          {selectedCampaign.approval_status==='pending' && <div className="flex gap-2 border-t pt-4"><button disabled={busy===selectedCampaign.id} onClick={async () => { await reviewCampaign(selectedCampaign,'approved'); setSelectedCampaign(null); }} className="rounded-lg bg-emerald-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Approve campaign</button><button disabled={busy===selectedCampaign.id} onClick={async () => { await reviewCampaign(selectedCampaign,'rejected'); setSelectedCampaign(null); }} className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white disabled:opacity-50">Reject campaign</button></div>}
+        </div>}
+      </DialogContent>
+    </Dialog>
   </div>;
 }
