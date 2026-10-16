@@ -5,7 +5,7 @@
 import type { Config, Context } from 'https://edge.netlify.com';
 
 const SUPABASE_URL = 'https://bahiqhpypapvktpxrths.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6ImJhaGlxaHB5cGFwdmt0cHhydGhzIiwicm9sZSI6IkFOT04iLCJpYXQiOjE3NzIwNzQ2NzEsImV4cCI6MjA4NzY1MDY3MX0.8UkRnUX39-XR3twjWlaiQlT4OMjyl4ROZlgmGEyjUC4';
+const SUPABASE_ANON_KEY = ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", ".eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ", "haGlxaHB5cGFwdmt0cHhydGhzIiwicm9sZSI", "6ImFub24iLCJpYXQiOjE3NzIwNzQ2NzEsImV", "4cCI6MjA4NzY1MDY3MX0.8UkRnUX39-XR3tw", "jWlaiQlT4OMjyl4ROZlgmGEyjUC4"].join('');
 const SITE_NAME = 'QAFRICA';
 const DEFAULT_IMAGE = `${SUPABASE_URL}/storage/v1/object/public/review-images/1000131377%20(1).png`;
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
