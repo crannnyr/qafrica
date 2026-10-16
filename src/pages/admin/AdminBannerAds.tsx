@@ -11,6 +11,7 @@ export default function AdminBannerAds() {
   const [banners, setBanners] = useState<BannerSubmission[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [cpc, setCpc] = useState('');
+  const [bannerCpc, setBannerCpc] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [savingRate, setSavingRate] = useState(false);
@@ -20,14 +21,17 @@ export default function AdminBannerAds() {
     const [bannerResult, campaignResult, rateResult] = await Promise.all([
       supabase.from('stores').select('id,name,slug,banner_url,pending_banner_url,banner_submitted_at,banner_rejection_reason').not('pending_banner_url', 'is', null).order('banner_submitted_at', { ascending: true }),
       supabase.from('ad_campaigns').select('id,campaign_name,campaign_type,store_id,product_id,image_url,target_url,budget,spent,clicks,status,approval_status,start_date,end_date').order('created_at', { ascending: false }),
-      supabase.from('placement_ad_settings').select('flat_cpc_ngn').eq('id', true).maybeSingle(),
+      supabase.from('placement_ad_settings').select('flat_cpc_ngn,banner_cpc_ngn').eq('id', true).maybeSingle(),
     ]);
     if (bannerResult.error) toast.error('Could not load pending banners: ' + bannerResult.error.message);
     else setBanners((bannerResult.data ?? []) as BannerSubmission[]);
     if (campaignResult.error) toast.error('Could not load ad campaigns: ' + campaignResult.error.message);
     else setCampaigns((campaignResult.data ?? []) as Campaign[]);
     if (rateResult.error) toast.error('Could not load Placement Ads CPC rate: ' + rateResult.error.message);
-    else setCpc(rateResult.data?.flat_cpc_ngn == null ? '' : String(rateResult.data.flat_cpc_ngn));
+    else {
+      setCpc(rateResult.data?.flat_cpc_ngn == null ? '' : String(rateResult.data.flat_cpc_ngn));
+      setBannerCpc(rateResult.data?.banner_cpc_ngn == null ? '' : String(rateResult.data.banner_cpc_ngn));
+    }
     setLoading(false);
   }, []);
 
@@ -60,16 +64,33 @@ export default function AdminBannerAds() {
     setSavingRate(false);
   };
 
+  const saveBannerRate = async () => {
+    const rate = Number(bannerCpc);
+    if (!bannerCpc.trim() || !Number.isFinite(rate) || rate <= 0) { toast.error('Enter a Banner Ads CPC greater than ₦0'); return; }
+    setSavingRate(true);
+    const user = (await supabase.auth.getUser()).data.user;
+    const { error } = await supabase.from('placement_ad_settings').upsert({ id: true, banner_cpc_ngn: rate, updated_at: new Date().toISOString(), updated_by: user?.id ?? null }, { onConflict: 'id' });
+    if (error) toast.error(error.message);
+    else toast.success('Banner Ads CPC rate saved');
+    setSavingRate(false);
+  };
+
   return <div className="mx-auto max-w-6xl space-y-8">
     <header className="flex flex-wrap items-start justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-gray-900">Banners & Advertising</h1><p className="mt-1 text-sm text-gray-500">Review store banners and ad campaigns. CPC applies to Placement Ads only.</p></div>
+      <div><h1 className="text-2xl font-bold text-gray-900">Banners & Advertising</h1><p className="mt-1 text-sm text-gray-500">Review store banners and ad campaigns. Configure separate CPC rates for Placement Ads and Banner Ads.</p></div>
       <button onClick={() => void load()} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><RefreshCw className="h-4 w-4"/>Refresh</button>
     </header>
 
     <section className="rounded-xl border bg-white p-5 space-y-4">
       <div className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-orange-600"/><h2 className="text-lg font-bold">Placement Ads CPC</h2></div>
-      <p className="text-sm text-gray-500">One flat rate across every category. This rate is not applied to Banner Ads. Billing remains disabled until you configure a rate.</p>
+      <p className="text-sm text-gray-500">One flat rate across every category. Billing remains disabled until you configure a rate.</p>
       <div className="flex flex-wrap items-end gap-3"><label className="block"><span className="mb-1 block text-sm font-medium">Cost per click (NGN)</span><input type="number" min="0.01" step="0.01" value={cpc} onChange={e => setCpc(e.target.value)} placeholder="Enter flat CPC" className="w-56 rounded-lg border px-3 py-2"/></label><button onClick={() => void saveRate()} disabled={savingRate} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingRate ? <Loader2 className="h-4 w-4 animate-spin"/> : <Save className="h-4 w-4"/>}Save CPC</button></div>
+    </section>
+
+    <section className="rounded-xl border bg-white p-5 space-y-4">
+      <div className="flex items-center gap-2"><ImageIcon className="h-5 w-5 text-orange-600"/><h2 className="text-lg font-bold">Banner Ads CPC</h2></div>
+      <p className="text-sm text-gray-500">This rate is charged for eligible clicks on approved, active homepage banner campaigns. It is separate from Placement Ads CPC. Billing remains disabled until you configure a rate.</p>
+      <div className="flex flex-wrap items-end gap-3"><label className="block"><span className="mb-1 block text-sm font-medium">Cost per click (NGN)</span><input type="number" min="0.01" step="0.01" value={bannerCpc} onChange={e => setBannerCpc(e.target.value)} placeholder="Enter banner CPC" className="w-56 rounded-lg border px-3 py-2"/></label><button onClick={() => void saveBannerRate()} disabled={savingRate} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingRate ? <Loader2 className="h-4 w-4 animate-spin"/> : <Save className="h-4 w-4"/>}Save Banner CPC</button></div>
     </section>
 
     <section className="space-y-3">
