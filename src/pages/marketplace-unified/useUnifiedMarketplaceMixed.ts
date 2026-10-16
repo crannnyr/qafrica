@@ -15,10 +15,12 @@ const cached = (a: Args, seed: string) => {
 
 const createViewerSeed = () => {
   try {
-    const existing = window.localStorage.getItem('qafrica_unified_marketplace_seed');
+    const day = new Date().toISOString().slice(0, 10);
+    const storageKey = `qafrica_unified_marketplace_seed:${day}`;
+    const existing = window.localStorage.getItem(storageKey);
     if (existing) return existing;
     const seed = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-    window.localStorage.setItem('qafrica_unified_marketplace_seed', seed);
+    window.localStorage.setItem(storageKey, seed);
     return seed;
   } catch {
     return `${Date.now()}-${Math.random()}`;
