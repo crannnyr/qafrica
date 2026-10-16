@@ -38,7 +38,7 @@ export default function PlacementAds({ niche, category, search }: { niche: strin
         if (!p || !s || p.store_id !== s.id) continue;
         if (niche && p.niche !== niche) continue;
         if (category && (p.category || '').trim().toLowerCase() !== category.trim().toLowerCase()) continue;
-        if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !(p.category || '').toLowerCase().includes(search.toLowerCase()) && !(p.tags || []).some(t => t.toLowerCase().includes(search.toLowerCase()))) continue;
+        if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !(p.category || '').toLowerCase().includes(search.toLowerCase()) && !(p.tags || []).some((t: string) => t.toLowerCase().includes(search.toLowerCase()))) continue;
         mapped.push({ campaign, product: {
           id: 'product:' + p.id, source_id: p.id, source_type: 'product', name: p.name, description: p.description,
           images: p.images || [], price_ngn: Number(p.selling_price), compare_at_price_ngn: p.compare_at_price,
