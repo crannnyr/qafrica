@@ -3,9 +3,11 @@ import { Megaphone, Loader2, Plus, RefreshCw, X } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { useStoreStore } from '@/stores';
 import { toast } from 'sonner';
+import FlutterwavePayDialog from '@/components/payments/FlutterwavePayDialog';
+import { checkAdCampaignPayment, startAdCampaignPayment } from '@/services/flutterwave';
 
 type ProductOption = { id:string; name:string; category:string|null; images:string[] };
-type CampaignRow = { id:string; campaign_name:string; campaign_type:string; budget:number; spent:number; clicks:number; status:string; approval_status:string; created_at:string };
+type CampaignRow = { id:string; campaign_name:string; campaign_type:string; budget:number; spent:number; clicks:number; status:string; approval_status:string; payment_status:string; created_at:string };
 
 export default function AdsPage() {
   const { currentStore } = useStoreStore();
@@ -21,13 +23,14 @@ export default function AdsPage() {
   const [loading,setLoading] = useState(false);
   const [saving,setSaving] = useState(false);
   const [createModalOpen,setCreateModalOpen] = useState(false);
+  const [payingCampaign,setPayingCampaign] = useState<CampaignRow | null>(null);
 
   const load = useCallback(async () => {
     if (!currentStore?.id) return;
     setLoading(true);
     const [productsResult,campaignResult] = await Promise.all([
       supabase.from('products').select('id,name,category,images').eq('store_id',currentStore.id).eq('is_active',true).eq('marketplace_approval_status','approved').order('name'),
-      supabase.from('ad_campaigns').select('id,campaign_name,campaign_type,budget,spent,clicks,status,approval_status,created_at').eq('store_id',currentStore.id).order('created_at',{ascending:false}),
+      supabase.from('ad_campaigns').select('id,campaign_name,campaign_type,budget,spent,clicks,status,approval_status,payment_status,created_at').eq('store_id',currentStore.id).order('created_at',{ascending:false}),
     ]);
     if (productsResult.error) toast.error('Could not load eligible products: '+productsResult.error.message);
     else setProducts((productsResult.data ?? []) as ProductOption[]);
@@ -94,9 +97,10 @@ export default function AdsPage() {
 
       <section className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
         <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Your campaigns</h2><button onClick={()=>void load()} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm"><RefreshCw className="h-4 w-4"/>Refresh</button></div>
-        {loading?<p className="text-sm text-gray-500">Loading campaigns…</p>:campaigns.length===0?<p className="text-sm text-gray-500">You haven’t submitted any QAFRICA campaigns yet.</p>:<div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-xs uppercase text-gray-500"><tr><th className="p-2">Campaign</th><th className="p-2">Format</th><th className="p-2">Budget / spent</th><th className="p-2">Clicks</th><th className="p-2">Review</th></tr></thead><tbody className="divide-y">{campaigns.map(c=><tr key={c.id}><td className="p-2 font-semibold">{c.campaign_name}</td><td className="p-2 capitalize">{c.campaign_type}</td><td className="p-2">₦{Number(c.budget).toLocaleString('en-NG')} / ₦{Number(c.spent).toLocaleString('en-NG')}</td><td className="p-2">{c.clicks}</td><td className="p-2"><span className={'rounded-full px-2 py-1 text-xs font-bold capitalize '+(c.approval_status==='approved'?'bg-emerald-100 text-emerald-700':c.approval_status==='rejected'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-800')}>{c.approval_status}</span></td></tr>)}</tbody></table></div>}
+        {loading?<p className="text-sm text-gray-500">Loading campaigns…</p>:campaigns.length===0?<p className="text-sm text-gray-500">You haven’t submitted any QAFRICA campaigns yet.</p>:<div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-xs uppercase text-gray-500"><tr><th className="p-2">Campaign</th><th className="p-2">Format</th><th className="p-2">Budget / spent</th><th className="p-2">Clicks</th><th className="p-2">Review</th><th className="p-2">Payment</th><th className="p-2">Action</th></tr></thead><tbody className="divide-y">{campaigns.map(c=><tr key={c.id}><td className="p-2 font-semibold">{c.campaign_name}</td><td className="p-2 capitalize">{c.campaign_type}</td><td className="p-2">₦{Number(c.budget).toLocaleString('en-NG')} / ₦{Number(c.spent).toLocaleString('en-NG')}</td><td className="p-2">{c.clicks}</td><td className="p-2"><span className={'rounded-full px-2 py-1 text-xs font-bold capitalize '+(c.approval_status==='approved'?'bg-emerald-100 text-emerald-700':c.approval_status==='rejected'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-800')}>{c.approval_status}</span></td><td className="p-2"><span className="capitalize">{c.payment_status || 'unpaid'}</span></td><td className="p-2">{c.approval_status==='approved' && c.payment_status!=='paid' ? <button type="button" onClick={()=>setPayingCampaign(c)} className="rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white">Pay now</button> : c.approval_status==='pending' ? <span>Awaiting approval</span> : c.payment_status==='paid' ? <span>Paid</span> : <span>—</span>}</td></tr>)}</tbody></table></div>}
       </section>
 
+      {payingCampaign && <FlutterwavePayDialog start={() => startAdCampaignPayment(payingCampaign.id)} check={checkAdCampaignPayment} itemNoun="campaign budget" planLabel={payingCampaign.campaign_name} paidMessage="Your campaign budget is paid. The campaign can now serve on the marketplace." onClose={() => setPayingCampaign(null)} onPaid={async () => { setPayingCampaign(null); await load(); toast.success('Campaign budget payment confirmed'); }} />}
 
     </div>
   );
