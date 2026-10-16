@@ -16,7 +16,7 @@ export default function PlacementAds({ niche, category, search }: { niche: strin
     let alive = true;
     const load = async () => {
       let query = supabase.from('ad_campaigns').select('id,product_id,store_id,campaign_name,clicks,spent,budget,category')
-        .eq('campaign_type','placement').eq('approval_status','approved').eq('status','active')
+        .eq('campaign_type','placement').eq('approval_status','approved').eq('payment_status','paid').eq('status','active')
         .lte('start_date',new Date().toISOString()).or(`end_date.is.null,end_date.gt.${new Date().toISOString()}`)
         .not('product_id','is',null).gt('budget',0).order('created_at',{ascending:false}).limit(12);
       if (category) query = query.ilike('category', category);
