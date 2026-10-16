@@ -61,12 +61,6 @@ export default function AdsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-7">
-      <div>
-        <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-100 text-orange-600"><Megaphone className="h-5 w-5" /></div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ads</h1>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">Submit QAFRICA Banner Ads or Placement Ads for review. Placement Ads and Banner Ads each use a separately configured CPC rate. Clicks are billed only after admin approval and while the campaign is active.</p>
-      </div>
-
       <div className="flex justify-end">
         <button type="button" onClick={() => setCreateModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700"><Plus className="h-4 w-4"/>Create a QAFRICA campaign</button>
       </div>
