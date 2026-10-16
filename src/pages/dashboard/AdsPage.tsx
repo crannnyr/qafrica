@@ -67,10 +67,9 @@ export default function AdsPage() {
         <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">Submit QAFRICA Banner Ads or Placement Ads for review. Placement Ads and Banner Ads each use a separately configured CPC rate. Clicks are billed only after admin approval and while the campaign is active.</p>
       </div>
 
-      <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <div><h2 className="text-lg font-bold">Advertise on QAfrica</h2><p className="mt-1 text-sm text-gray-500">Create a Banner Ad or Placement Ad campaign.</p></div>
+      <div className="flex justify-end">
         <button type="button" onClick={() => setCreateModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700"><Plus className="h-4 w-4"/>Create a QAFRICA campaign</button>
-      </section>
+      </div>
 
       {createModalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6" onMouseDown={e => { if (e.target === e.currentTarget && !saving) setCreateModalOpen(false); }}>
         <section role="dialog" aria-modal="true" aria-labelledby="create-campaign-title" className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-800 sm:p-6">
