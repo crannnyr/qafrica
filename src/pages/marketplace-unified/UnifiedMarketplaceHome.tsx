@@ -247,7 +247,7 @@ function BannerCarousel() {
   useEffect(() => {
     let alive = true;
     supabase.from('ad_campaigns').select('id,campaign_name,image_url,target_url')
-      .eq('campaign_type','banner').eq('approval_status','approved').eq('status','active')
+      .eq('campaign_type','banner').eq('approval_status','approved').eq('payment_status','paid').eq('status','active')
       .lte('start_date',new Date().toISOString()).or(`end_date.is.null,end_date.gt.${new Date().toISOString()}`)
       .not('image_url','is',null).order('created_at',{ascending:false}).limit(3)
       .then(({data,error}) => { if (alive && !error) setBannerAds((data ?? []).filter(a => Number(a.image_url?.length) > 0) as typeof bannerAds); });
