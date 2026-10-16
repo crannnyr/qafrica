@@ -16,7 +16,7 @@ export default function AdminBannerAds() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [savingRate, setSavingRate] = useState(false);
-  const [rateDialog, setRateDialog] = useState<'placement' | 'banner' | null>(null);
+  const [rateDialog, setRateDialog] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
 
   const load = useCallback(async () => {
@@ -56,25 +56,32 @@ export default function AdminBannerAds() {
     setBusy(null);
   };
 
-  const saveRate = async () => {
-    const rate = Number(cpc);
-    if (!cpc.trim() || !Number.isFinite(rate) || rate <= 0) { toast.error('Enter a CPC greater than ₦0'); return; }
+  const saveRates = async () => {
+    const placementRate = Number(cpc);
+    const bannerRate = Number(bannerCpc);
+    if (!cpc.trim() || !Number.isFinite(placementRate) || placementRate <= 0) {
+      toast.error('Enter a Placement Ads CPC greater than ₦0');
+      return;
+    }
+    if (!bannerCpc.trim() || !Number.isFinite(bannerRate) || bannerRate <= 0) {
+      toast.error('Enter a Banner Ads CPC greater than ₦0');
+      return;
+    }
     setSavingRate(true);
     const user = (await supabase.auth.getUser()).data.user;
-    const { error } = await supabase.from('placement_ad_settings').upsert({ id: true, flat_cpc_ngn: rate, updated_at: new Date().toISOString(), updated_by: user?.id ?? null }, { onConflict: 'id' });
-    if (error) toast.error(error.message);
-    else toast.success('Placement Ads CPC rate saved');
-    setSavingRate(false);
-  };
-
-  const saveBannerRate = async () => {
-    const rate = Number(bannerCpc);
-    if (!bannerCpc.trim() || !Number.isFinite(rate) || rate <= 0) { toast.error('Enter a Banner Ads CPC greater than ₦0'); return; }
-    setSavingRate(true);
-    const user = (await supabase.auth.getUser()).data.user;
-    const { error } = await supabase.from('placement_ad_settings').upsert({ id: true, banner_cpc_ngn: rate, updated_at: new Date().toISOString(), updated_by: user?.id ?? null }, { onConflict: 'id' });
-    if (error) toast.error(error.message);
-    else toast.success('Banner Ads CPC rate saved');
+    const { error } = await supabase.from('placement_ad_settings').upsert({
+      id: true,
+      flat_cpc_ngn: placementRate,
+      banner_cpc_ngn: bannerRate,
+      updated_at: new Date().toISOString(),
+      updated_by: user?.id ?? null,
+    }, { onConflict: 'id' });
+    if (error) toast.error('Could not save CPC rates: ' + error.message);
+    else {
+      toast.success('Placement Ads and Banner Ads CPC rates saved');
+      setRateDialog(false);
+      await load();
+    }
     setSavingRate(false);
   };
 
@@ -84,19 +91,17 @@ export default function AdminBannerAds() {
       <button onClick={() => void load()} className="inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"><RefreshCw className="h-4 w-4"/>Refresh</button>
     </header>
 
-    <section className="grid gap-3 sm:grid-cols-2">
-      <button type="button" onClick={() => setRateDialog('placement')} className="rounded-xl border bg-white p-5 text-left transition hover:border-orange-300 hover:shadow-sm">
-        <div className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-orange-600"/><h2 className="font-bold">Placement Ads CPC</h2></div>
-        <p className="mt-2 text-sm text-gray-500">Configure the click rate for sponsored product placements.</p>
-        <p className="mt-3 text-sm font-semibold">{cpc ? money(Number(cpc)) + ' per click' : 'Not configured'}</p>
-        <span className="mt-3 inline-flex rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white">Configure rate</span>
-      </button>
-      <button type="button" onClick={() => setRateDialog('banner')} className="rounded-xl border bg-white p-5 text-left transition hover:border-orange-300 hover:shadow-sm">
-        <div className="flex items-center gap-2"><ImageIcon className="h-5 w-5 text-orange-600"/><h2 className="font-bold">Banner Ads CPC</h2></div>
-        <p className="mt-2 text-sm text-gray-500">Configure the click rate for approved homepage banner campaigns.</p>
-        <p className="mt-3 text-sm font-semibold">{bannerCpc ? money(Number(bannerCpc)) + ' per click' : 'Not configured'}</p>
-        <span className="mt-3 inline-flex rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white">Configure rate</span>
-      </button>
+    <section className="rounded-xl border bg-white p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="font-bold">CPC pricing</h2>
+          <p className="mt-1 text-sm text-gray-500">Set the cost per click for placement and homepage banner ads in one place.</p>
+          <p className="mt-3 text-sm font-medium">Placement Ads: <span className="font-bold">{cpc ? money(Number(cpc)) + ' / click' : 'Not configured'}</span><span className="mx-2 text-gray-300">|</span>Banner Ads: <span className="font-bold">{bannerCpc ? money(Number(bannerCpc)) + ' / click' : 'Not configured'}</span></p>
+        </div>
+        <button type="button" onClick={() => setRateDialog(true)} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700">
+          <Save className="h-4 w-4" /> Configure CPC rates
+        </button>
+      </div>
     </section>
 
     <section className="space-y-3">
@@ -111,13 +116,23 @@ export default function AdminBannerAds() {
       <div className="flex items-center gap-2"><Megaphone className="h-5 w-5 text-orange-600"/><h2 className="text-lg font-bold">Ad campaigns</h2></div>
       {loading ? <p className="text-sm text-gray-500">Loading…</p> : campaigns.length === 0 ? <div className="rounded-xl border bg-white p-5 text-sm text-gray-500">No ad campaigns have been submitted yet.</div> : <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full text-sm"><thead className="bg-gray-50 text-left text-xs uppercase text-gray-500"><tr><th className="p-3">Campaign</th><th className="p-3">Type</th><th className="p-3">Where it appears</th><th className="p-3">Budget / spent</th><th className="p-3">Clicks</th><th className="p-3">Approval</th><th className="p-3">Payment</th><th className="p-3">Review</th></tr></thead><tbody className="divide-y">{campaigns.map(c => <tr key={c.id}><td className="p-3"><button type="button" onClick={() => setSelectedCampaign(c)} className="block max-w-[12rem] text-left font-semibold leading-snug hover:text-orange-700"><span className="line-clamp-2 break-words">{c.campaign_name}</span></button><div className="mt-1 text-xs text-gray-500">{c.store_id.slice(0,8)}…</div></td><td className="p-3 capitalize">{c.campaign_type}</td><td className="p-3 text-xs text-gray-600">{c.campaign_type === 'banner' ? 'Homepage banner carousel' : 'Sponsored product slots near marketplace results'}</td><td className="p-3">{money(c.budget)} / {money(c.spent)}</td><td className="p-3">{c.clicks ?? 0}</td><td className="p-3"><span className={'inline-flex rounded-full px-2.5 py-1 text-xs font-bold capitalize '+(c.approval_status==='approved'?'bg-emerald-100 text-emerald-800':c.approval_status==='rejected'?'bg-red-100 text-red-800':'bg-amber-100 text-amber-800')}>{c.approval_status}</span></td><td className="p-3"><span className={'inline-flex rounded-full px-2.5 py-1 text-xs font-bold capitalize '+(c.payment_status==='paid'?'bg-emerald-100 text-emerald-800':c.payment_status==='review'||c.payment_status==='failed'?'bg-red-100 text-red-800':c.payment_status==='pending'?'bg-blue-100 text-blue-800':'bg-gray-100 text-gray-700')}>{c.payment_status || 'unpaid'}</span></td><td className="p-3">{c.approval_status==='pending' ? <div className="flex flex-wrap gap-1"><button disabled={busy===c.id} onClick={() => void reviewCampaign(c,'approved')} className="rounded bg-emerald-600 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-50">{busy===c.id ? 'Saving…' : 'Approve'}</button><button disabled={busy===c.id} onClick={() => void reviewCampaign(c,'rejected')} className="rounded bg-red-600 px-2 py-1.5 text-xs font-bold text-white disabled:opacity-50">Reject</button></div> : <span className={'text-xs font-semibold '+(c.approval_status==='approved'?'text-emerald-700':'text-red-700')}>{c.approval_status==='approved'?'Decision: Approved':'Decision: Rejected'}</span>}</td></tr>)}</tbody></table></div>}
     </section>
-    <Dialog open={rateDialog !== null} onOpenChange={(open) => { if (!open) setRateDialog(null); }}>
+    <Dialog open={rateDialog} onOpenChange={(open) => setRateDialog(open)}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{rateDialog === 'placement' ? 'Placement Ads CPC' : 'Banner Ads CPC'}</DialogTitle>
-          <DialogDescription>{rateDialog === 'placement' ? 'Set one cost-per-click rate for sponsored product placements.' : 'Set the cost per eligible click on approved, active homepage banner campaigns.'} Billing stays disabled until a valid rate is saved.</DialogDescription>
+          <DialogTitle>Configure CPC rates</DialogTitle>
+          <DialogDescription>Set both cost-per-click prices in one step. These rates apply to sponsored product placements and approved homepage banner campaigns.</DialogDescription>
         </DialogHeader>
-        {rateDialog === 'placement' ? <div className="space-y-3"><label className="block text-sm font-medium">Cost per click (NGN)<input type="number" min="0.01" step="0.01" value={cpc} onChange={e => setCpc(e.target.value)} placeholder="Enter flat CPC" className="mt-1 w-full rounded-lg border px-3 py-2"/></label><button onClick={async () => { await saveRate(); }} disabled={savingRate} className="rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingRate ? 'Saving…' : 'Save Placement CPC'}</button></div> : <div className="space-y-3"><label className="block text-sm font-medium">Cost per click (NGN)<input type="number" min="0.01" step="0.01" value={bannerCpc} onChange={e => setBannerCpc(e.target.value)} placeholder="Enter banner CPC" className="mt-1 w-full rounded-lg border px-3 py-2"/></label><button onClick={async () => { await saveBannerRate(); }} disabled={savingRate} className="rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{savingRate ? 'Saving…' : 'Save Banner CPC'}</button></div>}
+        <div className="space-y-4">
+          <label className="block text-sm font-medium">Placement Ads CPC (NGN)
+            <input type="number" min="0.01" step="0.01" value={cpc} onChange={e => setCpc(e.target.value)} placeholder="Enter Placement Ads price per click" className="mt-1 w-full rounded-lg border px-3 py-2"/>
+          </label>
+          <label className="block text-sm font-medium">Banner Ads CPC (NGN)
+            <input type="number" min="0.01" step="0.01" value={bannerCpc} onChange={e => setBannerCpc(e.target.value)} placeholder="Enter Banner Ads price per click" className="mt-1 w-full rounded-lg border px-3 py-2"/>
+          </label>
+          <button type="button" onClick={() => void saveRates()} disabled={savingRate} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 font-semibold text-white disabled:opacity-50">
+            {savingRate ? <><Loader2 className="h-4 w-4 animate-spin"/> Saving…</> : <><Save className="h-4 w-4"/> Set CPC prices</>}
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
     <Dialog open={selectedCampaign !== null} onOpenChange={(open) => { if (!open) setSelectedCampaign(null); }}>
