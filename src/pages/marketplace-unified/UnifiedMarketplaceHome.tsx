@@ -232,6 +232,16 @@ function UnifiedFeed({
 }
 
 function BannerCarousel() {
+  const recordBannerClick = (campaignId: string) => {
+    const clickKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}-${Math.random()}`;
+    void supabase.rpc('record_banner_ad_click', { p_campaign_id: campaignId, p_click_key: clickKey }).then(({ error }) => {
+      if (error && !error.message.includes('CPC rate has not been configured')) {
+        console.warn('Banner ad click was not billed:', error.message);
+      }
+    });
+  };
   const { stores } = useMarketplaceStores();
   const [bannerAds, setBannerAds] = useState<{id:string; campaign_name:string; image_url:string; target_url:string|null}[]>([]);
   useEffect(() => {
@@ -286,6 +296,7 @@ function BannerCarousel() {
             key={s.id}
             to={s.isAd ? (s.target_url || '/stores-v2') : marketplaceLink(`/${s.slug}`)}
             state={MARKETPLACE_STATE}
+            onClickCapture={() => { if (s.isAd) recordBannerClick(s.id.replace(/^ad:/, '')); }}
             aria-roledescription="slide"
             aria-label={`${i + 1} of ${slides.length}: ${s.name}`}
             className="relative shrink-0 w-full snap-start aspect-[2.2/1] sm:aspect-[3.4/1] bg-gray-200"
