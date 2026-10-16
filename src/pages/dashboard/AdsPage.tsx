@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { Megaphone, Loader2, Plus, RefreshCw, X } from 'lucide-react';
 import { supabase } from '@/services/supabase';
 import { useStoreStore } from '@/stores';
 import { toast } from 'sonner';
@@ -20,6 +20,7 @@ export default function AdsPage() {
   const [campaigns,setCampaigns] = useState<CampaignRow[]>([]);
   const [loading,setLoading] = useState(false);
   const [saving,setSaving] = useState(false);
+  const [createModalOpen,setCreateModalOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!currentStore?.id) return;
@@ -54,7 +55,7 @@ export default function AdsPage() {
       image_url:type==='banner'?imageUrl.trim():null, target_url:type==='banner'?(targetUrl.trim() || null):null,
     });
     if(error) toast.error('Campaign could not be submitted: '+error.message);
-    else { toast.success('Campaign submitted for admin approval'); setName('');setBudget('');setProductId('');setImageUrl('');setTargetUrl('');setCategory('');await load(); }
+    else { toast.success('Campaign submitted for admin approval'); setName('');setBudget('');setProductId('');setImageUrl('');setTargetUrl('');setCategory('');setCreateModalOpen(false);await load(); }
     setSaving(false);
   };
 
@@ -66,9 +67,14 @@ export default function AdsPage() {
         <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">Submit QAFRICA Banner Ads or Placement Ads for review. Placement Ads and Banner Ads each use a separately configured CPC rate. Clicks are billed only after admin approval and while the campaign is active.</p>
       </div>
 
-      <section className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-        <h2 className="text-lg font-bold">Create a QAFRICA campaign</h2>
-        <p className="mt-1 text-sm text-gray-500">Every campaign requires admin approval before it appears on the marketplace.</p>
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+        <div><h2 className="text-lg font-bold">Advertise on QAfrica</h2><p className="mt-1 text-sm text-gray-500">Create a Banner Ad or Placement Ad campaign.</p></div>
+        <button type="button" onClick={() => setCreateModalOpen(true)} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-700"><Plus className="h-4 w-4"/>Create a QAFRICA campaign</button>
+      </section>
+
+      {createModalOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-6" onMouseDown={e => { if (e.target === e.currentTarget && !saving) setCreateModalOpen(false); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="create-campaign-title" className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl dark:bg-gray-800 sm:p-6">
+          <div className="mb-4 flex items-start justify-between gap-3"><div><h2 id="create-campaign-title" className="text-lg font-bold">Create a QAFRICA campaign</h2><p className="mt-1 text-sm text-gray-500">Every campaign requires admin approval before it appears on the marketplace.</p></div><button type="button" onClick={() => setCreateModalOpen(false)} disabled={saving} aria-label="Close campaign form" className="rounded-lg p-2 hover:bg-gray-100 disabled:opacity-50"><X className="h-5 w-5"/></button></div>
         <form onSubmit={submit} className="mt-5 grid gap-4 md:grid-cols-2">
           <label className="block text-sm font-medium">Ad format<select value={type} onChange={e=>setType(e.target.value as 'placement'|'banner')} className="mt-1 w-full rounded-lg border px-3 py-2"><option value="placement">Placement Ad — product at top of results</option><option value="banner">Banner Ad — image in homepage banner area</option></select></label>
           <label className="block text-sm font-medium">Campaign name<input value={name} onChange={e=>setName(e.target.value)} maxLength={100} required className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="e.g. October product promotion"/></label>
@@ -84,10 +90,11 @@ export default function AdsPage() {
           </>}
           <div className="md:col-span-2"><button type="submit" disabled={saving || !currentStore?.id} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving?<Loader2 className="h-4 w-4 animate-spin"/>:<Plus className="h-4 w-4"/>}Submit for approval</button></div>
         </form>
-      </section>
+        </section>
+      </div>}
 
       <section className="rounded-2xl border border-gray-100 bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
-        <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Your QAFRICA campaigns</h2><button onClick={()=>void load()} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm"><RefreshCw className="h-4 w-4"/>Refresh</button></div>
+        <div className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Your campaigns</h2><button onClick={()=>void load()} className="inline-flex items-center gap-1 rounded-lg border px-3 py-2 text-sm"><RefreshCw className="h-4 w-4"/>Refresh</button></div>
         {loading?<p className="text-sm text-gray-500">Loading campaigns…</p>:campaigns.length===0?<p className="text-sm text-gray-500">You haven’t submitted any QAFRICA campaigns yet.</p>:<div className="overflow-x-auto"><table className="w-full text-sm"><thead className="text-left text-xs uppercase text-gray-500"><tr><th className="p-2">Campaign</th><th className="p-2">Format</th><th className="p-2">Budget / spent</th><th className="p-2">Clicks</th><th className="p-2">Review</th></tr></thead><tbody className="divide-y">{campaigns.map(c=><tr key={c.id}><td className="p-2 font-semibold">{c.campaign_name}</td><td className="p-2 capitalize">{c.campaign_type}</td><td className="p-2">₦{Number(c.budget).toLocaleString('en-NG')} / ₦{Number(c.spent).toLocaleString('en-NG')}</td><td className="p-2">{c.clicks}</td><td className="p-2"><span className={'rounded-full px-2 py-1 text-xs font-bold capitalize '+(c.approval_status==='approved'?'bg-emerald-100 text-emerald-700':c.approval_status==='rejected'?'bg-red-100 text-red-700':'bg-amber-100 text-amber-800')}>{c.approval_status}</span></td></tr>)}</tbody></table></div>}
       </section>
 
