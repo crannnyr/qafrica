@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { BadgeCheck, Star } from 'lucide-react';
 import { MARKETPLACE_STATE } from '@/lib/navigation';
@@ -19,7 +20,22 @@ export default function UnifiedProductCard({ p, priority = false }: { p: Unified
   const href = p.source_type === 'china_import' && p.seller_id
     ? `/stores-v2/product/${p.source_type}/${p.source_id}?store=${encodeURIComponent(p.seller_id)}`
     : `/stores-v2/product/${p.source_type}/${p.source_id}`;
-  const image = p.images?.[0] || '/placeholder.svg';
+  const images = p.images?.filter(Boolean) ?? [];
+  const [imageIndex, setImageIndex] = useState(0);
+
+  useEffect(() => {
+    setImageIndex(0);
+  }, [p.id]);
+
+  useEffect(() => {
+    if (images.length < 2) return;
+    const timer = window.setInterval(() => {
+      setImageIndex((current) => (current + 1) % images.length);
+    }, 12_000);
+    return () => window.clearInterval(timer);
+  }, [p.id, images.length]);
+
+  const image = images[imageIndex % Math.max(images.length, 1)] || '/placeholder.svg';
   const compareAt = Number(p.compare_at_price_ngn || 0);
   const price = Number(p.price_ngn || 0);
   const discountPct = compareAt > price && price > 0 ? Math.round((1 - price / compareAt) * 100) : 0;
