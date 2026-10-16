@@ -52,6 +52,14 @@ export function startSubscriptionPayment(plan: SubscriptionPlanRequest) {
   return call<StartResult>('start', plan) as Promise<StartResult>;
 }
 
+export function startAdCampaignPayment(campaignId: string) {
+  return call<StartResult>('ad-start', { campaign_id: campaignId }) as Promise<StartResult>;
+}
+
+export function checkAdCampaignPayment(reference: string) {
+  return call<{ ok: true; status: PaymentStatus; paid: boolean }>('ad-status', { reference });
+}
+
 export function checkSubscriptionPayment(reference: string) {
   return call<{ ok: true; status: PaymentStatus; paid: boolean; tier: string; is_starter_pack: boolean }>('status', { reference });
 }
