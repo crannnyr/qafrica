@@ -63,7 +63,7 @@ export default function AdsPage() {
     <div className="mx-auto max-w-6xl space-y-7">
       <header>
         <div className="mb-3 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-100 text-orange-600"><Megaphone className="h-5 w-5" /></div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">QAFRICA Ads</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Ads Campaign</h1>
         <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-500 dark:text-gray-400">Create and manage your Banner Ads and Placement Ads on the QAFRICA marketplace.</p>
       </header>
 
