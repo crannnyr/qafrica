@@ -31,7 +31,7 @@ function variantLabel(options: Record<string, unknown> | null) {
 type ProductGroup = {
   product_name: string;
   image_url: string | null;
-  variants: Array<{ label: string; remaining_quantity: number }>;
+  variants: Array<{ label: string; order_code: string; shipping_method: string | null; remaining_quantity: number }>;
   total_remaining: number;
 };
 
@@ -48,9 +48,11 @@ function groupItemsByProduct(items: SharedItem[]): ProductGroup[] {
     }
 
     const label = variantLabel(item.variant_options) || 'Standard';
-    const existingVariant = product.variants.find(variant => variant.label === label);
+    const orderCode = item.order_code || 'Order';
+    const shippingMethod = item.shipping_method ?? null;
+    const existingVariant = product.variants.find(variant => variant.label === label && variant.order_code === orderCode && variant.shipping_method === shippingMethod);
     if (existingVariant) existingVariant.remaining_quantity += Math.max(0, item.remaining_quantity);
-    else product.variants.push({ label, remaining_quantity: Math.max(0, item.remaining_quantity) });
+    else product.variants.push({ label, order_code: orderCode, shipping_method: shippingMethod, remaining_quantity: Math.max(0, item.remaining_quantity) });
     product.total_remaining += Math.max(0, item.remaining_quantity);
   }
   return Array.from(products.values()).sort((a, b) => a.product_name.localeCompare(b.product_name));
@@ -68,7 +70,7 @@ export default function PartialReceivingSharePage() {
     if (!query) return products;
     return products.filter(product =>
       product.product_name.toLocaleLowerCase().includes(query) ||
-      product.variants.some(variant => variant.label.toLocaleLowerCase().includes(query))
+      product.variants.some(variant => `${variant.label} ${variant.order_code} ${variant.shipping_method ?? ''}`.toLocaleLowerCase().includes(query))
     );
   }, [products, searchTerm]);
 
@@ -97,10 +99,7 @@ export default function PartialReceivingSharePage() {
           <h1 className="mt-3 text-2xl font-black text-gray-900 sm:text-3xl">Custom sourcing · Product requirements</h1>
           <p className="mt-2 text-sm text-gray-500">Products are grouped together with each variant and the total quantity still needed across the selected orders.</p>
           {list && <p className="mt-3 text-xs font-semibold text-gray-500">{products.length} products · {new Date(list.created_at).toLocaleDateString()}</p>}
-          {list && (() => {
-            const methods = Array.from(new Set([list.shipping_method, ...(list.items ?? []).map(item => item.shipping_method)].filter((method): method is string => typeof method === 'string' && method.trim().length > 0)));
-            return <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-wide text-blue-600">Shipping method</p><p className="mt-1 text-sm font-bold text-blue-950">{methods.length ? methods.join(' · ') : 'Not specified'}</p></div>;
-          })()}
+
         </header>
 
         {loading ? (
@@ -152,6 +151,8 @@ export default function PartialReceivingSharePage() {
                             <div className="min-w-0">
                               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Variant</p>
                               <p className="mt-0.5 text-xs font-medium text-gray-700">{variant.label}</p>
+                              <p className="mt-1 text-[11px] font-semibold text-gray-500">Order: {variant.order_code}</p>
+                              <p className="mt-0.5 text-[11px] text-blue-700">Shipping method: {variant.shipping_method?.trim() || 'Not specified'}</p>
                             </div>
                             <div className="shrink-0 text-right">
                               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Quantity needed</p>
