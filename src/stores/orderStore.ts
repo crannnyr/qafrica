@@ -17,7 +17,7 @@ interface OrderState {
   updateOrderStatus: (orderId: string, status: Order['status']) => Promise<{ success: boolean; error?: string }>;
   confirmDelivery: (orderId: string) => Promise<{ success: boolean; error?: string }>;
   fetchDropshipOrders: (storeId: string) => Promise<void>;
-  updateDropshipOrderStatus: (orderId: string, originalStoreId: string, status: Order['status']) => Promise<{ success: boolean; error?: string }>;
+  updateDropshipOrderStatus: (orderId: string, originalStoreId: string, status: Order['status'], additionalData?: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>;
   clearError: () => void;
   reset: () => void;
 }
@@ -179,10 +179,10 @@ export const useOrderStore = create<OrderState>((set) => ({
     }
   },
 
-  updateDropshipOrderStatus: async (orderId, originalStoreId, status) => {
+  updateDropshipOrderStatus: async (orderId, originalStoreId, status, additionalData) => {
     set({ isLoading: true, error: null });
     try {
-      const { data, error } = await orderService.updateDropshipOrderStatus(orderId, originalStoreId, status);
+      const { data, error } = await orderService.updateDropshipOrderStatus(orderId, originalStoreId, status, additionalData);
       if (error) {
         set({ isLoading: false, error: error.message });
         return { success: false, error: error.message };

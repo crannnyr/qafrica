@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard, Users, Store, Package, ShoppingCart,
+  LayoutDashboard, Users, Store, Package, ShoppingCart, Megaphone,
   CreditCard, Crown, LogOut, Menu, X, Shield, Globe,
   ChevronLeft, User, Bell, FileText, Truck, ShoppingBag,
   Mail, AlertTriangle, Wallet,
@@ -16,6 +16,7 @@ const NAV = [
   { icon: Users,           label: 'Users',             path: '/admin/users' },
   { icon: Store,           label: 'Stores',            path: '/admin/stores' },
   { icon: Package,         label: 'Products',          path: '/admin/products' },
+  { icon: Megaphone,       label: 'Banners & Ads',      path: '/admin/banner-ads' },
   { icon: ShoppingCart,    label: 'Orders',            path: '/admin/orders' },
   { icon: AlertTriangle,   label: 'Reported problems', path: '/admin/issues' },
   { icon: CreditCard,      label: 'Withdrawals',       path: '/admin/withdrawals' },

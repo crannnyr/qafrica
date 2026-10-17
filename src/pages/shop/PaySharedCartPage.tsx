@@ -1,7 +1,7 @@
 // /pay/:code  Someone asked you to pay for their cart. No account needed.
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Gift, Lock, ShieldCheck, MapPin, AlertTriangle } from 'lucide-react';
+import { Gift, Lock, ShieldCheck, MapPin, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { EscrowExplainer, Field, InfoButton } from './ui';
 import { naira } from './format';
@@ -74,6 +74,25 @@ export default function PaySharedCartPage() {
   const remainingAmount = Math.max(Number(cart.remaining_amount ?? q.amount), 0);
   const paymentLabelAmount = cart.is_marketplace && contributionAmount.trim() && Number(contributionAmount) > 0 ? Number(contributionAmount) : remainingAmount;
 
+  // Allocate pooled contributions to the lowest-priced cart lines first.
+  // This is a deterministic display rule; the underlying payment total remains unchanged.
+  const progressLines = q.stores.flatMap((store) =>
+    store.items.map((item, index) => ({
+      key: `${store.store_id}:${item.product_id}:${index}`,
+      name: item.name,
+      image: item.image,
+      quantity: item.quantity,
+      total: Math.max(0, Number(item.total_price) || 0),
+      variant_options: item.variant_options,
+    })),
+  ).sort((a, b) => a.total - b.total);
+  let fundsToAllocate = amountRaised;
+  const itemProgress = progressLines.map((item) => {
+    const funded = Math.min(item.total, fundsToAllocate);
+    fundsToAllocate = Math.max(0, fundsToAllocate - funded);
+    return { ...item, funded, complete: item.total > 0 && funded >= item.total, percent: item.total > 0 ? Math.min(100, funded / item.total * 100) : 0 };
+  });
+
   return (
     <div className="min-h-screen bg-[#F6F6F6] text-gray-900 pb-10">
       <header className="bg-white border-b border-gray-100" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
@@ -96,16 +115,33 @@ export default function PaySharedCartPage() {
           <section key={s.store_id} className="bg-white px-4 py-4">
             <p className="text-[13px] font-semibold mb-2">{s.store_name}</p>
             <ul className="space-y-2.5">
-              {s.items.map((l, i) => (
-                <li key={i} className="flex gap-3">
-                  <div className="w-14 h-14 rounded-md bg-gray-100 overflow-hidden shrink-0">{l.image && <img src={l.image} alt="" className="w-full h-full object-cover" />}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] line-clamp-2">{l.name}</p>
-                    <p className="text-[12px] text-gray-500">Qty {l.quantity}{l.variant_options ? ` · ${Object.values(l.variant_options).join(' / ')}` : ''}</p>
-                  </div>
-                  <p className="text-[13px] font-semibold tabular-nums">{naira(l.total_price)}</p>
-                </li>
-              ))}
+              {s.items.map((l, i) => {
+                const funding = itemProgress.find((item) => item.key === `${s.store_id}:${l.product_id}:${i}`);
+                return (
+                  <li key={i} className="flex gap-3">
+                    <div className="w-14 h-14 rounded-md bg-gray-100 overflow-hidden shrink-0">{l.image && <img src={l.image} alt="" className="w-full h-full object-cover" />}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] line-clamp-2">{l.name}</p>
+                      <p className="text-[12px] text-gray-500">Qty {l.quantity}{l.variant_options ? ` · ${Object.values(l.variant_options).join(' / ')}` : ''}</p>
+                      {cart.is_marketplace && funding && (
+                        <div className="mt-2">
+                          <div className="mb-1 flex items-center justify-between gap-2 text-[10px] text-gray-500">
+                            <span>{funding.complete ? 'Fully funded' : `${naira(funding.funded)} of ${naira(funding.total)} funded`}</span>
+                            <span className="font-semibold">{funding.complete ? 'Completed' : `${Math.round(funding.percent)}%`}</span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-gray-100" role="progressbar" aria-label={`${l.name} funding progress`} aria-valuemin={0} aria-valuemax={funding.total} aria-valuenow={funding.funded}>
+                            <div className="h-full rounded-full bg-[#FA6338] transition-all duration-300" style={{ width: `${funding.percent}%` }} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-start gap-1.5">
+                      <p className="text-[13px] font-semibold tabular-nums">{naira(l.total_price)}</p>
+                      {cart.is_marketplace && funding?.complete && <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-label="Item fully funded" />}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
             <div className="mt-3 pt-3 border-t border-gray-100 flex justify-between text-[13px]">
               <span className="text-gray-600">Delivery</span>
@@ -117,8 +153,8 @@ export default function PaySharedCartPage() {
         {cart.is_marketplace && (
           <section className="bg-white px-4 py-4">
             <div className="flex items-center justify-between text-[13px] font-semibold"><span>Help Pay progress</span><span>{naira(amountRaised)} of {naira(targetAmount)}</span></div>
-            <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={targetAmount} aria-valuenow={Math.min(amountRaised, targetAmount)}><div className="h-full rounded-full bg-[#FA6338]" style={{ width: (targetAmount > 0 ? Math.min(100, amountRaised / targetAmount * 100) : 0) + '%' }} /></div>
-            <p className="mt-2 text-[12px] text-gray-500">Remaining: {naira(remainingAmount)}. You can contribute part of the balance; the order is placed when the full amount is raised.</p>
+            <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden" role="progressbar" aria-valuemin={0} aria-valuemax={targetAmount} aria-valuenow={Math.min(amountRaised, targetAmount)}><div className="h-full bg-[#FA6338] transition-all duration-300" style={{ width: (targetAmount > 0 ? Math.min(100, amountRaised / targetAmount * 100) : 0) + '%' }} /></div>
+            <p className="mt-2 text-[12px] text-gray-500">Remaining: {naira(remainingAmount)}. Each product above shows its funding progress; contributions cover the lowest-priced items first.</p>
           </section>
         )}
 

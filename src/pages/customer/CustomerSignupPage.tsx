@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, ShoppingBag, ArrowLeft, Check } from 'lucide-react';
+import { Eye, EyeOff, ArrowLeft, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCustomerAuthStore } from '@/stores';
 import { toast } from 'sonner';
@@ -100,9 +100,7 @@ export default function CustomerSignupPage() {
 
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <ShoppingBag className="w-8 h-8 text-white" />
-            </div>
+            <img src="/qafrica-bag-logo.svg" alt="QAFRICA official logo" className="w-16 h-16 object-contain mx-auto mb-4 rounded-xl" />
             <h1 className="text-2xl font-bold text-gray-900">Create Account</h1>
             <p className="text-gray-500 mt-1">Join QAfrica shoppers</p>
           </div>

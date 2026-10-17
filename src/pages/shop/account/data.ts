@@ -28,6 +28,8 @@ export type MyOrder = {
     total_price: number;
     variant_options: Record<string, string> | null;
     product_id: string | null;
+    source_id?: string | null;
+    original_product_id?: string | null;
     image_url?: string | null;
   }[];
   china_code?: string | null;
@@ -140,6 +142,38 @@ async function attachChinaDropshipTracking(order: MyOrder): Promise<MyOrder> {
   };
 }
 
+async function enrichChinaDropshipImages(orders: MyOrder[]): Promise<MyOrder[]> {
+  const items = orders.flatMap(order => order.order_items.map(item => ({ item })));
+  const ids = [...new Set(items.flatMap(({ item }) =>
+    [item.source_id, item.original_product_id, item.product_id].filter((id): id is string => typeof id === 'string' && !!id)
+  ))];
+  if (!ids.length) return orders;
+
+  const [china, products] = await Promise.all([
+    supabase.from('china_import_products').select('id,image_url,image_urls').in('id', ids),
+    supabase.from('products').select('id,images,image_url').in('id', ids),
+  ]);
+  const images = new Map<string, string>();
+  for (const product of china.data ?? []) {
+    const image = (Array.isArray(product.image_urls) ? product.image_urls.find(Boolean) : null) || product.image_url;
+    if (image) images.set(product.id, image);
+  }
+  for (const product of products.data ?? []) {
+    const image = (Array.isArray(product.images) ? product.images.find(Boolean) : null) || product.image_url;
+    if (image && !images.has(product.id)) images.set(product.id, image);
+  }
+
+  return orders.map(order => ({
+    ...order,
+    order_items: order.order_items.map(item => {
+      if (item.image_url) return item;
+      const image = [item.source_id, item.original_product_id, item.product_id]
+        .map(id => id ? images.get(id) : undefined).find(Boolean);
+      return image ? { ...item, image_url: image } : item;
+    }),
+  }));
+}
+
 async function fetchUnifiedOrders(customerId: string): Promise<MyOrder[]> {
   // Fetch store orders through the authenticated get-orders function. It uses
   // the verified JWT identity and service-role reads, avoiding a silent empty
@@ -171,7 +205,8 @@ async function fetchUnifiedOrders(customerId: string): Promise<MyOrder[]> {
   if (chinaResult.error) console.error('China Import customer orders query failed:', chinaResult.error);
   const chinaOrders = ((chinaResult.data ?? []) as unknown as ChinaRow[]).map(normalizeChina);
 
-  return [...trackedStoreOrders, ...chinaOrders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const unified = [...trackedStoreOrders, ...chinaOrders].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return enrichChinaDropshipImages(unified);
 }
 
 export function useMyOrders() {
@@ -201,12 +236,13 @@ export async function fetchOrder(id: string, customerId: string): Promise<MyOrde
   const detailRow = Array.isArray(detailPayload) ? detailPayload[0] : detailPayload;
 
   if (!detailError && detailRow && !detailRow.error && detailRow.id === id) {
-    return {
+    const normalized = {
       ...detailRow,
       stores: detailRow.stores ?? detailRow.store ?? null,
-      source_type: 'store',
+      source_type: 'store' as const,
       order_items: Array.isArray(detailRow.order_items) ? detailRow.order_items : [],
     } as MyOrder;
+    return (await enrichChinaDropshipImages([normalized]))[0];
   }
 
   if (detailError || detailResponse?.error) {
@@ -218,7 +254,7 @@ export async function fetchOrder(id: string, customerId: string): Promise<MyOrde
   const { data, error } = await supabase.from('orders').select(SELECT)
     .eq('id', id).eq('customer_id', customerId).maybeSingle();
   if (error) console.error('Direct customer order detail query failed:', error);
-  if (data) return { ...(data as unknown as MyOrder), source_type: 'store' };
+  if (data) return (await enrichChinaDropshipImages([{ ...(data as unknown as MyOrder), source_type: 'store' }]))[0];
 
   const { data: china, error: chinaError } = await supabase.from('china_import_orders')
     .select('id, code, status, payment_status, total_ngn, subtotal_ngn, shipping_ngn, created_at, shipped_at, received_at, user_id, customer_whatsapp, delivery_address, shipping_method, batch_id, items')

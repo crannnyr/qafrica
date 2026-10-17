@@ -13,20 +13,22 @@ const cached = (a: Args, seed: string) => {
   return hit && Date.now() - hit.at < 10 * 60 * 1000 ? hit : null;
 };
 
-const createViewerSeed = () => {
-  try {
-    const existing = window.localStorage.getItem('qafrica_unified_marketplace_seed');
-    if (existing) return existing;
-    const seed = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
-    window.localStorage.setItem('qafrica_unified_marketplace_seed', seed);
-    return seed;
-  } catch {
-    return `${Date.now()}-${Math.random()}`;
-  }
-};
+const createViewerSeed = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
 
 export function useUnifiedMarketplaceMixed(args: Args) {
-  const [viewerSeed] = useState(createViewerSeed);
+  const [viewerSeed, setViewerSeed] = useState(createViewerSeed);
+
+  // Give the main marketplace a fresh, deterministic order every five minutes.
+  // Each seed is shared across pagination so items don't jump between pages.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setViewerSeed(createViewerSeed());
+    }, 5 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
   const initialCache = cached(args, viewerSeed);
   const [items, setItems] = useState<UnifiedMarketplaceProduct[]>(initialCache?.items ?? []);
   const [status, setStatus] = useState<FeedStatus>(initialCache?.status ?? 'loading');

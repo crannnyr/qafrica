@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -73,50 +73,60 @@ function CollapsibleDescription({
 }
 
 // ── Dropship modal ────────────────────────────────────────────────────────────
-function DropshipModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function DropshipModal({
+  open,
+  onClose,
+  product,
+  onCopyCode,
+}: {
+  open: boolean;
+  onClose: () => void;
+  product: Product | null;
+  onCopyCode: () => void;
+}) {
+  if (!product) return null;
+  const productCode = product.product_code || product.sku || product.barcode || product.id;
+  const wholesalePrice = Number(product.dropship_price || product.wholesale_price || product.cost_price || 0);
   return (
     <AnimatePresence>
       {open && (
         <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
-            onClick={onClose}
-          />
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-50 flex items-center justify-center px-4"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-xl">
-              <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center mb-4">
-                <Package className="w-5 h-5 text-gray-600" />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50" onClick={onClose} />
+          <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }} transition={{ duration: 0.18 }}
+            className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6 overflow-y-auto"
+            onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-xl my-auto">
+              <div className="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center mb-4">
+                <Package className="w-5 h-5 text-orange-600" />
               </div>
-              <h3 className="font-semibold text-gray-900 mb-1 text-base">Start selling on QAFRICA</h3>
-              <p className="text-sm text-gray-500 leading-relaxed mb-6">
-                Want an affordable online store like this and resell this item? It's possible with QAFRICA — would you like to find out more?
+              <h3 className="font-semibold text-gray-900 mb-1 text-base">Dropship this item</h3>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Sell <strong>{product.name}</strong> at your own price and choose your profit margin. Eligible products are available at a discounted wholesale/dropship rate.
               </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={onClose}
-                  className="flex-1 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition"
-                >
-                  Not now
-                </button>
-                <a
-                  href="https://qafrica.store"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 py-2.5 text-sm font-semibold text-white bg-gray-900 rounded-xl hover:bg-gray-800 transition text-center"
-                  onClick={onClose}
-                >
-                  Visit QAFRICA
-                </a>
+              <div className="mt-4 rounded-xl border border-gray-200 p-3">
+                <div className="flex items-start gap-3">
+                  {product.images?.[0] && <img src={product.images[0]} alt="" className="w-14 h-14 rounded-lg object-cover" />}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-900">{product.name}</p>
+                    <p className="mt-1 text-xs text-gray-500">{wholesalePrice > 0 ? `Wholesale/dropship reference: ₦${wholesalePrice.toLocaleString()}` : 'Wholesale pricing is shown when you import this item.'}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Product code</p>
+                    <p className="truncate font-mono text-xs font-bold text-gray-900">{productCode}</p>
+                  </div>
+                  <button type="button" onClick={onCopyCode} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100">Copy code</button>
+                </div>
+              </div>
+              <p className="mt-4 text-xs leading-relaxed text-gray-500">Create your store at QAFRICA, then open the Marketplace section in the sidebar to complete your seller verification and access product categories.</p>
+              <div className="flex gap-3 mt-5">
+                <button onClick={onClose} className="flex-1 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition">Not now</button>
+                <a href="https://qafrica.store" target="_blank" rel="noopener noreferrer"
+                  className="flex-1 py-2.5 text-sm font-semibold text-white bg-orange-500 rounded-xl hover:bg-orange-600 transition text-center"
+                  onClick={onClose}>Start now</a>
               </div>
             </div>
           </motion.div>
@@ -135,7 +145,9 @@ export default function ProductDetailPage() {
   const { goBack, fromMarketplace } = useSmartBack(`/${slug}${previewSearch()}`);
   const storeHref = fromMarketplace ? marketplaceLink(`/${slug}`) : `/${slug}${previewSearch()}`;
   const chainState = fromMarketplace ? MARKETPLACE_STATE : undefined;
-  const { addItem, addToWishlist, removeFromWishlist, isInWishlist, getTotalItems } = useCartStore();
+  const { addItem, addToWishlist, removeFromWishlist, isInWishlist } = useCartStore();
+  const cartItems = useCartStore(state => state.items);
+  const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   const { customer } = useCustomerAuthStore();
 
   const [store, setStore] = useState<StoreType | null>(null);
@@ -143,6 +155,7 @@ export default function ProductDetailPage() {
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
+  const addToCartInFlight = useRef(false);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   // selectedVariantData is only used for Format B (legacy) products that have per-variant price/stock
   const [selectedVariantData, setSelectedVariantData] = useState<ProductVariant | null>(null);
@@ -362,7 +375,10 @@ export default function ProductDetailPage() {
   };
 
   const handleAddToCart = (variantOverride?: Record<string, string>, qtyOverride?: number): boolean => {
+    if (addToCartInFlight.current) return false;
     if (!product || !store) return false;
+    addToCartInFlight.current = true;
+    window.setTimeout(() => { addToCartInFlight.current = false; }, 800);
     const qty = qtyOverride ?? quantity;
     const variants = variantOverride ?? selectedVariants;
     const v = product.variants as any[] | undefined;
@@ -452,7 +468,10 @@ export default function ProductDetailPage() {
   };
 
   // ── Loading ───────────────────────────────────────────────────────────────
-  if (isLoading) {
+  // Keep the existing product view mounted when switching to another product
+  // within the same storefront. Replacing the entire page with a spinner on
+  // every route-param change caused the visible flicker between products.
+  if (isLoading && (!product || !store)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div
@@ -474,7 +493,7 @@ export default function ProductDetailPage() {
 
       {/* ── Header ── */}
       {look ? (
-        <LookPageHeader store={viewStore ?? store} look={look} primary={primary} slug={slug ?? store.slug} cartCount={getTotalItems()} onBack={goBack} backLabel={fromMarketplace ? 'Back to marketplace' : undefined} storeHref={storeHref} storeState={chainState} />
+        <LookPageHeader store={viewStore ?? store} look={look} primary={primary} slug={slug ?? store.slug} cartCount={cartCount} onBack={goBack} backLabel={fromMarketplace ? 'Back to marketplace' : undefined} storeHref={storeHref} storeState={chainState} />
       ) : (
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
@@ -501,8 +520,13 @@ export default function ProductDetailPage() {
             <span className="text-sm font-semibold text-gray-900 hidden sm:block">{store.name}</span>
           </Link>
 
-          <Link to="/cart" className="p-2 rounded-full hover:bg-gray-100 transition" aria-label="Cart">
+          <Link to="/cart" className="relative p-2 rounded-full hover:bg-gray-100 transition" aria-label={`Cart${cartCount > 0 ? `, ${cartCount} items` : ""}`}>
             <ShoppingCart className="w-4 h-4 text-gray-700" />
+            {cartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-orange-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                {cartCount}
+              </span>
+            )}
           </Link>
         </div>
       </header>
@@ -765,7 +789,21 @@ export default function ProductDetailPage() {
         </div>
       </footer>
 
-      <DropshipModal open={showDropshipModal} onClose={() => setShowDropshipModal(false)} />
+      <DropshipModal
+        open={showDropshipModal}
+        onClose={() => setShowDropshipModal(false)}
+        product={product}
+        onCopyCode={async () => {
+          const productCode = product?.sku || product?.barcode || product?.id;
+          if (!productCode) return;
+          try {
+            await navigator.clipboard.writeText(productCode);
+            toast.success('Product code copied');
+          } catch {
+            toast.error('Could not copy product code. Please copy it manually.');
+          }
+        }}
+      />
 
       {/* ── Buy Now modal ── */}
       <AnimatePresence>

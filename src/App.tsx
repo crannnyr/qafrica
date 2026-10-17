@@ -130,6 +130,7 @@ const TrackRouter = lazy(() => import('@/pages/shop/TrackRouter'));
 const ShareCartPage = lazy(() => import('@/pages/shop/ShareCartPage'));
 const PaySharedCartPage = lazy(() => import('@/pages/shop/PaySharedCartPage'));
 const AdminIssues = lazy(() => import('@/pages/admin/AdminIssues'));
+const AdminBannerAds = lazy(() => import('@/pages/admin/AdminBannerAds'));
 
 // Dashboard Pages
 const DashboardLayout = lazy(() => import('@/pages/dashboard/DashboardLayout'));
@@ -659,6 +660,7 @@ function App() {
             <Route path="users" element={<AdminUsers />} />
             <Route path="stores" element={<AdminStores />} />
             <Route path="products" element={<AdminProducts />} />
+            <Route path="banner-ads" element={<AdminBannerAds />} />
             <Route path="orders" element={<AdminOrders />} />
             <Route path="withdrawals" element={<AdminWithdrawals />} />
             <Route path="failures" element={<AdminFailures />} />

@@ -4,9 +4,11 @@ import { PackageSearch, RefreshCw, ShieldCheck } from 'lucide-react';
 import MarketplaceLayout from '@/pages/marketplace/MarketplaceLayout';
 import { MARKETPLACE_STATE } from '@/lib/navigation';
 import { marketplaceLink } from '@/lib/marketplaceAttribution';
+import { supabase } from '@/services';
 import { nicheLabel } from '@/pages/marketplace/useMarketplace';
 import { useMarketplaceStores } from '@/pages/customer/StoreDiscovery/useMarketplaceStores';
 import UnifiedProductCard from './UnifiedProductCard';
+import PlacementAds from './PlacementAds';
 import { useUnifiedMarketplaceMixed } from './useUnifiedMarketplaceMixed';
 import { useUnifiedMarketplaceCategories } from './useUnifiedMarketplaceCategories';
 import type { UnifiedFeedTab } from './types';
@@ -149,6 +151,7 @@ function UnifiedMarketplaceFeedPage() {
         ))}
       </div>
 
+      <PlacementAds niche={niche} category={category} search={query || null} />
       <UnifiedFeed feed={feed} filtered={!browsing} onClear={() => setParams(new URLSearchParams())} />
     </MarketplaceLayout>
   );
@@ -229,8 +232,30 @@ function UnifiedFeed({
 }
 
 function BannerCarousel() {
+  const recordBannerClick = (campaignId: string) => {
+    const clickKey = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random()}-${Math.random()}`;
+    void supabase.rpc('record_banner_ad_click', { p_campaign_id: campaignId, p_click_key: clickKey }).then(({ error }) => {
+      if (error && !error.message.includes('CPC rate has not been configured')) {
+        console.warn('Banner ad click was not billed:', error.message);
+      }
+    });
+  };
   const { stores } = useMarketplaceStores();
-  const slides = stores.filter((s) => s.banner_url).slice(0, 6);
+  const [bannerAds, setBannerAds] = useState<{id:string; campaign_name:string; image_url:string; target_url:string|null}[]>([]);
+  useEffect(() => {
+    let alive = true;
+    supabase.from('ad_campaigns').select('id,campaign_name,image_url,target_url')
+      .eq('campaign_type','banner').eq('approval_status','approved').eq('payment_status','paid').eq('status','active')
+      .lte('start_date',new Date().toISOString()).or(`end_date.is.null,end_date.gt.${new Date().toISOString()}`)
+      .not('image_url','is',null).order('created_at',{ascending:false}).limit(3)
+      .then(({data,error}) => { if (alive && !error) setBannerAds((data ?? []).filter(a => Number(a.image_url?.length) > 0) as typeof bannerAds); });
+    return () => { alive = false; };
+  }, []);
+  const storeSlides = stores.filter((s) => s.banner_url).map(s => ({id:s.id,name:s.name,slug:s.slug,banner_url:s.banner_url,isAd:false,target_url:null as string|null}));
+  const paidSlides = bannerAds.map(a => ({id:'ad:'+a.id,name:a.campaign_name,slug:'',banner_url:a.image_url,isAd:true,target_url:a.target_url}));
+  const slides = [...paidSlides, ...storeSlides].slice(0, 6);
   const track = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -269,17 +294,19 @@ function BannerCarousel() {
         {slides.map((s, i) => (
           <Link
             key={s.id}
-            to={marketplaceLink(`/${s.slug}`)}
+            to={s.isAd ? (s.target_url || '/stores-v2') : marketplaceLink(`/${s.slug}`)}
             state={MARKETPLACE_STATE}
+            onClickCapture={() => { if (s.isAd) recordBannerClick(s.id.replace(/^ad:/, '')); }}
             aria-roledescription="slide"
             aria-label={`${i + 1} of ${slides.length}: ${s.name}`}
             className="relative shrink-0 w-full snap-start aspect-[2.2/1] sm:aspect-[3.4/1] bg-gray-200"
           >
             <img src={s.banner_url!} alt="" className="absolute inset-0 w-full h-full object-cover" loading={i === 0 ? 'eager' : 'lazy'} />
             <span className="absolute inset-0 bg-gradient-to-r from-black/65 via-black/20 to-transparent" />
+            {s.isAd && <span className="absolute top-3 left-3 rounded bg-black/75 px-2 py-1 text-[10px] font-bold uppercase text-white">Ad</span>}
             <span className="absolute left-4 bottom-4 right-1/3 text-white">
               <span className="block text-lg sm:text-2xl font-extrabold leading-tight line-clamp-2">{s.name}</span>
-              <span className="mt-2 inline-block bg-white text-gray-900 text-xs font-bold px-3 py-1.5">SHOP NOW</span>
+              <span className="mt-2 inline-block bg-white text-gray-900 text-xs font-bold px-3 py-1.5">{s.isAd ? 'LEARN MORE' : 'SHOP NOW'}</span>
             </span>
           </Link>
         ))}

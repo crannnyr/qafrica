@@ -32,7 +32,28 @@ export default function StoreDiscoveryPage() {
         .or('is_blocked.eq.false,is_blocked.is.null')
         .order('created_at', { ascending: false });
       const storeList = !error && data ? data : [];
-      setStores(storeList);
+
+      // Use approved review statistics from the existing database RPC. Never
+      // manufacture ratings or review counts when a store has no reviews.
+      const storesWithRatings = await Promise.all(storeList.map(async (store: any) => {
+        try {
+          const { data: statsRows, error: statsError } = await supabase.rpc(
+            'get_store_review_stats',
+            { p_store_id: store.id },
+          );
+          const stats = !statsError
+            ? (Array.isArray(statsRows) ? statsRows[0] : statsRows)
+            : null;
+          return {
+            ...store,
+            rating: Number(stats?.average_rating ?? 0),
+            review_count: Number(stats?.total_reviews ?? 0),
+          };
+        } catch {
+          return { ...store, rating: 0, review_count: 0 };
+        }
+      }));
+      setStores(storesWithRatings);
 
       // Store-section visibility requires an active PAID (non-free) plan —
       // fetched separately since stores don't carry their own tier field.
@@ -92,8 +113,8 @@ export default function StoreDiscoveryPage() {
         primary_color: s.primary_color,
         niches:        s.niches     || [],
         product_count: getProductCount(s.products),
-        rating:        4.5,
-        review_count:  100,
+        rating:        Number(s.rating ?? 0),
+        review_count:  Number(s.review_count ?? 0),
         is_verified:   s.is_verified,
         created_at:    s.created_at,
       }));

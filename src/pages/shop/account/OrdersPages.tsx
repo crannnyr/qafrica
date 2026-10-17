@@ -168,7 +168,7 @@ export function OrderPage() {
               ) : null}
             </div>
           ) : (
-            <Link to={`/track?order=${encodeURIComponent(o.order_number)}&email=${encodeURIComponent(o.customer_email ?? '')}`} className="mt-3 inline-block text-[12px] font-semibold underline underline-offset-2">See full timeline</Link>
+            <Link to={`/track-order?order=${encodeURIComponent(o.order_number)}&email=${encodeURIComponent(o.customer_email ?? '')}`} className="mt-3 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 text-[13px] font-semibold text-white shadow-sm hover:bg-orange-600"> <Package className="h-4 w-4" aria-hidden /> Track this order </Link>
           )}
         </section>
 

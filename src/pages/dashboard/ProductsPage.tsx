@@ -206,6 +206,11 @@ export default function ProductsPage() {
                   
                   {/* Status Badges */}
                   <div className="absolute top-3 left-3 flex flex-col gap-2">
+                    {!isImported && (
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold shadow-sm ${product.marketplace_approval_status === 'approved' ? 'bg-emerald-100 text-emerald-700' : product.marketplace_approval_status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
+                        Marketplace: {product.marketplace_approval_status ?? 'pending'}
+                      </span>
+                    )}
                     {isImported && (
                       <span className="px-2 py-1 rounded-full text-xs font-bold bg-indigo-500 text-white flex items-center gap-1 shadow-sm">
                         <Download className="w-3 h-3" />

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart, ArrowLeft, Heart, Store as StoreIcon, ChevronRight,
   Minus, Plus, Check, AlertCircle, Clock, ChevronDown, ChevronUp,
-  Truck, Shield, Package, BadgeCheck,
+  Truck, Shield, Package, BadgeCheck, Copy, X,
 } from 'lucide-react';
 import { supabase } from '@/services';
 import { toast } from 'sonner';
@@ -134,6 +134,8 @@ function RelatedProductCard({ item }: { item: UnifiedMarketplaceProduct }) {
 }
 
 export default function UnifiedProductPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { sourceType, sourceId } = useParams<{ sourceType: string; sourceId: string }>();
   const [searchParams] = useSearchParams();
   const sellerStoreId = searchParams.get('store');
@@ -144,6 +146,15 @@ export default function UnifiedProductPage() {
   const [quantity, setQuantity] = useState(1);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [relatedProducts, setRelatedProducts] = useState<UnifiedMarketplaceProduct[]>([]);
+  const [dropshipModalOpen, setDropshipModalOpen] = useState(false);
+  const [productCode, setProductCode] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+  const addToastGuard = useRef(false);
+  const cartItems = useCartStore(s => s.items);
+  const storeCartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
+  const importCart = useImportCartStore(s => s.cart);
+  const importCartCount = importCart.reduce((sum, item) => sum + item.quantity, 0);
+  const cartCount = storeCartCount + importCartCount;
   const addItem = useCartStore(s => s.addItem);
   const addToWishlist = useCartStore(s => s.addToWishlist);
   const removeFromWishlist = useCartStore(s => s.removeFromWishlist);
@@ -160,6 +171,11 @@ export default function UnifiedProductPage() {
   }, [isAuthenticated, customer?.id, loadWishlist]);
 
   useEffect(() => {
+    addToastGuard.current = false;
+    return () => { addToastGuard.current = false; };
+  }, [sourceType, sourceId]);
+
+  useEffect(() => {
     let active = true;
 
     async function load() {
@@ -170,6 +186,13 @@ export default function UnifiedProductPage() {
       }
 
       setLoading(true);
+      setError(null);
+      setProduct(null);
+      setStore(null);
+      setRelatedProducts([]);
+      setProductCode('');
+      setSelectedVariants({});
+      setQuantity(1);
 
       const rpcName = sourceType === 'china_import' && sellerStoreId
         ? 'marketplace_unified_product'
@@ -199,6 +222,19 @@ export default function UnifiedProductPage() {
 
       const resolvedProduct = row as UnifiedMarketplaceProduct;
       setProduct(resolvedProduct);
+      setCodeLoading(true);
+      const codeTable = sourceType === 'china_import' ? 'china_import_products' : 'products';
+      const codeColumn = 'product_code';
+      const { data: codeRow, error: codeError } = await supabase
+        .from(codeTable)
+        .select(codeColumn)
+        .eq('id', sourceId)
+        .maybeSingle();
+      if (active && !codeError && codeRow) {
+        const code = (codeRow as Record<string, unknown>)[codeColumn];
+        if (typeof code === 'string') setProductCode(code);
+      }
+      if (active) setCodeLoading(false);
       setError(null);
 
       // Normal marketplace products keep the original seller/store presentation.
@@ -211,6 +247,10 @@ export default function UnifiedProductPage() {
 
         if (active && storeData) setStore(storeData as StoreMeta);
       }
+
+      // The main product is ready; don't keep the whole page behind a spinner
+      // while secondary related-product queries run.
+      if (active) setLoading(false);
 
       const viewerSeed = typeof window !== 'undefined'
         ? window.localStorage.getItem('qafrica_unified_marketplace_seed') || ''
@@ -264,10 +304,7 @@ export default function UnifiedProductPage() {
         }
       }
 
-      if (active) {
-        setRelatedProducts(candidates.slice(0, 4));
-        setLoading(false);
-      }
+      if (active) setRelatedProducts(candidates.slice(0, 4));
     }
 
     void load();
@@ -310,6 +347,7 @@ export default function UnifiedProductPage() {
   const sellerLogo = store?.logo_url;
 
   const handleAddToCart = () => {
+    if (addToastGuard.current) return;
     if (!product) return;
     if (!available) {
       toast.error('This product is out of stock');
@@ -320,9 +358,13 @@ export default function UnifiedProductPage() {
       return;
     }
 
+    addToastGuard.current = true;
+    window.setTimeout(() => { addToastGuard.current = false; }, 800);
+
     if (china && product.seller_id) {
       const sellerStore = store;
       if (!sellerStore) {
+        addToastGuard.current = false;
         toast.error('Store information is unavailable');
         return;
       }
@@ -371,6 +413,7 @@ export default function UnifiedProductPage() {
     }
 
     if (!store) {
+      addToastGuard.current = false;
       toast.error('Store information is unavailable');
       return;
     }
@@ -429,6 +472,12 @@ export default function UnifiedProductPage() {
     }
   };
 
+  const handleBuyNow = () => {
+    if (!product || !available || (variantNames.length > 0 && !selectedAll)) return;
+    handleAddToCart();
+    navigate('/stores-v2/checkout');
+  };
+
   const sellerCard = (
     <div className="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2.5 hover:border-gray-300 hover:bg-gray-50 transition">
       {china ? (
@@ -453,9 +502,17 @@ export default function UnifiedProductPage() {
         <span className="block text-sm font-semibold text-gray-900 truncate">{product.seller_name}</span>
       </span>
 
-      {product.seller_type === 'store' && product.seller_slug ? (
+      {china ? (
         <Link
-          to="/stores-v2"
+          to="/recommendations"
+          className="inline-flex items-center gap-1 text-sm font-medium text-gray-700"
+        >
+          <StoreIcon className="w-4 h-4" /> View products <ChevronRight className="w-4 h-4" />
+        </Link>
+      ) : product.seller_type === 'store' && product.seller_slug ? (
+        <Link
+          to={`/${product.seller_slug}`}
+          state={{ returnTo: `${location.pathname}${location.search}` }}
           className="inline-flex items-center gap-1 text-sm font-medium text-gray-700"
         >
           <StoreIcon className="w-4 h-4" /> View store <ChevronRight className="w-4 h-4" />
@@ -492,8 +549,13 @@ export default function UnifiedProductPage() {
             />
           </Link>
 
-          <Link to="/stores-v2/cart" className="p-2 rounded-full hover:bg-gray-100 transition" aria-label="Cart">
-            <ShoppingCart className="w-4 h-4 text-gray-700" />
+          <Link to="/stores-v2/cart" className="relative p-2 rounded-full hover:bg-gray-100 transition" aria-label={`Cart${cartCount > 0 ? `, ${cartCount} items` : ""}`}>
+            <ShoppingCart className="w-5 h-5 text-gray-700" />
+            {cartCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 bg-[#FA6338] text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                {cartCount > 99 ? "99+" : cartCount}
+              </span>
+            )}
           </Link>
         </div>
       </header>
@@ -650,7 +712,7 @@ export default function UnifiedProductPage() {
                 type="button"
                 disabled={!available || (variantNames.length > 0 && !selectedAll)}
                 className="flex-1 h-12 rounded-xl text-sm font-semibold bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40 transition"
-                title="Checkout integration is completed in Step 7"
+                onClick={handleBuyNow}
               >
                 Buy now
               </button>
@@ -684,14 +746,15 @@ export default function UnifiedProductPage() {
               </span>
             </div>
 
-            {product.seller_type === 'store' && (
-              <Link
-                to="/stores-v2"
-                className="self-start flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 border border-gray-200 hover:border-gray-300 rounded-full px-3 py-1.5 transition"
+            {(product.seller_type === 'store' || china) && (
+              <button
+                type="button"
+                onClick={() => setDropshipModalOpen(true)}
+                className="self-start flex items-center gap-1.5 text-sm font-semibold text-[#E8590C] hover:text-[#c94d0a] border border-orange-200 hover:border-orange-300 bg-orange-50 rounded-full px-4 py-2 transition"
               >
-                <Package className="w-3 h-3" />
-                View more marketplace products
-              </Link>
+                <Package className="w-4 h-4" />
+                Dropship this item
+              </button>
             )}
           </section>
         </div>
@@ -720,6 +783,73 @@ export default function UnifiedProductPage() {
           </section>
         )}
       </main>
+
+      {dropshipModalOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setDropshipModalOpen(false);
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dropship-modal-title"
+            className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={() => setDropshipModalOpen(false)}
+              aria-label="Close dropshipping information"
+              className="absolute right-4 top-4 rounded-full p-2 text-gray-500 hover:bg-gray-100"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-orange-100 text-[#E8590C]">
+              <Package className="h-6 w-6" />
+            </div>
+            <h2 id="dropship-modal-title" className="pr-8 text-xl font-bold text-gray-900">
+              Sell this product with QAfrica
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-gray-600">
+              Get access to a discounted wholesale rate, list the item in your own storefront at a price you choose, and earn the difference as profit. You’ll need a QAfrica storefront account with access to this product’s category.
+            </p>
+            <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Product code</p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="min-w-0 flex-1 break-all text-sm font-bold text-gray-900">
+                  {codeLoading ? 'Loading code…' : productCode || 'Code unavailable'}
+                </code>
+                <button
+                  type="button"
+                  disabled={codeLoading || !productCode}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(productCode);
+                      toast.success('Product code copied');
+                    } catch {
+                      toast.error('Could not copy the code. Please copy it manually.');
+                    }
+                  }}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 disabled:opacity-40"
+                >
+                  <Copy className="h-3.5 w-3.5" /> Copy
+                </button>
+              </div>
+            </div>
+            <p className="mt-4 text-xs leading-5 text-gray-500">
+              Copy this code so you can find and import the item from the catalog after signing up.
+            </p>
+            <a
+              href="/signup"
+              className="mt-5 flex h-12 w-full items-center justify-center rounded-xl bg-[#E8590C] px-4 text-sm font-bold text-white transition hover:bg-[#cf4f0b]"
+            >
+              Start now
+            </a>
+          </section>
+        </div>
+      )}
 
       <footer className="border-t border-gray-100 mt-16">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 text-center">
