@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, PackageCheck } from 'lucide-react';
+import { AlertCircle, PackageCheck, Search, X } from 'lucide-react';
 import CONFIG from '@/lib/config';
 
 type SharedItem = {
@@ -59,7 +59,16 @@ export default function PartialReceivingSharePage() {
   const [list, setList] = useState<SharedList | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const products = useMemo(() => groupItemsByProduct(list?.items ?? []), [list]);
+  const filteredProducts = useMemo(() => {
+    const query = searchTerm.trim().toLocaleLowerCase();
+    if (!query) return products;
+    return products.filter(product =>
+      product.product_name.toLocaleLowerCase().includes(query) ||
+      product.variants.some(variant => variant.label.toLocaleLowerCase().includes(query))
+    );
+  }, [products, searchTerm]);
 
   useEffect(() => {
     let active = true;
@@ -98,36 +107,62 @@ export default function PartialReceivingSharePage() {
           <>
             <div className="mb-4 flex items-center justify-between rounded-xl border border-orange-100 bg-orange-50 px-4 py-3">
               <span className="text-sm font-semibold text-orange-900">Products needed</span>
-              <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-orange-700">{products.length}</span>
+              <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-orange-700">{filteredProducts.length}{searchTerm.trim() ? ` of ${products.length}` : ''}</span>
             </div>
-            <div className="space-y-3">
-              {products.map(product => (
-                <article key={product.product_name} className="flex gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
-                  {product.image_url ? <img src={product.image_url} alt={product.product_name} loading="lazy" className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 object-cover sm:h-24 sm:w-24" /> : <div className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 sm:h-24 sm:w-24" />}
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-sm font-bold text-gray-900 sm:text-base">{product.product_name}</h2>
-                    <div className="mt-3 space-y-2">
-                      {product.variants.map(variant => (
-                        <div key={variant.label} className="flex items-start justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5">
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Variant</p>
-                            <p className="mt-0.5 text-xs font-medium text-gray-700">{variant.label}</p>
-                          </div>
-                          <div className="shrink-0 text-right">
-                            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Quantity needed</p>
-                            <p className="mt-0.5 text-sm font-black text-orange-700">{variant.remaining_quantity}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
-                      <span className="text-xs font-semibold text-gray-500">Total needed for this product</span>
-                      <span className="text-sm font-black text-gray-900">{product.total_remaining}</span>
-                    </div>
-                  </div>
-                </article>
-              ))}
+
+            <div className="mb-4 flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100">
+              <Search className="h-5 w-5 flex-shrink-0 text-gray-400" aria-hidden="true" />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={event => setSearchTerm(event.target.value)}
+                placeholder="Search products, colors, sizes or variants…"
+                aria-label="Search products and variants"
+                className="min-w-0 flex-1 bg-transparent text-sm text-gray-900 outline-none placeholder:text-gray-400"
+              />
+              {searchTerm && (
+                <button type="button" onClick={() => setSearchTerm('')} aria-label="Clear search" className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
+
+            {filteredProducts.length === 0 ? (
+              <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center">
+                <Search className="mx-auto h-7 w-7 text-gray-300" />
+                <p className="mt-3 text-sm font-semibold text-gray-700">No matching products found</p>
+                <p className="mt-1 text-xs text-gray-500">Try another product name, color, size or variant.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredProducts.map(product => (
+                  <article key={product.product_name} className="flex gap-4 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm sm:p-5">
+                    {product.image_url ? <img src={product.image_url} alt={product.product_name} loading="lazy" className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 object-cover sm:h-24 sm:w-24" /> : <div className="h-20 w-20 flex-shrink-0 rounded-xl bg-gray-100 sm:h-24 sm:w-24" />}
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-sm font-bold text-gray-900 sm:text-base">{product.product_name}</h2>
+                      <div className="mt-3 space-y-2">
+                        {product.variants.map(variant => (
+                          <div key={variant.label} className="flex items-start justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2.5">
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Variant</p>
+                              <p className="mt-0.5 text-xs font-medium text-gray-700">{variant.label}</p>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Quantity needed</p>
+                              <p className="mt-0.5 text-sm font-black text-orange-700">{variant.remaining_quantity}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
+                        <span className="text-xs font-semibold text-gray-500">Total needed for this product</span>
+                        <span className="text-sm font-black text-gray-900">{product.total_remaining}</span>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
             <p className="mt-6 text-center text-xs text-gray-400">Shared using a private link. Customer contact and delivery details are not shown.</p>
           </>
         )}
