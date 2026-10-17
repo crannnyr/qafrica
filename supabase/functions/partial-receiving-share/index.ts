@@ -24,12 +24,25 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await db.from('china_import_partial_receiving_shares')
       .select('order_code,items,created_at').eq('token', token).maybeSingle()
     if (error || !data) return json({ error: 'This shared list could not be found.' }, 404)
-    let shippingMethod: string | null = null
-    if (data.order_id) {
-      const { data: order } = await db.from('china_import_orders').select('shipping_method').eq('id', data.order_id).maybeSingle()
-      shippingMethod = typeof order?.shipping_method === 'string' ? order.shipping_method : null
-    }
-    return json({ order_code: data.order_code, shipping_method: shippingMethod, items: data.items, created_at: data.created_at })
+
+    // Resolve shipping methods live from china_import_orders for every order represented in the shared list.
+    const items = Array.isArray(data.items) ? data.items as Record<string, unknown>[] : []
+    const orderCodes = [...new Set(items
+      .map(item => typeof item.order_code === 'string' ? item.order_code.trim() : '')
+      .filter(Boolean))]
+    const { data: orders, error: ordersError } = orderCodes.length
+      ? await db.from('china_import_orders').select('code,shipping_method').in('code', orderCodes)
+      : { data: [], error: null }
+    if (ordersError) return json({ error: 'Could not load shipping methods for this list.' }, 500)
+    const shippingByCode = new Map((orders ?? []).map((order: { code: string; shipping_method: string | null }) => [
+      order.code,
+      typeof order.shipping_method === 'string' ? order.shipping_method : null,
+    ]))
+    const refreshedItems = items.map(item => ({
+      ...item,
+      shipping_method: shippingByCode.get(typeof item.order_code === 'string' ? item.order_code : '') ?? null,
+    }))
+    return json({ order_code: data.order_code, items: refreshedItems, created_at: data.created_at })
   }
 
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
