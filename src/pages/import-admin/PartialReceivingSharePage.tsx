@@ -4,6 +4,7 @@ import CONFIG from '@/lib/config';
 
 type SharedItem = {
   order_code?: string;
+  shipping_method?: string | null;
   product_name: string;
   image_url: string | null;
   variant_options: Record<string, unknown> | null;
@@ -14,6 +15,7 @@ type SharedItem = {
 
 type SharedList = {
   order_code: string;
+  shipping_method?: string | null;
   created_at: string;
   items: SharedItem[];
 };
@@ -95,6 +97,10 @@ export default function PartialReceivingSharePage() {
           <h1 className="mt-3 text-2xl font-black text-gray-900 sm:text-3xl">Custom sourcing · Product requirements</h1>
           <p className="mt-2 text-sm text-gray-500">Products are grouped together with each variant and the total quantity still needed across the selected orders.</p>
           {list && <p className="mt-3 text-xs font-semibold text-gray-500">{products.length} products · {new Date(list.created_at).toLocaleDateString()}</p>}
+          {list && (() => {
+            const methods = Array.from(new Set([list.shipping_method, ...(list.items ?? []).map(item => item.shipping_method)].filter((method): method is string => typeof method === 'string' && method.trim().length > 0)));
+            return <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3"><p className="text-[10px] font-bold uppercase tracking-wide text-blue-600">Shipping method</p><p className="mt-1 text-sm font-bold text-blue-950">{methods.length ? methods.join(' · ') : 'Not specified'}</p></div>;
+          })()}
         </header>
 
         {loading ? (
