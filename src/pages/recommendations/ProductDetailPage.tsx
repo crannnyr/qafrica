@@ -10,6 +10,7 @@ import {
 import { fmt, buildCartKey, computeVariantPriceNgn, variantPriceRange } from './RecommendationsPage';
 import type { ImportProduct, VariantGroup } from './RecommendationsPage';
 import SEO, { ProductSchema } from '@/components/SEO';
+import ShareProductButton from '@/components/ShareProductButton';
 import { useImportCartStore } from '@/stores/importCartStore';
 import ImportQtyControl from '@/components/ImportQtyControl';
 import { useCustomerAuthStore } from '@/stores';
@@ -539,6 +540,9 @@ export default function ProductDetailPage() {
           <h1 className="font-black text-gray-900 text-base leading-snug mb-3">
             {product.name}
           </h1>
+          <div className="mb-3">
+            <ShareProductButton title={product.name} description={product.description} />
+          </div>
 
           {/* Collapsible description */}
           {product.description && (

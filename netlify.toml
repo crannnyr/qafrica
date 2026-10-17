@@ -2,6 +2,23 @@
   command = "npm run build"
   publish = "dist"
 
+# Inject product metadata into HTML before link-preview crawlers read it.
+[[edge_functions]]
+  function = "import-meta"
+  path = "/recommendations"
+
+[[edge_functions]]
+  function = "import-meta"
+  path = "/recommendations/*"
+
+[[edge_functions]]
+  function = "import-meta"
+  path = "/stores-v2/product/*"
+
+[[edge_functions]]
+  function = "import-meta"
+  path = "/*/product/*"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

@@ -9,6 +9,7 @@ import {
 import { storeService, productService, supabase } from '@/services';
 import Reviews from '@/components/Reviews';
 import ImageCarousel from '@/components/ImageCarousel';
+import ShareProductButton from '@/components/ShareProductButton';
 import { toast } from 'sonner';
 import { getThemeById } from '@/lib/themes';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
@@ -567,6 +568,9 @@ export default function ProductDetailPage() {
               >
                 {product.name}
               </h1>
+              <div className="mt-3">
+                <ShareProductButton title={product.name} description={product.description} />
+              </div>
             </div>
 
             {/* Marketplace visitors: the only way into the seller's store. Back from there returns to /stores. */}

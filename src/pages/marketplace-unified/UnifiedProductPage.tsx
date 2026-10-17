@@ -14,6 +14,7 @@ import type { Product, Store } from '@/types';
 import Reviews from '@/components/Reviews';
 import ImportReviews from '@/components/ImportReviews';
 import ImageCarousel from '@/components/ImageCarousel';
+import ShareProductButton from '@/components/ShareProductButton';
 import type { UnifiedMarketplaceProduct } from './types';
 import { naira } from './useUnifiedMarketplace';
 
@@ -585,6 +586,9 @@ export default function UnifiedProductPage() {
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight">
                 {product.name}
               </h1>
+              <div className="mt-3">
+                <ShareProductButton title={product.name} description={product.description} />
+              </div>
             </div>
 
             {sellerCard}
