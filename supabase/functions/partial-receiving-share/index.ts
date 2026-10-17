@@ -24,7 +24,12 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await db.from('china_import_partial_receiving_shares')
       .select('order_code,items,created_at').eq('token', token).maybeSingle()
     if (error || !data) return json({ error: 'This shared list could not be found.' }, 404)
-    return json({ order_code: data.order_code, items: data.items, created_at: data.created_at })
+    let shippingMethod: string | null = null
+    if (data.order_id) {
+      const { data: order } = await db.from('china_import_orders').select('shipping_method').eq('id', data.order_id).maybeSingle()
+      shippingMethod = typeof order?.shipping_method === 'string' ? order.shipping_method : null
+    }
+    return json({ order_code: data.order_code, shipping_method: shippingMethod, items: data.items, created_at: data.created_at })
   }
 
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
@@ -49,11 +54,13 @@ Deno.serve(async (req: Request) => {
 
   const orderIds = [...new Set(selectedRows.map((item: any) => item.order_id))]
   const { data: orders, error: ordersError } = await db.from('china_import_orders')
-    .select('id,code').in('id', orderIds)
+    .select('id,code,shipping_method').in('id', orderIds)
   if (ordersError || !orders || orders.length !== orderIds.length) return json({ error: 'Could not load the selected orders.' }, 500)
   const orderCodes = new Map(orders.map((order: any) => [order.id, order.code]))
+  const shippingMethods = new Map(orders.map((order: any) => [order.id, typeof order.shipping_method === 'string' ? order.shipping_method : null]))
   const items = selectedRows.map((item: any) => ({
     order_code: orderCodes.get(item.order_id) ?? '',
+    shipping_method: shippingMethods.get(item.order_id) ?? null,
     product_name: item.product_name,
     image_url: item.image_url ?? null,
     variant_options: variantObject(item.variant_options),
