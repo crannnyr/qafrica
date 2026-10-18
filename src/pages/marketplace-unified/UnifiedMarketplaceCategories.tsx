@@ -12,7 +12,7 @@ export default function UnifiedMarketplaceCategories() {
 
   const shown = (cats?.categories ?? []).filter((category) => !active || category.niches?.includes(active));
   const departments = [
-    { id: '', label: 'Just for You' },
+    { id: '', label: 'All Categories' },
     ...(cats?.niches ?? []).map((n) => ({ id: n.id, label: nicheLabel(n.id) })),
   ];
 
@@ -42,7 +42,7 @@ export default function UnifiedMarketplaceCategories() {
 
         <section className="flex-1 min-w-0 h-full min-h-0 overflow-y-auto overscroll-contain px-3 py-4">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-base font-bold">{active ? 'Subcategories' : 'Subcategories for You'}</h1>
+            <h1 className="text-base font-bold">{active ? `Subcategories in ${nicheLabel(active)}` : 'Subcategories'}</h1>
             {active && (
               <Link to={`/stores-v2?niche=${encodeURIComponent(active)}`} className="text-[13px] text-gray-600 underline underline-offset-2">
                 Shop all
