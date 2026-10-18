@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Megaphone, Loader2, Plus, RefreshCw, X } from 'lucide-react';
+import { Megaphone, Loader2, Plus, RefreshCw, X, Image as ImageIcon, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/services/supabase';
 import { useStoreStore } from '@/stores';
 import { toast } from 'sonner';
@@ -46,8 +47,9 @@ export default function AdsPage() {
     if (!currentStore?.id) { toast.error('Your store is not loaded yet'); return; }
     const parsedBudget = Number(budget);
     if (!name.trim() || !Number.isFinite(parsedBudget) || parsedBudget <= 0) { toast.error('Enter a campaign name and a budget greater than ₦0'); return; }
+    if (type === 'placement' && products.length === 0) { toast.error('Add a product and get marketplace approval before creating a Placement Ad.'); return; }
     if (type === 'placement' && !productId) { toast.error('Choose a marketplace-approved product'); return; }
-    if (type === 'banner' && !/^https?:\/\//i.test(imageUrl.trim())) { toast.error('Enter a valid public banner image URL'); return; }
+    if (type === 'banner' && (!currentStore?.logo_url || !currentStore?.banner_url)) { toast.error('Add both your store logo and banner in Settings → Images before continuing.'); return; }
     setSaving(true);
     const selectedProduct = products.find(p=>p.id===productId);
     const {error} = await supabase.from('ad_campaigns').insert({
@@ -55,7 +57,7 @@ export default function AdsPage() {
       platform:'qafrica', campaign_name:name.trim(), budget:parsedBudget, spent:0, clicks:0, impressions:0, conversions:0,
       status:'active', start_date:new Date().toISOString(), campaign_type:type,
       approval_status:'pending', category:type==='placement'?(category || selectedProduct?.category || null):null,
-      image_url:type==='banner'?imageUrl.trim():null, target_url:type==='banner'?(targetUrl.trim() || null):null,
+      image_url:type==='banner'?currentStore.banner_url:null, target_url:null,
     });
     if(error) toast.error('Campaign could not be submitted: '+error.message);
     else { toast.success('Campaign submitted for admin approval'); setName('');setBudget('');setProductId('');setImageUrl('');setTargetUrl('');setCategory('');setCreateModalOpen(false);await load(); }
@@ -85,15 +87,13 @@ export default function AdsPage() {
           <label className="block text-sm font-medium">Campaign name<input value={name} onChange={e=>setName(e.target.value)} maxLength={100} required className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="e.g. October product promotion"/></label>
           <label className="block text-sm font-medium">Campaign budget (₦)<input type="number" min="1" step="0.01" value={budget} onChange={e=>setBudget(e.target.value)} required className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="Maximum spend"/></label>
           {type==='placement' ? <>
-            <label className="block text-sm font-medium">Marketplace product<select value={productId} onChange={e=>{setProductId(e.target.value);const p=products.find(x=>x.id===e.target.value);setCategory(p?.category||'');}} required className="mt-1 w-full rounded-lg border px-3 py-2"><option value="">Choose approved product</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+            <label className="block text-sm font-medium">Marketplace-approved product<select value={productId} onChange={e=>{setProductId(e.target.value);const p=products.find(x=>x.id===e.target.value);setCategory(p?.category||'');}} required className="mt-1 w-full rounded-lg border px-3 py-2"><option value="">Choose approved product</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
             <label className="block text-sm font-medium">Category targeting (optional)<input value={category} onChange={e=>setCategory(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="Default: product category"/></label>
             <div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">The configured Placement Ads CPC rate is charged for eligible clicks. Your campaign stops serving when its budget is exhausted.</div>
           </> : <>
-            <label className="block text-sm font-medium md:col-span-2">Public banner image URL<input type="url" value={imageUrl} onChange={e=>setImageUrl(e.target.value)} required className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="https://…"/></label>
-            <label className="block text-sm font-medium md:col-span-2">Destination URL (optional)<input type="url" value={targetUrl} onChange={e=>setTargetUrl(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="https://your-store-or-product…"/></label>
-            {imageUrl && <img src={imageUrl} alt="Banner preview" className="md:col-span-2 max-h-48 w-full rounded-lg bg-gray-100 object-contain"/>}<div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">The configured Banner Ads CPC rate is charged for eligible clicks on your approved banner. Your campaign stops serving when its budget is exhausted.</div>
+            <div className="md:col-span-2 rounded-xl border border-gray-200 p-4"><div className="flex items-start gap-3"><ImageIcon className="mt-0.5 h-5 w-5 shrink-0 text-orange-600"/><div className="min-w-0 flex-1"><p className="font-semibold">Use your store banner</p><p className="mt-1 text-sm text-gray-600">Your banner ad will use the banner saved in Store Settings and redirect shoppers directly to your store. No separate image or link is needed.</p><div className="mt-3 grid gap-2 sm:grid-cols-2 text-sm"><p>Logo: <strong className={currentStore?.logo_url ? "text-emerald-700" : "text-amber-700"}>{currentStore?.logo_url ? "Added" : "Missing"}</strong></p><p>Banner: <strong className={currentStore?.banner_url ? "text-emerald-700" : "text-amber-700"}>{currentStore?.banner_url ? "Added" : "Missing"}</strong></p></div>{currentStore?.banner_url && <img src={currentStore.banner_url} alt="Current store banner" className="mt-3 max-h-40 w-full rounded-lg bg-gray-100 object-contain"/>}{(!currentStore?.logo_url || !currentStore?.banner_url) && <Link to="/dashboard/settings?tab=images" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 font-semibold text-white">Add logo and banner in Settings <ExternalLink className="h-3.5 w-3.5"/></Link>}</div></div></div><div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">The configured Banner Ads CPC rate is charged for eligible clicks on your approved banner. Your campaign stops serving when its budget is exhausted.</div>
           </>}
-          <div className="md:col-span-2"><button type="submit" disabled={saving || !currentStore?.id} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving?<Loader2 className="h-4 w-4 animate-spin"/>:<Plus className="h-4 w-4"/>}Submit for approval</button></div>
+          <div className="md:col-span-2"><button type="submit" disabled={saving || !currentStore?.id || (type==='placement' && products.length===0) || (type==='banner' && (!currentStore?.logo_url || !currentStore?.banner_url))} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving?<Loader2 className="h-4 w-4 animate-spin"/>:<Plus className="h-4 w-4"/>}Submit for approval</button></div>
         </form>
         </section>
       </div>}
