@@ -147,6 +147,11 @@ export default function UnifiedProductPage() {
   const [quantity, setQuantity] = useState(1);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [relatedProducts, setRelatedProducts] = useState<UnifiedMarketplaceProduct[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+  const [relatedHasMore, setRelatedHasMore] = useState(true);
+  const relatedSentinelRef = useRef<HTMLDivElement>(null);
+  const relatedOffsetRef = useRef(0);
+  const relatedRequestRef = useRef(0);
   const [dropshipModalOpen, setDropshipModalOpen] = useState(false);
   const [productCode, setProductCode] = useState('');
   const [codeLoading, setCodeLoading] = useState(false);
@@ -191,6 +196,10 @@ export default function UnifiedProductPage() {
       setProduct(null);
       setStore(null);
       setRelatedProducts([]);
+      setRelatedLoading(false);
+      setRelatedHasMore(true);
+      relatedOffsetRef.current = 0;
+      relatedRequestRef.current += 1;
       setProductCode('');
       setSelectedVariants({});
       setQuantity(1);
@@ -253,64 +262,96 @@ export default function UnifiedProductPage() {
       // while secondary related-product queries run.
       if (active) setLoading(false);
 
+      // Related items are loaded in 20-product batches from the same niche/category.
+      // Fetch one extra row so excluding the current product still yields up to 20 cards.
+      relatedOffsetRef.current = 0;
+      setRelatedHasMore(true);
+      setRelatedLoading(true);
       const viewerSeed = typeof window !== 'undefined'
         ? window.localStorage.getItem('qafrica_unified_marketplace_seed') || ''
         : '';
-
-      const baseParams = {
+      const relatedRequestId = ++relatedRequestRef.current;
+      const { data: relatedData, error: relatedError } = await supabase.rpc('marketplace_unified_products', {
         p_tab: 'for_you',
         p_niche: resolvedProduct.niche,
         p_category: resolvedProduct.category,
         p_search: null,
-        p_limit: 12,
+        p_limit: 21,
         p_offset: 0,
         p_viewer_seed: viewerSeed,
-      };
+      });
 
-      const firstRelated = await supabase.rpc('marketplace_unified_products', baseParams);
-      let candidates = Array.isArray(firstRelated.data)
-        ? firstRelated.data as UnifiedMarketplaceProduct[]
-        : [];
-
-      candidates = candidates.filter(item =>
-        !(item.source_type === resolvedProduct.source_type && item.source_id === resolvedProduct.source_id)
-      );
-
-      if (candidates.length < 4) {
-        const broadRelated = await supabase.rpc('marketplace_unified_products', {
-          ...baseParams,
-          p_niche: null,
-          p_category: null,
-          p_limit: 16,
-        });
-
-        const broad = Array.isArray(broadRelated.data)
-          ? broadRelated.data as UnifiedMarketplaceProduct[]
-          : [];
-
-        const seen = new Set(candidates.map(item => item.source_type + ':' + item.source_id));
-
-        for (const item of broad) {
-          const key = item.source_type + ':' + item.source_id;
-          if (
-            item.source_type === resolvedProduct.source_type &&
-            item.source_id === resolvedProduct.source_id
-          ) continue;
-          if (seen.has(key)) continue;
-
-          seen.add(key);
-          candidates.push(item);
-
-          if (candidates.length >= 4) break;
-        }
+      if (!active || relatedRequestId !== relatedRequestRef.current) return;
+      if (relatedError) {
+        console.error('Could not load related marketplace products', relatedError);
+        setRelatedProducts([]);
+        setRelatedHasMore(false);
+        setRelatedLoading(false);
+        return;
       }
 
-      if (active) setRelatedProducts(candidates.slice(0, 4));
+      const rows = Array.isArray(relatedData) ? relatedData as UnifiedMarketplaceProduct[] : [];
+      relatedOffsetRef.current = rows.length;
+      const related = rows.filter(item =>
+        !(item.source_type === resolvedProduct.source_type && item.source_id === resolvedProduct.source_id)
+      ).slice(0, 20);
+      setRelatedProducts(related);
+      setRelatedHasMore(rows.length === 21);
+      setRelatedLoading(false);
     }
 
     void load();
     return () => { active = false; };
   }, [sourceType, sourceId, sellerStoreId]);
+
+  const loadMoreRelated = useMemo(() => async () => {
+    if (!product || relatedLoading || !relatedHasMore) return;
+    setRelatedLoading(true);
+    const requestId = ++relatedRequestRef.current;
+    const viewerSeed = typeof window !== 'undefined'
+      ? window.localStorage.getItem('qafrica_unified_marketplace_seed') || ''
+      : '';
+    const { data, error: relatedError } = await supabase.rpc('marketplace_unified_products', {
+      p_tab: 'for_you',
+      p_niche: product.niche,
+      p_category: product.category,
+      p_search: null,
+      p_limit: 21,
+      p_offset: relatedOffsetRef.current,
+      p_viewer_seed: viewerSeed,
+    });
+
+    if (requestId !== relatedRequestRef.current) return;
+    if (relatedError) {
+      console.error('Could not load more related products', relatedError);
+      setRelatedLoading(false);
+      return;
+    }
+
+    const rows = Array.isArray(data) ? data as UnifiedMarketplaceProduct[] : [];
+    relatedOffsetRef.current += rows.length;
+    const existing = new Set(relatedProducts.map(item => item.source_type + ':' + item.source_id));
+    existing.add(product.source_type + ':' + product.source_id);
+    const next = rows.filter(item => {
+      const key = item.source_type + ':' + item.source_id;
+      if (existing.has(key)) return false;
+      existing.add(key);
+      return true;
+    });
+    setRelatedProducts(previous => [...previous, ...next]);
+    setRelatedHasMore(rows.length === 21);
+    setRelatedLoading(false);
+  }, [product, relatedLoading, relatedHasMore, relatedProducts]);
+
+  useEffect(() => {
+    const sentinel = relatedSentinelRef.current;
+    if (!sentinel || !relatedHasMore || relatedLoading || relatedProducts.length === 0) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0]?.isIntersecting) void loadMoreRelated();
+    }, { rootMargin: '500px 0px' });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [loadMoreRelated, relatedHasMore, relatedLoading, relatedProducts.length]);
 
   const variantNames = useMemo(
     () => getVariantNames(product?.variants),
@@ -771,7 +812,7 @@ export default function UnifiedProductPage() {
           )}
         </section>
 
-        {relatedProducts.length > 0 && (
+        {(relatedProducts.length > 0 || relatedLoading) && (
           <section className="mt-16" aria-labelledby="unified-related-products">
             <p
               id="unified-related-products"
@@ -783,7 +824,18 @@ export default function UnifiedProductPage() {
               {relatedProducts.map(item => (
                 <RelatedProductCard key={item.source_type + ':' + item.source_id} item={item} />
               ))}
+              {relatedLoading && Array.from({ length: 4 }).map((_, index) => (
+                <div key={`related-loading-${index}`} className="animate-pulse">
+                  <div className="aspect-square rounded-xl bg-gray-100 mb-3" />
+                  <div className="h-3 rounded bg-gray-100 mb-2 w-4/5" />
+                  <div className="h-4 rounded bg-gray-100 w-2/5" />
+                </div>
+              ))}
             </div>
+            <div ref={relatedSentinelRef} aria-hidden className="h-1" />
+            {!relatedHasMore && relatedProducts.length > 0 && (
+              <p className="text-center text-xs text-gray-400 py-6">You've seen everything in this category.</p>
+            )}
           </section>
         )}
       </main>
