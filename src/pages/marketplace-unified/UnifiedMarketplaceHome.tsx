@@ -243,18 +243,18 @@ function BannerCarousel() {
     });
   };
   const { stores } = useMarketplaceStores();
-  const [bannerAds, setBannerAds] = useState<{id:string; campaign_name:string; image_url:string; target_url:string|null}[]>([]);
+  const [bannerAds, setBannerAds] = useState<{id:string; store_id:string; campaign_name:string; image_url:string|null; target_url:string|null}[]>([]);
   useEffect(() => {
     let alive = true;
-    supabase.from('ad_campaigns').select('id,campaign_name,image_url,target_url')
+    supabase.from('ad_campaigns').select('id,store_id,campaign_name,image_url,target_url')
       .eq('campaign_type','banner').eq('approval_status','approved').eq('payment_status','paid').eq('status','active')
       .lte('start_date',new Date().toISOString()).or(`end_date.is.null,end_date.gt.${new Date().toISOString()}`)
       .not('image_url','is',null).order('created_at',{ascending:false}).limit(3)
-      .then(({data,error}) => { if (alive && !error) setBannerAds((data ?? []).filter(a => Number(a.image_url?.length) > 0) as typeof bannerAds); });
+      .then(({data,error}) => { if (alive && !error) setBannerAds((data ?? []) as typeof bannerAds); });
     return () => { alive = false; };
   }, []);
   const storeSlides = stores.filter((s) => s.banner_url).map(s => ({id:s.id,name:s.name,slug:s.slug,banner_url:s.banner_url,isAd:false,target_url:null as string|null}));
-  const paidSlides = bannerAds.map(a => ({id:'ad:'+a.id,name:a.campaign_name,slug:'',banner_url:a.image_url,isAd:true,target_url:a.target_url}));
+  const paidSlides = bannerAds.flatMap(a => { const store = stores.find(s => s.id === a.store_id); const banner = store?.banner_url || a.image_url; return banner && store?.slug ? [{id:'ad:'+a.id,name:store.name || a.campaign_name,slug:store.slug,banner_url:banner,isAd:true,target_url:marketplaceLink('/' + store.slug)}] : []; });
   const slides = [...paidSlides, ...storeSlides].slice(0, 6);
   const track = useRef<HTMLDivElement>(null);
   const [index, setIndex] = useState(0);
@@ -294,7 +294,7 @@ function BannerCarousel() {
         {slides.map((s, i) => (
           <Link
             key={s.id}
-            to={s.isAd ? (s.target_url || '/stores-v2') : marketplaceLink(`/${s.slug}`)}
+            to={s.isAd ? (s.target_url || marketplaceLink(`/${s.slug}`)) : marketplaceLink(`/${s.slug}`)}
             state={MARKETPLACE_STATE}
             onClickCapture={() => { if (s.isAd) recordBannerClick(s.id.replace(/^ad:/, '')); }}
             aria-roledescription="slide"
