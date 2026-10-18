@@ -24,9 +24,9 @@ export function InfoButton({ title, children, label }: { title: string; children
         <Info className="w-3.5 h-3.5" />
       </button>
       {open && (
-        <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label={title}>
+        <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center" role="dialog" aria-modal="true" aria-label={title}>
           <button type="button" aria-label="Close" className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div className="relative w-full sm:max-w-sm bg-white rounded-t-2xl sm:rounded-2xl p-5 shadow-xl" style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
+          <div className="relative w-full sm:max-w-sm max-h-[85dvh] overflow-y-auto overscroll-contain bg-white rounded-t-2xl sm:rounded-2xl p-5 shadow-xl" style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom))' }}>
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-[15px] font-semibold text-gray-900">{title}</h2>
               <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="-mt-1 -mr-1 p-1.5 rounded-full hover:bg-gray-100">
