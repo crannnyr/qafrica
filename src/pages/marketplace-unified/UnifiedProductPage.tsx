@@ -152,6 +152,7 @@ export default function UnifiedProductPage() {
   const relatedSentinelRef = useRef<HTMLDivElement>(null);
   const relatedOffsetRef = useRef(0);
   const relatedRequestRef = useRef(0);
+  const relatedSeedRef = useRef('');
   const [dropshipModalOpen, setDropshipModalOpen] = useState(false);
   const [productCode, setProductCode] = useState('');
   const [codeLoading, setCodeLoading] = useState(false);
@@ -267,9 +268,11 @@ export default function UnifiedProductPage() {
       relatedOffsetRef.current = 0;
       setRelatedHasMore(true);
       setRelatedLoading(true);
-      const viewerSeed = typeof window !== 'undefined'
-        ? window.localStorage.getItem('qafrica_unified_marketplace_seed') || ''
-        : '';
+      // Use a fresh shuffle seed for each product-detail visit. Keep it stable
+      // for this visit so offset pagination doesn't repeat or skip the shuffled order.
+      relatedSeedRef.current = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
       const relatedRequestId = ++relatedRequestRef.current;
       const { data: relatedData, error: relatedError } = await supabase.rpc('marketplace_unified_products', {
         p_tab: 'for_you',
@@ -278,7 +281,7 @@ export default function UnifiedProductPage() {
         p_search: null,
         p_limit: 21,
         p_offset: 0,
-        p_viewer_seed: viewerSeed,
+        p_viewer_seed: relatedSeedRef.current,
       });
 
       if (!active || relatedRequestId !== relatedRequestRef.current) return;
@@ -308,9 +311,6 @@ export default function UnifiedProductPage() {
     if (!product || relatedLoading || !relatedHasMore) return;
     setRelatedLoading(true);
     const requestId = ++relatedRequestRef.current;
-    const viewerSeed = typeof window !== 'undefined'
-      ? window.localStorage.getItem('qafrica_unified_marketplace_seed') || ''
-      : '';
     const { data, error: relatedError } = await supabase.rpc('marketplace_unified_products', {
       p_tab: 'for_you',
       p_niche: product.niche,
@@ -318,7 +318,7 @@ export default function UnifiedProductPage() {
       p_search: null,
       p_limit: 21,
       p_offset: relatedOffsetRef.current,
-      p_viewer_seed: viewerSeed,
+      p_viewer_seed: relatedSeedRef.current,
     });
 
     if (requestId !== relatedRequestRef.current) return;
