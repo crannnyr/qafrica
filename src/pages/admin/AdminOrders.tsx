@@ -55,7 +55,65 @@ export default function AdminOrders() {
 
       if (error) throw error;
       if (!data) throw new Error('Order details could not be found.');
-      setSelectedOrder(data as OrderDetail);
+
+      // China Import dropship items intentionally have no products-table relation.
+      // Resolve their catalog image by source_id first, then legacy product IDs.
+      const importedItems = (data.order_items ?? []).filter((item: any) =>
+        item?.source_type === 'china_import' || item?.is_imported === true
+      );
+      const chinaIds = [...new Set(importedItems.flatMap((item: any) =>
+        [item.source_id, item.original_product_id, item.product_id]
+          .filter((id: unknown): id is string => typeof id === 'string' && id.length > 0)
+      ))];
+
+      let enrichedOrder: any = data;
+      if (chinaIds.length) {
+        const { data: catalogProducts, error: catalogError } = await supabase
+          .from('china_import_products')
+          .select('id,name,image_url,image_urls,variants')
+          .in('id', chinaIds);
+
+        if (catalogError) {
+          console.warn('Could not resolve China Import order images:', catalogError.message);
+        } else {
+          const catalogById = new Map((catalogProducts ?? []).map((product: any) => [
+            product.id,
+            {
+              name: product.name,
+              images: Array.isArray(product.image_urls) && product.image_urls.length
+                ? product.image_urls
+                : product.image_url ? [product.image_url] : [],
+              variants: product.variants ?? [],
+            },
+          ]));
+
+          enrichedOrder = {
+            ...data,
+            order_items: (data.order_items ?? []).map((item: any) => {
+              if (item?.source_type !== 'china_import' && item?.is_imported !== true) return item;
+              const catalog = catalogById.get(item.source_id || item.original_product_id || item.product_id);
+              if (!catalog) return item;
+              const images = item.product?.images?.length
+                ? item.product.images
+                : (item.image_url || item.image || item.product_image_url)
+                  ? [item.image_url || item.image || item.product_image_url]
+                  : catalog.images;
+              return {
+                ...item,
+                product_name: item.product_name || catalog.name,
+                image_url: item.image_url || item.image || item.product_image_url || catalog.images[0] || null,
+                product: {
+                  ...(item.product ?? {}),
+                  name: item.product?.name || catalog.name,
+                  images,
+                },
+                imported_variants: catalog.variants,
+              };
+            }),
+          };
+        }
+      }
+      setSelectedOrder(enrichedOrder as OrderDetail);
     } catch (err) {
       console.error('Failed to load order details:', err);
       toast.error(err instanceof Error ? err.message : 'Could not load order details');
