@@ -59,6 +59,14 @@ function variantLabel(options: Record<string, unknown> | null) {
     .join(' · ');
 }
 
+
+function shippingMethodType(method: string | null | undefined): 'air' | 'sea' | 'other' {
+  const normalized = String(method ?? '').trim().toLowerCase();
+  if (normalized.includes('air') || normalized.includes('flight') || normalized.includes('航空')) return 'air';
+  if (normalized.includes('sea') || normalized.includes('ocean') || normalized.includes('ship') || normalized.includes('海运')) return 'sea';
+  return 'other';
+}
+
 function sellerLabel(item: FulfillmentItem) {
   if (!item.seller_store_name) return null;
   return item.seller_store_slug ? `${item.seller_store_name} (/${item.seller_store_slug})` : item.seller_store_name;
@@ -71,6 +79,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'awaiting_arrival' | 'at_qafrica_hq'>('all');
+  const [shippingMethodTab, setShippingMethodTab] = useState<'all' | 'air' | 'sea'>('all');
   const [openOrders, setOpenOrders] = useState<Set<string>>(new Set());
   const [openBatches, setOpenBatches] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
@@ -718,6 +727,18 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
             </div>
           </div>
 
+          <div className="grid grid-cols-3 gap-2 rounded-xl bg-gray-100 p-1">
+            {([
+              { value: 'all', label: 'All shipping', count: items.filter(item => item.received_quantity < item.ordered_quantity).length },
+              { value: 'air', label: 'Air shipping', count: items.filter(item => shippingMethodType(item.shipping_method) === 'air' && item.received_quantity < item.ordered_quantity).length },
+              { value: 'sea', label: 'Sea shipping', count: items.filter(item => shippingMethodType(item.shipping_method) === 'sea' && item.received_quantity < item.ordered_quantity).length },
+            ] as const).map(tab => (
+              <button key={tab.value} type="button" onClick={() => setShippingMethodTab(tab.value)} className={shippingMethodTab === tab.value ? 'rounded-lg bg-white px-3 py-2.5 text-xs font-bold text-gray-900 shadow-sm' : 'rounded-lg px-3 py-2.5 text-xs font-semibold text-gray-500'}>
+                {tab.label} <span className="ml-1 text-[10px] opacity-70">{tab.count}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
@@ -875,7 +896,10 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                 const visibleOrders = batch.orders
                   .map(order => ({
                     ...order,
-                    items: order.items.filter(item => item.received_quantity < item.ordered_quantity),
+                    items: order.items.filter(item =>
+                      item.received_quantity < item.ordered_quantity &&
+                      (shippingMethodTab === 'all' || shippingMethodType(item.shipping_method) === shippingMethodTab)
+                    ),
                   }))
                   .filter(order =>
                     order.items.length > 0 &&
