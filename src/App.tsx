@@ -595,6 +595,12 @@ function App() {
           {/* ── Customer ── */}
           <Route path="/customer/login" element={<ShopAuthPage mode="login" />} />
           <Route path="/customer/signup" element={<ShopAuthPage mode="signup" />} />
+          {/* Primary shopper tabs render in ShopperTabCache so they stay mounted. */}
+          <Route path="/customer/dashboard" element={null} />
+          <Route path="/help-pay" element={null} />
+          <Route path="/stores-v2" element={null} />
+          <Route path="/stores-v2/categories" element={null} />
+          <Route path="/stores-v2/cart" element={null} />
 
           <Route path="/customer/orders" element={<ShopOrdersPage />} />
           <Route path="/customer/orders/:orderId" element={<ShopOrderPage />} />
@@ -613,6 +619,7 @@ function App() {
           <Route path="/stores" element={<Navigate to="/stores-v2" replace />} />
           <Route path="/stores/categories" element={<Navigate to="/stores-v2/categories" replace />} />
 
+          <Route path="/cart" element={null} />
           <Route path="/cart/share" element={<ShareCartPage />} />
           <Route path="/pay/:code" element={<PaySharedCartPage />} />
           <Route path="/checkout" element={<ShopCheckoutPage />} />
