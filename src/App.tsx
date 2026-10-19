@@ -421,6 +421,38 @@ function SitewideMetaPixel() {
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
+const SHOPPER_TAB_PATHS = [
+  { key: 'shop', paths: ['/stores-v2'], render: () => <UnifiedMarketplaceHome /> },
+  { key: 'categories', paths: ['/stores-v2/categories'], render: () => <UnifiedMarketplaceCategories /> },
+  { key: 'help-pay', paths: ['/help-pay'], render: () => <HelpPayPage /> },
+  { key: 'cart', paths: ['/stores-v2/cart', '/cart'], render: () => <CartPage /> },
+  { key: 'me', paths: ['/customer/dashboard'], render: () => <MePage /> },
+] as const;
+
+/** Keep the primary shopper tabs mounted after first visit to preserve local state. */
+function ShopperTabCache() {
+  const { pathname } = useLocation();
+  const activeTab = SHOPPER_TAB_PATHS.find((tab) => (tab.paths as readonly string[]).includes(pathname))?.key;
+  const [visited, setVisited] = useState<string[]>(() => activeTab ? [activeTab] : []);
+
+  useEffect(() => {
+    if (activeTab) setVisited((current) => current.includes(activeTab) ? current : [...current, activeTab]);
+  }, [activeTab]);
+
+  return (
+    <div>
+      {SHOPPER_TAB_PATHS.map((tab) => {
+        if (!visited.includes(tab.key)) return null;
+        return (
+          <div key={tab.key} style={{ display: activeTab === tab.key ? 'contents' : 'none' }} aria-hidden={activeTab !== tab.key}>
+            {tab.render()}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function App() {
   const { fetchProfile } = useAuthStore();
 
@@ -454,6 +486,7 @@ function App() {
         <NavTracker />
 
         <Suspense fallback={<PageLoader />}>
+        <ShopperTabCache />
         <Routes>
           {/* ── Public Routes ── */}
           <Route path="/" element={<LandingPage />} />
@@ -562,26 +595,24 @@ function App() {
           {/* ── Customer ── */}
           <Route path="/customer/login" element={<ShopAuthPage mode="login" />} />
           <Route path="/customer/signup" element={<ShopAuthPage mode="signup" />} />
-          <Route path="/customer/dashboard" element={<MePage />} />
+
           <Route path="/customer/orders" element={<ShopOrdersPage />} />
           <Route path="/customer/orders/:orderId" element={<ShopOrderPage />} />
           <Route path="/customer/wishlist" element={<ShopWishlistPage />} />
           <Route path="/customer/addresses" element={<ShopAddressesPage />} />
           <Route path="/customer/profile" element={<ShopProfilePage />} />
           <Route path="/customer/links" element={<MyLinksPage />} />
-          <Route path="/help-pay" element={<HelpPayPage />} />
+
           <Route path="/help-pay/leaderboard" element={<LeaderboardPage />} />
           <Route path="/help-pay/claim" element={<ClaimClearPage />} />
-          <Route path="/stores-v2" element={<UnifiedMarketplaceHome />} />
-           <Route path="/stores-v2/categories" element={<UnifiedMarketplaceCategories />} />
-          <Route path="/stores-v2/cart" element={<CartPage />} />
+
           <Route path="/stores-v2/cart/share" element={<ShareCartPage />} />
           <Route path="/stores-v2/checkout" element={<MarketplaceCheckoutPage />} />
           <Route path="/stores-v2/checkout/complete" element={<MarketplaceCheckoutCompletePage />} />
           <Route path="/stores-v2/product/:sourceType/:sourceId" element={<UnifiedProductPage />} />
           <Route path="/stores" element={<Navigate to="/stores-v2" replace />} />
           <Route path="/stores/categories" element={<Navigate to="/stores-v2/categories" replace />} />
-          <Route path="/cart" element={<CartPage />} />
+
           <Route path="/cart/share" element={<ShareCartPage />} />
           <Route path="/pay/:code" element={<PaySharedCartPage />} />
           <Route path="/checkout" element={<ShopCheckoutPage />} />
