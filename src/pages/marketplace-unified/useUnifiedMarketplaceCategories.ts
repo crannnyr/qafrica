@@ -17,26 +17,32 @@ export function useUnifiedMarketplaceCategories() {
       return;
     }
 
-    // Share an in-flight request across mounts (including React StrictMode's
-    // development remount) so navigation doesn't duplicate the same RPC.
+    // Share the in-flight request across mounts and React StrictMode remounts.
     if (!request) {
-      request = supabase.rpc('marketplace_v2_categories').then(({ data: d, error }) => {
+      const pending: Promise<Data | null> = Promise.resolve(
+        supabase.rpc('marketplace_v2_categories'),
+      ).then(({ data: d, error }) => {
         if (error || !d) {
           request = null;
           return null;
         }
         cache = { niches: d.niches ?? [], categories: d.categories ?? [] };
         return cache;
-      }).catch((error) => {
+      }).catch((error: unknown) => {
         request = null;
         console.error('marketplace_v2_categories failed', error);
         return null;
       });
+      request = pending;
     }
 
-    void request.then((result) => {
-      if (alive && result) setData(result);
-    });
+    const pendingRequest = request;
+    if (pendingRequest) {
+      void pendingRequest.then((result) => {
+        if (alive && result) setData(result);
+      });
+    }
+
     return () => {
       alive = false;
     };
