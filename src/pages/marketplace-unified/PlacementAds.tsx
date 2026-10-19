@@ -30,7 +30,7 @@ export default function PlacementAds({ niche, category, search }: { niche: strin
       ]);
       if (!alive) return;
       const storeMap = new Map((stores ?? []).filter(s => s.is_active && !s.is_blocked && s.marketplace_enabled).map(s => [s.id,s]));
-      const productMap = new Map((products ?? []).filter(p => !p.is_out_of_stock && (p.has_variants || Number(p.stock_quantity ?? 1)>0) && p.images?.length && Number(p.selling_price)>0).map(p => [p.id,p]));
+      const productMap = new Map((products ?? []).filter(p => !p.is_out_of_stock && Number(p.stock_quantity ?? 0) >= 5 && p.images?.length && Number(p.selling_price)>0).map(p => [p.id,p]));
       const mapped: Placement[] = [];
       for (const campaign of eligibleCampaigns as Campaign[]) {
         const p = productMap.get(campaign.product_id);
