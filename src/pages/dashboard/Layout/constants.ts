@@ -36,6 +36,7 @@ export const sidebarItems: NavItem[] = [
     path: '/dashboard/products',
     children: [
       { icon: Package, label: 'All Products', path: '/dashboard/products' },
+      { icon: Plus, label: 'Add Product', path: '/dashboard/products/new' },
       { icon: Upload, label: 'Bulk Import', path: '/dashboard/products/bulk-import' },
       { icon: Import, label: 'Import Catalog', path: '/dashboard/import-catalog' },
     ],
