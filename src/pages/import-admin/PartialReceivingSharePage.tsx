@@ -64,15 +64,27 @@ export default function PartialReceivingSharePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [shippingMethodTab, setShippingMethodTab] = useState<'all' | 'air' | 'sea'>('all');
   const products = useMemo(() => groupItemsByProduct(list?.items ?? []), [list]);
+  const methodType = (method: string | null) => {
+    const value = String(method ?? '').trim().toLowerCase();
+    if (value.includes('air') || value.includes('flight') || value.includes('航空')) return 'air';
+    if (value.includes('sea') || value.includes('ocean') || value.includes('ship') || value.includes('海运')) return 'sea';
+    return 'other';
+  };
+  const tabProducts = useMemo(() => products.map(product => ({
+    ...product,
+    variants: product.variants.filter(variant => shippingMethodTab === 'all' || methodType(variant.shipping_method) === shippingMethodTab),
+  })).map(product => ({ ...product, total_remaining: product.variants.reduce((sum, variant) => sum + variant.remaining_quantity, 0) }))
+    .filter(product => product.variants.length > 0), [products, shippingMethodTab]);
   const filteredProducts = useMemo(() => {
     const query = searchTerm.trim().toLocaleLowerCase();
-    if (!query) return products;
-    return products.filter(product =>
+    if (!query) return tabProducts;
+    return tabProducts.filter(product =>
       product.product_name.toLocaleLowerCase().includes(query) ||
       product.variants.some(variant => `${variant.label} ${variant.order_code} ${variant.shipping_method ?? ''}`.toLocaleLowerCase().includes(query))
     );
-  }, [products, searchTerm]);
+  }, [tabProducts, searchTerm]);
 
   useEffect(() => {
     let active = true;
@@ -110,6 +122,14 @@ export default function PartialReceivingSharePage() {
           <div className="rounded-2xl bg-white p-8 text-center text-sm text-gray-600">There are no outstanding items in this list.</div>
         ) : (
           <>
+            <div className="mb-4 grid grid-cols-3 gap-2 rounded-xl border border-orange-100 bg-white p-2 shadow-sm" role="tablist" aria-label="Filter by shipping method">
+              {([{ id: 'all', label: 'All shipping' }, { id: 'air', label: 'Air shipping' }, { id: 'sea', label: 'Sea shipping' }] as const).map(tab => (
+                <button key={tab.id} type="button" role="tab" aria-selected={shippingMethodTab === tab.id} onClick={() => setShippingMethodTab(tab.id)} className={`rounded-lg px-2 py-3 text-xs font-bold sm:text-sm ${shippingMethodTab === tab.id ? 'bg-orange-500 text-white shadow-sm' : 'bg-gray-50 text-gray-600 hover:bg-orange-50'}`}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
             <div className="mb-4 flex items-center justify-between rounded-xl border border-orange-100 bg-orange-50 px-4 py-3">
               <span className="text-sm font-semibold text-orange-900">Products needed</span>
               <span className="rounded-full bg-white px-3 py-1 text-sm font-black text-orange-700">{filteredProducts.length}{searchTerm.trim() ? ` of ${products.length}` : ''}</span>
