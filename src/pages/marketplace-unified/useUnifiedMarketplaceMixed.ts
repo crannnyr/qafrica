@@ -8,9 +8,30 @@ type Args = { tab: UnifiedFeedTab; niche: string | null; category: string | null
 const cache = new Map<string, { items: UnifiedMarketplaceProduct[]; offset: number; status: FeedStatus; at: number }>();
 
 const keyFor = (a: Args, seed: string) => JSON.stringify([a.tab, a.niche, a.category, a.search?.trim() || null, seed]);
+const CACHE_TTL = 10 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 40;
 const cached = (a: Args, seed: string) => {
-  const hit = cache.get(keyFor(a, seed));
-  return hit && Date.now() - hit.at < 10 * 60 * 1000 ? hit : null;
+  const key = keyFor(a, seed);
+  const hit = cache.get(key);
+  if (!hit) return null;
+  if (Date.now() - hit.at >= CACHE_TTL) {
+    cache.delete(key);
+    return null;
+  }
+  // Refresh insertion order for a small LRU-style cache.
+  cache.delete(key);
+  cache.set(key, hit);
+  return hit;
+};
+
+const saveCache = (key: string, value: { items: UnifiedMarketplaceProduct[]; offset: number; status: FeedStatus; at: number }) => {
+  cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
 };
 
 const createViewerSeed = () =>
@@ -67,7 +88,7 @@ export function useUnifiedMarketplaceMixed(args: Args) {
     const cacheKey = keyFor(args, viewerSeed);
     setItems((previous) => {
       const next = reset ? rows : [...previous, ...rows.filter((r) => !previous.some((p) => p.id === r.id))];
-      cache.set(cacheKey, { items: next, offset: offset.current, status: nextStatus, at: Date.now() });
+      saveCache(cacheKey, { items: next, offset: offset.current, status: nextStatus, at: Date.now() });
       return next;
     });
     setStatus(nextStatus);
