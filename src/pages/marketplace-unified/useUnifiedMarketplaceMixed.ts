@@ -18,14 +18,19 @@ const createViewerSeed = () =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random()}`;
 
+// Keep the viewer seed at module scope so navigating away and back does not
+// create a new feed identity and bypass the in-memory product cache.
+let sharedViewerSeed = createViewerSeed();
+
 export function useUnifiedMarketplaceMixed(args: Args) {
-  const [viewerSeed, setViewerSeed] = useState(createViewerSeed);
+  const [viewerSeed, setViewerSeed] = useState(() => sharedViewerSeed);
 
   // Give the main marketplace a fresh, deterministic order every five minutes.
   // Each seed is shared across pagination so items don't jump between pages.
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setViewerSeed(createViewerSeed());
+      sharedViewerSeed = createViewerSeed();
+      setViewerSeed(sharedViewerSeed);
     }, 5 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
