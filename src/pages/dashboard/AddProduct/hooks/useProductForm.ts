@@ -57,8 +57,22 @@ export function useProductForm({
         if (isTerminalMode && !formData.weight_kg) { toast.error('Weight is required for Terminal Africa delivery'); return false; }
         if (formData.weight_kg && parseFloat(formData.weight_kg) <= 0) { toast.error('Weight must be greater than 0'); return false; }
         if (formData.hs_code && !/^\d{4}(\d{2})?$/.test(formData.hs_code.trim())) { toast.error('HS Code must be exactly 4 or 6 digits'); return false; }
-        if (!formData.has_variants && (!formData.stock_quantity || parseInt(formData.stock_quantity) < 0)) {
-          toast.error('Please enter a valid stock quantity'); return false;
+        if (!formData.has_variants) {
+          const stock = Number(formData.stock_quantity);
+          if (formData.stock_quantity === '' || !Number.isFinite(stock) || !Number.isInteger(stock) || stock <= 0) {
+            toast.error('Stock quantity must be a whole number greater than 0'); return false;
+          }
+        } else {
+          if (variants.length === 0) {
+            toast.error('Please generate at least one variant combination'); return false;
+          }
+          if (variants.some((variant) => !Number.isInteger(Number(variant.stock)) || Number(variant.stock) < 0)) {
+            toast.error('Each variant must have a valid non-negative stock quantity'); return false;
+          }
+          const totalVariantStock = variants.reduce((sum, variant) => sum + (Number(variant.stock) || 0), 0);
+          if (totalVariantStock <= 0) {
+            toast.error('Total stock across variants must be greater than 0'); return false;
+          }
         }
         return true;
       case 6:
