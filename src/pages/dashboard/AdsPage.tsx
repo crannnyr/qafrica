@@ -19,6 +19,8 @@ export default function AdsPage() {
   const [imageUrl,setImageUrl] = useState('');
   const [targetUrl,setTargetUrl] = useState('');
   const [category,setCategory] = useState('');
+  const [placementCpc,setPlacementCpc] = useState<number|null>(null);
+  const [bannerCpc,setBannerCpc] = useState<number|null>(null);
   const [products,setProducts] = useState<ProductOption[]>([]);
   const [campaigns,setCampaigns] = useState<CampaignRow[]>([]);
   const [loading,setLoading] = useState(false);
@@ -29,9 +31,10 @@ export default function AdsPage() {
   const load = useCallback(async () => {
     if (!currentStore?.id) return;
     setLoading(true);
-    const [productsResult,campaignResult] = await Promise.all([
+    const [productsResult,campaignResult,rateResult] = await Promise.all([
       supabase.from('products').select('id,name,category,images').eq('store_id',currentStore.id).eq('is_active',true).eq('marketplace_approval_status','approved').order('name'),
       supabase.from('ad_campaigns').select('id,campaign_name,campaign_type,budget,spent,clicks,status,approval_status,payment_status,created_at').eq('store_id',currentStore.id).order('created_at',{ascending:false}),
+      supabase.from('placement_ad_settings').select('flat_cpc_ngn,banner_cpc_ngn').eq('id',true).maybeSingle(),
     ]);
     if (productsResult.error) toast.error('Could not load eligible products: '+productsResult.error.message);
     else setProducts((productsResult.data ?? []) as ProductOption[]);
@@ -89,7 +92,7 @@ export default function AdsPage() {
           {type==='placement' ? <>
             <label className="block text-sm font-medium">Marketplace-approved product<select value={productId} onChange={e=>{setProductId(e.target.value);const p=products.find(x=>x.id===e.target.value);setCategory(p?.category||'');}} required className="mt-1 w-full rounded-lg border px-3 py-2"><option value="">Choose approved product</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
             <label className="block text-sm font-medium">Category targeting (optional)<input value={category} onChange={e=>setCategory(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2" placeholder="Default: product category"/></label>
-            <div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">The configured Placement Ads CPC rate is charged for eligible clicks. Your campaign stops serving when its budget is exhausted.</div>
+            <div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">{placementCpc !== null && placementCpc > 0 ? <>Current rate: <strong>₦{placementCpc.toLocaleString('en-NG',{maximumFractionDigits:2})} per eligible click.</strong> </> : 'The Placement Ads click rate has not been configured yet. '}Your campaign stops serving when its budget is exhausted.</div>
           </> : <>
             <div className="md:col-span-2 overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">
               <div className="flex items-start gap-3 border-b border-gray-100 bg-gray-50 px-4 py-4 dark:border-gray-800 dark:bg-gray-800/60">
@@ -104,7 +107,7 @@ export default function AdsPage() {
                 {currentStore?.banner_url && <div><p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">Banner preview</p><img src={currentStore.banner_url} alt="Current store banner preview" className="max-h-44 w-full rounded-lg border border-gray-200 bg-gray-50 object-contain dark:border-gray-700 dark:bg-gray-800"/></div>}
                 {(!currentStore?.logo_url || !currentStore?.banner_url) && <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/30"><p className="text-sm leading-5 text-amber-900 dark:text-amber-200">Upload your store logo and banner to continue. Both are required for a Banner Ad.</p><Link to="/dashboard/settings?tab=images" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-700">Open Image Settings <ExternalLink className="h-3.5 w-3.5"/></Link></div>}
               </div>
-            </div><div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">The configured Banner Ads CPC rate is charged for eligible clicks on your approved banner. Your campaign stops serving when its budget is exhausted.</div>
+            </div><div className="md:col-span-2 rounded-lg bg-orange-50 p-3 text-sm text-orange-900">{bannerCpc !== null && bannerCpc > 0 ? <>Current rate: <strong>₦{bannerCpc.toLocaleString('en-NG',{maximumFractionDigits:2})} per eligible click.</strong> </> : 'The Banner Ads click rate has not been configured yet. '}Your campaign stops serving when its budget is exhausted.</div>
           </>}
           <div className="md:col-span-2"><button type="submit" disabled={saving || !currentStore?.id || (type==='placement' && products.length===0) || (type==='banner' && (!currentStore?.logo_url || !currentStore?.banner_url))} className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">{saving?<Loader2 className="h-4 w-4 animate-spin"/>:<Plus className="h-4 w-4"/>}Submit for approval</button></div>
         </form>
