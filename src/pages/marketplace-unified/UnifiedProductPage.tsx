@@ -522,7 +522,7 @@ export default function UnifiedProductPage() {
 
   const sellerCard = (
     <div className="flex items-center gap-3 rounded-xl border border-gray-200 px-3 py-2.5 hover:border-gray-300 hover:bg-gray-50 transition">
-      {china ? (
+      {china && !product.seller_id ? (
         <img
           src="/qafrica-bag-logo.svg"
           alt="QAFRICA"
@@ -544,7 +544,7 @@ export default function UnifiedProductPage() {
         <span className="block text-sm font-semibold text-gray-900 truncate">{product.seller_name}</span>
       </span>
 
-      {china ? (
+      {china && !product.seller_id ? (
         <Link
           to="/recommendations"
           className="inline-flex items-center gap-1 text-sm font-medium text-gray-700"
@@ -632,7 +632,7 @@ export default function UnifiedProductPage() {
               </div>
             </div>
 
-            {sellerCard}
+            {(!china || Boolean(product.seller_id)) && sellerCard}
 
             <div className="flex items-center justify-between">
               <div className="flex items-end gap-2 flex-wrap">
@@ -805,7 +805,7 @@ export default function UnifiedProductPage() {
         </div>
 
         <section className="mt-16" aria-label="Product reviews">
-          {china ? (
+          {china && !product.seller_id ? (
             <ImportReviews productId={product.source_id} />
           ) : (
             <Reviews productId={product.source_id} storeId={product.seller_id || undefined} />
