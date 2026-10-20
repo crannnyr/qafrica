@@ -19,12 +19,9 @@
   function = "import-meta"
   path = "/*/product/*"
 
-[[redirects]]
-  from = "/"
-  to = "/stores-v2"
-  status = 302
-  force = true
-  conditions = {Host = ["qafrica.ng", "www.qafrica.ng"]}
+[[edge_functions]]
+  function = "root-marketplace-redirect"
+  path = "/"
 
 [[redirects]]
   from = "/*"
