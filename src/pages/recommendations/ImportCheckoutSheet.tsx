@@ -586,8 +586,13 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
 
   const perItemShippingComplete = cart.length <= 1 || cart.every(i => !!shippingMethodFor(i));
   const missingShippingItems = cart.length > 1 ? cart.filter(i => !shippingMethodFor(i)) : [];
+  const invalidShippingRateItems = cart.filter(i =>
+    !Number.isFinite(Number(i.flight_shipping_cost_ngn)) || Number(i.flight_shipping_cost_ngn) <= 0 ||
+    !Number.isFinite(Number(i.sea_shipping_cost_ngn)) || Number(i.sea_shipping_cost_ngn) <= 0
+  );
   const pickupPricingReady = deliveryMode !== 'pickup_station' || pickupPricingStatus === 'disabled' || pickupPricingStatus === 'ready';
-  const canSubmit = whatsapp.trim() && cart.length > 0 && addressComplete && perItemShippingComplete && pickupPricingReady &&
+  const canSubmit = whatsapp.trim() && cart.length > 0 && invalidShippingRateItems.length === 0 &&
+    addressComplete && perItemShippingComplete && pickupPricingReady &&
     (cart.length > 1 ? true : !!shippingMethod);
 
   const handleCheckout = async () => {
@@ -1366,6 +1371,11 @@ if (promoQuote?.pending_order?.id) {
           className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-gray-400 focus:ring-2 focus:ring-gray-200 outline-none"
         />
 
+        {invalidShippingRateItems.length > 0 && (
+          <p className="text-amber-700 text-xs bg-amber-50 px-3 py-2 rounded-lg">
+            Shipping fees are missing for {invalidShippingRateItems.map(i => i.name).join(', ')}. Remove these items and add the products again after their shipping fees are configured.
+          </p>
+        )}
         {error && <p className="text-red-500 text-xs bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
       </div>
 
