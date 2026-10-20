@@ -1,10 +1,10 @@
 // QAFRICA Platform Configuration
 export const CONFIG = {
   PLATFORM_NAME: 'QAFRICA',
-  PLATFORM_URL: 'qafrica.store',
+  PLATFORM_URL: 'qafrica.ng',
   APP_URL: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173',
   PLATFORM_EMAIL: 'support@qafrica.store',
-  // Turn on once wildcard DNS (*.qafrica.store) + hosting are set up.
+  // Legacy .store and new .ng storefront subdomains are supported.
   STORE_SUBDOMAINS_LIVE: false,
   SUPABASE_URL: 'https://bahiqhpypapvktpxrths.supabase.co',
   SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJhaGlxaHB5cGFwdmt0cHhydGhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwNzQ2NzEsImV4cCI6MjA4NzY1MDY3MX0.8UkRnUX39-XR3twjWlaiQlT4OMjyl4ROZlgmGEyjUC4',
