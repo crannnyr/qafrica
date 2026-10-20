@@ -19,7 +19,7 @@ import StoreClosedPage from '@/pages/store/StoreClosedPage';
 import { PLATFORM_HOST, aliasTargetPath, storeSubdomainLabel } from '@/lib/storeSubdomain';
 
 const PLATFORM_DOMAINS = [
-  'qafrica.store', 'www.qafrica.store', 'localhost', '127.0.0.1', 'qqafr.bolt.host',
+  'qafrica.ng', 'www.qafrica.ng', 'qafrica.store', 'www.qafrica.store', 'localhost', '127.0.0.1', 'qqafr.bolt.host',
 ];
 
 const isPlatformDomain = (hostname: string) => {
