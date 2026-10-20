@@ -143,22 +143,30 @@ export const useImportCartStore = create<ImportCartState>()(
           const res = await fetch(`${IMPORT_PRODUCT_LOOKUP_URL}&ids=${ids.join(',')}`);
           const data = await res.json().catch(() => ({}));
           const list: ImportProduct[] = Array.isArray(data?.products) ? data.products : [];
-          if (!res.ok || list.length === 0) return;
+          if (!res.ok) return;
+          // The lookup endpoint returns active products only. Remove stale cart
+          // snapshots for products that were deactivated/deleted, and reject
+          // products unless both shipping methods have a positive configured fee.
           const live = new Map(list.map(p => [p.id, p]));
           set(state => {
             let changed = false;
-            const cart = state.cart.map(item => {
+            const cart = state.cart.flatMap(item => {
               const p = live.get(item.id);
-              if (!p || !Number.isFinite(Number(p.price_ngn))) return item;
+              const airRate = Number(p?.flight_shipping_cost_ngn);
+              const seaRate = Number(p?.sea_shipping_cost_ngn);
+              if (!p || !Number.isFinite(Number(p.price_ngn)) ||
+                  !Number.isFinite(airRate) || airRate <= 0 ||
+                  !Number.isFinite(seaRate) || seaRate <= 0) {
+                changed = true;
+                return [];
+              }
               let price = Number(p.price_ngn);
               for (const group of p.variants ?? []) {
                 const selected = item.variant_selection?.[group.name];
                 const delta = selected == null ? undefined : group.price_deltas?.[selected];
                 if (typeof delta === 'number') price += delta;
               }
-              if (price === Number(item.price_ngn) && p.ship_only === item.ship_only) return item;
-              changed = true;
-              return {
+              const nextItem = {
                 ...item,
                 price_ngn: price,
                 price_cny: p.price_cny,
@@ -167,9 +175,13 @@ export const useImportCartStore = create<ImportCartState>()(
                 variants: p.variants,
                 has_variants: p.has_variants,
                 ship_only: p.ship_only,
+                weight_grams: p.weight_grams,
+                volume_cbm: p.volume_cbm,
                 sea_shipping_cost_ngn: p.sea_shipping_cost_ngn,
                 flight_shipping_cost_ngn: p.flight_shipping_cost_ngn,
               };
+              if (JSON.stringify(nextItem) !== JSON.stringify(item)) changed = true;
+              return [nextItem];
             });
             return changed ? { cart } : state;
           });
