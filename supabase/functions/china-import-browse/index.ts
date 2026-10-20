@@ -39,11 +39,18 @@ serve(async (req: Request) => {
           p_offset: offset,
         });
         if (error) return json({ error: error.message, products: [] }, 500);
-        const products = data?.products ?? []; const total = Number(data?.total ?? 0);
+        const products = (data?.products ?? []).filter((p: any) =>
+          Number.isFinite(Number(p.flight_shipping_cost_ngn)) && Number(p.flight_shipping_cost_ngn) > 0 &&
+          Number.isFinite(Number(p.sea_shipping_cost_ngn)) && Number(p.sea_shipping_cost_ngn) > 0
+        );
+        const total = Number(data?.total ?? 0);
         return json({ products, total, hasMore: offset + products.length < total, corrected: data?.corrected ?? null });
       }
 
-      let base = supabase.from("china_import_products").select(PRODUCT_COLUMNS, { count: "exact" }).eq("is_active", true);
+      let base = supabase.from("china_import_products").select(PRODUCT_COLUMNS, { count: "exact" })
+        .eq("is_active", true)
+        .gt("flight_shipping_cost_ngn", 0)
+        .gt("sea_shipping_cost_ngn", 0);
       if (parent && parent !== "All") base = base.eq("parent_category", parent);
       if (subcategory && subcategory !== "All") base = base.eq("category", subcategory);
       if (priceMax) base = base.lte("price_ngn", Number(priceMax));
@@ -67,13 +74,13 @@ serve(async (req: Request) => {
       const ids = (url.searchParams.get("ids") ?? "").split(",").map((v) => v.trim()).filter((v) => UUID.test(v)).slice(0, 100);
       if (id) {
         if (!UUID.test(id)) return json({ error: "Invalid product id", product: null }, 400);
-        const { data, error } = await supabase.from("china_import_products").select(PRODUCT_DETAIL_COLUMNS).eq("id", id).eq("is_active", true).maybeSingle();
+        const { data, error } = await supabase.from("china_import_products").select(PRODUCT_DETAIL_COLUMNS).eq("id", id).eq("is_active", true).gt("flight_shipping_cost_ngn", 0).gt("sea_shipping_cost_ngn", 0).maybeSingle();
         if (error) return json({ error: error.message, product: null }, 500);
         if (!data) return json({ error: "Product not found", product: null }, 404);
         return json({ product: data });
       }
       if (ids.length === 0) return json({ products: [] });
-      const { data, error } = await supabase.from("china_import_products").select(PRODUCT_DETAIL_COLUMNS).in("id", ids).eq("is_active", true);
+      const { data, error } = await supabase.from("china_import_products").select(PRODUCT_DETAIL_COLUMNS).in("id", ids).eq("is_active", true).gt("flight_shipping_cost_ngn", 0).gt("sea_shipping_cost_ngn", 0);
       if (error) return json({ error: error.message, products: [] }, 500);
       return json({ products: data ?? [] });
     }
