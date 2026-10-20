@@ -14,10 +14,10 @@ export default defineConfig({
       include: /\.(jsx|js|mdx|md|tsx|ts)$/,
     }),
     sitemap({
-      hostname: 'https://qafrica.store',
+      hostname: 'https://qafrica.ng',
       // Product pages are listed in a second, always-current sitemap served by
       // netlify/edge-functions/import-sitemap.ts; this adds it to robots.txt.
-      externalSitemaps: ['https://qafrica.store/sitemap-products.xml'],
+      externalSitemaps: ['https://qafrica.ng/sitemap-products.xml'],
       // robots.txt is generated from here on every build (the old robots.txt in
       // the repo root was never deployed), so this is the single source of truth.
       robots: [
