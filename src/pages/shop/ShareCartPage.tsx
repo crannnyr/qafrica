@@ -155,16 +155,18 @@ export default function ShareCartPage() {
             <Field id="phone" label="Your phone" type="tel" inputMode="tel" value={phone} onChange={setPhone} autoComplete="tel" />
           </div>
           <Field id="address" label="Delivery address" value={address} onChange={setAddress} autoComplete="street-address" placeholder="House number and street" />
-          <div className="grid grid-cols-2 gap-3">
-            <div><label htmlFor="city" className="block text-[12px] font-medium text-gray-700 mb-1">City / area</label><select id="city" value={city} onChange={(e) => setCity(e.target.value)} disabled={!state} required className="w-full h-11 px-3 rounded-lg border border-gray-300 bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-gray-900 disabled:bg-gray-100 disabled:text-gray-400"><option value="">{state ? "Choose city / area…" : "Choose state first"}</option>{cityOptions.map((area) => <option key={area} value={area}>{area}</option>)}</select></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="state" className="block text-[12px] font-medium text-gray-700 mb-1">State</label>
-              <select id="state" value={state} onChange={(e) => { setState(e.target.value); setCity(""); }} className="w-full h-11 px-3 rounded-lg border border-gray-300 bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-gray-900">
-                <option value="">Choose…</option>
+              <select id="state" value={state} onChange={(e) => { setState(e.target.value); setCity(""); }} required className="w-full h-11 px-3 rounded-lg border border-gray-300 bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-gray-900">
+                <option value="">Choose state…</option>
                 {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-          </div>
+            <div>
+              <label htmlFor="city" className="block text-[12px] font-medium text-gray-700 mb-1">City / area</label>
+              <select id="city" value={city} onChange={(e) => setCity(e.target.value)} disabled={!state} required className="w-full h-11 px-3 rounded-lg border border-gray-300 bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-gray-900 disabled:bg-gray-100 disabled:text-gray-400"><option value="">{state ? "Choose city / area…" : "Choose state first"}</option>{cityOptions.map((area) => <option key={area} value={area}>{area}</option>)}</select>
+            </div>          </div>
         </section>
         <section className="bg-white px-4 py-4">
           <label htmlFor="note" className="block text-[12px] font-medium text-gray-700 mb-1">Note <span className="text-gray-400 font-normal">(optional)</span></label>
