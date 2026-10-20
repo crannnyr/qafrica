@@ -1,7 +1,7 @@
-// <store>.qafrica.store aliases. The subdomain forwards to qafrica.store/<slug>, so cart,
-// sign-in and checkout stay on one domain (browsers keep carts separate per domain).
-
-export const PLATFORM_HOST = 'qafrica.store';
+// Store subdomains on the primary .ng and legacy .store domains.
+// Aliases forward to the primary domain so cart, sign-in and checkout share an origin.
+export const PLATFORM_HOST = 'qafrica.ng';
+const PLATFORM_HOSTS = ['qafrica.ng', 'qafrica.store'] as const;
 
 // Subdomains that are never stores
 const RESERVED = new Set(['www', 'api', 'admin', 'app', 'mail', 'email', 'cdn', 'static', 'staging', 'dev', 'status', 'help', 'support', 'blog', 'docs']);
@@ -9,9 +9,9 @@ const RESERVED = new Set(['www', 'api', 'admin', 'app', 'mail', 'email', 'cdn', 
 /** Store label for "<label>.qafrica.store", else null. */
 export function storeSubdomainLabel(hostname: string): string | null {
   const host = hostname.toLowerCase();
-  const suffix = `.${PLATFORM_HOST}`;
-  if (!host.endsWith(suffix)) return null;
-  const label = host.slice(0, -suffix.length);
+  const platformHost = PLATFORM_HOSTS.find(domain => host.endsWith(`.${domain}`));
+  if (!platformHost) return null;
+  const label = host.slice(0, -platformHost.length - 1);
   if (!label || label.includes('.') || RESERVED.has(label)) return null;
   if (!/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(label)) return null;
   return label;
