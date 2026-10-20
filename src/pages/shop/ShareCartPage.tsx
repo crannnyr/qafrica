@@ -5,13 +5,15 @@ import { Copy, Check, Share2, MessageCircle, ShieldCheck, HandHeart } from 'luci
 import { supabase } from '@/services';
 import { useCartStore, useCustomerAuthStore } from '@/stores';
 import CONFIG from '@/lib/config';
+import NIGERIAN_LGAS from '@/data/nigeria-lgas.json';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { Field, InfoButton, PageHeader } from './ui';
 import { naira } from './format';
 import { CHECKOUT_SELECTION_KEY } from './CartPage';
 import { createSharedCart, loadSavedDetails, saveDetails, shareUrl } from './checkoutApi';
 
-const STATES: string[] = (CONFIG as unknown as { NIGERIAN_STATES: string[] }).NIGERIAN_STATES ?? [];
+const LOCATIONS = NIGERIAN_LGAS as Record<string, string[]>;
+const STATES: string[] = Object.keys(LOCATIONS).sort((a, b) => a.localeCompare(b));
 
 export default function ShareCartPage() {
   useForceLightMode();
@@ -39,6 +41,7 @@ export default function ShareCartPage() {
   const [city, setCity] = useState(saved.delivery?.city ?? '');
   const [state, setState] = useState(saved.delivery?.state ?? '');
   const [note, setNote] = useState('');
+  const cityOptions = LOCATIONS[state] ?? [];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ code: string; amount: number } | null>(null);
@@ -153,10 +156,10 @@ export default function ShareCartPage() {
           </div>
           <Field id="address" label="Delivery address" value={address} onChange={setAddress} autoComplete="street-address" placeholder="House number and street" />
           <div className="grid grid-cols-2 gap-3">
-            <Field id="city" label="City / area" value={city} onChange={setCity} />
+            <div><label htmlFor="city" className="block text-[12px] font-medium text-gray-700 mb-1">City / area</label><select id="city" value={city} onChange={(e) => setCity(e.target.value)} disabled={!state} required className="w-full h-11 px-3 rounded-lg border border-gray-300 bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-gray-900 disabled:bg-gray-100 disabled:text-gray-400"><option value="">{state ? "Choose city / area…" : "Choose state first"}</option>{cityOptions.map((area) => <option key={area} value={area}>{area}</option>)}</select></div>
             <div>
               <label htmlFor="state" className="block text-[12px] font-medium text-gray-700 mb-1">State</label>
-              <select id="state" value={state} onChange={(e) => setState(e.target.value)} className="w-full h-11 px-3 rounded-lg border border-gray-300 bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-gray-900">
+              <select id="state" value={state} onChange={(e) => { setState(e.target.value); setCity(""); }} className="w-full h-11 px-3 rounded-lg border border-gray-300 bg-white text-[14px] focus:outline-none focus:ring-2 focus:ring-gray-900">
                 <option value="">Choose…</option>
                 {STATES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
