@@ -20,6 +20,13 @@
   path = "/*/product/*"
 
 [[redirects]]
+  from = "/"
+  to = "/stores-v2"
+  status = 302
+  force = true
+  conditions = {Host = ["qafrica.ng", "www.qafrica.ng"]}
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
