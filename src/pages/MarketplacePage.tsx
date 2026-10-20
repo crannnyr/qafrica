@@ -24,11 +24,11 @@ export default function MarketplacePage() {
           name="keywords"
           content="sell on jumia nigeria, sell on konga nigeria, sell on jiji nigeria, jumia seller registration, konga vendor nigeria, how to sell on jumia, jumia seller fees, nigerian marketplace seller, dropshipping nigeria jumia"
         />
-        <link rel="canonical" href="https://qafrica.store/marketplaces" />
+        <link rel="canonical" href="https://qafrica.ng/marketplaces" />
         <meta property="og:title"       content="Sell on Jumia, Konga & Jiji — QAFRICA" />
         <meta property="og:description" content="Post once. Sell on Jumia, Konga and Jiji automatically. QAFRICA handles QC, listing and fulfilment." />
         <meta property="og:type"        content="website" />
-        <meta property="og:url"         content="https://qafrica.store/marketplaces" />
+        <meta property="og:url"         content="https://qafrica.ng/marketplaces" />
         <meta name="twitter:card"        content="summary_large_image" />
         <meta name="twitter:title"       content="Sell on Jumia, Konga & Jiji — QAFRICA" />
         <meta name="twitter:description" content="Post once. Sell on Jumia, Konga and Jiji automatically." />
@@ -37,11 +37,11 @@ export default function MarketplacePage() {
           '@type':      'WebPage',
           'name':       'QAFRICA Marketplace — Sell on Jumia, Konga & Jiji',
           'description':'List products on Jumia, Konga and Jiji simultaneously from one QAFRICA dashboard.',
-          'url':        'https://qafrica.store/marketplaces',
+          'url':        'https://qafrica.ng/marketplaces',
           'publisher':  {
             '@type': 'Organization',
             'name':  'QAFRICA',
-            'url':   'https://qafrica.store',
+            'url':   'https://qafrica.ng',
           },
           'mainEntity': {
             '@type': 'FAQPage',
