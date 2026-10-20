@@ -17,7 +17,7 @@ export default function SEO({
   title,
   description = 'QAFRICA - Nigeria\'s premier e-commerce platform builder. Create your online store in minutes.',
   image = 'https://bahiqhpypapvktpxrths.supabase.co/storage/v1/object/public/review-images/1000131377%20(1).png',
-  url = typeof window !== 'undefined' ? window.location.href : 'https://qafrica.store',
+  url = typeof window !== 'undefined' ? window.location.href : 'https://qafrica.ng',
   type = 'website',
   keywords = ['e-commerce', 'Nigeria', 'online store', 'sell online', 'QAFRICA'],
   author = 'QAFRICA',
@@ -181,7 +181,7 @@ export function OrganizationSchema() {
     '@context': 'https://schema.org',
     '@type': 'Organization',
     name: 'QAFRICA',
-    url: 'https://qafrica.store',
+    url: 'https://qafrica.ng',
     logo: 'https://bahiqhpypapvktpxrths.supabase.co/storage/v1/object/public/review-images/1000131377%20(1).png',
     description: 'Nigeria\'s premier e-commerce platform builder',
     sameAs: [
