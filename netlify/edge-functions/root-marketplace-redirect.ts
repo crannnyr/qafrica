@@ -1,4 +1,7 @@
-export default async (request: Request) => {
+export default async (
+  request: Request,
+  context: { next: () => Promise<Response> },
+) => {
   const url = new URL(request.url);
   const hostname = url.hostname.toLowerCase();
 
@@ -10,5 +13,6 @@ export default async (request: Request) => {
     return Response.redirect(url.toString(), 302);
   }
 
-  return fetch(request);
+  // Let every other domain and path continue through Netlify normally.
+  return context.next();
 };
