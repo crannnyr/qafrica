@@ -25,6 +25,7 @@ const PLATFORM_DOMAINS = [
 const isPlatformDomain = (hostname: string) => {
   if (PLATFORM_DOMAINS.includes(hostname)) return true;
   if (hostname.endsWith('.qafrica.store')) return true;
+  if (hostname.endsWith('.qafrica.ng')) return true;
   if (hostname.endsWith('.bolt.host')) return true;
   if (hostname.endsWith('.netlify.app')) return true;
   if (hostname.endsWith('.vercel.app')) return true;
