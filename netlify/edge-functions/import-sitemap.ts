@@ -6,7 +6,7 @@ import type { Config } from 'https://edge.netlify.com';
 const SUPABASE_URL = 'https://bahiqhpypapvktpxrths.supabase.co';
 // Public anon key (same one the web app ships). RLS limits it to active products.
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJhaGlxaHB5cGFwdmt0cHhydGhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwNzQ2NzEsImV4cCI6MjA4NzY1MDY3MX0.8UkRnUX39-XR3twjWlaiQlT4OMjyl4ROZlgmGEyjUC4';
-const SITE = 'https://qafrica.store';
+const SITE = 'https://qafrica.ng';
 const PAGE = 1000; // PostgREST returns at most 1000 rows per request
 const MAX_URLS = 45000; // sitemap files are capped at 50,000 URLs
 
