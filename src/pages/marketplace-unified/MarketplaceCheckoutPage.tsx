@@ -10,10 +10,10 @@ import ImportQtyControl from '@/components/ImportQtyControl';
 
 const naira = (value: number) => `₦${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-const NIGERIAN_LOCATIONS: Record<string, string[]> = {
-"Abia":["Umuahia","Aba","Arochukwu","Ohafia"],"Adamawa":["Yola","Mubi","Numan","Jimeta"],"Akwa Ibom":["Uyo","Eket","Ikot Ekpene","Oron"],"Anambra":["Awka","Onitsha","Nnewi","Ekwulobia"],"Bauchi":["Bauchi","Azare","Misau","Jama'are"],"Bayelsa":["Yenagoa","Brass","Ogbia","Nembe"],"Benue":["Makurdi","Gboko","Otukpo","Katsina-Ala"],"Borno":["Maiduguri","Biu","Bama","Dikwa"],"Cross River":["Calabar","Ikom","Ogoja","Ugep"],"Delta":["Asaba","Warri","Effurun","Sapele","Ughelli"],"Ebonyi":["Abakaliki","Afikpo","Onueke","Ezza"],"Edo":["Benin City","Auchi","Ekpoma","Uromi"],"Ekiti":["Ado-Ekiti","Ikere-Ekiti","Iworoko","Oye-Ekiti"],"Enugu":["Enugu","Nsukka","Agbani","Awgu"],"FCT":["Abuja","Gwagwalada","Kuje","Kubwa","Bwari","Nyanya","Lugbe"],"Gombe":["Gombe","Kumo","Deba","Billiri"],"Imo":["Owerri","Orlu","Okigwe","Mbaise"],"Jigawa":["Dutse","Hadejia","Kazaure","Gumel"],"Kaduna":["Kaduna","Zaria","Kafanchan","Sabon Gari"],"Kano":["Kano","Wudil","Gwarzo","Bichi"],"Katsina":["Katsina","Daura","Funtua","Malumfashi"],"Kebbi":["Birnin Kebbi","Argungu","Yauri","Zuru"],"Kogi":["Lokoja","Okene","Kabba","Idah"],"Kwara":["Ilorin","Offa","Omu-Aran","Jebba"],"Lagos":["Ikeja","Lagos Island","Lekki","Victoria Island","Surulere","Yaba","Ajah","Ikorodu","Epe","Badagry","Festac","Agege","Alimosho"],"Nasarawa":["Lafia","Keffi","Karu","Akwanga"],"Niger":["Minna","Suleja","Bida","Kontagora"],"Ogun":["Abeokuta","Ijebu-Ode","Sagamu","Ota","Ilaro"],"Ondo":["Akure","Ondo","Owo","Ikare-Akoko"],"Osun":["Osogbo","Ile-Ife","Ilesa","Ede","Ikirun"],"Oyo":["Ibadan","Ogbomosho","Oyo","Iseyin","Saki"],"Plateau":["Jos","Bukuru","Pankshin","Shendam"],"Rivers":["Port Harcourt","Obio-Akpor","Eleme","Bonny","Okrika","Oyigbo","Ikwerre"],"Sokoto":["Sokoto","Tambuwal","Wurno","Illela"],"Taraba":["Jalingo","Wukari","Bali","Takum"],"Yobe":["Damaturu","Potiskum","Gashua","Nguru"],"Zamfara":["Gusau","Kaura Namoda","Talata Mafara","Anka"]
-};
-const NIGERIAN_STATES = Object.keys(NIGERIAN_LOCATIONS);
+import NIGERIAN_LGAS from '@/data/nigeria-lgas.json';
+
+const NIGERIAN_LOCATIONS = NIGERIAN_LGAS as Record<string, string[]>;
+const NIGERIAN_STATES = Object.keys(NIGERIAN_LOCATIONS).sort((a, b) => a.localeCompare(b));
 
 type QuoteStore = { store_id: string; store_name: string; items: any[]; subtotal: number; delivery_fee: number; total: number; shipping_included?: boolean; flight_shipping_total?: number };
 
