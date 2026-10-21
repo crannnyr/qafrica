@@ -472,6 +472,14 @@ export default function ClosedBatchDetail({
     await load();
   };
 
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+
+  useEffect(() => {
+    call('admin-check-super-admin', { manager_token: token })
+      .then(result => setIsSuperAdmin(result?.is_super_admin === true))
+      .catch(() => setIsSuperAdmin(false));
+  }, [token]);
+
   const setItemShipping = async (line: CustomerLine, method: 'flight' | 'sea_freight') => {
     const result = await call('admin-set-item-shipping-method', {
       manager_token: token, order_id: line.order_id, product_id: line.product_id,
