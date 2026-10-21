@@ -3914,6 +3914,19 @@ serve(async (req: Request) => {
         .eq('id', order_id).select().single()
       if (updateErr) return json({ error: updateErr.message }, 500)
 
+      // Keep the fulfillment snapshot aligned with the corrected order item.
+      const { data: fulfillmentItem } = await supabase.from('china_import_fulfillment_items')
+        .select('id, item_snapshot').eq('order_id', order_id).eq('order_item_index', matchedItemIndex).maybeSingle()
+      if (fulfillmentItem) {
+        const snapshot = fulfillmentItem.item_snapshot && typeof fulfillmentItem.item_snapshot === 'object' ? fulfillmentItem.item_snapshot : {}
+        await supabase.from('china_import_fulfillment_items')
+          .update({
+            variant_options: new_variant_options,
+            item_snapshot: { ...snapshot, variant_options: new_variant_options },
+            updated_at: new Date().toISOString(),
+          }).eq('id', fulfillmentItem.id)
+      }
+
       if (order.user_id) {
         const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', order.user_id).single()
         if (customer?.email) {
@@ -4023,12 +4036,14 @@ serve(async (req: Request) => {
       const items = Array.isArray(order.items) ? order.items : []
       const variantMatch = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
       let matched = false
+      let matchedItemIndex = -1
       let oldVariantOptions: Record<string, string> | null = null
       const preservePricing = billed || !!order.shipped_at || ['shipped_and_closed', 'clearance_and_closed'].includes(String(order.status ?? '').toLowerCase())
       const newPrice = preservePricing ? null : computeItemPriceNgn(product, new_variant_options)
-      const updatedItems = items.map((item: any) => {
+      const updatedItems = items.map((item: any, index: number) => {
         if (item.id === product_id && (old_variant_options === undefined || variantMatch(item.variant_options, old_variant_options))) {
           matched = true
+          matchedItemIndex = index
           oldVariantOptions = item.variant_options ?? null
           return { ...item, variant_options: new_variant_options, ...(newPrice === null ? {} : { price_ngn: newPrice }) }
         }
