@@ -3940,11 +3940,13 @@ serve(async (req: Request) => {
         .from('china_import_orders').select('*').eq('id', order_id).single()
       if (orderErr || !order) return json({ error: 'Order not found' }, 404)
 
+      let billedCorrection = false
       if (order.staged_at) {
         const { data: billStatus } = await supabase
           .from('import_batch_bill_status').select('status')
           .eq('batch_key', order.staged_at).eq('kind', 'consolidation_shipping').maybeSingle()
-        if (billStatus?.status === 'sent' && !isSuperAdmin) {
+        billedCorrection = billStatus?.status === 'sent'
+        if (billedCorrection && !isSuperAdmin) {
           return json({ error: 'This batch has already been billed. Only a Super Admin can correct the shipping method.' }, 409)
         }
       }
@@ -3954,11 +3956,6 @@ serve(async (req: Request) => {
       if (product?.ship_only && new_method === 'flight') {
         return json({ error: 'This item can only ship by sea freight.' }, 400)
       }
-      if (isSuperAdmin && order.staged_at && new_method === 'sea_freight') {
-        // For corrections to billed items, annotate the order audit note without altering bill/payment rows.
-        // The bill remains unchanged; a human can review any pricing impact separately.
-      }
-
       const items = Array.isArray(order.items) ? order.items : []
       const variantMatch = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
       let matched = false
@@ -3974,9 +3971,12 @@ serve(async (req: Request) => {
       const methods = new Set(updatedItems.map((i: any) => i.shipping_method).filter(Boolean))
       const summary = methods.size === 1 ? [...methods][0] : methods.size > 1 ? 'mixed' : order.shipping_method
 
+      const auditNote = billedCorrection
+        ? [order.admin_note, `[Super Admin shipping correction ${new Date().toISOString()}] ${product?.name ?? product_id}: ${(items.find((i: any) => i.id === product_id && (variant_options === undefined || variantMatch(i.variant_options, variant_options))) ?? {}).shipping_method ?? 'unset'} → ${new_method}. Existing bill/payment records left unchanged.`].filter(Boolean).join('\n')
+        : order.admin_note
       const { data: updated, error: updateErr } = await supabase
         .from('china_import_orders')
-        .update({ items: updatedItems, shipping_method: summary, updated_at: new Date().toISOString() })
+        .update({ items: updatedItems, shipping_method: summary, admin_note: auditNote, updated_at: new Date().toISOString() })
         .eq('id', order_id).select().single()
       if (updateErr) return json({ error: updateErr.message }, 500)
 
