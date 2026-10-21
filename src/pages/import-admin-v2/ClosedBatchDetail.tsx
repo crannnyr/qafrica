@@ -1457,6 +1457,7 @@ export default function ClosedBatchDetail({
                       runIndividual={runIndividual}
                       individualActing={individualActing}
                       onSetItemShipping={setItemShipping}
+                      isSuperAdmin={isSuperAdmin}
                       productVariants={productVariants}
                       onSetItemVariant={setItemVariant}
                     />
@@ -1504,9 +1505,10 @@ function CustomerCard({
   applyPercentDiscount,
   isBilled, statusRow, ledgerRow, isShippedC, isReceivedC,
   noteDrafts, setNoteDrafts, saveNote, runIndividual, individualActing,
-  onSetItemShipping, productVariants, onSetItemVariant,
+  onSetItemShipping, isSuperAdmin, productVariants, onSetItemVariant,
 }: {
   customer: { customerId: string; name: string; firstOrderAt: string; orderCount: number; lines: CustomerLine[] };
+  isSuperAdmin: boolean;
   billKind: BillKind; setBillKind: (k: BillKind) => void; onBack: () => void;
   customerPriceFor: (customerId: string, productId: string, kind: BillKind) => string;
   isOverridden: (customerId: string, productId: string, kind: BillKind) => boolean;
@@ -1625,7 +1627,7 @@ function CustomerCard({
                   </div>
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <span className="text-[10px] text-gray-400">Shipping:</span>
-                    {isBilled(id, 'consolidation_shipping') ? (
+                    {isBilled(id, 'consolidation_shipping') && !isSuperAdmin ? (
                       <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${line.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600' : 'bg-indigo-50 text-indigo-600'}`}>
                         {line.shipping_method === 'flight' ? <Plane className="w-2.5 h-2.5" /> : <Ship className="w-2.5 h-2.5" />}
                         {line.shipping_method === 'flight' ? 'Air' : 'Sea'}
