@@ -1617,19 +1617,21 @@ function CustomerCard({
                   </div>
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <span className="text-[10px] text-gray-400">Shipping:</span>
-                    {isBilled(id, 'consolidation_shipping') || line.ship_only ? (
+                    {isBilled(id, 'consolidation_shipping') ? (
                       <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${line.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600' : 'bg-indigo-50 text-indigo-600'}`}>
                         {line.shipping_method === 'flight' ? <Plane className="w-2.5 h-2.5" /> : <Ship className="w-2.5 h-2.5" />}
                         {line.shipping_method === 'flight' ? 'Air' : 'Sea'}
                       </span>
                     ) : (
                       <div className="flex gap-1">
-                        <button
-                          onClick={() => onSetItemShipping(line, 'flight')}
-                          className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors ${line.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-white text-gray-400 border-gray-200'}`}
-                        >
-                          <Plane className="w-2.5 h-2.5" /> Air
-                        </button>
+                        {!line.ship_only && (
+                          <button
+                            onClick={() => onSetItemShipping(line, 'flight')}
+                            className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors ${line.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                          >
+                            <Plane className="w-2.5 h-2.5" /> Air
+                          </button>
+                        )}
                         <button
                           onClick={() => onSetItemShipping(line, 'sea_freight')}
                           className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border transition-colors ${line.shipping_method === 'sea_freight' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 border-gray-200'}`}
