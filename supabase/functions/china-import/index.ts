@@ -3914,33 +3914,6 @@ serve(async (req: Request) => {
         .eq('id', order_id).select().single()
       if (updateErr) return json({ error: updateErr.message }, 500)
 
-      // Sync every matching fulfillment record, using product_id and item index together.
-      // Some legacy fulfillment rows were created with stale/missing index metadata, so fall back
-      // to the order+product match if the exact indexed row is absent. Surface failures instead of
-      // silently reporting a successful order-only update.
-      const { data: indexedRows, error: indexedErr } = await supabase.from('china_import_fulfillment_items')
-        .select('id, item_snapshot, variant_options, order_item_index, product_id')
-        .eq('order_id', order_id).eq('product_id', product_id).eq('order_item_index', matchedItemIndex)
-      if (indexedErr) return json({ error: 'Order was updated, but fulfillment lookup failed: ' + indexedErr.message }, 500)
-      let fulfillmentRows = indexedRows ?? []
-      if (fulfillmentRows.length === 0) {
-        const { data: fallbackRows, error: fallbackErr } = await supabase.from('china_import_fulfillment_items')
-          .select('id, item_snapshot, variant_options, order_item_index, product_id')
-          .eq('order_id', order_id).eq('product_id', product_id)
-        if (fallbackErr) return json({ error: 'Order was updated, but fulfillment lookup failed: ' + fallbackErr.message }, 500)
-        fulfillmentRows = fallbackRows ?? []
-      }
-      for (const fulfillmentItem of fulfillmentRows) {
-        const snapshot = fulfillmentItem.item_snapshot && typeof fulfillmentItem.item_snapshot === 'object' ? fulfillmentItem.item_snapshot : {}
-        const { error: fulfillmentUpdateErr } = await supabase.from('china_import_fulfillment_items')
-          .update({
-            variant_options: new_variant_options,
-            item_snapshot: { ...snapshot, variant_options: new_variant_options },
-            updated_at: new Date().toISOString(),
-          }).eq('id', fulfillmentItem.id)
-        if (fulfillmentUpdateErr) return json({ error: 'Order was updated, but fulfillment variant sync failed: ' + fulfillmentUpdateErr.message }, 500)
-      }
-
       if (order.user_id) {
         const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', order.user_id).single()
         if (customer?.email) {
@@ -4091,6 +4064,27 @@ serve(async (req: Request) => {
 
       const { data: updated, error: updateErr } = await supabase.from('china_import_orders').update(updates).eq('id', order_id).select().single()
       if (updateErr) return json({ error: updateErr.message }, 500)
+
+      // Sync variant changes into fulfillment rows. Prefer exact item index, then
+      // fall back to order + product for legacy fulfillment records with stale indexes.
+      const { data: indexedRows, error: indexedErr } = await supabase.from('china_import_fulfillment_items')
+        .select('id, item_snapshot, order_item_index, product_id')
+        .eq('order_id', order_id).eq('product_id', product_id).eq('order_item_index', matchedItemIndex)
+      if (indexedErr) return json({ error: 'Order saved but fulfillment lookup failed: ' + indexedErr.message }, 500)
+      let fulfillmentRows = indexedRows ?? []
+      if (fulfillmentRows.length === 0) {
+        const { data: fallbackRows, error: fallbackErr } = await supabase.from('china_import_fulfillment_items')
+          .select('id, item_snapshot, order_item_index, product_id').eq('order_id', order_id).eq('product_id', product_id)
+        if (fallbackErr) return json({ error: 'Order saved but fulfillment lookup failed: ' + fallbackErr.message }, 500)
+        fulfillmentRows = fallbackRows ?? []
+      }
+      for (const fulfillmentItem of fulfillmentRows) {
+        const snapshot = fulfillmentItem.item_snapshot && typeof fulfillmentItem.item_snapshot === 'object' ? fulfillmentItem.item_snapshot : {}
+        const { error: fulfillmentUpdateErr } = await supabase.from('china_import_fulfillment_items')
+          .update({ variant_options: new_variant_options, item_snapshot: { ...snapshot, variant_options: new_variant_options }, updated_at: new Date().toISOString() })
+          .eq('id', fulfillmentItem.id)
+        if (fulfillmentUpdateErr) return json({ error: 'Order saved but fulfillment sync failed: ' + fulfillmentUpdateErr.message }, 500)
+      }
 
       if (order.user_id) {
         const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', order.user_id).single()
