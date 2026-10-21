@@ -322,6 +322,40 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     finally { setSavingAddress(false); }
   };
 
+  const openVariantEditor = async (index: number) => {
+    const item = items[index];
+    let groups = variantGroups[item.id] ?? [];
+    if (groups.length === 0 && isSuperAdmin) {
+      setVariantsLoading(true);
+      try {
+        const res = await fetch(EDGE_URL + '?action=admin-get-product-variants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ manager_token: token, product_id: item.id }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) throw new Error(data.error ?? 'Could not load product variants');
+        groups = Array.isArray(data.variants) ? data.variants : [];
+        setVariantGroups(prev => ({ ...prev, [item.id]: groups }));
+        if (groups.length === 0) {
+          toast.error('No variant options are registered for this product.');
+          return;
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Could not load variants');
+        return;
+      } finally {
+        setVariantsLoading(false);
+      }
+    }
+    if (groups.length === 0) {
+      toast.error('No variant options are registered for this product.');
+      return;
+    }
+    setEditingItem(editingItem === index ? null : index);
+    setVariantDraft(item.variant_options ?? {});
+  };
+
   const saveVariant = async (index: number) => {
     const item = items[index];
     const groups = variantGroups[item.id] ?? [];
@@ -395,7 +429,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
                   <div className="flex gap-3">
                     {item.image_url ? <img src={item.image_url} className="w-12 h-12 rounded-lg object-cover border border-gray-100" alt="" /> : <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center"><Package className="w-4 h-4 text-gray-300" /></div>}
                     <div className="flex-1 min-w-0"><p className="text-xs font-bold text-gray-800">{item.name}</p><p className="text-[10px] text-gray-400 mt-0.5">Qty ×{item.quantity} · {money(item.price_ngn)} each</p>{item.variant_options && Object.keys(item.variant_options).length > 0 && <p className="text-[10px] text-gray-500 mt-1">{Object.entries(item.variant_options).map(([k,v]) => k + ': ' + v).join(', ')}</p>}</div>
-                    <div className="flex items-start gap-1"><button disabled={variantsLoading || groups.length === 0} onClick={() => { setEditingItem(editing ? null : i); setVariantDraft(item.variant_options ?? {}); }} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed" title={groups.length > 0 ? 'Edit product variant' : 'This product has no registered variants'}><Pencil className="w-3.5 h-3.5" /></button><button disabled={removingItem === i} onClick={() => void removeItem(i)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Remove item"><Trash2 className="w-3.5 h-3.5" /></button></div>
+                    <div className="flex items-start gap-1"><button disabled={variantsLoading || (groups.length === 0 && !isSuperAdmin)} onClick={() => void openVariantEditor(i)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed" title={groups.length > 0 ? 'Edit product variant' : 'This product has no registered variants'}><Pencil className="w-3.5 h-3.5" /></button><button disabled={removingItem === i} onClick={() => void removeItem(i)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500" title="Remove item"><Trash2 className="w-3.5 h-3.5" /></button></div>
                   </div>
                   {editing && <div className="mt-3 pt-3 border-t border-gray-100 space-y-2"><label className="text-[10px] font-bold text-gray-400 uppercase">Product variant</label>{groups.map(group => <div key={group.id}><label className="text-[9px] font-bold text-gray-500 uppercase">{group.name}</label><select value={variantDraft[group.name] ?? ''} onChange={e => setVariantDraft(v => ({ ...v, [group.name]: e.target.value }))} className="mt-1 w-full border border-gray-200 rounded-lg px-3 py-2 text-xs bg-white outline-none focus:border-gray-400"><option value="">Select {group.name}</option>{group.options.map(option => <option key={option} value={option}>{option}</option>)}</select></div>)}<p className="text-[9px] text-gray-400">Only variants registered for this product can be selected. The existing variant pricing logic will be used when saved.</p><div className="flex justify-end gap-2 mt-2"><button onClick={() => setEditingItem(null)} className="px-3 py-1.5 text-xs text-gray-500">Cancel</button><button disabled={savingItem} onClick={() => void saveVariant(i)} className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold flex items-center gap-1">{savingItem ? <Loader className="w-3 h-3 animate-spin"/> : <Save className="w-3 h-3"/>} Save</button></div></div>}
                 </div>;
