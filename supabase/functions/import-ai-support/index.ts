@@ -516,7 +516,7 @@ async function customerTool(s:any, req:Request, actor:Actor, name:string, a:any,
   }
   if (name === 'track_my_order') {
     const {data,error}=await s.from('china_import_orders').select('id,code,status,payment_status,payment_method,total_ngn,items,created_at,delivery_mode,pickup_station_name,pickup_station_address,shipping_method,delivery_address,shipped_at,received_at').eq('user_id',id).eq('code',clean(a.code,80)).maybeSingle(); if(error)throw error
-    if(!data)return {found:false}; const {data:bill}=await s.from('china_import_consolidation_bills').select('id,status,kind,amount_ngn,delivery_estimate_start_at,delivery_estimate_min_at,delivery_estimate_max_at').eq('user_id',id).eq('order_id',data.id).order('created_at',{ascending:false}).limit(1).maybeSingle(); return {found:true,order:data,latest_bill:bill??null}
+    if(!data)return {found:false}; const {data:bill}=await s.from('china_import_consolidation_bills').select('id,status,kind,amount_ngn,delivery_estimate_start_at,delivery_estimate_min_at,delivery_estimate_max_at').eq('user_id',id).eq('order_id',data.id).eq('kind','consolidation_shipping').order('created_at',{ascending:false}).limit(1).maybeSingle(); return {found:true,order:data,latest_bill:bill??null}
   }
   if (name === 'get_my_order_context') {
     const code = clean(a.code, 80);
