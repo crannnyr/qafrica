@@ -1188,16 +1188,16 @@ export default function ClosedBatchDetail({
                                           </div>
                                           {lineBilled ? (
                                             <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 rounded-full px-1.5 py-0.5 flex-shrink-0">Bill sent</span>
-                                          ) : l.ship_only ? (
-                                            <span className="text-[9px] font-bold text-blue-700 bg-blue-50 rounded-full px-1.5 py-0.5 flex-shrink-0">Sea only</span>
                                           ) : (
                                             <div className="flex gap-1 flex-shrink-0">
-                                              <button
-                                                onClick={() => setItemShipping(l, 'flight')}
-                                                className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${l.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-white text-gray-400 border-gray-200'}`}
-                                              >
-                                                <Plane className="w-2.5 h-2.5" /> Air
-                                              </button>
+                                              {!l.ship_only && (
+                                                <button
+                                                  onClick={() => setItemShipping(l, 'flight')}
+                                                  className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${l.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600 border-sky-200' : 'bg-white text-gray-400 border-gray-200'}`}
+                                                >
+                                                  <Plane className="w-2.5 h-2.5" /> Air
+                                                </button>
+                                              )}
                                               <button
                                                 onClick={() => setItemShipping(l, 'sea_freight')}
                                                 className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${l.shipping_method === 'sea_freight' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-gray-400 border-gray-200'}`}
