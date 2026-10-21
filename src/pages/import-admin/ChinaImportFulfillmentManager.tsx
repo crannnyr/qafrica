@@ -541,10 +541,11 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     });
   }, [orderSummaries]);
 
-  const awaitingCount = items.filter(item => item.received_quantity <= 0).length;
-  const hqCount = items.filter(item => item.received_quantity > 0).length;
-  const orderedUnits = items.reduce((sum, item) => sum + item.ordered_quantity, 0);
-  const receivedUnits = items.reduce((sum, item) => sum + item.received_quantity, 0);
+  // Keep Receiving summary cards in sync with the search scope, like the Received tab.
+  const awaitingCount = filtered.filter(item => item.received_quantity <= 0).length;
+  const hqCount = filtered.filter(item => item.received_quantity > 0).length;
+  const orderedUnits = filtered.reduce((sum, item) => sum + item.ordered_quantity, 0);
+  const receivedUnits = filtered.reduce((sum, item) => sum + item.received_quantity, 0);
 
   return (
     <>
