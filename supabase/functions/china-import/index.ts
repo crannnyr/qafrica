@@ -3997,55 +3997,58 @@ serve(async (req: Request) => {
       return json({ order: updated })
     }
 
-    // Admin per-item variant override — some customers ask for a size/color
-    // change after paying. Same "not billed" gate as shipping method, since
-    // a variant change can also change price_ngn (price_deltas), which would
-    // silently disagree with an already-sent bill otherwise.
+    // Super Admin can correct missing/wrong variants until the order is received/delivered.
+    // Preserve pricing and billed totals for any billed or shipped order.
     if (req.method === 'POST' && action === 'admin-set-item-variant') {
       const { manager_token, order_id, product_id, old_variant_options, new_variant_options } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token, 'import.products.update'))) return json({ error: 'Unauthorized' }, 401)
-      if (!order_id || !product_id || !new_variant_options) return json({ error: 'Missing order_id, product_id, or new_variant_options' }, 400)
+      const isSuperAdmin = await isSuperAdminSession(supabase, manager_token)
+      if (!isSuperAdmin && !(await requireAdmin(supabase, manager_token, 'import.products.update'))) return json({ error: 'Unauthorized' }, 401)
+      if (!order_id || !product_id || !new_variant_options || typeof new_variant_options !== 'object') return json({ error: 'Missing order_id, product_id, or new_variant_options' }, 400)
 
-      const { data: order, error: orderErr } = await supabase
-        .from('china_import_orders').select('*').eq('id', order_id).single()
+      const { data: order, error: orderErr } = await supabase.from('china_import_orders').select('*').eq('id', order_id).single()
       if (orderErr || !order) return json({ error: 'Order not found' }, 404)
+      if (['received', 'delivered'].includes(String(order.status ?? '').toLowerCase())) return json({ error: 'Variants cannot be changed after the order has been received/delivered.' }, 409)
 
+      let billed = false
       if (order.staged_at) {
-        const { data: billStatus } = await supabase
-          .from('import_batch_bill_status').select('status')
+        const { data: billStatus } = await supabase.from('import_batch_bill_status').select('status')
           .eq('batch_key', order.staged_at).eq('kind', 'consolidation_shipping').maybeSingle()
-        if (billStatus?.status === 'sent') {
-          return json({ error: 'This batch has already been billed — variants can no longer be changed here.' }, 409)
-        }
+        billed = billStatus?.status === 'sent'
+        if (billed && !isSuperAdmin) return json({ error: 'This batch has already been billed. Only Super Admin can correct variants before delivery.' }, 409)
       }
 
-      const { data: product } = await supabase
-        .from('china_import_products').select('name, price_ngn, variants, has_variants').eq('id', product_id).maybeSingle()
+      const { data: product } = await supabase.from('china_import_products').select('name, price_ngn, variants, has_variants').eq('id', product_id).maybeSingle()
       if (!product?.has_variants) return json({ error: 'This product has no variants to change.' }, 400)
 
       const items = Array.isArray(order.items) ? order.items : []
       const variantMatch = (a: any, b: any) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
       let matched = false
       let oldVariantOptions: Record<string, string> | null = null
-      const newPrice = computeItemPriceNgn(product, new_variant_options)
-      const updatedItems = items.map((i: any) => {
-        if (i.id === product_id && (old_variant_options === undefined || variantMatch(i.variant_options, old_variant_options))) {
+      const preservePricing = billed || !!order.shipped_at || ['shipped_and_closed', 'clearance_and_closed'].includes(String(order.status ?? '').toLowerCase())
+      const newPrice = preservePricing ? null : computeItemPriceNgn(product, new_variant_options)
+      const updatedItems = items.map((item: any) => {
+        if (item.id === product_id && (old_variant_options === undefined || variantMatch(item.variant_options, old_variant_options))) {
           matched = true
-          oldVariantOptions = i.variant_options ?? null
-          return { ...i, variant_options: new_variant_options, price_ngn: newPrice }
+          oldVariantOptions = item.variant_options ?? null
+          return { ...item, variant_options: new_variant_options, ...(newPrice === null ? {} : { price_ngn: newPrice }) }
         }
-        return i
+        return item
       })
       if (!matched) return json({ error: 'Could not find that item on this order' }, 404)
 
-      const subtotalNgn = updatedItems.reduce((s: number, i: any) => s + Number(i.price_ngn ?? 0) * Number(i.quantity ?? 0), 0)
-      const jumiaFeeNgn = order.delivery_type === 'to_qafrica' ? updatedItems.reduce((s: number, i: any) => s + 200 * Number(i.quantity ?? 0), 0) : 0
-      const totalNgn = subtotalNgn + jumiaFeeNgn
+      const updates: Record<string, unknown> = { items: updatedItems, updated_at: new Date().toISOString() }
+      if (!preservePricing) {
+        const subtotalNgn = updatedItems.reduce((sum: number, item: any) => sum + Number(item.price_ngn ?? 0) * Number(item.quantity ?? 0), 0)
+        const jumiaFeeNgn = order.delivery_type === 'to_qafrica' ? updatedItems.reduce((sum: number, item: any) => sum + 200 * Number(item.quantity ?? 0), 0) : 0
+        updates.subtotal_ngn = subtotalNgn
+        updates.jumia_fee_ngn = jumiaFeeNgn
+        updates.total_ngn = subtotalNgn + jumiaFeeNgn
+      } else if (isSuperAdmin) {
+        const audit = `[Super Admin variant correction ${new Date().toISOString()}] ${product.name ?? product_id}: ${JSON.stringify(oldVariantOptions)} -> ${JSON.stringify(new_variant_options)}. Existing bill and pricing preserved.`
+        updates.admin_note = [order.admin_note, audit].filter(Boolean).join('\\n')
+      }
 
-      const { data: updated, error: updateErr } = await supabase
-        .from('china_import_orders')
-        .update({ items: updatedItems, subtotal_ngn: subtotalNgn, jumia_fee_ngn: jumiaFeeNgn, total_ngn: totalNgn, updated_at: new Date().toISOString() })
-        .eq('id', order_id).select().single()
+      const { data: updated, error: updateErr } = await supabase.from('china_import_orders').update(updates).eq('id', order_id).select().single()
       if (updateErr) return json({ error: updateErr.message }, 500)
 
       if (order.user_id) {
@@ -4054,15 +4057,12 @@ serve(async (req: Request) => {
           const fmtVariant = (v: Record<string, string> | null) => v && Object.keys(v).length ? Object.values(v).join(', ') : 'no variant selected'
           await queueTemplatedEmail(supabase, 'item_variant_changed', customer.email, {
             customer_name: customer.full_name ?? order.customer_name ?? 'there',
-            order_code: order.code,
-            item_name: product?.name ?? 'your item',
+            product_name: product.name ?? product_id,
             old_variant: fmtVariant(oldVariantOptions),
             new_variant: fmtVariant(new_variant_options),
-            new_price: `₦${Math.round(newPrice).toLocaleString()}`,
           })
         }
       }
-
       return json({ order: updated })
     }
 
