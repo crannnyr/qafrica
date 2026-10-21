@@ -1194,7 +1194,7 @@ export default function ClosedBatchDetail({
                                             <p className="text-[11px] font-semibold text-gray-700 truncate">{l.customer_name}</p>
                                             <p className="text-[10px] text-gray-400 truncate">{variantLabel(l.variant_options) || 'No variant'} · qty {l.qty}</p>
                                           </div>
-                                          {lineBilled ? (
+                                          {lineBilled && !isSuperAdmin ? (
                                             <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 rounded-full px-1.5 py-0.5 flex-shrink-0">Bill sent</span>
                                           ) : (
                                             <div className="flex gap-1 flex-shrink-0">
@@ -1625,7 +1625,7 @@ function CustomerCard({
                   </div>
                   <div className="flex items-center gap-1.5 mt-1.5">
                     <span className="text-[10px] text-gray-400">Shipping:</span>
-                    {isBilled(id, 'consolidation_shipping') ? (
+                    {isBilled(id, 'consolidation_shipping') && !isSuperAdmin ? (
                       <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${line.shipping_method === 'flight' ? 'bg-sky-50 text-sky-600' : 'bg-indigo-50 text-indigo-600'}`}>
                         {line.shipping_method === 'flight' ? <Plane className="w-2.5 h-2.5" /> : <Ship className="w-2.5 h-2.5" />}
                         {line.shipping_method === 'flight' ? 'Air' : 'Sea'}
