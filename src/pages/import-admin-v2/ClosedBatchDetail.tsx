@@ -1609,7 +1609,9 @@ function CustomerCard({
                   {variantLabel(line.variant_options) && (
                     <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(line.variant_options)}</p>
                   )}
-                  {productVariants[line.product_id] && !isBilled(id, 'consolidation_shipping') && (
+                  {productVariants[line.product_id] &&
+                    (!isBilled(id, 'consolidation_shipping') || isSuperAdmin) &&
+                    (!received || !isSuperAdmin) && (
                     <VariantEditRow
                       line={line}
                       groups={productVariants[line.product_id]}
