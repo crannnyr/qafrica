@@ -1215,7 +1215,7 @@ export default function ClosedBatchDetail({
                                             </div>
                                           )}
                                         </div>
-                                        {!lineBilled ? (
+                                        {!lineBilled || isSuperAdmin ? (
                                           <div className="flex items-center gap-1.5">
                                             <span className="text-[10px] text-gray-400">Discount</span>
                                             <input
