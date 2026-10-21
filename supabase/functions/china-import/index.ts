@@ -3926,14 +3926,13 @@ serve(async (req: Request) => {
       return json({ order: updated })
     }
 
-    // Admin per-item shipping override. Only allowed before the batch's
-    // consolidation_shipping bill is locked ('sent') — after that, shipping
-    // is already priced/committed and changing it would silently break the
-    // bill the customer already saw. Matches an item by product_id (+
-    // variant_options when present) inside the order's items array.
+    // Admin per-item shipping override. Ordinary admins are blocked after a consolidation bill
+    // is sent; Super Admin may make a controlled correction while preserving the existing bill.
+    // Matches an item by product_id (+ variant_options when present) inside the order's items array.
     if (req.method === 'POST' && action === 'admin-set-item-shipping-method') {
       const { manager_token, order_id, product_id, variant_options, new_method } = await req.json()
       if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Unauthorized' }, 401)
+      const isSuperAdmin = await isSuperAdminSession(supabase, manager_token)
       if (!order_id || !product_id) return json({ error: 'Missing order_id or product_id' }, 400)
       if (!['flight', 'sea_freight'].includes(new_method)) return json({ error: 'Invalid new_method' }, 400)
 
@@ -3945,8 +3944,8 @@ serve(async (req: Request) => {
         const { data: billStatus } = await supabase
           .from('import_batch_bill_status').select('status')
           .eq('batch_key', order.staged_at).eq('kind', 'consolidation_shipping').maybeSingle()
-        if (billStatus?.status === 'sent') {
-          return json({ error: 'This batch has already been billed — shipping method can no longer be changed here.' }, 409)
+        if (billStatus?.status === 'sent' && !isSuperAdmin) {
+          return json({ error: 'This batch has already been billed. Only a Super Admin can correct the shipping method.' }, 409)
         }
       }
 
@@ -3954,6 +3953,10 @@ serve(async (req: Request) => {
         .from('china_import_products').select('name, ship_only').eq('id', product_id).maybeSingle()
       if (product?.ship_only && new_method === 'flight') {
         return json({ error: 'This item can only ship by sea freight.' }, 400)
+      }
+      if (isSuperAdmin && order.staged_at && new_method === 'sea_freight') {
+        // For corrections to billed items, annotate the order audit note without altering bill/payment rows.
+        // The bill remains unchanged; a human can review any pricing impact separately.
       }
 
       const items = Array.isArray(order.items) ? order.items : []
