@@ -2807,8 +2807,9 @@ serve(async (req: Request) => {
 
     if (req.method === 'POST' && action === 'admin-check-super-admin') {
       const { manager_token } = await req.json().catch(() => ({}))
-      if (!(await requireAdmin(supabase, manager_token, 'import.orders.view'))) return json({ error: 'Unauthorized' }, 401)
-      return json({ is_super_admin: await isSuperAdminSession(supabase, manager_token) })
+      const isSuperAdmin = await isSuperAdminSession(supabase, manager_token)
+      if (!isSuperAdmin && !(await requireAdmin(supabase, manager_token, 'import.orders.view'))) return json({ error: 'Unauthorized' }, 401)
+      return json({ is_super_admin: isSuperAdmin })
     }
 
     // Admin order-detail address editor. Super Admins may correct delivery
@@ -3931,8 +3932,8 @@ serve(async (req: Request) => {
     // Matches an item by product_id (+ variant_options when present) inside the order's items array.
     if (req.method === 'POST' && action === 'admin-set-item-shipping-method') {
       const { manager_token, order_id, product_id, variant_options, new_method } = await req.json()
-      if (!(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Unauthorized' }, 401)
       const isSuperAdmin = await isSuperAdminSession(supabase, manager_token)
+      if (!isSuperAdmin && !(await requireAdmin(supabase, manager_token, 'import.pricing_shipping.update'))) return json({ error: 'Unauthorized' }, 401)
       if (!order_id || !product_id) return json({ error: 'Missing order_id or product_id' }, 400)
       if (!['flight', 'sea_freight'].includes(new_method)) return json({ error: 'Invalid new_method' }, 400)
 
