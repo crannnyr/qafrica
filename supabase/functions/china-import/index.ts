@@ -4010,6 +4010,18 @@ serve(async (req: Request) => {
       return json({ order: updated })
     }
 
+    if (req.method === 'POST' && action === 'admin-get-product-variants') {
+      const { manager_token, product_id } = await req.json()
+      const isSuperAdmin = await isSuperAdminSession(supabase, manager_token)
+      if (!isSuperAdmin && !(await requireAdmin(supabase, manager_token, 'import.products.view'))) return json({ error: 'Unauthorized' }, 401)
+      if (!product_id) return json({ error: 'Missing product_id' }, 400)
+      const { data: product, error } = await supabase.from('china_import_products')
+        .select('id, name, has_variants, variants').eq('id', product_id).maybeSingle()
+      if (error) return json({ error: error.message }, 500)
+      if (!product) return json({ error: 'Product not found' }, 404)
+      return json({ product_id: product.id, name: product.name, variants: Array.isArray(product.variants) ? product.variants : [], has_variants: !!product.has_variants })
+    }
+
     // Super Admin can correct missing/wrong variants until the order is received/delivered.
     // Preserve pricing and billed totals for any billed or shipped order.
     if (req.method === 'POST' && action === 'admin-set-item-variant') {
