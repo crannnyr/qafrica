@@ -381,6 +381,25 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     }
   };
 
+  const unreceive = async (item: FulfillmentItem) => {
+    if (!canReceive) return toast.error('You do not have permission to reverse receiving');
+    if (item.received_quantity <= 0) return toast.error('This item has no received quantity to reverse');
+    if (item.allocated_quantity > 0 || item.shipped_quantity > 0 || item.delivered_quantity > 0) return toast.error('Reverse allocation/shipment before unreceiving this item.');
+    if (!window.confirm(`Unreceive ${item.received_quantity} unit(s) of ${item.product_name} ${variantLabel(item.variant_options)} and return them to inventory?`)) return;
+    const reason = window.prompt('Reason for unreceiving (optional):') ?? '';
+    setActing(item.id);
+    try {
+      const res = await fetch(`${EDGE_URL}?action=admin-fulfillment-unreceive`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ manager_token: token, fulfillment_item_id: item.id, note: reason.trim() || null }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Could not unreceive item');
+      const updated = data.fulfillment_item as FulfillmentItem;
+      setItems(current => current.map(row => row.id === item.id ? { ...row, ...updated, stock_quantity: Number(data.stock_after ?? (row.stock_quantity + Number(data.quantity_reversed ?? 0))) } : row));
+      toast.success(`Unreceived ${data.quantity_reversed} unit(s) and returned them to inventory`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not unreceive item');
+    } finally { setActing(null); }
+  };
+
   const filteredShipments = useMemo(() => {
     const needle = shipmentQuery.trim().toLowerCase();
     return allShipments.filter(shipment => {
@@ -955,6 +974,11 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                             </div>
                                           )}
                                           {!canReceive && !complete && <p className="text-[10px] text-gray-400 mt-3">You can view fulfillment, but your account cannot record receiving.</p>}
+                                          {canReceive && item.received_quantity > 0 && item.allocated_quantity === 0 && item.shipped_quantity === 0 && item.delivered_quantity === 0 && (
+                                            <button type="button" onClick={() => void unreceive(item)} disabled={acting === item.id} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-40">
+                                              {acting === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Unreceive item
+                                            </button>
+                                          )}
                                           {item.received_at && <p className="text-[10px] text-gray-400 mt-2">Last received: {new Date(item.received_at).toLocaleString()}</p>}
                                         </div>
                                       );
