@@ -1009,7 +1009,10 @@ serve(async (req: Request) => {
       const page = Number.isFinite(requestedPage) && requestedPage >= 1 ? Math.floor(requestedPage) : 1
       const perPage = Number.isFinite(requestedPerPage) && requestedPerPage >= 1 ? Math.min(50, Math.floor(requestedPerPage)) : 50
       const search = typeof body.search === 'string' ? body.search.trim() : ''
+      const status = body.status === 'active' || body.status === 'inactive' ? body.status : 'all'
       if (search) query = query.ilike('name', '%' + search.replace(/[%_]/g, '') + '%')
+      if (status === 'active') query = query.eq('is_active', true)
+      if (status === 'inactive') query = query.eq('is_active', false)
 
       const from = (page - 1) * perPage
       const to = from + perPage - 1
