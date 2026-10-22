@@ -15,7 +15,6 @@ import { useImportCartStore } from '@/stores/importCartStore';
 import { createSharedCart, loadSavedDetails, saveDetails, shareUrl } from './checkoutApi';
 
 const QAFRICA_STORE_ID = '00000000-0000-0000-0000-000000000000';
-const QAFRICA_STORE = { id: QAFRICA_STORE_ID, name: 'QAFRICA', slug: 'qafrica' };
 
 const LOCATIONS = NIGERIAN_LGAS as Record<string, string[]>;
 const STATES: string[] = Object.keys(LOCATIONS).sort((a, b) => a.localeCompare(b));
