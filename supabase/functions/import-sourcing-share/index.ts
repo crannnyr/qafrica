@@ -26,7 +26,16 @@ async function getShare(supabase: any, token: unknown) {
 async function getCommitmentRows(supabase: any, batchKey: string) {
   const { data, error } = await supabase.rpc('china_import_get_sourcing_commitment_lines', { p_batch_key: batchKey })
   if (error) throw error
-  return data ?? []
+  const rows = data ?? []
+  const orderIds = [...new Set(rows.map((row: any) => row.order_id).filter(Boolean))]
+  if (!orderIds.length) return rows
+  const { data: orders, error: ordersError } = await supabase
+    .from('china_import_orders')
+    .select('id,shipping_method')
+    .in('id', orderIds)
+  if (ordersError) throw ordersError
+  const methodByOrderId = new Map((orders ?? []).map((order: any) => [order.id, order.shipping_method]))
+  return rows.map((row: any) => ({ ...row, shipping_method: methodByOrderId.get(row.order_id) ?? null }))
 }
 
 Deno.serve(async (req: Request) => {
