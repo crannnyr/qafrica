@@ -31,11 +31,13 @@ export type Quote = { ok: boolean; stores: QuoteStore[]; amount: number; errors:
 
 export const toQuoteItems = (items: CartItem[]) =>
   items.map((i) => ({
-    product_id: i.productId,
-    store_id: i.storeId,
+    product_id: i.sourceType === 'china_import' ? (i.sourceId ?? i.productId) : i.productId,
+    source_id: i.sourceType === 'china_import' ? (i.sourceId ?? i.productId) : undefined,
+    source_type: i.sourceType ?? 'product',
+    store_id: i.sourceType === 'china_import' ? '00000000-0000-0000-0000-000000000000' : i.storeId,
     quantity: i.quantity,
     variant_options: i.variantOptions ?? null,
-    attribution: i.attribution ?? 'own',
+    attribution: i.sourceType === 'china_import' ? 'marketplace' : (i.attribution ?? 'own'),
   }));
 
 export async function fetchQuote(items: CartItem[], state: string | null, coupons: Record<string, string> = {}): Promise<Quote> {
