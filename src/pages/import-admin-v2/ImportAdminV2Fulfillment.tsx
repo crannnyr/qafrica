@@ -1,5 +1,5 @@
 import { Loader2 } from 'lucide-react';
-import ChinaImportFulfillmentManager from '@/pages/import-admin/ChinaImportFulfillmentManager';
+import ChinaImportFulfillmentManager from './ImportAdminV2FulfillmentManager';
 import { getManagementToken } from './ManagementAuth';
 import { useImportAdminPermissions } from '@/hooks/useImportAdminPermissions';
 
