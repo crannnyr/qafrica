@@ -29,6 +29,56 @@ Deno.serve(async (req) => {
     console.error('confirm failed', e);
     // Fall through: return current status; the webhook / sweep will finish the job
   }
+  // QAF-MKT references are finalized through marketplace checkout so
+  // China Import Help Pay can return the same public payment-status contract.
+  if (reference.startsWith('QAF-MKT-')) {
+    const { data: marketplaceSession, error: marketplaceError } = await supabase
+      .from('marketplace_checkout_sessions')
+      .select('status,amount,paid_amount,order_ids')
+      .eq('reference', reference)
+      .maybeSingle();
+    if (marketplaceError) {
+      console.error('marketplace confirm status lookup failed', marketplaceError.message);
+      return json(500, { error: 'Could not load your payment status' });
+    }
+    if (!marketplaceSession) return json(404, { error: 'Not found' });
+
+    const { data: contribution } = await supabase.from('shared_cart_contributions')
+      .select('shared_cart_id,amount,status')
+      .eq('checkout_reference', reference)
+      .maybeSingle();
+    let contributionView: { amount: number; amount_raised: number; target_amount: number; complete: boolean } | undefined;
+    if (contribution) {
+      const { data: cart } = await supabase.from('shared_carts')
+        .select('amount_snapshot,status')
+        .eq('id', contribution.shared_cart_id)
+        .maybeSingle();
+      const { data: rows } = await supabase.from('shared_cart_contributions')
+        .select('amount')
+        .eq('shared_cart_id', contribution.shared_cart_id)
+        .eq('status', 'paid');
+      const amountRaised = (rows ?? []).reduce((sum: number, row: any) => sum + Number(row.amount || 0), 0);
+      const targetAmount = Number(cart?.amount_snapshot || 0);
+      contributionView = {
+        amount: Number(contribution.amount),
+        amount_raised: amountRaised,
+        target_amount: targetAmount,
+        complete: cart?.status === 'paid' || amountRaised + 0.01 >= targetAmount,
+      };
+    }
+    const orderIds = Array.isArray(marketplaceSession.order_ids) ? marketplaceSession.order_ids : [];
+    const { data: orderRows } = orderIds.length
+      ? await supabase.from('orders').select('order_number,total').in('id', orderIds)
+      : { data: [], error: null };
+    return json(200, {
+      status: marketplaceSession.status,
+      amount: Number(contribution?.amount ?? marketplaceSession.amount ?? 0),
+      return_slug: null,
+      orders: (orderRows ?? []).map((order: any) => ({ order_number: order.order_number, total: Number(order.total || 0) })),
+      ...(contributionView ? { contribution: contributionView } : {}),
+    });
+  }
+
   const { data } = await supabase.rpc('checkout_session_status', { p_reference: reference });
   if (!data) return json(404, { error: 'Not found' });
   const { data: session } = await supabase.from('checkout_sessions').select('shared_cart_id').eq('reference', reference).maybeSingle();
