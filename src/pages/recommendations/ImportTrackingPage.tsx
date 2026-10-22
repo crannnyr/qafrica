@@ -40,6 +40,7 @@ interface TrackedOrder {
   id: string; code: string; status: string;
   shipping_method: 'flight' | 'sea_freight' | 'mixed' | null;
   shipped_at: string | null; received_at?: string | null; created_at: string;
+  estimated_arrival_at?: string | null; arrival_extension_count?: number; arrival_last_extended_at?: string | null; previous_estimated_arrival_at?: string | null;
   consolidation_billed?: boolean; consolidation_bill_status?: string | null;
   items?: TrackedItem[];
   delivery_mode?: 'home' | 'pickup_station';
@@ -335,6 +336,23 @@ export default function ImportTrackingPage() {
                   })}
                 </div>
               </div>
+            </div>
+
+            <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4">
+              <p className="text-[11px] font-bold text-orange-600 uppercase tracking-widest mb-1">Estimated arrival</p>
+              {order.status === 'received' || order.received_at ? (
+                <p className="text-sm font-bold text-emerald-700">Delivered</p>
+              ) : order.estimated_arrival_at ? (
+                <>
+                  <p className="text-lg font-black text-gray-900">{new Date(order.estimated_arrival_at).toLocaleDateString('en-NG', { dateStyle: 'medium', timeZone: 'Africa/Lagos' })}</p>
+                  <p className="text-xs text-gray-600 mt-1">By approximately {new Date(order.estimated_arrival_at).toLocaleTimeString('en-NG', { hour: 'numeric', minute: '2-digit', timeZone: 'Africa/Lagos' })} WAT</p>
+                  {(order.arrival_extension_count ?? 0) > 0 && <p className="text-[11px] text-orange-700 mt-2">Arrival estimate extended by 14 days {order.arrival_extension_count! > 1 ? `(${order.arrival_extension_count} extensions)` : ''} because delivery has not yet been confirmed.</p>}
+                </>
+              ) : order.shipped_at && order.shipping_method ? (
+                <p className="text-sm font-bold text-gray-900">{new Date(new Date(order.shipped_at).getTime() + (order.shipping_method === 'flight' ? 30 : 90) * 86400000).toLocaleDateString('en-NG', { dateStyle: 'medium', timeZone: 'Africa/Lagos' })}<span className="block text-xs font-normal text-gray-500 mt-1">Estimated date based on shipping method; not a guaranteed delivery time.</span></p>
+              ) : (
+                <p className="text-sm text-gray-600">Your estimated arrival date will be available once the order has shipped.</p>
+              )}
             </div>
 
             {order.fulfillment_items && order.fulfillment_items.length > 0 && (
