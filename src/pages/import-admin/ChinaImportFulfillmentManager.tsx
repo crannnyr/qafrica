@@ -704,6 +704,11 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                   <p className="text-xs font-bold text-gray-900">{item.product_name}</p>
                                   {variantLabel(item.variant_options) && <p className="text-[10px] text-gray-500 mt-0.5">{variantLabel(item.variant_options)}</p>}
                                   <p className="text-[10px] text-gray-400 mt-1">Ordered {item.ordered_quantity} · Received {item.received_quantity} · Allocated {item.allocated_quantity} · Available {availableItem}</p>
+                                  {canReceive && item.received_quantity > 0 && item.received_quantity < item.ordered_quantity && item.allocated_quantity === 0 && item.shipped_quantity === 0 && item.delivered_quantity === 0 && (
+                                    <button type="button" onClick={() => void unreceive(item)} disabled={acting === item.id} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-40">
+                                      {acting === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Unreceive item
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -974,11 +979,6 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                                             </div>
                                           )}
                                           {!canReceive && !complete && <p className="text-[10px] text-gray-400 mt-3">You can view fulfillment, but your account cannot record receiving.</p>}
-                                          {canReceive && item.received_quantity > 0 && item.allocated_quantity === 0 && item.shipped_quantity === 0 && item.delivered_quantity === 0 && (
-                                            <button type="button" onClick={() => void unreceive(item)} disabled={acting === item.id} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-40">
-                                              {acting === item.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />} Unreceive item
-                                            </button>
-                                          )}
                                           {item.received_at && <p className="text-[10px] text-gray-400 mt-2">Last received: {new Date(item.received_at).toLocaleString()}</p>}
                                         </div>
                                       );
