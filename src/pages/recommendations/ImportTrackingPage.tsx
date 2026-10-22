@@ -348,10 +348,10 @@ export default function ImportTrackingPage() {
                   <p className="text-xs text-gray-600 mt-1">By approximately {new Date(order.estimated_arrival_at).toLocaleTimeString('en-NG', { hour: 'numeric', minute: '2-digit', timeZone: 'Africa/Lagos' })} WAT</p>
                   {(order.arrival_extension_count ?? 0) > 0 && <p className="text-[11px] text-orange-700 mt-2">Arrival estimate extended by 14 days {order.arrival_extension_count! > 1 ? `(${order.arrival_extension_count} extensions)` : ''} because delivery has not yet been confirmed.</p>}
                 </>
-              ) : order.shipped_at && order.shipping_method ? (
-                <p className="text-sm font-bold text-gray-900">{new Date(new Date(order.shipped_at).getTime() + (order.shipping_method === 'flight' ? 30 : 90) * 86400000).toLocaleDateString('en-NG', { dateStyle: 'medium', timeZone: 'Africa/Lagos' })}<span className="block text-xs font-normal text-gray-500 mt-1">Estimated date based on shipping method; not a guaranteed delivery time.</span></p>
+              ) : order.shipping_method && order.shipping_method !== 'mixed' ? (
+                <p className="text-sm font-bold text-gray-900">{new Date(new Date(order.shipped_at || order.created_at).getTime() + (order.shipping_method === 'flight' ? 30 : 90) * 86400000).toLocaleDateString('en-NG', { dateStyle: 'medium', timeZone: 'Africa/Lagos' })}<span className="block text-xs font-normal text-gray-500 mt-1">{order.shipped_at ? 'Estimated from the shipment date; not a guaranteed delivery time.' : 'Provisional estimate from the order date. This will be recalculated when shipment is confirmed.'}</span></p>
               ) : (
-                <p className="text-sm text-gray-600">Your estimated arrival date will be available once the order has shipped.</p>
+                <p className="text-sm text-gray-600">A reliable arrival estimate will appear when the shipping method and shipment date are confirmed.</p>
               )}
             </div>
 
