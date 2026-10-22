@@ -9,8 +9,13 @@ import NIGERIAN_LGAS from '@/data/nigeria-lgas.json';
 import { useForceLightMode } from '@/hooks/useForceLightMode';
 import { Field, InfoButton, PageHeader } from './ui';
 import { naira } from './format';
-import { CHECKOUT_SELECTION_KEY } from './CartPage';
+import { CHECKOUT_SELECTION_KEY, MARKETPLACE_CHECKOUT_SELECTION_KEY } from './CartPage';
+import type { CartItem } from '@/stores/cartStore';
+import { useImportCartStore } from '@/stores/importCartStore';
 import { createSharedCart, loadSavedDetails, saveDetails, shareUrl } from './checkoutApi';
+
+const QAFRICA_STORE_ID = '00000000-0000-0000-0000-000000000000';
+const QAFRICA_STORE = { id: QAFRICA_STORE_ID, name: 'QAFRICA', slug: 'qafrica' };
 
 const LOCATIONS = NIGERIAN_LGAS as Record<string, string[]>;
 const STATES: string[] = Object.keys(LOCATIONS).sort((a, b) => a.localeCompare(b));
@@ -21,17 +26,63 @@ export default function ShareCartPage() {
   const cartPath = location.pathname.startsWith('/stores-v2') ? '/stores-v2/cart' : '/cart';
   const shopPath = location.pathname.startsWith('/stores-v2') ? '/stores-v2' : '/stores';
   const allItems = useCartStore((s) => s.items);
+  const importItems = useImportCartStore((s) => s.cart);
   const { customer, isAuthenticated } = useCustomerAuthStore();
   const items = useMemo(() => {
+    const normal = (() => {
+      try {
+        const ids: string[] = JSON.parse(sessionStorage.getItem(CHECKOUT_SELECTION_KEY) ?? 'null');
+        if (Array.isArray(ids) && ids.length) {
+          const picked = allItems.filter((i) => ids.includes(i.id));
+          if (picked.length) return picked;
+        }
+      } catch { /* ignore */ }
+      return allItems;
+    })();
+    const selectedChinaIds = new Set<string>();
     try {
-      const ids: string[] = JSON.parse(sessionStorage.getItem(CHECKOUT_SELECTION_KEY) ?? 'null');
-      if (Array.isArray(ids) && ids.length) {
-        const picked = allItems.filter((i) => ids.includes(i.id));
-        if (picked.length) return picked;
-      }
+      const selection = JSON.parse(sessionStorage.getItem(MARKETPLACE_CHECKOUT_SELECTION_KEY) ?? 'null');
+      if (Array.isArray(selection?.china_cart_ids)) selection.china_cart_ids.forEach((id: string) => selectedChinaIds.add(id));
+      if (Array.isArray(selection?.china_product_ids)) selection.china_product_ids.forEach((id: string) => selectedChinaIds.add(id));
     } catch { /* ignore */ }
-    return allItems;
-  }, [allItems]);
+    const importSelection = new Set<string>();
+    try {
+      const keys: string[] = JSON.parse(sessionStorage.getItem('qafrica_import_checkout_selection') ?? 'null');
+      if (Array.isArray(keys)) keys.forEach(key => importSelection.add(key));
+    } catch { /* ignore */ }
+    const chinaFromUnified: CartItem[] = normal
+      .filter(item => item.sourceType === 'china_import')
+      .map(item => ({
+        ...item,
+        storeId: QAFRICA_STORE_ID,
+        storeName: 'QAFRICA',
+        storeSlug: 'qafrica',
+        attribution: 'marketplace',
+        sourceType: 'china_import',
+        sourceId: item.sourceId ?? item.productId,
+      }));
+    const chinaFromImport: CartItem[] = importItems
+      .filter(item => (selectedChinaIds.size ? selectedChinaIds.has(item.id) : (importSelection.size ? importSelection.has(item.cart_key) : true)))
+      .map(item => ({
+        id: 'china-import-cart:' + item.cart_key,
+        productId: item.id,
+        storeId: QAFRICA_STORE_ID,
+        storeName: 'QAFRICA',
+        storeSlug: 'qafrica',
+        name: item.name,
+        image: item.image_url,
+        quantity: item.quantity,
+        price: Number(item.price_ngn || 0),
+        unitPrice: Number(item.price_ngn || 0),
+        totalPrice: Number(item.price_ngn || 0) * item.quantity,
+        variantOptions: item.variant_selection,
+        addedAt: new Date().toISOString(),
+        attribution: 'marketplace',
+        sourceType: 'china_import',
+        sourceId: item.id,
+      }));
+    return [...normal.filter(item => item.sourceType !== 'china_import'), ...chinaFromUnified, ...chinaFromImport];
+  }, [allItems, importItems]);
 
   const saved = useMemo(() => loadSavedDetails(), []);
   const [name, setName] = useState(saved.customer?.name ?? customer?.full_name ?? '');
@@ -55,11 +106,16 @@ export default function ShareCartPage() {
     setBusy(true);
     const recipient = { name: name.trim(), email: email.trim(), phone: phone.trim() };
     const delivery = { address: address.trim(), city: city.trim(), state };
-    const r = await createSharedCart(items, recipient, delivery, note.trim());
-    setBusy(false);
-    if (!r.ok) return setError(r.error);
-    saveDetails({ customer: recipient, delivery });
-    setResult({ code: r.code, amount: r.amount });
+    try {
+      const r = await createSharedCart(items, recipient, delivery, note.trim());
+      if (!r.ok) return setError(r.error);
+      saveDetails({ customer: recipient, delivery });
+      setResult({ code: r.code, amount: r.amount });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create the payment link. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (!items.length) {
