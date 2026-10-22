@@ -338,23 +338,6 @@ export default function ImportTrackingPage() {
               </div>
             </div>
 
-            <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4">
-              <p className="text-[11px] font-bold text-orange-600 uppercase tracking-widest mb-1">Estimated arrival</p>
-              {order.status === 'received' || order.received_at ? (
-                <p className="text-sm font-bold text-emerald-700">Delivered</p>
-              ) : order.estimated_arrival_at ? (
-                <>
-                  <p className="text-lg font-black text-gray-900">{new Date(order.estimated_arrival_at).toLocaleDateString('en-NG', { dateStyle: 'medium', timeZone: 'Africa/Lagos' })}</p>
-                  <p className="text-xs text-gray-600 mt-1">By approximately {new Date(order.estimated_arrival_at).toLocaleTimeString('en-NG', { hour: 'numeric', minute: '2-digit', timeZone: 'Africa/Lagos' })} WAT</p>
-                  {(order.arrival_extension_count ?? 0) > 0 && <p className="text-[11px] text-orange-700 mt-2">Arrival estimate extended by 14 days {order.arrival_extension_count! > 1 ? `(${order.arrival_extension_count} extensions)` : ''} because delivery has not yet been confirmed.</p>}
-                </>
-              ) : order.shipping_method && order.shipping_method !== 'mixed' ? (
-                <p className="text-sm font-bold text-gray-900">{new Date(new Date(order.shipped_at || order.created_at).getTime() + (order.shipping_method === 'flight' ? 30 : 90) * 86400000).toLocaleDateString('en-NG', { dateStyle: 'medium', timeZone: 'Africa/Lagos' })}<span className="block text-xs font-normal text-gray-500 mt-1">{order.shipped_at ? 'Estimated from the shipment date; not a guaranteed delivery time.' : 'Provisional estimate from the order date. This will be recalculated when shipment is confirmed.'}</span></p>
-              ) : (
-                <p className="text-sm text-gray-600">A reliable arrival estimate will appear when the shipping method and shipment date are confirmed.</p>
-              )}
-            </div>
-
             {order.fulfillment_items && order.fulfillment_items.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 p-5">
                 <div className="flex items-center justify-between mb-3">
