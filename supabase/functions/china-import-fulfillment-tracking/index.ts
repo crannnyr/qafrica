@@ -29,7 +29,7 @@ serve(async (req: Request) => {
 
     const { data: order, error } = await supabase
       .from('china_import_orders')
-      .select('id, code, status, shipping_method, shipped_at, received_at, created_at, items, delivery_mode, pickup_station_name, pickup_station_address')
+      .select('id, code, status, shipping_method, shipped_at, received_at, created_at, estimated_arrival_at, arrival_extension_count, arrival_last_extended_at, previous_estimated_arrival_at, items, delivery_mode, pickup_station_name, pickup_station_address')
       .eq('code', code.trim().toUpperCase())
       .maybeSingle()
     if (error) return json({ error: error.message }, 500)
