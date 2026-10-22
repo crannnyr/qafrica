@@ -35,14 +35,20 @@ serve(async (req: Request) => {
     if (error) return json({ error: error.message }, 500)
     if (!order) return json({ error: 'No order found with that code. Double-check and try again.' }, 404)
 
-    const { data: bill, error: billError } = await supabase
+    // Legacy orders can have duplicate consolidation bills (for example,
+    // one pending row and one paid row). Do not use maybeSingle() here:
+    // multiple valid rows must not break public order tracking.
+    const { data: bills, error: billError } = await supabase
       .from('china_import_consolidation_bills')
-      .select('id, status')
+      .select('id, status, created_at')
       .eq('order_id', order.id)
       .eq('kind', 'consolidation_shipping')
-      .not('status', 'eq', 'cancelled')
-      .maybeSingle()
+      .neq('status', 'cancelled')
+      .order('created_at', { ascending: false })
     if (billError) return json({ error: billError.message }, 500)
+    const bill = (bills ?? []).find((row: any) => row.status === 'paid')
+      ?? (bills ?? [])[0]
+      ?? null
 
     const { data: fulfillmentItems, error: fulfillmentError } = await supabase
       .from('china_import_fulfillment_items')
