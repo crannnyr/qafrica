@@ -118,6 +118,18 @@ export default function CartPage() {
     } catch { /* ignore */ }
     navigate(path);
   };
+  const sharePayLink = () => {
+    try {
+      sessionStorage.setItem(CHECKOUT_SELECTION_KEY, JSON.stringify(selected.map((i) => i.id)));
+      sessionStorage.setItem('qafrica_import_checkout_selection', JSON.stringify(selectedImportItems.map(i => i.cart_key)));
+      sessionStorage.setItem(MARKETPLACE_CHECKOUT_SELECTION_KEY, JSON.stringify({
+        product_cart_ids: selected.map(i => i.id),
+        china_cart_ids: selectedChinaCartItems.map(i => i.id),
+        china_product_ids: selectedImportItems.map(i => i.id),
+      }));
+    } catch { /* ignore */ }
+    navigate(location.pathname.startsWith('/stores-v2') ? '/stores-v2/cart/share' : '/cart/share');
+  };
   const checkout = () => {
     try {
       sessionStorage.setItem(
@@ -307,7 +319,7 @@ export default function CartPage() {
             </p>
             <p className="text-[12px] text-gray-500">Share a link. They pay, you receive.</p>
           </div>
-          <button type="button" onClick={() => goWithSelection(location.pathname.startsWith('/stores-v2') ? '/stores-v2/cart/share' : '/cart/share')} disabled={selected.length === 0} className="h-9 px-3 rounded-lg border border-gray-900 text-[12px] font-semibold disabled:opacity-40">
+          <button type="button" onClick={sharePayLink} disabled={totalSelectedCount === 0} className="h-9 px-3 rounded-lg border border-gray-900 text-[12px] font-semibold disabled:opacity-40">
             Get link
           </button>
         </div>
