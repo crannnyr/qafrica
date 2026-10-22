@@ -131,16 +131,21 @@ const WINDOWS: Record<'flight' | 'sea_freight', { min: number; max: number; fast
   sea_freight: { min: 60, max: 90, fastestSeen: 45 },
 };
 
-function CountdownWindow({ shippedAt, method, compact }: { shippedAt: string; method: 'flight' | 'sea_freight'; compact?: boolean }) {
+function CountdownWindow({ shippedAt, method, estimatedArrivalAt, compact }: { shippedAt: string; method: 'flight' | 'sea_freight'; estimatedArrivalAt?: string | null; compact?: boolean }) {
   const elapsed = daysSince(shippedAt);
   const { min, max, fastestSeen } = WINDOWS[method];
   const remainingLow = Math.max(min - elapsed, 0);
   const remainingHigh = Math.max(max - elapsed, 0);
+  const daysUntilStoredEta = estimatedArrivalAt
+    ? Math.ceil((new Date(estimatedArrivalAt).getTime() - Date.now()) / 86_400_000)
+    : null;
+  const hasStoredEta = daysUntilStoredEta !== null && Number.isFinite(daysUntilStoredEta);
+  const displayedDays = hasStoredEta ? Math.max(daysUntilStoredEta, 0) : remainingHigh;
 
   if (compact) {
     return (
       <p className="text-[11px] text-gray-500">
-        {remainingHigh === 0 ? 'Any day now' : `Est. ${remainingLow}–${remainingHigh} days left`}
+        {hasStoredEta ? (daysUntilStoredEta! <= 0 ? 'Estimated arrival overdue' : `Est. ${displayedDays} days left`) : (remainingHigh === 0 ? 'Any day now' : `Est. ${remainingLow}–${remainingHigh} days left`)}
         <span className="text-gray-300"> · {min}–{max} day window</span>
       </p>
     );
@@ -150,11 +155,12 @@ function CountdownWindow({ shippedAt, method, compact }: { shippedAt: string; me
     <div className="bg-orange-50 border border-orange-100 rounded-2xl p-4 text-center">
       <p className="text-[11px] font-bold text-orange-500 uppercase tracking-widest mb-1">Estimated arrival</p>
       <p className="text-2xl font-black text-gray-900">
-        {remainingHigh === 0 ? 'Any day now' : `${remainingLow}–${remainingHigh} days`}
+        {hasStoredEta ? (daysUntilStoredEta! <= 0 ? 'Arrival estimate overdue' : `${displayedDays} days remaining`) : (remainingHigh === 0 ? 'Any day now' : `${remainingLow}–${remainingHigh} days`)}
       </p>
       <p className="text-[11px] text-gray-400 mt-1.5 leading-relaxed">
-        {method === 'flight' ? 'Air freight' : 'Sea freight'} runs a {min}–{max} day window from ship date —
-        not a fixed promise, some shipments have arrived in as little as ~{fastestSeen} days.
+        {hasStoredEta
+          ? `Updated estimated arrival: ${new Date(estimatedArrivalAt!).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' })}. This estimate may change as shipment progress is updated.`
+          : `${method === 'flight' ? 'Air freight' : 'Sea freight'} runs a ${min}–${max} day window from ship date — not a fixed promise; some shipments have arrived in as little as ~${fastestSeen} days.`}
       </p>
     </div>
   );
@@ -189,7 +195,7 @@ function TransportAnimation({ method, active }: { method: 'flight' | 'sea_freigh
 // One line per item: name/qty, its own shipping method badge, and (once
 // shipped) its own remaining-days estimate. Falls back to the order-level
 // shipping_method for items placed before per-item shipping existed.
-function ItemRow({ item, fallbackMethod, shippedAt }: { item: TrackedItem; fallbackMethod: 'flight' | 'sea_freight' | null; shippedAt: string | null }) {
+function ItemRow({ item, fallbackMethod, shippedAt, estimatedArrivalAt }: { item: TrackedItem; fallbackMethod: 'flight' | 'sea_freight' | null; shippedAt: string | null; estimatedArrivalAt?: string | null }) {
   const method = item.shipping_method ?? fallbackMethod;
   return (
     <div className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-b-0">
@@ -201,7 +207,7 @@ function ItemRow({ item, fallbackMethod, shippedAt }: { item: TrackedItem; fallb
         {item.variant_options && Object.keys(item.variant_options).length > 0 && (
           <p className="text-[10px] text-gray-400 truncate">{Object.values(item.variant_options).join(', ')}</p>
         )}
-        {shippedAt && method && <CountdownWindow shippedAt={shippedAt} method={method} compact />}
+        {shippedAt && method && <CountdownWindow shippedAt={shippedAt} method={method} estimatedArrivalAt={estimatedArrivalAt} compact />}
       </div>
       {method && (
         <span className={`flex items-center gap-1 flex-shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${method === 'flight' ? 'bg-sky-50 text-sky-600' : 'bg-indigo-50 text-indigo-600'}`}>
@@ -403,7 +409,7 @@ export default function ImportTrackingPage() {
                 </p>
                 <div>
                   {order.items.map((item, i) => (
-                    <ItemRow key={item.id ?? i} item={item} fallbackMethod={singleMethod} shippedAt={order.shipped_at} />
+                    <ItemRow key={item.id ?? i} item={item} fallbackMethod={singleMethod} shippedAt={order.shipped_at} estimatedArrivalAt={order.estimated_arrival_at} />
                   ))}
                 </div>
               </div>
@@ -418,7 +424,7 @@ export default function ImportTrackingPage() {
             {/* Countdown only ever appears once the item has actually shipped
                 (shipped_at set) — this is the trigger, never before. */}
             {order.shipped_at && singleMethod && (
-              <CountdownWindow shippedAt={order.shipped_at} method={singleMethod} />
+              <CountdownWindow shippedAt={order.shipped_at} method={singleMethod} estimatedArrivalAt={order.estimated_arrival_at} />
             )}
           </div>
         )}
