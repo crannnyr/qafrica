@@ -153,6 +153,29 @@ serve(async (req) => {
 
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
+  if (action === 'admin-fulfillment-unreceive') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.orders.update'))) {
+      return json({ error: 'Unauthorized' }, 401)
+    }
+    if (!body.fulfillment_item_id) return json({ error: 'Missing fulfillment item id' }, 400)
+
+    const { data: session, error: sessionError } = await supabase
+      .from('import_admin_sessions')
+      .select('manager_id')
+      .eq('token', body.manager_token)
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle()
+    if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
+
+    const { data, error } = await supabase.rpc('unreceive_china_import_fulfillment_item', {
+      p_fulfillment_item_id: body.fulfillment_item_id,
+      p_manager_id: session.manager_id,
+      p_note: typeof body.note === 'string' ? body.note.trim() || null : null,
+    })
+    if (error) return json({ error: error.message }, 400)
+    return json(data)
+  }
+
   if (action === 'admin-fulfillment-receive-from-stock') {
     if (!(await requireManager(supabase, body.manager_token, 'import.orders.update'))) {
       return json({ error: 'Unauthorized' }, 401)
