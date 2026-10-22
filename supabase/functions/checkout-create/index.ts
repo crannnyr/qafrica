@@ -24,10 +24,10 @@ const isEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 const normPhone = (p: string) => p.replace(/[^\d+]/g, '');
 const isPhone = (p: string) => /^\+?\d{10,14}$/.test(p);
 
-function newReference() {
+function newReference(marketplace = false) {
   const rand = crypto.getRandomValues(new Uint8Array(6));
   const tail = Array.from(rand, (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 10).toUpperCase();
-  return `QAF-${Date.now().toString(36).toUpperCase()}-${tail}`;
+  return `${marketplace ? 'QAF-MKT' : 'QAF'}-${Date.now().toString(36).toUpperCase()}-${tail}`;
 }
 
 Deno.serve(async (req) => {
@@ -89,13 +89,19 @@ Deno.serve(async (req) => {
 
   const rawItems = shared ? shared.items : body?.items;
   if (!Array.isArray(rawItems) || rawItems.length === 0) return json(400, { error: 'Your cart is empty' });
-  const items = rawItems.slice(0, 60).map((i: Record<string, unknown>) => ({
-    product_id: String(i.product_id ?? ''),
-    store_id: String(i.store_id ?? ''),
-    quantity: Number(i.quantity ?? 1),
-    variant_options: i.variant_options && typeof i.variant_options === 'object' ? i.variant_options : null,
-    attribution: i.attribution === 'marketplace' ? 'marketplace' : 'own',
-  }));
+  const items = rawItems.slice(0, 60).map((i: Record<string, unknown>) => {
+    const sourceType = i.source_type === 'china_import' ? 'china_import' : 'product';
+    const sourceId = String(i.source_id ?? i.product_id ?? '');
+    return {
+      product_id: sourceId,
+      source_id: sourceId,
+      source_type: sourceType,
+      store_id: sourceType === 'china_import' ? '00000000-0000-0000-0000-000000000000' : String(i.store_id ?? ''),
+      quantity: Number(i.quantity ?? 1),
+      variant_options: i.variant_options && typeof i.variant_options === 'object' ? i.variant_options : null,
+      attribution: sourceType === 'china_import' ? 'marketplace' : (i.attribution === 'marketplace' ? 'marketplace' : 'own'),
+    };
+  });
   const coupons = !shared && body?.coupons && typeof body.coupons === 'object' ? body.coupons : {};
 
   // Server-side price, stock, delivery and coupon check
@@ -119,7 +125,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  const reference = newReference();
+  const reference = newReference(Boolean(shared && items.some((i: { source_type: string }) => i.source_type === 'china_import')));
   let paymentAmount = Number(quote.amount);
   let checkoutQuote = quote;
   if (shared) {
@@ -146,6 +152,54 @@ Deno.serve(async (req) => {
       return json(409, { error: 'The remaining balance is not available for payment.' });
     }
   }
+  // China Import Help Pay links use the marketplace finalizer, which creates
+  // the source-specific China order/fulfillment records after full funding.
+  if (shared && items.some((i: { source_type: string }) => i.source_type === 'china_import')) {
+    const marketplaceItems = checkoutQuote.stores.flatMap((store: any) =>
+      (store.items ?? []).map((line: any) => ({
+        ...line, source_type: line.source_type ?? 'product', source_id: line.source_id ?? line.product_id,
+      }))
+    );
+    const { data: marketplaceSession, error: marketplaceSessionError } = await supabase
+      .from('marketplace_checkout_sessions')
+      .insert({
+        reference, customer_id: customerId, customer_name: customer.name,
+        customer_email: customer.email, customer_phone: customer.phone, delivery,
+        items: marketplaceItems,
+        store_orders: checkoutQuote.stores.filter((store: any) => !store.shipping_included),
+        amount: paymentAmount,
+      }).select('id').single();
+    if (marketplaceSessionError || !marketplaceSession) {
+      await supabase.from('shared_cart_contributions').update({ status: 'failed' }).eq('checkout_reference', reference);
+      console.error('marketplace shared-cart session insert failed', marketplaceSessionError);
+      return json(500, { error: 'We could not start your payment. Please try again.' });
+    }
+    try {
+      const order = await nombaFetch('/v1/checkout/order', {
+        method: 'POST',
+        body: { order: {
+          orderReference: reference, amount: paymentAmount.toFixed(2), currency: 'NGN',
+          customerEmail: payer?.email ?? customer.email,
+          callbackUrl: `${SITE}/checkout/complete?ref=${encodeURIComponent(reference)}&for=${encodeURIComponent(shared.recipient_name.split(' ')[0])}`,
+        }},
+        idempotencyKey: reference,
+      });
+      const link = order?.data?.checkoutLink;
+      if (!link) throw new Error('No checkout link returned');
+      await supabase.from('marketplace_checkout_sessions')
+        .update({ checkout_link: link, nomba_order_id: order?.data?.orderReference ?? null, updated_at: new Date().toISOString() })
+        .eq('id', marketplaceSession.id);
+      return json(200, { reference, checkout_link: link, amount: paymentAmount });
+    } catch (e) {
+      await supabase.from('shared_cart_contributions').update({ status: 'failed' }).eq('checkout_reference', reference);
+      await supabase.from('marketplace_checkout_sessions')
+        .update({ status: 'failed', error: 'nomba_create_failed', updated_at: new Date().toISOString() })
+        .eq('id', marketplaceSession.id);
+      console.error('Nomba China Import Help Pay order failed', e instanceof NombaError ? { status: e.status, code: e.code, description: e.description } : e);
+      return json(502, { error: 'Payment service is busy. Please try again in a moment.' });
+    }
+  }
+
   const returnSlug = clean(body?.return_slug, 80) || null;
   const { data: session, error: sErr } = await supabase
     .from('checkout_sessions')
