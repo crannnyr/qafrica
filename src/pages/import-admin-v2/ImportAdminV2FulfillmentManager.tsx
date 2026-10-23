@@ -331,11 +331,9 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
         });
       }
     }
-    return Array.from(map.values()).sort((a, b) => {
-      const ad = Math.max(...a.items.map(item => new Date(item.received_at ?? item.batch_opened_at ?? 0).getTime()));
-      const bd = Math.max(...b.items.map(item => new Date(item.received_at ?? item.batch_opened_at ?? 0).getTime()));
-      return bd - ad;
-    });
+    // Preserve the order returned by the fulfillment list. Receiving an item
+    // must not reorder its parent order in the Receiving tab.
+    return Array.from(map.values());
   }, [filtered]);
 
   const receive = async (item: FulfillmentItem) => {
