@@ -74,7 +74,7 @@ export default function UnifiedMarketplaceCategories() {
             </div>
             {active && (
               <Link
-                to={`/stores-v2?niche=${encodeURIComponent(active.nicheId)}&category=${encodeURIComponent(active.name)}`}
+                to={`/stores-v2?niche=${encodeURIComponent(active.nicheId)}`}
                 className="text-[13px] text-gray-600 underline underline-offset-2 shrink-0"
               >
                 Shop all
