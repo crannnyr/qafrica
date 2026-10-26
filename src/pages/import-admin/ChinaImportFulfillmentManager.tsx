@@ -436,9 +436,19 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   }, [items]);
 
   const createPartialReceivingShare = async () => {
-    const selectedItemIds = selectedShareItems;
+    // Ignore stale selections that were saved before an item became fully received
+    // or was removed from the currently loaded fulfillment list.
+    const outstandingItemIds = new Set(
+      items
+        .filter(item => Number(item.received_quantity) < Number(item.ordered_quantity))
+        .map(item => item.id)
+    );
+    const selectedItemIds = selectedShareItems.filter(id => outstandingItemIds.has(id));
+    if (selectedItemIds.length !== selectedShareItems.length) {
+      setSelectedShareItems(selectedItemIds);
+    }
     if (!selectedItemIds.length) {
-      toast.error('Select at least one outstanding item first');
+      toast.error('Select at least one item with an outstanding quantity');
       return;
     }
     setSharingOrderId('selected');
