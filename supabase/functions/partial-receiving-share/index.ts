@@ -81,9 +81,6 @@ Deno.serve(async (req: Request) => {
     received_quantity: Number(item.received_quantity ?? 0),
     remaining_quantity: Math.max(0, Number(item.ordered_quantity ?? 0) - Number(item.received_quantity ?? 0)),
   }))
-  if (!items.length || items.some((item: any) => item.remaining_quantity <= 0)) {
-    return json({ error: 'Select only items that still have outstanding quantities.' }, 400)
-  }
   const firstOrderId = selectedRows[0].order_id
   const orderCodeLabel = orderIds.length === 1 ? (orderCodes.get(firstOrderId) ?? '') : `Multiple orders (${orderIds.length})`
 
