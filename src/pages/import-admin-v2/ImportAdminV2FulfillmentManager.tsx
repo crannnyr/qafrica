@@ -549,7 +549,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   };
 
   const orderSummaries = useMemo(() => {
-    return orders.map(order => {
+    return orders.filter(order => !['cancelled', 'canceled', 'refunded'].includes(String(order.items[0]?.order_status ?? '').toLowerCase())).map(order => {
       const ordered = order.items.reduce((sum, item) => sum + item.ordered_quantity, 0);
       const received = order.items.reduce((sum, item) => sum + item.received_quantity, 0);
       return {
