@@ -313,6 +313,7 @@ export default function ClosedBatchDetail({
       const fallbackLines: CustomerLine[] = [];
 
       for (const order of orders) {
+        if (['cancelled', 'canceled', 'refunded'].includes(String(order.status ?? '').toLowerCase())) continue;
         if (!order.user_id) continue;
         for (const item of order.items ?? []) {
           const itemKey = `${order.id}::${item.id}::${variantLabel(item.variant_options)}`;
