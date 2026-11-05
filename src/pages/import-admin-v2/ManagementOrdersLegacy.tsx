@@ -180,6 +180,26 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   const [savingItem, setSavingItem] = useState(false);
   const [removingItem, setRemovingItem] = useState<number | null>(null);
   const [cancellingBalance, setCancellingBalance] = useState(false);
+  const [hasFulfillmentLedger, setHasFulfillmentLedger] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const checkFulfillmentLedger = async () => {
+      try {
+        const response = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/import-management?action=admin-fulfillment-list', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ manager_token: token }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!cancelled && response.ok && Array.isArray(data.items)) {
+          setHasFulfillmentLedger(data.items.some((item: { order_id?: string }) => item.order_id === order.id));
+        }
+      } catch {
+        if (!cancelled) setHasFulfillmentLedger(false);
+      }
+    };
+    void checkFulfillmentLedger();
+    return () => { cancelled = true; };
+  }, [order.id, token]);
 
   const items = order.items ?? [];
 
@@ -441,7 +461,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
             <span className="px-2.5 py-1 rounded-full bg-gray-50 text-gray-500 text-[10px] font-semibold">{new Date(order.created_at).toLocaleString('en-NG')}</span>
           </div>
 
-          {(order.status !== 'cancelled' && order.status !== 'refunded') && (
+          {hasFulfillmentLedger && (order.status !== 'cancelled' && order.status !== 'refunded') && (
             <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
