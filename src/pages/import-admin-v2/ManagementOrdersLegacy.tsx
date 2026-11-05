@@ -84,6 +84,7 @@ interface ClosedBatch {
 function buildClosedBatches(orders: OrderRow[]): ClosedBatch[] {
   const map = new Map<string, { orders: Set<string>; products: Set<string>; buyers: Set<string>; units: number }>();
   for (const order of orders) {
+    if (['cancelled', 'canceled', 'refunded'].includes(String(order.status ?? '').toLowerCase())) continue;
     if (!order.staged_at) continue;
     const entry = map.get(order.staged_at) ?? { orders: new Set(), products: new Set(), buyers: new Set(), units: 0 };
     entry.orders.add(order.id);
@@ -109,6 +110,7 @@ function buildClosedBatches(orders: OrderRow[]): ClosedBatch[] {
 function buildGroups(orders: OrderRow[], showClosed: boolean): Group[] {
   const map = new Map<string, Group>();
   for (const order of orders) {
+    if (['cancelled', 'canceled', 'refunded'].includes(String(order.status ?? '').toLowerCase())) continue;
     const isStaged = !!order.staged_at;
     if (isStaged !== showClosed) continue;
     for (const item of order.items ?? []) {
