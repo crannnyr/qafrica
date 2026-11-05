@@ -84,6 +84,7 @@ interface ClosedBatch {
 function buildClosedBatches(orders: OrderRow[]): ClosedBatch[] {
   const map = new Map<string, { orders: Set<string>; products: Set<string>; buyers: Set<string>; units: number }>();
   for (const order of orders) {
+    if (['cancelled', 'canceled', 'refunded'].includes(String(order.status ?? '').toLowerCase())) continue;
     if (!order.staged_at) continue;
     const entry = map.get(order.staged_at) ?? { orders: new Set(), products: new Set(), buyers: new Set(), units: 0 };
     entry.orders.add(order.id);
@@ -109,6 +110,7 @@ function buildClosedBatches(orders: OrderRow[]): ClosedBatch[] {
 function buildGroups(orders: OrderRow[], showClosed: boolean): Group[] {
   const map = new Map<string, Group>();
   for (const order of orders) {
+    if (['cancelled', 'canceled', 'refunded'].includes(String(order.status ?? '').toLowerCase())) continue;
     const isStaged = !!order.staged_at;
     if (isStaged !== showClosed) continue;
     for (const item of order.items ?? []) {
@@ -177,6 +179,27 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   const [variantsLoading, setVariantsLoading] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
   const [removingItem, setRemovingItem] = useState<number | null>(null);
+  const [cancellingBalance, setCancellingBalance] = useState(false);
+  const [hasFulfillmentLedger, setHasFulfillmentLedger] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const checkFulfillmentLedger = async () => {
+      try {
+        const response = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/import-management?action=admin-fulfillment-list', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ manager_token: token }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!cancelled && response.ok && Array.isArray(data.items)) {
+          setHasFulfillmentLedger(data.items.some((item: { order_id?: string }) => item.order_id === order.id));
+        }
+      } catch {
+        if (!cancelled) setHasFulfillmentLedger(false);
+      }
+    };
+    void checkFulfillmentLedger();
+    return () => { cancelled = true; };
+  }, [order.id, token]);
 
   const items = order.items ?? [];
 
@@ -397,6 +420,30 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     finally { setRemovingItem(null); }
   };
 
+  const cancelRemainingBalance = async () => {
+    const reason = window.prompt(
+      'Why is the remaining undelivered balance being cancelled? The refund will be calculated only for quantities not yet received, shipped, or delivered. The existing 20% cancellation fee applies when eligible under policy.'
+    );
+    if (!reason?.trim()) return;
+    if (!window.confirm('Cancel the remaining balance on ' + order.code + ' and create its refund record? Already received, shipped, and delivered quantities will remain unchanged.')) return;
+    setCancellingBalance(true);
+    try {
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/refunds?action=admin-cancel-unfulfilled-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_id: order.id, reason: reason.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Could not cancel remaining balance');
+      await onReload();
+      toast.success('Remaining balance cancelled. Refund added to the normal Refunds queue.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not cancel remaining balance');
+    } finally {
+      setCancellingBalance(false);
+    }
+  };
+
   const money = (n: unknown) => '₦' + Math.round(Number(n ?? 0)).toLocaleString();
   const statusClass = (v: string) => v === 'paid' || v === 'confirmed' ? 'bg-emerald-50 text-emerald-700' : v === 'cancelled' || v === 'refunded' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600';
 
@@ -413,6 +460,21 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
             <span className={"px-2.5 py-1 rounded-full text-[10px] font-bold capitalize " + statusClass(order.payment_status)}>{order.payment_status.replaceAll('_',' ')}</span>
             <span className="px-2.5 py-1 rounded-full bg-gray-50 text-gray-500 text-[10px] font-semibold">{new Date(order.created_at).toLocaleString('en-NG')}</span>
           </div>
+
+          {hasFulfillmentLedger && (order.status !== 'cancelled' && order.status !== 'refunded') && (
+            <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-amber-900">Cancel remaining balance</p>
+                  <p className="text-[11px] text-amber-800 mt-1">For partially received or delivered orders. Only quantities not yet received, shipped, or delivered are eligible for refund. Existing fulfillment history is preserved.</p>
+                </div>
+                <button type="button" onClick={() => void cancelRemainingBalance()} disabled={cancellingBalance} className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-[11px] font-bold text-white hover:bg-red-700 disabled:opacity-50">
+                  {cancellingBalance ? <Loader className="h-3 w-3 animate-spin"/> : <X className="h-3 w-3"/>}
+                  {cancellingBalance ? 'Cancelling…' : 'Cancel balance'}
+                </button>
+              </div>
+            </section>
+          )}
 
           <section className="rounded-2xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-3"><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Client</p>{order.user_id && <button onClick={() => onOpenClient(order.user_id!)} className="text-[10px] font-bold text-orange-600 hover:underline">Client details</button>}</div>

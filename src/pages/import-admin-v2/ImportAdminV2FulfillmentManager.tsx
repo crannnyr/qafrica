@@ -82,6 +82,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [openOrders, setOpenOrders] = useState<Set<string>>(new Set());
   const [openBatches, setOpenBatches] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
+  const [cancellingBalanceId, setCancellingBalanceId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [shipmentOrderId, setShipmentOrderId] = useState<string | null>(null);
   const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({});
@@ -376,6 +377,31 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       toast.error(e instanceof Error ? e.message : 'Could not receive from inventory');
     } finally {
       setActing(null);
+    }
+  };
+
+  const cancelRemainingBalance = async (order: OrderGroup) => {
+    const reason = window.prompt(
+      'Why is the remaining undelivered balance of ' + order.orderCode + ' being cancelled? Only quantities not yet received, shipped, or delivered are eligible. The existing 20% fee applies when policy requires it.'
+    );
+    if (!reason?.trim()) return;
+    if (!window.confirm('Cancel the remaining balance of ' + order.orderCode + ' and create its normal refund record? Received, shipped, and delivered quantities will remain unchanged.')) return;
+    setCancellingBalanceId(order.id);
+    try {
+      const res = await fetch(`${CONFIG.SUPABASE_URL}/functions/v1/refunds?action=admin-cancel-unfulfilled-balance`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_id: order.id, reason: reason.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Could not cancel remaining balance');
+      toast.success('Remaining balance cancelled. Refund added to the normal Refunds queue.');
+      await load(true);
+      await loadShipments();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not cancel remaining balance');
+    } finally {
+      setCancellingBalanceId(null);
     }
   };
 
@@ -676,6 +702,17 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                       </button>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {canReceive && order.order_status !== 'cancelled' && order.order_status !== 'refunded' && (
+                          <button
+                            type="button"
+                            onClick={() => void cancelRemainingBalance(order)}
+                            disabled={cancellingBalanceId === order.id}
+                            className="px-3 py-2 rounded-lg border border-red-200 bg-red-50 text-red-700 text-[10px] font-bold flex items-center gap-1.5 disabled:opacity-40"
+                          >
+                            {cancellingBalanceId === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                            {cancellingBalanceId === order.id ? 'Cancelling…' : 'Cancel balance'}
+                          </button>
+                        )}
                         {available > 0 && (
                           <button
                             type="button"

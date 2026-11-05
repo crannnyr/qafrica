@@ -379,6 +379,75 @@ serve(async (req: Request) => {
   const action = url.searchParams.get('action')
 
   try {
+    if (req.method === 'POST' && action === 'admin-cancel-unfulfilled-balance') {
+      const { manager_token, order_id, reason } = await req.json()
+      if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)
+      if (!order_id || !reason || typeof reason !== 'string' || !reason.trim()) {
+        return json({ error: 'Missing order_id or cancellation reason' }, 400)
+      }
+
+      const { data: session, error: sessionError } = await supabase
+        .from('import_admin_sessions')
+        .select('manager_id')
+        .eq('token', manager_token)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+      if (sessionError) return json({ error: sessionError.message }, 500)
+
+      const { data, error } = await supabase.rpc('cancel_china_import_unfulfilled_balance', {
+        p_order_id: order_id,
+        p_reason: reason.trim(),
+        p_manager_id: session?.manager_id ?? null,
+      })
+      if (error) {
+        const message = error.message || 'Could not cancel the remaining order balance'
+        const status = /already|no remaining|no .*eligible|reconcile|cannot|differ|missing|price|in progress/i.test(message) ? 409 : 500
+        return json({ error: message }, status)
+      }
+
+      const { data: order } = await supabase
+        .from('china_import_orders')
+        .select('id, code, user_id, customer_name, payment_method')
+        .eq('id', order_id)
+        .maybeSingle()
+      if (order?.user_id) {
+        const { data: customer } = await supabase
+          .from('customers')
+          .select('email, full_name')
+          .eq('id', order.user_id)
+          .maybeSingle()
+        if (customer?.email) {
+          const refundAmount = Number(data.refund_amount_ngn ?? 0)
+          const cancellationFee = Number(data.cancellation_fee_ngn ?? 0)
+          const feeText = cancellationFee > 0
+            ? ` A 20% cancellation fee of ₦${cancellationFee.toLocaleString()} was deducted under the existing refund policy.`
+            : ''
+          const html = emailShell(`
+            <h2 style="color:#111827;margin:0 0 8px;">The remaining balance of your order was cancelled</h2>
+            <p style="color:#6B7280;margin:0 0 16px;line-height:1.6;">
+              Hi ${customer.full_name ?? order.customer_name ?? 'there'}, the unfulfilled balance of order
+              <strong>${order.code}</strong> was cancelled. Items already received, shipped, or delivered remain recorded against your order.
+            </p>
+            <div style="background:#FEF2F2;border-left:4px solid #EF4444;border-radius:0 10px 10px 0;padding:16px 20px;margin-bottom:20px;">
+              <p style="margin:0 0 4px;font-size:13px;color:#991B1B;font-weight:600;">Reason</p>
+              <p style="margin:0;font-size:14px;color:#7F1D1D;">${reason.trim()}</p>
+            </div>
+            <p style="color:#374151;font-size:14px;margin-bottom:16px;line-height:1.6;">
+              Your refund amount is <strong>₦${refundAmount.toLocaleString()}</strong>.${feeText}
+              ${order.payment_method === 'paystack'
+                ? 'The refund will be returned through the original Paystack payment method.'
+                : 'Please submit your bank details in the Refund section so the finance team can process it.'}
+            </p>
+          `)
+          await supabase.functions.invoke('send-email', {
+            body: { to: customer.email, subject: `Update to your QAFRICA order ${order.code}`, html },
+          }).catch(() => {})
+        }
+      }
+
+      return json({ success: true, cancellation: data })
+    }
+
     if (req.method === 'POST' && action === 'admin-cancel-order') {
       const { manager_token, order_id, reason } = await req.json()
       if (!(await requireAdmin(supabase, manager_token))) return json({ error: 'Unauthorized' }, 401)

@@ -179,6 +179,30 @@ export default function ClosedBatchDetail({
     }
   };
 
+  const cancelRemainingBalance = async (orderId: string, orderCode: string) => {
+    const reason = window.prompt(
+      'Why is the remaining undelivered balance of ' + orderCode + ' being cancelled? Only quantities not yet received, shipped, or delivered will be refunded. The existing 20% cancellation fee applies when eligible under policy.'
+    );
+    if (!reason?.trim()) return;
+    if (!window.confirm('Cancel the remaining balance of ' + orderCode + ' and create a refund record? Existing fulfillment quantities will remain unchanged.')) return;
+    setCancellingBalanceId(orderId);
+    try {
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/refunds?action=admin-cancel-unfulfilled-balance', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_id: orderId, reason: reason.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) throw new Error(data.error ?? 'Could not cancel remaining balance');
+      toast.success('Remaining balance cancelled. Refund added to the Refunds queue.');
+      onReload?.();
+      await load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not cancel remaining balance');
+    } finally {
+      setCancellingBalanceId(null);
+    }
+  };
+
   const openSourcingProduct = async (productId: string) => {
     if (expandedSourcingProduct === productId) { setExpandedSourcingProduct(null); return; }
     setExpandedSourcingProduct(productId);
@@ -214,6 +238,7 @@ export default function ClosedBatchDetail({
   const [bulkConfirm, setBulkConfirm] = useState<null | 'bill' | 'ship' | 'clearance_bill' | 'receive'>(null);
   const [isActing, setIsActing] = useState(false);
   const [individualActing, setIndividualActing] = useState<string | null>(null);
+  const [cancellingBalanceId, setCancellingBalanceId] = useState<string | null>(null);
   const [selectedCustomerForDrilldown, setSelectedCustomerForDrilldown] = useState<string | null>(null);
   const [sourcingShareUrl, setSourcingShareUrl] = useState<string | null>(null);
   const [sourcingShareLoading, setSourcingShareLoading] = useState(false);
@@ -288,6 +313,7 @@ export default function ClosedBatchDetail({
       const fallbackLines: CustomerLine[] = [];
 
       for (const order of orders) {
+        if (['cancelled', 'canceled', 'refunded'].includes(String(order.status ?? '').toLowerCase())) continue;
         if (!order.user_id) continue;
         for (const item of order.items ?? []) {
           const itemKey = `${order.id}::${item.id}::${variantLabel(item.variant_options)}`;
@@ -1620,6 +1646,20 @@ function CustomerCard({
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="text-[10px] text-gray-400">{line.qty} × sold {fmt(line.unit_price_ngn)}</span>
                     <span className="text-[10px] font-mono text-gray-300">{line.order_code}</span>
+                    {(() => {
+                      const order = orders.find(row => row.id === line.order_id);
+                      const cancellable = order && !['cancelled', 'canceled', 'refunded'].includes(String(order.status ?? '').toLowerCase());
+                      return cancellable ? (
+                        <button
+                          type="button"
+                          onClick={() => void cancelRemainingBalance(line.order_id, line.order_code)}
+                          disabled={cancellingBalanceId === line.order_id}
+                          className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[9px] font-bold text-red-700 disabled:opacity-40"
+                        >
+                          {cancellingBalanceId === line.order_id ? 'Cancelling…' : 'Cancel remaining balance'}
+                        </button>
+                      ) : null;
+                    })()}
                     {line.ship_only && (
                       <span className="inline-flex items-center gap-1 text-[9px] font-bold text-blue-700 bg-blue-50 rounded-full px-1.5 py-0.5">
                         <Ship className="w-2.5 h-2.5" /> Sea only
