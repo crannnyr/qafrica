@@ -132,6 +132,28 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   const [promoQuote, setPromoQuote] = useState<ChinaImportPromotionQuote | null>(null);
   const [result, setResult] = useState<{ code: string; bank?: any; order_id?: string } | null>(null);
 
+  // Nomba returns customers to the import checkout with the unique payment reference.
+  // The backend verifies the saved intent and transaction amount before the order is marked paid.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const provider = params.get('payment');
+    const reference = params.get('reference');
+    if (provider !== 'nomba' || !reference) return;
+    setIsVerifying(true);
+    fetch(`${EDGE_URL}?action=nomba-payment-verify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customer.id, reference }),
+    }).then(async response => {
+      const data = await response.json();
+      if (!response.ok || !data?.success) throw new Error(data.error ?? 'Nomba payment is not yet confirmed.');
+      onClearCart();
+      setResult({ code: '' });
+      window.history.replaceState({}, '', window.location.pathname);
+    }).catch(err => {
+      setError(err instanceof Error ? err.message : 'Could not confirm Nomba payment.');
+    }).finally(() => setIsVerifying(false));
+  }, [customer.id]);
+
   useEffect(() => {
     if (!isVerifying) return;
     const handler = (e: BeforeUnloadEvent) => {
