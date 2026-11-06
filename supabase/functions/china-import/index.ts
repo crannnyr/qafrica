@@ -837,6 +837,7 @@ serve(async (req: Request) => {
   const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
   const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   const PAYSTACK_SECRET_KEY = Deno.env.get('PAYSTACK_SECRET_KEY') ?? ''
+  const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
 
   const url = new URL(req.url)
@@ -1699,7 +1700,8 @@ serve(async (req: Request) => {
     }
 
     if (req.method === 'POST' && action === 'nomba-payment-verify') {
-      const { customer_id, reference } = await req.json().catch(() => ({}))
+      const { customer_id, reference, webhook = false } = await req.json().catch(() => ({}))
+      if (webhook && req.headers.get('Authorization') !== `Bearer ${SERVICE_ROLE_KEY}`) return json({ error: 'Unauthorized webhook request' }, 401)
       if (!customer_id || typeof reference !== 'string') return json({ error: 'Missing customer or payment reference' }, 400)
       const { data: intent, error: intentError } = await supabase.from('china_import_payment_intents')
         .select('*').eq('reference', reference).eq('customer_id', customer_id).maybeSingle()
@@ -1748,7 +1750,8 @@ serve(async (req: Request) => {
           })
         }
       }
-      await supabase.from('china_import_payment_intents').update({ status: 'paid', nomba_transaction_id: String(tx?.id ?? ''), paid_at: now, updated_at: now }).eq('id', intent.id).eq('status', 'pending')
+      const { error: intentUpdateError } = await supabase.from('china_import_payment_intents').update({ status: 'paid', nomba_transaction_id: String(tx?.id ?? ''), paid_at: now, updated_at: now }).eq('id', intent.id).eq('status', 'pending')
+      if (intentUpdateError) return json({ error: 'Verified payment could not be recorded. Contact support.' }, 500)
       return json({ success: true, intent_type: intent.intent_type })
     }
 
