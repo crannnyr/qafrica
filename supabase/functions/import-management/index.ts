@@ -153,6 +153,17 @@ serve(async (req) => {
 
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405)
 
+  if (action === 'admin-fulfillment-cancel-unfulfilled-balance') {
+    if (!(await requireManager(supabase, body.manager_token, 'import.orders.update'))) return json({ error: 'Unauthorized' }, 403)
+    const orderId = typeof body.order_id === 'string' ? body.order_id.trim() : ''
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+    if (!orderId || !reason) return json({ error: 'Order ID and cancellation reason are required.' }, 400)
+    const { data: session, error: sessionError } = await supabase.from('import_admin_sessions').select('manager_id').eq('token', body.manager_token).gt('expires_at', new Date().toISOString()).maybeSingle()
+    if (sessionError || !session?.manager_id) return json({ error: 'Valid manager session required' }, 401)
+    const { data, error } = await supabase.rpc('cancel_china_import_unfulfilled_balance', { p_order_id: orderId, p_reason: reason, p_manager_id: session.manager_id })
+    if (error) return json({ error: error.message }, 400)
+    return json(data)
+  }
   if (action === 'admin-fulfillment-unreceive') {
     if (!(await requireManager(supabase, body.manager_token, 'import.orders.update'))) {
       return json({ error: 'Unauthorized' }, 401)
