@@ -22,6 +22,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Image } from 'https://deno.land/x/imagescript@1.3.0/mod.ts'
+import { nombaFetch } from '../_shared/nomba.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -1244,7 +1245,7 @@ serve(async (req: Request) => {
       if (!customer_name || !customer_whatsapp) return json({ error: 'Missing customer_name or customer_whatsapp' }, 400)
       if (!delivery_type || !['to_qafrica', 'to_me'].includes(delivery_type)) return json({ error: 'Invalid delivery_type' }, 400)
       if (!Array.isArray(items) || items.length === 0) return json({ error: 'No items provided' }, 400)
-      if (!payment_method || !['paystack', 'manual'].includes(payment_method)) return json({ error: 'Invalid payment_method' }, 400)
+      if (!payment_method || !['paystack', 'nomba', 'manual'].includes(payment_method)) return json({ error: 'Invalid payment_method' }, 400)
 
       // ── Per-item shipping method ─────────────────────────────────────────
       // Each cart item carries its own shipping_method now. For backward
@@ -1470,7 +1471,7 @@ serve(async (req: Request) => {
       // threshold; at or above it, manual bank transfer is required.
       const { data: paymentSettings, error: paymentSettingsErr } = await supabase
         .from('import_admin_credentials')
-        .select('paystack_enabled, manual_transfer_enabled, paystack_manual_threshold_ngn')
+        .select('paystack_enabled, nomba_enabled, manual_transfer_enabled, paystack_manual_threshold_ngn')
         .eq('id', 1).single()
       if (paymentSettingsErr) return json({ error: 'Could not load payment settings' }, 500)
 
@@ -1485,6 +1486,11 @@ serve(async (req: Request) => {
         if (totalNgn >= paystackManualThresholdNgn) {
           return json({ error: `Orders of ₦${paystackManualThresholdNgn.toLocaleString()} or more must be paid via manual bank transfer.` }, 409)
         }
+      }
+
+      if (payment_method === 'nomba') {
+        if (!nombaEnabled) return json({ error: 'Nomba is currently unavailable.' }, 409)
+        if (totalNgn >= paystackManualThresholdNgn) return json({ error: `Orders of ₦${paystackManualThresholdNgn.toLocaleString()} or more must be paid via manual bank transfer.` }, 409)
       }
 
       if (payment_method === 'manual') {
@@ -1616,6 +1622,134 @@ serve(async (req: Request) => {
       }
 
       return json({ order_id: order.id, code: order.code, total_ngn: totalNgn, jumia_pickup_fee_ngn: jumiaPickupFeeNgn, pickup_package_size: pickupQuote.package_size })
+    }
+
+    if (req.method === 'POST' && action === 'nomba-order-checkout-init') {
+      const { customer_id, order_id } = await req.json().catch(() => ({}))
+      if (!customer_id || !order_id) return json({ error: 'Missing customer or order' }, 400)
+      const { data: order, error: orderError } = await supabase.from('china_import_orders')
+        .select('id, code, user_id, total_ngn, payment_status').eq('id', order_id).maybeSingle()
+      if (orderError || !order) return json({ error: 'Order not found' }, 404)
+      if (order.user_id !== customer_id) return json({ error: 'Unauthorized' }, 403)
+      if (order.payment_status === 'paid') return json({ error: 'Order is already paid' }, 409)
+      const { data: settings, error: settingsError } = await supabase.from('import_admin_credentials')
+        .select('nomba_enabled, paystack_manual_threshold_ngn').eq('id', 1).single()
+      if (settingsError) return json({ error: 'Could not load payment settings' }, 500)
+      const threshold = Number(settings.paystack_manual_threshold_ngn ?? 100000)
+      if (settings.nomba_enabled !== true) return json({ error: 'Nomba is currently unavailable.' }, 409)
+      if (Number(order.total_ngn) >= threshold) return json({ error: 'This order must be paid by manual bank transfer.' }, 409)
+      const reference = `QAF-IMP-${order.id}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
+      const { data: intent, error: intentError } = await supabase.from('china_import_payment_intents').insert({
+        reference, intent_type: 'order', customer_id, order_id: order.id,
+        amount_ngn: Number(order.total_ngn), provider: 'nomba', status: 'pending',
+      }).select('id').single()
+      if (intentError || !intent) return json({ error: 'Could not initialize payment. Please try again.' }, 500)
+      try {
+        const response = await nombaFetch('/v1/checkout/order', {
+          method: 'POST',
+          body: { order: { orderReference: reference, amount: Number(order.total_ngn).toFixed(2), currency: 'NGN', customerEmail: (await supabase.from('customers').select('email').eq('id', customer_id).single()).data?.email ?? '', callbackUrl: `${Deno.env.get('APP_URL') ?? 'https://qafrica.store'}/importations/dashboard?payment=nomba&reference=${encodeURIComponent(reference)}` } },
+          idempotencyKey: reference,
+        })
+        const checkoutLink = response?.data?.checkoutLink
+        if (!checkoutLink) throw new Error('Nomba did not return a checkout link')
+        await supabase.from('china_import_payment_intents').update({ checkout_url: checkoutLink, updated_at: new Date().toISOString() }).eq('id', intent.id)
+        return json({ checkout_link: checkoutLink, reference })
+      } catch (error) {
+        await supabase.from('china_import_payment_intents').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', intent.id)
+        console.error('[china-import] Nomba order checkout init failed', error)
+        return json({ error: 'Nomba checkout is temporarily unavailable. Please try again.' }, 502)
+      }
+    }
+
+    if (req.method === 'POST' && action === 'nomba-bill-checkout-init') {
+      const { customer_id, bill_id } = await req.json().catch(() => ({}))
+      if (!customer_id || !bill_id) return json({ error: 'Missing customer or bill' }, 400)
+      const { data: bill, error: billError } = await supabase.from('china_import_consolidation_bills')
+        .select('id, user_id, amount_ngn, status').eq('id', bill_id).maybeSingle()
+      if (billError || !bill) return json({ error: 'Bill not found' }, 404)
+      if (bill.user_id !== customer_id) return json({ error: 'Unauthorized' }, 403)
+      if (bill.status === 'paid') return json({ error: 'Bill is already paid' }, 409)
+      if (bill.status !== 'pending') return json({ error: 'This bill is not payable at the moment.' }, 409)
+      const { data: settings, error: settingsError } = await supabase.from('import_admin_credentials')
+        .select('nomba_enabled').eq('id', 1).single()
+      if (settingsError) return json({ error: 'Could not load payment settings' }, 500)
+      if (settings.nomba_enabled !== true) return json({ error: 'Nomba is currently unavailable.' }, 409)
+      const reference = `QAF-IBILL-${bill.id}-${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
+      const { data: intent, error: intentError } = await supabase.from('china_import_payment_intents').insert({
+        reference, intent_type: 'bill', customer_id, bill_id: bill.id,
+        amount_ngn: Number(bill.amount_ngn), provider: 'nomba', status: 'pending',
+      }).select('id').single()
+      if (intentError || !intent) return json({ error: 'Could not initialize payment. Please try again.' }, 500)
+      try {
+        const customerResult = await supabase.from('customers').select('email').eq('id', customer_id).single()
+        const response = await nombaFetch('/v1/checkout/order', {
+          method: 'POST',
+          body: { order: { orderReference: reference, amount: Number(bill.amount_ngn).toFixed(2), currency: 'NGN', customerEmail: customerResult.data?.email ?? '', callbackUrl: `${Deno.env.get('APP_URL') ?? 'https://qafrica.store'}/importations/dashboard?payment=nomba&reference=${encodeURIComponent(reference)}` } },
+          idempotencyKey: reference,
+        })
+        const checkoutLink = response?.data?.checkoutLink
+        if (!checkoutLink) throw new Error('Nomba did not return a checkout link')
+        await supabase.from('china_import_payment_intents').update({ checkout_url: checkoutLink, updated_at: new Date().toISOString() }).eq('id', intent.id)
+        return json({ checkout_link: checkoutLink, reference })
+      } catch (error) {
+        await supabase.from('china_import_payment_intents').update({ status: 'failed', updated_at: new Date().toISOString() }).eq('id', intent.id)
+        console.error('[china-import] Nomba bill checkout init failed', error)
+        return json({ error: 'Nomba checkout is temporarily unavailable. Please try again.' }, 502)
+      }
+    }
+
+    if (req.method === 'POST' && action === 'nomba-payment-verify') {
+      const { customer_id, reference } = await req.json().catch(() => ({}))
+      if (!customer_id || typeof reference !== 'string') return json({ error: 'Missing customer or payment reference' }, 400)
+      const { data: intent, error: intentError } = await supabase.from('china_import_payment_intents')
+        .select('*').eq('reference', reference).eq('customer_id', customer_id).maybeSingle()
+      if (intentError || !intent) return json({ error: 'Payment reference not found' }, 404)
+      if (intent.status === 'paid') return json({ success: true, intent_type: intent.intent_type })
+      if (intent.status !== 'pending') return json({ error: 'This payment reference is no longer active.' }, 409)
+      const result = await nombaFetch(`/v1/transactions/accounts/single?orderReference=${encodeURIComponent(reference)}`)
+      const tx = result?.data
+      const transactionReference = tx?.onlineCheckoutOrderReference ?? tx?.orderReference
+      const status = String(tx?.status ?? '').toUpperCase()
+      const amount = Number(tx?.onlineCheckoutAmount ?? tx?.amount)
+      if (transactionReference !== reference || status !== 'SUCCESS' || !Number.isFinite(amount) || Math.abs(amount - Number(intent.amount_ngn)) > 0.01) {
+        return json({ success: false, error: 'Nomba payment has not been confirmed for the expected amount.' }, 409)
+      }
+      const now = new Date().toISOString()
+      if (intent.intent_type === 'order') {
+        const { data: order, error: orderError } = await supabase.from('china_import_orders')
+          .select('id, code, items, payment_status').eq('id', intent.order_id).eq('user_id', customer_id).single()
+        if (orderError || !order) return json({ error: 'Order not found for this payment.' }, 404)
+        const { error: paidError } = await supabase.from('china_import_orders').update({
+          payment_status: 'paid', payment_reference: reference, paid_at: now,
+        }).eq('id', order.id).neq('payment_status', 'paid')
+        if (paidError) return json({ error: 'Verified payment could not be applied to this order.' }, 500)
+        const { data: shippingBill, error: shippingError } = await supabase.from('china_import_consolidation_bills').update({
+          status: 'paid', confirmed_paid_at: now, reminder_count: 0,
+        }).eq('order_id', order.id).eq('kind', 'consolidation_shipping').eq('reason', 'Upfront shipping fee').neq('status', 'cancelled').select('id').maybeSingle()
+        if (shippingError) return json({ error: 'Payment verified, but shipping bill update failed. Contact support.' }, 500)
+        if (order.payment_status !== 'paid') {
+          await incrementUnitsSold(supabase, order.items)
+          const { data: fullOrder } = await supabase.from('china_import_orders').select('*').eq('id', order.id).single()
+          if (fullOrder) await sendOrderConfirmedEmail(supabase, fullOrder)
+          await advanceOrderStatus(supabase, order.id, 'confirmed')
+        }
+      } else {
+        const { data: bill, error: billError } = await supabase.from('china_import_consolidation_bills')
+          .select('*').eq('id', intent.bill_id).eq('user_id', customer_id).single()
+        if (billError || !bill) return json({ error: 'Bill not found' }, 404)
+        const { data: updated, error: updateError } = await supabase.from('china_import_consolidation_bills').update({
+          status: 'paid', confirmed_paid_at: now, paystack_reference: reference, reminder_count: 0,
+        }).eq('id', bill.id).eq('status', 'pending').select().maybeSingle()
+        if (updateError) return json({ error: 'Verified payment could not be applied to this bill.' }, 500)
+        if (updated) {
+          const { data: customer } = await supabase.from('customers').select('email, full_name').eq('id', customer_id).single()
+          if (customer?.email) await sendTemplatedEmail(supabase, 'bill_payment_confirmed', customer.email, {
+            customer_name: customer.full_name ?? 'there', amount_paid: Number(bill.amount_ngn ?? 0).toLocaleString(),
+          })
+        }
+      }
+      await supabase.from('china_import_payment_intents').update({ status: 'paid', nomba_transaction_id: String(tx?.id ?? ''), paid_at: now, updated_at: now }).eq('id', intent.id).eq('status', 'pending')
+      return json({ success: true, intent_type: intent.intent_type })
     }
 
     if (req.method === 'POST' && action === 'checkout-verify') {
@@ -2451,7 +2585,7 @@ serve(async (req: Request) => {
     if (req.method === 'GET' && action === 'admin-settings') {
       const { data, error } = await supabase
         .from('import_admin_credentials')
-        .select('paystack_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name, charge_shipping_at_checkout, shipping_discount_percent, shipping_discount_min_ngn, bulk_discount_tier1_qty, bulk_discount_tier1_percent, bulk_discount_tier2_qty, bulk_discount_tier2_percent, paystack_manual_threshold_ngn, home_delivery_enabled, pickup_station_delivery_enabled, sea_shipping_suggestion_threshold_ngn')
+        .select('paystack_enabled, nomba_enabled, manual_transfer_enabled, bank_account_number, bank_account_name, bank_name, charge_shipping_at_checkout, shipping_discount_percent, shipping_discount_min_ngn, bulk_discount_tier1_qty, bulk_discount_tier1_percent, bulk_discount_tier2_qty, bulk_discount_tier2_percent, paystack_manual_threshold_ngn, home_delivery_enabled, pickup_station_delivery_enabled, sea_shipping_suggestion_threshold_ngn')
         .eq('id', 1).single()
       if (error) return json({ error: error.message }, 500)
       return json({ settings: data })
@@ -2468,6 +2602,7 @@ serve(async (req: Request) => {
         bulk_discount_tier2_qty,
         bulk_discount_tier2_percent,
         paystack_enabled,
+        nomba_enabled,
         manual_transfer_enabled,
         bank_account_number,
         bank_account_name,
@@ -2519,6 +2654,7 @@ serve(async (req: Request) => {
       // Preserve the existing Import Admin payment settings API, but Management
       // does not send or display these fields.
       if (typeof paystack_enabled === 'boolean') updates.paystack_enabled = paystack_enabled
+      if (typeof nomba_enabled === 'boolean') updates.nomba_enabled = nomba_enabled
       if (typeof manual_transfer_enabled === 'boolean') updates.manual_transfer_enabled = manual_transfer_enabled
       if (typeof bank_account_number === 'string') updates.bank_account_number = bank_account_number
       if (typeof bank_account_name === 'string') updates.bank_account_name = bank_account_name
