@@ -1738,7 +1738,7 @@ serve(async (req: Request) => {
           .select('*').eq('id', intent.bill_id).eq('user_id', customer_id).single()
         if (billError || !bill) return json({ error: 'Bill not found' }, 404)
         const { data: updated, error: updateError } = await supabase.from('china_import_consolidation_bills').update({
-          status: 'paid', confirmed_paid_at: now, paystack_reference: reference, reminder_count: 0,
+          status: 'paid', confirmed_paid_at: now, reminder_count: 0,
         }).eq('id', bill.id).eq('status', 'pending').select().maybeSingle()
         if (updateError) return json({ error: 'Verified payment could not be applied to this bill.' }, 500)
         if (updated) {
