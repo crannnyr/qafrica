@@ -113,8 +113,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   // can still choose freely (see the per-item shipping section below).
   const seaOnlyItems = cart.filter(i => i.ship_only);
   const forcedSeaFreight = cart.length === 1 && seaOnlyItems.length > 0;
-  const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'manual'>('paystack');
+  const [paymentMethod, setPaymentMethod] = useState<'paystack' | 'nomba' | 'manual'>('paystack');
   const [paystackEnabled, setPaystackEnabled] = useState(true);
+  const [nombaEnabled, setNombaEnabled] = useState(false);
   const [manualTransferEnabled, setManualTransferEnabled] = useState(true);
   const [whatsapp, setWhatsapp] = useState(customer.phone ?? '');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -178,6 +179,9 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
         if (!data.settings) return;
         if (typeof data.settings.paystack_enabled === 'boolean') {
           setPaystackEnabled(data.settings.paystack_enabled);
+        }
+        if (typeof data.settings.nomba_enabled === 'boolean') {
+          setNombaEnabled(data.settings.nomba_enabled);
         }
         if (typeof data.settings.manual_transfer_enabled === 'boolean') {
           setManualTransferEnabled(data.settings.manual_transfer_enabled);
@@ -318,16 +322,18 @@ export default function ImportCheckoutSheet({ cart, customer, onClose, onAdd, on
   // Paystack / manual selection
   // Paystack remains available only below the configured threshold.
   // At or above the threshold, manual bank transfer is required.
-  const paystackAllowed = paystackEnabled && total < shippingSettings.paystackManualThresholdNgn;
+  const onlinePaymentsAllowed = total < shippingSettings.paystackManualThresholdNgn;
+  const paystackAllowed = paystackEnabled && onlinePaymentsAllowed;
+  const nombaAllowed = nombaEnabled && onlinePaymentsAllowed;
   const manualAllowed = manualTransferEnabled && total >= shippingSettings.paystackManualThresholdNgn;
 
   useEffect(() => {
-    if (!paystackAllowed && manualAllowed && paymentMethod === 'paystack') {
-      setPaymentMethod('manual');
-    } else if (!manualAllowed && paystackAllowed && paymentMethod === 'manual') {
-      setPaymentMethod('paystack');
-    }
-  }, [paystackAllowed, manualAllowed, paymentMethod]);
+    const selectedOnlineAllowed = paymentMethod === 'paystack' ? paystackAllowed : paymentMethod === 'nomba' ? nombaAllowed : manualAllowed;
+    if (selectedOnlineAllowed) return;
+    if (paystackAllowed) setPaymentMethod('paystack');
+    else if (nombaAllowed) setPaymentMethod('nomba');
+    else if (manualAllowed) setPaymentMethod('manual');
+  }, [paystackAllowed, nombaAllowed, manualAllowed, paymentMethod]);
 
   // Delivery address — only required when delivery === 'to_me'
   const [address, setAddress] = useState<DeliveryAddress>({
@@ -694,6 +700,18 @@ if (promoQuote?.pending_order?.id) {
       if (paymentMethod === 'manual') {
         setResult({ code: data.code, bank: data.bank, order_id: data.order_id });
         setIsProcessing(false);
+        return;
+      }
+
+      if (paymentMethod === 'nomba') {
+        const res = await fetch(`${EDGE_URL}?action=nomba-order-checkout-init`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_id: customer.id, order_id: data.order_id }),
+        });
+        const result = await res.json();
+        if (!res.ok || !result.checkout_link) throw new Error(result.error ?? 'Could not start Nomba checkout');
+        window.location.assign(result.checkout_link);
         return;
       }
 
@@ -1286,6 +1304,18 @@ if (promoQuote?.pending_order?.id) {
                 </p>
               </div>
             </button>
+            {nombaAllowed && (
+              <button
+                onClick={() => setPaymentMethod('nomba')}
+                className={`w-full flex items-center gap-3 text-left p-3 rounded-xl border-2 transition-colors ${paymentMethod === 'nomba' ? 'border-gray-900 bg-gray-50' : 'border-gray-100'}`}
+              >
+                <CreditCard className="w-4 h-4 text-gray-700 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-gray-900 text-xs">Pay with Nomba</p>
+                  <p className="text-[11px] text-gray-400">Secure online checkout</p>
+                </div>
+              </button>
+            )}
             <button
               disabled={!manualAllowed}
               onClick={() => {
