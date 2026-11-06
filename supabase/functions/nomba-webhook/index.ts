@@ -8,6 +8,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { verifyAndFinalize } from '../_shared/checkout.ts';
+import { nombaFetch } from '../_shared/nomba.ts';
 
 const WEBHOOK_SECRET = Deno.env.get('NOMBA_WEBHOOK_SECRET') ?? '';
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -84,6 +85,53 @@ Deno.serve(async (req) => {
   if (!valid) {
     console.warn('nomba webhook with invalid/missing signature', requestId);
     return json(200, { received: true }); // stored for audit, never acted on
+  }
+
+  // China Import payment intents are separate from marketplace/Help Pay sessions.
+  const ref = String(body?.data?.order?.orderReference ?? body?.data?.transaction?.merchantTxRef ?? '');
+  if (body?.event_type === 'payment_success' && ref.startsWith('QAF-I')) {
+    const { data: ev } = await supabase.from('payment_webhook_events')
+      .select('id, processed_at').eq('provider', 'nomba').eq('request_id', requestId).maybeSingle();
+    if (ev && !ev.processed_at) {
+      try {
+        const { data: intent, error: intentError } = await supabase.from('china_import_payment_intents')
+          .select('*').eq('reference', ref).maybeSingle();
+        if (intentError) throw new Error(intentError.message);
+        if (intent && intent.status === 'pending') {
+          const txResult = await nombaFetch(`/v1/transactions/accounts/single?orderReference=${encodeURIComponent(ref)}`);
+          const tx = txResult?.data;
+          const txRef = tx?.onlineCheckoutOrderReference ?? tx?.orderReference;
+          const txStatus = String(tx?.status ?? '').toUpperCase();
+          const paidAmount = Number(tx?.onlineCheckoutAmount ?? tx?.amount);
+          if (txRef === ref && txStatus === 'SUCCESS' && Number.isFinite(paidAmount) && Math.abs(paidAmount - Number(intent.amount_ngn)) <= 0.01) {
+            const now = new Date().toISOString();
+            if (intent.intent_type === 'order') {
+              const { data: order } = await supabase.from('china_import_orders').select('payment_status,items')
+                .eq('id', intent.order_id).maybeSingle();
+              if (order && order.payment_status !== 'paid') {
+                await supabase.from('china_import_orders').update({ payment_status: 'paid', payment_reference: ref, paid_at: now })
+                  .eq('id', intent.order_id).neq('payment_status', 'paid');
+                await supabase.from('china_import_consolidation_bills').update({ status: 'paid', confirmed_paid_at: now, reminder_count: 0 })
+                  .eq('order_id', intent.order_id).eq('kind', 'consolidation_shipping').eq('reason', 'Upfront shipping fee').neq('status', 'cancelled');
+                await supabase.rpc('china_import_payment_confirmed', { p_order_id: intent.order_id });
+              }
+            } else if (intent.intent_type === 'bill') {
+              await supabase.from('china_import_consolidation_bills').update({
+                status: 'paid', confirmed_paid_at: now, paystack_reference: ref, reminder_count: 0,
+              }).eq('id', intent.bill_id).eq('user_id', intent.customer_id).eq('status', 'pending');
+            }
+            await supabase.from('china_import_payment_intents').update({
+              status: 'paid', nomba_transaction_id: String(tx?.id ?? ''), paid_at: now, updated_at: now,
+            }).eq('id', intent.id).eq('status', 'pending');
+          }
+        }
+        await supabase.from('payment_webhook_events').update({ processed_at: new Date().toISOString(), process_error: null }).eq('id', ev.id);
+      } catch (e) {
+        await supabase.from('payment_webhook_events').update({ process_error: String(e).slice(0, 500) }).eq('id', ev.id);
+        return json(500, { error: 'China Import payment processing failed, please retry' });
+      }
+    }
+    return json(200, { received: true });
   }
 
   // Checkout payments: our references start with QAF-. Processing always re-verifies with Nomba.
