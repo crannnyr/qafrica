@@ -178,8 +178,37 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   const [savingItem, setSavingItem] = useState(false);
   const [removingItem, setRemovingItem] = useState<number | null>(null);
   const [cancellingBalance, setCancellingBalance] = useState(false);
+  const [refundPreview, setRefundPreview] = useState<{ eligible: boolean; eligible_units: number; refund_base_ngn: number; cancellation_fee_ngn: number; refund_amount_ngn: number; shipping_bill_status: string } | null>(null);
+  const [refundPreviewLoading, setRefundPreviewLoading] = useState(false);
 
   const items = order.items ?? [];
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadRefundPreview = async () => {
+      if (order.payment_status !== 'paid' || ['cancelled', 'canceled', 'refunded'].includes((order.status ?? '').toLowerCase())) {
+        setRefundPreview(null);
+        return;
+      }
+      setRefundPreviewLoading(true);
+      try {
+        const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/' + ['import-fulfillment', 'cancel-balance'].join('-'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ manager_token: token, order_id: order.id, action: 'preview' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.error) throw new Error(data.error ?? 'Could not calculate refundable amount');
+        if (!cancelled) setRefundPreview(data);
+      } catch {
+        if (!cancelled) setRefundPreview(null);
+      } finally {
+        if (!cancelled) setRefundPreviewLoading(false);
+      }
+    };
+    void loadRefundPreview();
+    return () => { cancelled = true; };
+  }, [token, order.id, order.payment_status, order.status]);
 
   useEffect(() => {
     const existing: Partial<DeliveryAddress> = order.delivery_address ?? {};
@@ -461,6 +490,17 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
             <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
               <p className="text-xs font-bold text-gray-900">Cancel outstanding fulfillment balance</p>
               <p className="text-[11px] text-gray-600 mt-1">Cancels only quantities not yet received, allocated, shipped or delivered. Existing fulfilled quantities and their history are preserved; any eligible refund enters the normal Refunds workflow.</p>
+              <div className="mt-3 rounded-xl border border-amber-200 bg-white p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[11px] font-semibold text-gray-500">Estimated refundable amount</span>
+                  <span className="text-sm font-black text-emerald-700">{refundPreviewLoading ? 'Calculating…' : refundPreview ? money(refundPreview.refund_amount_ngn) : 'Unavailable'}</span>
+                </div>
+                {refundPreview && <>
+                  <div className="mt-2 flex justify-between text-[10px] text-gray-500"><span>Eligible outstanding units</span><span>{refundPreview.eligible_units}</span></div>
+                  <div className="flex justify-between text-[10px] text-gray-500"><span>Estimated cancellation fee</span><span>{money(refundPreview.cancellation_fee_ngn)}</span></div>
+                  <p className="mt-2 text-[9px] leading-relaxed text-gray-400">Estimate uses the current fulfillment quantities and shipping-bill status. The final amount may change if the cancellation reason qualifies for a policy exception.</p>
+                </>}
+              </div>
               <button type="button" onClick={() => void cancelOutstandingBalance()} disabled={cancellingBalance} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50">
                 {cancellingBalance ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />} {cancellingBalance ? 'Processing…' : 'Cancel outstanding quantity'}
               </button>
