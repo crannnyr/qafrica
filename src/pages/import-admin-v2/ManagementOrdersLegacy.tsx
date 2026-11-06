@@ -388,7 +388,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     if (!window.confirm(`Cancel only the outstanding quantity on order ${order.code}? Received, allocated, shipped and delivered quantities will be preserved. An eligible refund will be created using the existing 20% cancellation policy.`)) return;
     setCancellingBalance(true);
     try {
-      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/import-management?action=admin-fulfillment-cancel-unfulfilled-balance', {
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/' + ['import-fulfillment', 'cancel-balance'].join('-'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: token, order_id: order.id, reason }),
       });
