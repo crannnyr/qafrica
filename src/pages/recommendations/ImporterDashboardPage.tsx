@@ -234,62 +234,69 @@ export default function ImporterDashboardPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Bills are paid via Paystack, verified server-side against the actual
-  // charge (see bill-pay-verify in the edge function) — no manual admin
-  // confirmation step needed anymore.
-  const isPayingBillRef = useRef(false);
-  const [billPayError, setBillPayError] = useState('');
+  // Both online providers use a server-created payment intent tied to the exact bill.
+  const finishBillPayment = async (reference: string) => {
+    try {
+      const res = await fetch(`${EDGE_URL}?action=nomba-payment-verify`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customer.id, reference }),
+      });
+      const data = await res.json();
+      if (data?.success) await load();
+      else setBillPayError(data.error ?? 'Payment could not be verified. If you were charged, contact support.');
+    } catch {
+      setBillPayError('Payment verification failed. Contact support.');
+    } finally {
+      setIsPayingBill(false);
+      isPayingBillRef.current = false;
+    }
+  };
 
   const payBillWithPaystack = async (bill: ConsolidationBill) => {
-    if (!customer?.id) return;
-    if (isPayingBillRef.current) return; // hard guard, not dependent on re-render timing
-    isPayingBillRef.current = true;
-    setIsPayingBill(true);
-    setBillPayError('');
+    if (!customer?.id || !billPaymentSettings.paystack_enabled) return;
+    if (isPayingBillRef.current) return;
+    isPayingBillRef.current = true; setIsPayingBill(true); setBillPayError('');
     try {
       await loadPaystackScript();
       const reference = generateReference('QAFBILL');
-  
-      await fetch(`${EDGE_URL}?action=bill-pay-init`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer_id: customer.id, bill_id: bill.id, reference }),
-      }).catch(() => {});
-  
       initializePayment({
-        email: customer.email,
-        amount: toKobo(bill.amount_ngn),
-        reference,
+        email: customer.email, amount: toKobo(bill.amount_ngn), reference,
         metadata: { type: 'china_import_bill', bill_id: bill.id, kind: bill.kind },
         onSuccess: async () => {
           try {
             const res = await fetch(`${EDGE_URL}?action=bill-pay-verify`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ customer_id: customer.id, bill_id: bill.id, reference }),
             });
             const data = await res.json();
-            if (data?.success) {
-              await load();
-            } else {
-              setBillPayError('Payment could not be verified. If you were charged, contact support.');
-            }
-          } catch {
-            setBillPayError('Payment verification failed. Contact support.');
-          } finally {
-            setIsPayingBill(false);
-            isPayingBillRef.current = false;
-          }
+            if (data?.success) await load();
+            else setBillPayError(data.error ?? 'Payment could not be verified. If you were charged, contact support.');
+          } catch { setBillPayError('Payment verification failed. Contact support.'); }
+          finally { setIsPayingBill(false); isPayingBillRef.current = false; }
         },
-        onCancel: () => {
-          setIsPayingBill(false);
-          isPayingBillRef.current = false;
-        },
+        onCancel: () => { setIsPayingBill(false); isPayingBillRef.current = false; },
       });
     } catch (e: any) {
       setBillPayError(e?.message ?? 'Could not start payment');
-      setIsPayingBill(false);
-      isPayingBillRef.current = false;
+      setIsPayingBill(false); isPayingBillRef.current = false;
+    }
+  };
+
+  const payBillWithNomba = async (bill: ConsolidationBill) => {
+    if (!customer?.id || !billPaymentSettings.nomba_enabled) return;
+    if (isPayingBillRef.current) return;
+    isPayingBillRef.current = true; setIsPayingBill(true); setBillPayError('');
+    try {
+      const res = await fetch(`${EDGE_URL}?action=nomba-bill-checkout-init`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customer_id: customer.id, bill_id: bill.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.checkout_link || !data.reference) throw new Error(data.error ?? 'Could not start Nomba checkout');
+      window.location.assign(data.checkout_link);
+    } catch (e: any) {
+      setBillPayError(e?.message ?? 'Could not start Nomba checkout');
+      setIsPayingBill(false); isPayingBillRef.current = false;
     }
   };
   const submitBankDetails = async () => {
@@ -597,7 +604,10 @@ export default function ImporterDashboardPage() {
                     key={bill.id}
                     bill={bill}
                     onInfo={() => setInfoBillKind(bill.kind)}
-                    onPay={() => payBillWithPaystack(bill)}
+                    onPayPaystack={() => payBillWithPaystack(bill)}
+                    onPayNomba={() => payBillWithNomba(bill)}
+                    paystackEnabled={billPaymentSettings.paystack_enabled}
+                    nombaEnabled={billPaymentSettings.nomba_enabled}
                     disabled={isPayingBill}
                   />
                 ))}
@@ -1226,10 +1236,13 @@ function OrderItemsDropdown({ order, isExpanded, onToggle, compact = false }: {
   );
 }
 
-function BillCard({ bill, onInfo, onPay, disabled }: {
+function BillCard({ bill, onInfo, onPayPaystack, onPayNomba, paystackEnabled, nombaEnabled, disabled }: {
   bill: ConsolidationBill;
   onInfo: () => void;
-  onPay: () => void;
+  onPayPaystack: () => void;
+  onPayNomba: () => void;
+  paystackEnabled: boolean;
+  nombaEnabled: boolean;
   disabled?: boolean;
 }) {
   const [showItems, setShowItems] = useState(false);
@@ -1273,13 +1286,11 @@ function BillCard({ bill, onInfo, onPay, disabled }: {
       )}
 
       {bill.status === 'pending' && (
-        <button
-          onClick={onPay}
-          disabled={disabled}
-          className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg disabled:opacity-40"
-        >
-          Pay with Paystack
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {paystackEnabled && <button onClick={onPayPaystack} disabled={disabled} className="text-xs font-bold bg-gray-900 text-white px-4 py-2 rounded-lg disabled:opacity-40">Pay with Paystack</button>}
+          {nombaEnabled && <button onClick={onPayNomba} disabled={disabled} className="text-xs font-bold border border-gray-300 text-gray-900 px-4 py-2 rounded-lg disabled:opacity-40">Pay with Nomba</button>}
+          {!paystackEnabled && !nombaEnabled && <span className="text-xs text-gray-400">Online bill payment is temporarily unavailable.</span>}
+        </div>
       )}
     </div>
   );
