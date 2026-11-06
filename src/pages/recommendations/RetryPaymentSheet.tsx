@@ -41,21 +41,30 @@ export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: 
   const [error, setError] = useState('');
   const [bank, setBank] = useState<any>(null);
   const [showManualFlow, setShowManualFlow] = useState(false);
+  const [paymentSettings, setPaymentSettings] = useState({ paystack_enabled: true, nomba_enabled: false, manual_transfer_enabled: true });
+  const [selectedProvider, setSelectedProvider] = useState<'paystack' | 'nomba'>('paystack');
 
   const useManualTransfer = order.total_ngn >= 100_000;
-  const usePaystack = !useManualTransfer;
+  const usePaystack = !useManualTransfer && paymentSettings.paystack_enabled;
+  const useNomba = !useManualTransfer && paymentSettings.nomba_enabled;
 
   useEffect(() => {
-    if (!useManualTransfer) return;
     fetch(`${EDGE_URL}?action=admin-settings`)
       .then(r => r.json())
-      .then(d => setBank(d.settings))
+      .then(d => {
+        if (d.settings) setPaymentSettings({
+          paystack_enabled: d.settings.paystack_enabled !== false,
+          nomba_enabled: d.settings.nomba_enabled === true,
+          manual_transfer_enabled: d.settings.manual_transfer_enabled !== false,
+        });
+        if (useManualTransfer) setBank(d.settings);
+      })
       .catch(() => {});
   }, [useManualTransfer]);
 
   const retryPaystack = async () => {
     if (!usePaystack) {
-      setError('Orders of ₦100,000 or more must be paid via manual bank transfer.');
+      setError(useManualTransfer ? 'Orders of ₦100,000 or more must be paid via manual bank transfer.' : 'Paystack is currently unavailable.');
       return;
     }
     setIsProcessing(true);
@@ -175,24 +184,29 @@ export default function RetryPaymentSheet({ order, customer, onClose, onPaid }: 
 
         {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
 
-        {usePaystack ? (
-          <button
-            onClick={retryPaystack}
-            disabled={isProcessing}
-            className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
-          >
-            {isProcessing && <Loader className="w-4 h-4 animate-spin" />}
-            Pay with Paystack
-          </button>
-        ) : (
+        {useManualTransfer ? (
           <button
             onClick={() => setShowManualFlow(true)}
-            disabled={!bank}
+            disabled={!bank || !paymentSettings.manual_transfer_enabled}
             className="w-full py-3.5 bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-colors flex items-center justify-center gap-2"
           >
             {!bank && <Loader className="w-4 h-4 animate-spin" />}
             Pay by bank transfer
           </button>
+        ) : (
+          <div className="space-y-2">
+            {usePaystack && <button onClick={retryPaystack} disabled={isProcessing} className="w-full py-3.5 bg-gray-900 text-white font-bold text-sm rounded-xl">{isProcessing ? 'Processing…' : 'Pay with Paystack'}</button>}
+            {useNomba && <button onClick={async () => {
+              setIsProcessing(true); setError('');
+              try {
+                const res = await fetch(`${EDGE_URL}?action=nomba-order-checkout-init`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_id: customer.id, order_id: order.id }) });
+                const data = await res.json();
+                if (!res.ok || !data.checkout_link) throw new Error(data.error ?? 'Could not start Nomba checkout');
+                window.location.assign(data.checkout_link);
+              } catch (e: any) { setError(e?.message ?? 'Could not start Nomba checkout'); setIsProcessing(false); }
+            }} disabled={isProcessing} className="w-full py-3.5 border border-gray-300 text-gray-900 font-bold text-sm rounded-xl">{isProcessing ? 'Processing…' : 'Pay with Nomba'}</button>}
+            {!usePaystack && !useNomba && <p className="text-xs text-red-500">No online payment provider is currently enabled. Please contact support.</p>}
+          </div>
         )}
       </motion.div>
     </motion.div>
