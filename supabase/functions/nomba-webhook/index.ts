@@ -120,8 +120,8 @@ Deno.serve(async (req) => {
   }
 
   // Checkout payments: our references start with QAF-. Processing always re-verifies with Nomba.
-  const ref = String(body?.data?.order?.orderReference ?? body?.data?.transaction?.merchantTxRef ?? '');
-  if (body?.event_type === 'payment_success' && ref.startsWith('QAF-')) {
+  const checkoutReference = String(body?.data?.order?.orderReference ?? body?.data?.transaction?.merchantTxRef ?? '');
+  if (body?.event_type === 'payment_success' && checkoutReference.startsWith('QAF-')) {
     const { data: ev } = await supabase
       .from('payment_webhook_events')
       .select('id, processed_at')
@@ -131,12 +131,12 @@ Deno.serve(async (req) => {
     if (ev && !ev.processed_at) {
       try {
         const fee = Number(body?.data?.transaction?.fee);
-        const result = await verifyAndFinalize(supabase, ref, Number.isFinite(fee) ? { fee } : {});
+        const result = await verifyAndFinalize(supabase, checkoutReference, Number.isFinite(fee) ? { fee } : {});
         await supabase.from('payment_webhook_events')
           .update({ processed_at: new Date().toISOString(), process_error: result.status === 'paid' ? null : result.status })
           .eq('id', ev.id);
       } catch (e) {
-        console.error('checkout processing failed', ref, e);
+        console.error('checkout processing failed', checkoutReference, e);
         await supabase.from('payment_webhook_events').update({ process_error: String(e).slice(0, 500) }).eq('id', ev.id);
         return json(500, { error: 'processing failed, please retry' }); // Nomba retries with backoff
       }
