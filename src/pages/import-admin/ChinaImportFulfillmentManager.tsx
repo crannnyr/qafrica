@@ -82,6 +82,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
   const [openOrders, setOpenOrders] = useState<Set<string>>(new Set());
   const [openBatches, setOpenBatches] = useState<Set<string>>(new Set());
   const [acting, setActing] = useState<string | null>(null);
+  const [cancellingBalanceOrderId, setCancellingBalanceOrderId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [shipmentOrderId, setShipmentOrderId] = useState<string | null>(null);
   const [shipmentQuantities, setShipmentQuantities] = useState<Record<string, number>>({});
@@ -378,6 +379,41 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
       toast.error(e instanceof Error ? e.message : 'Could not receive from inventory');
     } finally {
       setActing(null);
+    }
+  };
+
+  const cancelOutstandingBalance = async (order: OrderGroup) => {
+    const eligibleUnits = order.items.reduce((sum, item) => sum + Math.max(
+      0,
+      Number(item.ordered_quantity) - Math.max(
+        Number(item.received_quantity),
+        Number(item.allocated_quantity),
+        Number(item.shipped_quantity),
+        Number(item.delivered_quantity),
+      ),
+    ), 0);
+    if (eligibleUnits <= 0) {
+      toast.error('This order has no unreceived, unallocated, unshipped quantity eligible for cancellation.');
+      return;
+    }
+    const reason = window.prompt(`Reason for cancelling the ${eligibleUnits} outstanding unit(s) on order ${order.orderCode}:`)?.trim();
+    if (!reason) return;
+    if (!window.confirm(`Cancel only ${eligibleUnits} outstanding unit(s) on ${order.orderCode}? Received, allocated, shipped and delivered quantities will be preserved. The eligible refund will enter the normal Refunds workflow.`)) return;
+    setCancellingBalanceOrderId(order.id);
+    try {
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/' + ['import-fulfillment', 'cancel-balance'].join('-'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_id: order.id, reason }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error || data.success === false) throw new Error(data.error ?? 'Could not cancel outstanding balance');
+      toast.success(`Outstanding balance cancelled. Refund created: ₦${Number(data.refund_amount_ngn ?? 0).toLocaleString()}.`);
+      await load(true);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not cancel outstanding balance');
+    } finally {
+      setCancellingBalanceOrderId(null);
     }
   };
 
@@ -688,6 +724,17 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
                       </button>
 
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {order.items.some(item => item.ordered_quantity > Math.max(item.received_quantity, item.allocated_quantity, item.shipped_quantity, item.delivered_quantity)) && (
+                          <button
+                            type="button"
+                            onClick={() => void cancelOutstandingBalance(order)}
+                            disabled={cancellingBalanceOrderId === order.id}
+                            className="px-3 py-2 rounded-lg border border-red-200 bg-white text-red-700 text-[10px] font-bold flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {cancellingBalanceOrderId === order.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}
+                            Cancel outstanding
+                          </button>
+                        )}
                         {available > 0 && (
                           <button
                             type="button"

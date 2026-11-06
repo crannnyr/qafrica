@@ -177,6 +177,7 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
   const [variantsLoading, setVariantsLoading] = useState(false);
   const [savingItem, setSavingItem] = useState(false);
   const [removingItem, setRemovingItem] = useState<number | null>(null);
+  const [cancellingBalance, setCancellingBalance] = useState(false);
 
   const items = order.items ?? [];
 
@@ -381,6 +382,25 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
     finally { setSavingItem(false); }
   };
 
+  const cancelOutstandingBalance = async () => {
+    const reason = window.prompt('Enter the reason for cancelling the remaining unreceived/unshipped quantity:')?.trim();
+    if (!reason) return;
+    if (!window.confirm(`Cancel only the outstanding quantity on order ${order.code}? Received, allocated, shipped and delivered quantities will be preserved. An eligible refund will be created using the existing 20% cancellation policy.`)) return;
+    setCancellingBalance(true);
+    try {
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/' + ['import-fulfillment', 'cancel-balance'].join('-'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_token: token, order_id: order.id, reason }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error || data.success === false) throw new Error(data.error ?? 'Could not cancel outstanding balance');
+      await onReload();
+      const refund = Number(data.refund_amount_ngn ?? 0);
+      toast.success(`Outstanding balance cancelled. Refund created: ₦${refund.toLocaleString()}.`);
+    } catch (e) { toast.error(e instanceof Error ? e.message : 'Could not cancel outstanding balance'); }
+    finally { setCancellingBalance(false); }
+  };
+
   const removeItem = async (index: number) => {
     const item = items[index];
     if (!window.confirm('Remove "' + item.name + '" from order ' + order.code + '? This creates the existing item-cancellation/refund record.')) return;
@@ -436,6 +456,16 @@ export function OrderDetails({ token, order, onClose, onReload, onOpenClient }: 
               })}
             </div>
           </section>
+
+          {order.payment_status === 'paid' && !['cancelled', 'refunded'].includes(order.status ?? '') && (
+            <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+              <p className="text-xs font-bold text-gray-900">Cancel outstanding fulfillment balance</p>
+              <p className="text-[11px] text-gray-600 mt-1">Cancels only quantities not yet received, allocated, shipped or delivered. Existing fulfilled quantities and their history are preserved; any eligible refund enters the normal Refunds workflow.</p>
+              <button type="button" onClick={() => void cancelOutstandingBalance()} disabled={cancellingBalance} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-xs font-bold text-red-700 disabled:opacity-50">
+                {cancellingBalance ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />} {cancellingBalance ? 'Processing…' : 'Cancel outstanding quantity'}
+              </button>
+            </section>
+          )}
 
           <section className="rounded-2xl border border-gray-100 p-4">
             <div className="flex items-center justify-between mb-3"><p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Delivery address</p>{canEditDeliveryDetails && <button onClick={() => setAddressEditing(v => !v)} className="text-[10px] font-bold text-orange-600 flex items-center gap-1"><Pencil className="w-3 h-3"/> {addressEditing ? 'Close edit' : 'Edit address'}</button>}</div>
