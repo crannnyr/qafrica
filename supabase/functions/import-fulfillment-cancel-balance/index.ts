@@ -73,8 +73,16 @@ serve(async (req: Request) => {
   if (!managerId) return json({ error: 'Unauthorized: import.orders.update permission required' }, 403)
 
   const orderId = typeof body.order_id === 'string' ? body.order_id.trim() : ''
+  if (!orderId) return json({ error: 'Order ID is required.' }, 400)
+
+  if (body.action === 'preview') {
+    const { data: preview, error: previewError } = await db.rpc('preview_china_import_unfulfilled_balance', { p_order_id: orderId })
+    if (previewError) return json({ error: previewError.message }, 400)
+    return json(preview)
+  }
+
   const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
-  if (!orderId || !reason) return json({ error: 'Order ID and cancellation reason are required.' }, 400)
+  if (!reason) return json({ error: 'Cancellation reason is required.' }, 400)
 
   const { data, error } = await db.rpc('cancel_china_import_unfulfilled_balance', {
     p_order_id: orderId,
