@@ -1441,31 +1441,7 @@ function OrderDeliverySheet({ order, customer, onClose, onSaved }: OrderDelivery
       </div>
     </div>
   );
-}  // Confirm a bill payment when Nomba redirects back to the dashboard.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const provider = params.get('payment');
-    const reference = params.get('reference');
-    if (provider !== 'nomba' || !reference || !customer?.id) return;
-    isPayingBillRef.current = true;
-    setIsPayingBill(true);
-    fetch(`${EDGE_URL}?action=nomba-payment-verify`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customer_id: customer.id, reference }),
-    }).then(async response => {
-      const data = await response.json();
-      if (!response.ok || !data?.success) throw new Error(data.error ?? 'Nomba payment is not yet confirmed.');
-      await load();
-      window.history.replaceState({}, '', window.location.pathname);
-    }).catch(err => {
-      setBillPayError(err instanceof Error ? err.message : 'Could not confirm Nomba bill payment.');
-    }).finally(() => {
-      setIsPayingBill(false);
-      isPayingBillRef.current = false;
-    });
-  }, [customer?.id, load]);
-
-  const submitBankDetails = async () => {
+}  const submitBankDetails = async () => {
     if (!refundBankForm || !customer?.id) return;
     if (!bankFormData.bank_account_number.trim() || !bankFormData.bank_account_name.trim() || !bankFormData.bank_name.trim()) return;
     setIsSubmittingBank(true);
@@ -2607,4 +2583,28 @@ function OrderDeliverySheet({ order, customer, onClose, onSaved }: OrderDelivery
       </div>
     </div>
   );
-}
+}  // Confirm a bill payment when Nomba redirects back to the dashboard.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const provider = params.get('payment');
+    const reference = params.get('reference');
+    if (provider !== 'nomba' || !reference || !customer?.id) return;
+    isPayingBillRef.current = true;
+    setIsPayingBill(true);
+    fetch(`${EDGE_URL}?action=nomba-payment-verify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customer_id: customer.id, reference }),
+    }).then(async response => {
+      const data = await response.json();
+      if (!response.ok || !data?.success) throw new Error(data.error ?? 'Nomba payment is not yet confirmed.');
+      await load();
+      window.history.replaceState({}, '', window.location.pathname);
+    }).catch(err => {
+      setBillPayError(err instanceof Error ? err.message : 'Could not confirm Nomba bill payment.');
+    }).finally(() => {
+      setIsPayingBill(false);
+      isPayingBillRef.current = false;
+    });
+  }, [customer?.id, load]);
+
+
