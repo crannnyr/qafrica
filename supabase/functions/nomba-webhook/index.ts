@@ -87,17 +87,15 @@ Deno.serve(async (req) => {
     return json(200, { received: true }); // stored for audit, never acted on
   }
 
-  // China Import order/bill payment intents. Re-check Nomba transaction server-side
-  // and apply state changes through the same authenticated Edge Function action
-  // used by the customer return flow (service-role request is not accepted here).
-  const ref = String(body?.data?.order?.orderReference ?? body?.data?.transaction?.merchantTxRef ?? '');
-  if (body?.event_type === 'payment_success' && ref.startsWith('QAF-I')) {
+  // Nomba references for China Import use QAF-IMP- (orders) and QAF-IBILL- (bills).
+  const chinaImportReference = String(body?.data?.order?.orderReference ?? body?.data?.transaction?.merchantTxRef ?? '');
+  if (body?.event_type === 'payment_success' && (chinaImportReference.startsWith('QAF-IMP-') || chinaImportReference.startsWith('QAF-IBILL-'))) {
     const { data: ev } = await supabase.from('payment_webhook_events')
       .select('id, processed_at').eq('provider', 'nomba').eq('request_id', requestId).maybeSingle();
     if (ev && !ev.processed_at) {
       try {
         const { data: intent, error: intentError } = await supabase.from('china_import_payment_intents')
-          .select('customer_id').eq('reference', ref).maybeSingle();
+          .select('customer_id').eq('reference', chinaImportReference).maybeSingle();
         if (intentError) throw new Error(intentError.message);
         if (intent) {
           const verifyResponse = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/china-import?action=nomba-payment-verify`, {
@@ -107,7 +105,7 @@ Deno.serve(async (req) => {
               Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
               apikey: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
             },
-            body: JSON.stringify({ customer_id: intent.customer_id, reference: ref, webhook: true }),
+            body: JSON.stringify({ customer_id: intent.customer_id, reference: chinaImportReference, webhook: true }),
           });
           const verifyBody = await verifyResponse.json().catch(() => ({}));
           if (!verifyResponse.ok || !verifyBody?.success) throw new Error(verifyBody?.error ?? 'China Import verification failed');
