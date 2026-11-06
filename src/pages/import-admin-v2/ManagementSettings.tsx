@@ -8,6 +8,7 @@ const EDGE_URL = `${CONFIG.SUPABASE_URL}/functions/v1/china-import`
 
 type AdminSettings = {
   paystack_enabled: boolean
+  nomba_enabled: boolean
   manual_transfer_enabled: boolean
   bank_account_number: string
   bank_account_name: string
@@ -29,6 +30,7 @@ type AdminSettings = {
 
 const DEFAULTS: AdminSettings = {
   paystack_enabled: true,
+  nomba_enabled: false,
   manual_transfer_enabled: true,
   bank_account_number: '',
   bank_account_name: '',
@@ -145,6 +147,14 @@ export default function ManagementSettings() {
 
         <label className="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200">
           <div>
+            <p className="text-sm font-semibold text-gray-900">Nomba enabled</p>
+            <p className="text-[11px] text-gray-400">Offer Nomba as an additional online payment option below the manual-transfer threshold.</p>
+          </div>
+          <input type="checkbox" checked={settings.nomba_enabled} onChange={e => setField('nomba_enabled', e.target.checked)} className="w-4 h-4 accent-orange-500" />
+        </label>
+
+        <label className="flex items-center justify-between px-4 py-3 rounded-xl border border-gray-200">
+          <div>
             <p className="text-sm font-semibold text-gray-900">Manual bank transfer enabled</p>
             <p className="text-[11px] text-gray-400">Turn off to force Paystack only, site-wide.</p>
           </div>
@@ -154,7 +164,7 @@ export default function ManagementSettings() {
         <label className="block">
           <span className="text-xs font-semibold text-gray-700 block mb-1.5">Paystack / Manual threshold (₦)</span>
           <input type="number" min={0} value={settings.paystack_manual_threshold_ngn} onChange={e => setField('paystack_manual_threshold_ngn', Number(e.target.value))} className="w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:border-orange-500 outline-none" />
-          <p className="text-[11px] text-gray-400 mt-1">Orders below this amount use Paystack. Orders at or above it must use manual bank transfer.</p>
+          <p className="text-[11px] text-gray-400 mt-1">Orders below this amount can use enabled online providers (Paystack and/or Nomba). Orders at or above it must use manual bank transfer.</p>
         </label>
       </section>
 
