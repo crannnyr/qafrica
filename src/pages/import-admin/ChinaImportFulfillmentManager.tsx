@@ -401,7 +401,7 @@ export default function ChinaImportFulfillmentManager({ token, canReceive }: { t
     if (!window.confirm(`Cancel only ${eligibleUnits} outstanding unit(s) on ${order.orderCode}? Received, allocated, shipped and delivered quantities will be preserved. The eligible refund will enter the normal Refunds workflow.`)) return;
     setCancellingBalanceOrderId(order.id);
     try {
-      const res = await fetch(`${EDGE_URL}?action=admin-fulfillment-cancel-unfulfilled-balance`, {
+      const res = await fetch(CONFIG.SUPABASE_URL + '/functions/v1/' + ['import-fulfillment', 'cancel-balance'].join('-'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_token: token, order_id: order.id, reason }),
